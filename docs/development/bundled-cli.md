@@ -1,20 +1,26 @@
-# 内置桌面 CLI 设计
+# 桌面 CLI 分发与 PATH 安装
 
-> **状态（2026-08）**：M1–M3 主路径已实现（`open` + deep link、`paper move` 测试、externalBin 打包、设置 → 关于安装 CLI）。平台安装器自动 PATH（NSIS/deb 完整脚本）与 Homebrew Cask link 仍可按渠道加深。实现说明亦见 [../backend/cli.md](../backend/cli.md)。
+> **状态（2026-08）**：M1–M2（`open` + deep link、`paper move`）与设置 → 关于安装 PATH shim 已实现。  
+> **体积策略（[#285](https://github.com/poco-ai/Agentero/issues/285)）**：桌面安装包**不再**嵌入多 MB 的 `agentero-cli`；About → 安装 CLI 从 **同 tag** 的 GitHub Release 下载归档并校验 sha256。`externalBin` 仅保留 stub 以满足 tauri-build。独立 CLI 归档仍由 release CLI 矩阵上传。  
+> 平台安装器自动 PATH（NSIS/deb）与 Homebrew Cask link 仍可按渠道加深。实现说明亦见 [../backend/cli.md](../backend/cli.md)。
 
-关联 Issue：[\#165](https://github.com/poco-ai/Agentero/issues/165)（命令行打开 Vault）与 [\#166](https://github.com/poco-ai/Agentero/issues/166)（CLI 论文移动）。
+关联 Issue：[\#165](https://github.com/poco-ai/Agentero/issues/165)（命令行打开 Vault）、[\#166](https://github.com/poco-ai/Agentero/issues/166)（CLI 论文移动）、[\#285](https://github.com/poco-ai/Agentero/issues/285)（安装包体积）。
 
 **命令能力扩展**（翻译 / 高亮 / 批注等阅读标注进同一 `agentero` bin）：[\#170](https://github.com/poco-ai/Agentero/issues/170)，设计见 [mark-cli-roadmap.md](mark-cli-roadmap.md)。本篇只管 **分发与 `open`**；#170 管 **子命令与 marks 契约**。两者共用一个 headless 二进制，可并行开发。
 
 ## 背景与结论
 
-当前 `agentero-cli` 是独立 release artifact，用户必须另行下载并加入 `PATH`。桌面 App 与 CLI 又共享 `agentero_lib` 中的 Vault / Catalog 领域逻辑，分开安装会带来版本不一致和发现成本。
+桌面 App 与 CLI 共享 `agentero_lib` 中的 Vault / Catalog 领域逻辑；版本不一致会带来发现成本与契约漂移。
 
-目标是让**桌面安装包携带同版本的 headless CLI**，对用户只暴露一个 `agentero` 命令。不把 GUI 可执行文件直接当作 CLI，也不复制一份 Vault/Catalog 业务逻辑。
+**分发目标（修订后）：**
 
-这与 VS Code 的产品形态一致：Windows、Linux 安装器提供 PATH；macOS 从应用内显式安装 shell command。Typora 在 macOS 主要提供 App Bundle 可执行文件和 alias，不保证全局命令。Agentero 采用前者的跨平台安装策略，保留后者“CLI 随 App Bundle 交付”的优点。
+1. 用户只下载安装一个桌面 artifact 即可日常使用 GUI。
+2. 需要 `agentero` 时，在 **设置 → 关于** 一键安装与 App **完全同版本** 的 headless CLI（从该次 Release 下载，不拉 `latest`）。
+3. 安装包体积不因 CLI 膨胀（#285）；独立 CLI 归档继续服务 headless-only 机器。
 
-装包后的 `agentero` 应包含 **当时 tag 上已实现的全部 headless 子命令**（含既有 `vault` / `paper` / `import` / `wiki`，以及 #170 落地后的 `mark` / `translate` 等），避免「GUI 能标、CLI 还要另下包」或版本漂移写出桌面不认的 `marks/`。
+不把 GUI 可执行文件直接当作 CLI，也不复制一份 Vault/Catalog 业务逻辑。PATH 策略仍是：显式安装用户级 shim，**不**静默改 shell rc。
+
+安装后的 `agentero` 应包含 **当时 tag 上已实现的全部 headless 子命令**（含既有 `vault` / `paper` / `import` / `wiki`，以及 #170 落地后的 `mark` / `translate` 等）。
 
 ## 范围
 
@@ -84,16 +90,20 @@ agentero open <PATH> / agentero <PATH>
 
 ### Artifact 内容
 
-release workflow 先编译 desktop App 和目标平台的 `agentero-cli`，再把 CLI 作为 App Bundle 的 executable resource（内部文件名可为 `agentero-cli`，避免与 GUI 主程序重名）。CLI 的构建目标必须和 desktop App 相同，且使用同一 tag / version。
+| 产物 | CLI 策略 |
+|---|---|
+| 桌面安装包（DMG/MSI/deb/…） | **不**嵌入真实 CLI；`beforeBuildCommand` 仅 `pnpm cli:bundle:stub`（tauri-build 占位） |
+| GitHub Release CLI 归档 | 每平台 `agentero-cli-{ver}-{host}.{tar.gz\|zip}` + `.sha256`（CLI 矩阵 job） |
+| 设置 → 关于 → 安装 | Host 下载 **同 app 版本** 归档 → 校验 sha256 → 解压到用户 data 目录 → 用户 bin shim |
 
-**仅 desktop**。iOS / Android 是远端客户端，不内置 headless CLI：
+**仅 desktop**。iOS / Android 是远端客户端，无 headless CLI：
 
-- `tauri.conf.json`：`bundle.externalBin = ["binaries/agentero-cli"]`，`beforeBuildCommand` 含 `pnpm cli:bundle:release`
+- `tauri.conf.json`：`bundle.externalBin = ["binaries/agentero-cli"]`（stub only），`beforeBuildCommand` 含 `pnpm cli:bundle:stub`
 - `tauri.ios.conf.json` / `tauri.android.conf.json`：覆盖 `beforeBuildCommand` 为仅 `pnpm build`，并清空 `externalBin`
-- 独立 CLI job / `cargo build -p agentero-cli`：须先 seed `src-tauri/binaries/agentero-cli-$TRIPLE` stub（`pnpm cli:bundle:stub` 或 release workflow 中的 shell 步骤），否则 `tauri-build` 会因 missing resource 失败
-- `scripts/prepare-bundled-cli.mjs` 在 `TAURI_ENV_PLATFORM` 为 android/ios 时只写 stub、不编译 desktop CLI
+- 独立 CLI job / `cargo build -p agentero-cli`：须先 seed stub，否则 `tauri-build` 因 missing resource 失败
+- `scripts/prepare-bundled-cli.mjs` 在 mobile 时只写 stub
 
-外部 `agentero` 是指向或调用该内置 CLI 的轻量 shim；它不携带第二个版本，也不从网络下载组件。App 更新替换 Bundle 后，shim 继续定位同一 Bundle 内的新版 CLI；App 被卸载或移动导致不可定位时，shim 给出可操作错误。
+外部 `agentero` 是指向 **managed** CLI 二进制的轻量 shim（下载缓存，而非 App Bundle 内文件）。App 升级后若 CLI 版本落后，About 提示 **Update** 并重新下载同版本。
 
 ### 平台策略
 
@@ -122,28 +132,38 @@ DMG 的安装操作依次尝试已在 PATH 的用户目录、`~/.local/bin`，�
 - 前端抽取 `openLocalVaultPath`；监听 `vault:open-request`，处理启动竞态和打开失败。
 - 测试启动参数、运行中 App、无效目录与 Vault 切换。
 
-### M3：内置分发
+### M3：PATH 安装 UX（已实现基线）
 
-- release workflow 将各平台 CLI 放入对应 App artifact。
-- 建立 Windows/Linux 自动 PATH 入口与 macOS Homebrew/PKG link。
-- 增加 macOS DMG 的命令面板入口、安装状态与卸载操作；所有 UI 文案经 i18n。
-- release checklist 验证“新机器安装 App 后”与“App 更新后”均能执行 `agentero --version`、`agentero .`、`agentero paper move ...`。
+- 设置 → 关于：安装 / 卸载 / 状态；文案经 i18n。
+- 用户 bin shim；不编辑 shell rc。
+
+### M3b：可选下载分发（#285，已实现）
+
+- 安装包停止 `cli:bundle:release`；仅 stub。
+- About 安装：同版本 GitHub 下载 + sha256 + managed 缓存 + shim。
+- 版本落后时提供 Update；dev 可用 `pnpm cli:bundle` 离线安装。
+
+### 仍可选加深
+
+- Windows/Linux 安装器自动 PATH、Homebrew Cask link、PKG。
 
 ## 验收标准
 
-- 用户只下载安装一个桌面 artifact，即能获得与 App 完全同版本的 CLI。
-- Windows/Linux 包安装后，新的终端可执行 `agentero --version`。
-- macOS Homebrew/PKG 可直接执行；DMG 用户完成显式安装操作后可执行，且不会被静默修改 shell 配置。
-- `agentero <existing-directory>` 唤起已运行的 App、聚焦窗口并切换 Vault；无效路径不会改变当前 Vault。
-- `agentero --vault <vault> paper move <from> <new-parent>` 在 `new-parent` 不存在时成功创建目录、移动文件并更新 Catalog。
-- `--json`、headless 命令的 stdout/stderr 与退出码契约不因 GUI 打开能力而变化。
+- 桌面安装包内 **无** 可运行的多 MB `agentero-cli`（仅 stub 或无 payload）。
+- 已发布 `vX.Y.Z` 上，About → 安装后 `agentero --version` 为 `X.Y.Z`。
+- 安装过程校验 Release `.sha256`；失败不留下半截可执行文件。
+- 卸载只删除 Agentero 管理的 shim 与 managed 缓存，不碰用户自建 `agentero`。
+- `agentero <existing-directory>` 唤起已运行的 App、聚焦窗口并切换 Vault；无效路径不改变当前 Vault。
+- `--json` 与 headless 退出码契约不因 GUI 打开能力而变化。
 
 ## 风险与决策
 
 | 风险 | 决策 |
 |---|---|
 | macOS DMG 无法可靠自动加入 PATH | 使用显式安装命令；提供 PKG / Homebrew 作为零手动渠道。 |
-| App 与 CLI 版本漂移 | 只分发 Bundle 内 CLI，release CI 校验版本一致。 |
+| App 与 CLI 版本漂移 | 只下载 **当前 app 版本** 的 Release 资产；禁止 `latest`。 |
+| Draft / 未发布 tag | 404 明确提示；与 updater 一样仅已发布 Release 可用。 |
+| 安装包体积 | CLI 不进安装包（#285）；独立归档仍上传。 |
 | 外部 deep link 注入任意路径 | Host 规范化并验证目录，前端仅消费 Host 发出的路径。 |
 | GUI 启动与前端监听存在竞态 | Host 缓存最近一次 pending open request，前端 ready 后拉取或确认消费。 |
 | 目录简写与未来子命令冲突 | 子命令优先；歧义时使用显式 `open`。 |
