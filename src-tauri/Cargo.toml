@@ -39,6 +39,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 flate2 = "1.1.9"
 tar = "0.4.46"
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
 htmd = "0.5.4"
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 notify-debouncer-full = "0.3"

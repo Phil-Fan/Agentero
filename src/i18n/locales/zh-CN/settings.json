@@ -434,13 +434,19 @@
 			"label": "命令行工具",
 			"description": "无界面操作 Vault / Catalog，供脚本与外部 Agent 使用",
 			"notBundled": "当前构建未内置 CLI",
+			"downloadHint": "将安装与应用同版本的 CLI v{{version}}（首次约 12MB，从 GitHub Releases 下载）",
+			"versionMismatch": "CLI {{cli}} 与应用 {{app}} 不一致，请重新安装以对齐",
 			"install": "安装",
+			"update": "更新",
 			"uninstall": "移除",
+			"openRelease": "打开发布页",
 			"installSuccess": "已安装 CLI 命令",
+			"downloadInstallSuccess": "已下载并安装 CLI",
 			"uninstallSuccess": "已移除 CLI 命令",
 			"installFailed": "无法安装 CLI 命令",
 			"uninstallFailed": "无法移除 CLI 命令",
-			"statusFailed": "无法读取 CLI 状态"
+			"statusFailed": "无法读取 CLI 状态",
+			"openReleaseFailed": "无法打开发布页"
 		}
 	}
 }

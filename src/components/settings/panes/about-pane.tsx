@@ -1,4 +1,5 @@
 import { getVersion } from "@tauri-apps/api/app";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Download, LoaderCircle, RefreshCw, Terminal } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -74,7 +75,11 @@ export function AboutPane() {
 			.then(async (res) => {
 				setCli(res.status);
 				await refreshCli();
-				notifySuccess(t("about.cli.installSuccess"));
+				notifySuccess(
+					res.action === "download-install"
+						? t("about.cli.downloadInstallSuccess")
+						: t("about.cli.installSuccess"),
+				);
 			})
 			.catch(() => notifyError(t("about.cli.installFailed")))
 			.finally(() => setCliBusy(false));
@@ -89,6 +94,13 @@ export function AboutPane() {
 			})
 			.catch(() => notifyError(t("about.cli.uninstallFailed")))
 			.finally(() => setCliBusy(false));
+	};
+	const onOpenCliRelease = () => {
+		const url = cli?.releasePageUrl;
+		if (!url) return;
+		void openUrl(url).catch(() =>
+			notifyError(t("about.cli.openReleaseFailed")),
+		);
 	};
 
 	const description = (() => {
@@ -129,13 +141,26 @@ export function AboutPane() {
 		if (!cli) {
 			return cliLoading ? "…" : t("about.cli.statusFailed");
 		}
-		if (!cli.bundledPath) {
-			return t("about.cli.notBundled");
+		if (cli.message?.trim()) {
+			return cli.message;
 		}
-		return t("about.cli.description");
+		if (cli.installed && !cli.shimCurrent) {
+			return t("about.cli.versionMismatch", {
+				cli: cli.cliVersion ?? "?",
+				app: cli.appVersion,
+			});
+		}
+		if (cli.installed) {
+			return t("about.cli.description");
+		}
+		return t("about.cli.downloadHint", { version: cli.appVersion });
 	})();
 
-	const canInstallCli = Boolean(cli?.bundledPath) && !cliBusy;
+	const needsCliUpdate = Boolean(
+		cli?.installed && !cli.shimCurrent && cli.canInstall,
+	);
+	const canInstallCli = Boolean(cli?.canInstall) && !cliBusy;
+	const showInstall = !cli?.installed || needsCliUpdate;
 
 	return (
 		<>
@@ -215,7 +240,8 @@ export function AboutPane() {
 									) : null}
 									{t("about.cli.uninstall")}
 								</Button>
-							) : (
+							) : null}
+							{showInstall ? (
 								<Button
 									size="sm"
 									disabled={!canInstallCli || cliLoading}
@@ -226,10 +252,24 @@ export function AboutPane() {
 											data-icon="inline-start"
 											className="animate-spin"
 										/>
-									) : null}
-									{t("about.cli.install")}
+									) : (
+										<Download data-icon="inline-start" />
+									)}
+									{needsCliUpdate
+										? t("about.cli.update")
+										: t("about.cli.install")}
 								</Button>
-							)}
+							) : null}
+							{!cli?.canInstall && cli?.releasePageUrl ? (
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={cliLoading}
+									onClick={onOpenCliRelease}
+								>
+									{t("about.cli.openRelease")}
+								</Button>
+							) : null}
 						</div>
 					</SettingsRow>
 				</SettingsGroup>
