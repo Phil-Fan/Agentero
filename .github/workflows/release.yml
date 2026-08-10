@@ -47,12 +47,11 @@ jobs:
             Sideload it directly; the app is a remote client for your desktop Vault.
 
             ## CLI (`agentero`)
-            Headless Vault / Catalog machine interface (no BYOA). **Bundled with the desktop app** at the same version.
+            Headless Vault / Catalog machine interface (no BYOA). **Not embedded** in desktop installers (smaller packages; #285).
 
             After installing the desktop app:
-            - **Windows / Linux**: installers expose `agentero` on PATH when possible.
-            - **macOS (DMG)**: Settings → About → **Install CLI** (writes `~/.local/bin/agentero`; does not edit shell rc).
-            - Standalone CLI archives remain available for headless-only machines.
+            - **All platforms**: Settings → About → **Install CLI** downloads the **same app version** archive from this Release, verifies checksum, and writes a user-bin shim (does not edit shell rc).
+            - Standalone CLI archives below remain available for headless-only machines.
 
             ```bash
             agentero --version
@@ -112,11 +111,12 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      # Bundle same-version headless CLI into the desktop artifact (externalBin).
-      # `beforeBuildCommand` also runs `pnpm cli:bundle:release`; this pre-step
-      # makes the triple-suffixed binary available for tauri-build early checks.
-      - name: Prepare bundled CLI
-        run: pnpm cli:bundle:release
+      # Desktop packages no longer ship a real multi-MB CLI (#285). Seed a tiny
+      # externalBin stub so tauri-build accepts the resource path; users install
+      # the same-version CLI from Settings → About (GitHub Release download).
+      # `beforeBuildCommand` also runs `pnpm cli:bundle:stub`.
+      - name: Prepare externalBin CLI stub
+        run: pnpm cli:bundle:stub
 
       # macOS: Developer ID signing + notarytool (see docs/development/macos-signing.md).
       # Without APPLE_CERTIFICATE the build still runs unsigned (existing behavior).
