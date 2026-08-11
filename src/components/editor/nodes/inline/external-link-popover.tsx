@@ -199,7 +199,9 @@ export function ExternalLinkElement(props: PlateElementProps) {
 			<PopoverContent
 				align="start"
 				sideOffset={6}
-				className="w-80 gap-3 p-3"
+				// Above dockview sashes (z-index: calc(--dv-overlay-z-index + …) ≥ 1000)
+				// so the editor's split divider never paints over this popover.
+				className="z-[1100] w-80 gap-3 p-3"
 				onOpenAutoFocus={(event) => {
 					event.preventDefault();
 					window.requestAnimationFrame(() => {
