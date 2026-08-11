@@ -592,7 +592,10 @@ fn normalize_translate_provider_configs(configs: &mut HashMap<String, TranslateP
     configs.retain(|k, _| COMMERCIAL.contains(&k.as_str()));
     for cfg in configs.values_mut() {
         cfg.api_key = cfg.api_key.trim().to_string();
-        cfg.base_url = cfg.base_url.trim().trim_end_matches('/').to_string();
+        // Keep trailing slashes: this runs on every save and the result is
+        // echoed back into the settings UI, so stripping "/" would make it
+        // impossible to type paths like ".../v1". Endpoints trim on use.
+        cfg.base_url = cfg.base_url.trim().to_string();
         cfg.region = cfg.region.trim().to_string();
         cfg.model = cfg.model.trim().to_string();
     }

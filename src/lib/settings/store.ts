@@ -498,10 +498,10 @@ function normalizeTranslateProviderConfigs(
 		};
 		out[id] = {
 			apiKey: typeof cfg.apiKey === "string" ? cfg.apiKey.trim() : "",
-			baseUrl:
-				typeof cfg.baseUrl === "string"
-					? cfg.baseUrl.trim().replace(/\/+$/, "")
-					: "",
+			// No trailing-slash strip here: this runs on every keystroke save,
+			// which would eat the "/" while typing e.g. ".../v1". Host and the
+			// settings UI onBlur already trim trailing slashes.
+			baseUrl: typeof cfg.baseUrl === "string" ? cfg.baseUrl.trim() : "",
 			region: typeof cfg.region === "string" ? cfg.region.trim() : "",
 			model: typeof cfg.model === "string" ? cfg.model.trim() : "",
 		};
