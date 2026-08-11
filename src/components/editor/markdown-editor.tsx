@@ -64,7 +64,7 @@ import type {
 } from "@/lib/markdown/export/types";
 import { splitFrontmatter } from "@/lib/markdown/frontmatter";
 import { saveImageToMarkdownAssets } from "@/lib/markdown/image";
-import { loadSettings } from "@/lib/settings";
+import { loadSettings, useUiScale } from "@/lib/settings";
 import { formatModShortcut } from "@/lib/shell/shortcuts";
 import type { LinkFragment, WikiRenameHeadingRequest } from "@/lib/wiki";
 import { useWikiNav } from "@/lib/wiki/nav-context";
@@ -158,6 +158,9 @@ export function MarkdownEditor({
 	const onAssetsChangedRef = useRef(onAssetsChanged);
 	onAssetsChangedRef.current = onAssetsChanged;
 	const editorContainerRef = useRef<HTMLDivElement | null>(null);
+	// Body text keeps its own px font size (editorFontSize setting) so it must
+	// follow the UI zoom (uiScale) explicitly — rem-based chrome scales for free.
+	const uiScale = useUiScale();
 
 	/**
 	 * Body typography on the editor root. When a custom font stack is set, also
@@ -167,7 +170,8 @@ export function MarkdownEditor({
 	const editorTypographyStyle = useMemo((): CSSProperties | undefined => {
 		const style: CSSProperties = {};
 		if (fontSize != null && fontSize !== "") {
-			style.fontSize = fontSize;
+			style.fontSize =
+				typeof fontSize === "number" ? fontSize * uiScale : fontSize;
 		}
 		if (lineHeight != null && Number.isFinite(lineHeight)) {
 			style.lineHeight = lineHeight;
@@ -179,7 +183,7 @@ export function MarkdownEditor({
 			(style as Record<string, string>)["--font-heading"] = fontFamily;
 		}
 		return Object.keys(style).length > 0 ? style : undefined;
-	}, [fontSize, fontFamily, lineHeight]);
+	}, [fontSize, fontFamily, lineHeight, uiScale]);
 	/** Swallow the `beforeinput` insertParagraph that follows slash Enter confirm. */
 	const suppressNextEditorBreakRef = useRef(false);
 	const [findOpen, setFindOpen] = useState(false);

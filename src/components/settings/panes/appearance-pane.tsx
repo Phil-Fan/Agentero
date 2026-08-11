@@ -25,7 +25,6 @@ import {
 	EDITOR_LINE_HEIGHT_MAX,
 	EDITOR_LINE_HEIGHT_MIN,
 	EDITOR_LINE_HEIGHT_STEP,
-	UI_SCALE_PRESETS,
 } from "@/lib/settings";
 import {
 	applyUiTheme,
@@ -97,6 +96,19 @@ function AppearancePaneInner({
 		}, 150);
 		return () => clearTimeout(id);
 	}, [lineHeight, editorLineHeight, patch]);
+
+	const [scale, setScale] = useState(uiScale);
+	useEffect(() => {
+		setScale(uiScale);
+	}, [uiScale]);
+
+	useEffect(() => {
+		if (scale === uiScale) return;
+		const id = setTimeout(() => {
+			patch({ uiScale: scale });
+		}, 150);
+		return () => clearTimeout(id);
+	}, [scale, uiScale, patch]);
 
 	useEffect(() => {
 		let active = true;
@@ -266,23 +278,23 @@ function AppearancePaneInner({
 					</Select>
 				</SettingsRow>
 				<SettingsRow label={t("appearance.uiScale.label")} htmlFor={uiScaleId}>
-					<Select
-						value={String(uiScale)}
-						onValueChange={(v) => patch({ uiScale: Number(v) })}
-					>
-						<SelectTrigger id={uiScaleId} size="sm" className="min-w-[120px]">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							{UI_SCALE_PRESETS.map((scale) => (
-								<SelectItem key={scale} value={String(scale)}>
-									{t("appearance.uiScale.value", {
-										percent: Math.round(scale * 100),
-									})}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+					<div className="flex items-center gap-2">
+						<input
+							id={uiScaleId}
+							type="range"
+							min={80}
+							max={150}
+							step={1}
+							value={Math.round(scale * 100)}
+							onChange={(e) => setScale(Number(e.target.value) / 100)}
+							className="w-28 accent-primary"
+						/>
+						<span className="w-12 text-right text-muted-foreground text-xs tabular-nums">
+							{t("appearance.uiScale.value", {
+								percent: Math.round(scale * 100),
+							})}
+						</span>
+					</div>
 				</SettingsRow>
 			</SettingsGroup>
 
