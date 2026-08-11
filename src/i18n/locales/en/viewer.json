@@ -169,6 +169,7 @@
 		"progressPages": "{{page}} / {{total}} pages",
 		"progressPct": "{{pct}}%",
 		"hoverAskAria": "Open visual question for this figure, table, algorithm, or formula",
+		"clickAnnotateAria": "Annotate this figure, table, or algorithm",
 		"sectionFigures": "Figures",
 		"sectionTables": "Tables",
 		"sectionAlgorithms": "Algorithms",

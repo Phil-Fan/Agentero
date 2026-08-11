@@ -24,30 +24,30 @@ export const LAYOUT_KIND_HEX: Record<PdfLayoutKind, string> = {
 
 /** Soft fill used for card tints / PDF focus overlays. */
 export const LAYOUT_KIND_FILL: Record<PdfLayoutKind, string> = {
-	image: "rgba(245, 158, 11, 0.15)",
-	chart: "rgba(249, 115, 22, 0.15)",
-	table: "rgba(16, 185, 129, 0.15)",
-	algorithm: "rgba(99, 102, 241, 0.15)",
-	formula: "rgba(6, 182, 212, 0.15)",
-	formula_number: "rgba(8, 145, 178, 0.12)",
-	figure_title: "rgba(107, 114, 128, 0.15)",
-	header: "rgba(236, 72, 153, 0.15)",
-	abstract: "rgba(168, 85, 247, 0.15)",
-	text: "rgba(148, 163, 184, 0.08)",
+	image: "rgba(245, 158, 11, 0.05)",
+	chart: "rgba(249, 115, 22, 0.05)",
+	table: "rgba(16, 185, 129, 0.05)",
+	algorithm: "rgba(99, 102, 241, 0.05)",
+	formula: "rgba(6, 182, 212, 0.05)",
+	formula_number: "rgba(8, 145, 178, 0.04)",
+	figure_title: "rgba(107, 114, 128, 0.05)",
+	header: "rgba(236, 72, 153, 0.05)",
+	abstract: "rgba(168, 85, 247, 0.05)",
+	text: "rgba(148, 163, 184, 0.03)",
 };
 
 /** Stronger border / ring (matches EmbedPDF overlay border). */
 export const LAYOUT_KIND_BORDER: Record<PdfLayoutKind, string> = {
-	image: "rgba(245, 158, 11, 0.7)",
-	chart: "rgba(249, 115, 22, 0.7)",
-	table: "rgba(16, 185, 129, 0.7)",
-	algorithm: "rgba(99, 102, 241, 0.7)",
-	formula: "rgba(6, 182, 212, 0.7)",
-	formula_number: "rgba(8, 145, 178, 0.55)",
-	figure_title: "rgba(107, 114, 128, 0.7)",
-	header: "rgba(236, 72, 153, 0.7)",
-	abstract: "rgba(168, 85, 247, 0.7)",
-	text: "rgba(148, 163, 184, 0.35)",
+	image: "rgba(245, 158, 11, 0.4)",
+	chart: "rgba(249, 115, 22, 0.4)",
+	table: "rgba(16, 185, 129, 0.4)",
+	algorithm: "rgba(99, 102, 241, 0.4)",
+	formula: "rgba(6, 182, 212, 0.4)",
+	formula_number: "rgba(8, 145, 178, 0.3)",
+	figure_title: "rgba(107, 114, 128, 0.4)",
+	header: "rgba(236, 72, 153, 0.4)",
+	abstract: "rgba(168, 85, 247, 0.4)",
+	text: "rgba(148, 163, 184, 0.2)",
 };
 
 /** Tailwind-friendly classes for section headers / badges (light + dark). */

@@ -101,6 +101,12 @@ export type PdfLayoutHover = {
 	/** Pointer entered a layout hit target → start the dwell timer. */
 	scheduleLayoutHoverOpen: (region: PdfLayoutRegion) => void;
 	handleLayoutHoverLeave: (regionId: string) => void;
+	/**
+	 * Click a figure / table / algorithm hit target → open the visual-annotation
+	 * editor immediately (no dwell). Formula regions keep the dwell legend via
+	 * `scheduleLayoutHoverOpen`.
+	 */
+	handleLayoutRegionClick: (region: PdfLayoutRegion) => void;
 	markLayoutDraftHoverEnter: () => void;
 	scheduleLayoutDraftHide: () => void;
 	markFormulaHoverEnter: () => void;
@@ -532,6 +538,29 @@ export function usePdfLayoutHover({
 		],
 	);
 
+	/**
+	 * Click a figure/table/algorithm hit target → open the visual-annotation
+	 * editor immediately (non-ephemeral, stays open until the user acts).
+	 * `beginVisualAnnotation` closes any open formula legend and crops the
+	 * region; the `seq` token guards against a stale frame opening a draft
+	 * after the user already navigated away.
+	 */
+	const handleLayoutRegionClick = useCallback(
+		(region: PdfLayoutRegion) => {
+			if (layoutHoverBlocked()) return;
+			if (formulaAnnotationPreviewRef.current) return;
+			const seq = ++layoutHoverSeqRef.current;
+			// The crop editor renders its own source-region frame (visual draft),
+			// which clears when the editor closes. Do not also focus the layout
+			// region here — that focused frame would linger after the user
+			// cancels without annotating.
+			void beginVisualAnnotationRef.current(region.pageIndex + 1, region.bbox, {
+				seq,
+			});
+		},
+		[beginVisualAnnotationRef, layoutHoverBlocked],
+	);
+
 	useEffect(() => {
 		// Drop in-flight hover when switching PDF documents or unmounting.
 		if (!docId) {
@@ -589,6 +618,7 @@ export function usePdfLayoutHover({
 		layoutHoverSeqRef,
 		scheduleLayoutHoverOpen,
 		handleLayoutHoverLeave,
+		handleLayoutRegionClick,
 		markLayoutDraftHoverEnter,
 		scheduleLayoutDraftHide,
 		markFormulaHoverEnter,

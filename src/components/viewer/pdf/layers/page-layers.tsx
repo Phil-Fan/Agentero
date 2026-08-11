@@ -113,6 +113,8 @@ export type PdfPageHandlers = {
 	onRegionSelect: (page: number, region: PdfAskNormalizedRect) => void;
 	onLayoutHoverEnter: (region: PdfLayoutRegion) => void;
 	onLayoutHoverLeave: (regionId: string) => void;
+	/** Click a figure/table/algorithm hit target → open the annotate editor. */
+	onLayoutRegionClick: (region: PdfLayoutRegion) => void;
 	onDraftHoverEnter: () => void;
 	onDraftHoverLeave: () => void;
 	onTogglePageLayoutTranslate: (pageIndex: number) => void;
@@ -350,7 +352,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 							return (
 								<div
 									key={`layout-box-${region.id}`}
-									className="pointer-events-none absolute z-[1] rounded-sm border-[1.5px]"
+									className="pointer-events-none absolute z-[1] rounded-none border"
 									style={{
 										left: `${region.bbox.x * 100}%`,
 										top: `${region.bbox.y * 100}%`,
@@ -383,12 +385,14 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 					/>
 				) : null}
 				{/*
-				 * Hover hit targets for post-merge figure/table/algorithm/formula.
+				 * Hit targets for post-merge figure/table/algorithm/formula.
 				 * Largest first so smaller boxes stack on top and win pointer hits.
 				 * Hidden when framing or a visual draft is open (not during crop:
-				 * unmount leave must not cancel an in-flight hover open).
+				 * unmount leave must not cancel an in-flight crop).
 				 * Formula legend keeps hits mounted so leave/enter can switch
 				 * equations and drive hide without a second hover surface.
+				 * Figures / tables / algorithms annotate on click; formulas keep
+				 * the dwell-triggered glossary legend.
 				 */}
 				{!mode.regionSelecting && !mode.visualDraftOpen
 					? layout.hoverableRegionsByPage.get(pageIndex)?.map((region) => {
@@ -403,17 +407,30 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 									aria-label={
 										formulaLegend
 											? t("equationAnnotation.hoverAria")
-											: t("figures.hoverAskAria")
+											: t("figures.clickAnnotateAria")
 									}
-									className="absolute z-[2] cursor-pointer rounded-sm border-0 bg-transparent p-0 transition-colors hover:bg-primary/5"
+									className="absolute z-[2] cursor-pointer rounded-none border-0 bg-transparent p-0 transition-colors hover:bg-primary/5"
 									style={{
 										left: `${region.bbox.x * 100}%`,
 										top: `${region.bbox.y * 100}%`,
 										width: `${region.bbox.w * 100}%`,
 										height: `${region.bbox.h * 100}%`,
 									}}
-									onPointerEnter={() => handlers.onLayoutHoverEnter(region)}
-									onPointerLeave={() => handlers.onLayoutHoverLeave(region.id)}
+									onPointerEnter={
+										formulaLegend
+											? () => handlers.onLayoutHoverEnter(region)
+											: undefined
+									}
+									onPointerLeave={
+										formulaLegend
+											? () => handlers.onLayoutHoverLeave(region.id)
+											: undefined
+									}
+									onClick={
+										formulaLegend
+											? undefined
+											: () => handlers.onLayoutRegionClick(region)
+									}
 								/>
 							);
 						})
@@ -457,7 +474,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 				{visualDraftRegionOnPage ? (
 					<div
 						className={cn(
-							"absolute z-[2] rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]",
+							"absolute z-[2] rounded-none border border-primary/40 bg-primary/5 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]",
 							// Ephemeral layout-hover drafts need a hover surface so
 							// leaving the region can schedule auto-hide.
 							layout.visualDraftEphemeral
@@ -490,7 +507,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 				 */}
 				{formulaAnnotationRegionOnPage ? (
 					<div
-						className="pointer-events-none absolute z-[2] rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+						className="pointer-events-none absolute z-[2] rounded-none border border-primary/40 bg-primary/5 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
 						style={{
 							left: `${formulaAnnotationRegionOnPage.x * 100}%`,
 							top: `${formulaAnnotationRegionOnPage.y * 100}%`,
@@ -503,7 +520,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 				{/* Figures sidebar selection: EmbedPDF layout hue for kind. */}
 				{focusedLayoutOnPage && !formulaAnnotationRegionOnPage ? (
 					<div
-						className="pointer-events-none absolute z-[2] rounded-sm border-2 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+						className="pointer-events-none absolute z-[2] rounded-none border shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
 						style={{
 							left: `${focusedLayoutOnPage.bbox.x * 100}%`,
 							top: `${focusedLayoutOnPage.bbox.y * 100}%`,
@@ -522,7 +539,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 					? activeVisualOnPage.rects.map((rect) => (
 							<div
 								key={`${activeVisualOnPage.id}-region-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
-								className="pointer-events-none absolute z-[2] rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+								className="pointer-events-none absolute z-[2] rounded-none border border-primary/40 bg-primary/5 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
 								style={{
 									left: `${rect.x * 100}%`,
 									top: `${rect.y * 100}%`,

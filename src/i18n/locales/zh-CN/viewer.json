@@ -169,6 +169,7 @@
 		"progressPages": "{{page}} / {{total}} 页",
 		"progressPct": "{{pct}}%",
 		"hoverAskAria": "对此插图、表格、算法或公式打开视觉提问",
+		"clickAnnotateAria": "标注此插图、表格或算法",
 		"sectionFigures": "插图",
 		"sectionTables": "表格",
 		"sectionAlgorithms": "算法",
