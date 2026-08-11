@@ -637,7 +637,9 @@ export function MarkdownEditor({
 											<Editor
 												placeholder={placeholder}
 												readOnly={readOnly}
-												className="min-h-full px-6 pt-4 pb-48"
+												// `pr-16` reserves a right gutter for the collapsed
+												// TOC strip (`right-2 w-12`) so it never covers text.
+												className="min-h-full pl-6 pr-16 pt-4 pb-48"
 												style={editorTypographyStyle}
 											/>
 											{!readOnly ? (
