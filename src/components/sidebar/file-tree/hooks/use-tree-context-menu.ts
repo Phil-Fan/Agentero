@@ -10,6 +10,7 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { broadcastAgentAttachContext } from "@/lib/agent/context-attach";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { isTauri } from "@/lib/core/tauri";
 import { isPaperDirectory } from "@/lib/paper";
@@ -199,6 +200,13 @@ export function useTreeContextMenu({
 					onOpenPaperNotes(menu.path);
 				}
 			: undefined,
+		onAddToChat:
+			!targetIsVirtual && menu.path && !menu.path.startsWith("agentero:")
+				? () => {
+						setMenu(null);
+						broadcastAgentAttachContext([menu.path]);
+					}
+				: undefined,
 		onNewFile:
 			onStartCreate && vaultPath
 				? () => {

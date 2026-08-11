@@ -26,6 +26,11 @@ import {
 	takePendingAgentComposerPrompt,
 } from "@/lib/agent/composer-seed";
 import {
+	listenAgentAttachContext,
+	subscribePendingAgentContextPaths,
+	takePendingAgentContextPaths,
+} from "@/lib/agent/context-attach";
+import {
 	contextPathDisplayName,
 	normalizeContextPath,
 } from "@/lib/agent/context-path-icon";
@@ -404,6 +409,23 @@ export function useAgentComposer({
 		}
 		setMentionedPaths((prev) => prev.filter((item) => item !== path));
 	};
+
+	// File tree "Add to chat" → drop paths as context chips (same as @-mention).
+	// Handles same-window (module pub/sub) and the singleton feature window
+	// (Tauri event). Consumes one pending batch on mount.
+	useEffect(() => {
+		const pending = takePendingAgentContextPaths();
+		if (pending) attachContextPaths(pending);
+		const unsubscribe = subscribePendingAgentContextPaths(attachContextPaths);
+		let unlisten: (() => void) | undefined;
+		void listenAgentAttachContext(attachContextPaths).then((u) => {
+			unlisten = u;
+		});
+		return () => {
+			unsubscribe();
+			unlisten?.();
+		};
+	}, [attachContextPaths]);
 
 	/**
 	 * Drag from file tree sets `text/plain` vault paths (newline-separated).

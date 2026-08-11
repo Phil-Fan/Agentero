@@ -3,6 +3,7 @@
 		"empty": "Empty folder",
 		"newFile": "New file",
 		"openNotes": "Open Notes",
+		"addToChat": "Add to conversation",
 		"newFolder": "New folder",
 		"invalidName": "Invalid name. Do not use path separators.",
 		"needsVault": "Open a vault before creating files.",

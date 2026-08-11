@@ -3,6 +3,7 @@
 		"empty": "空文件夹",
 		"newFile": "新建文件",
 		"openNotes": "打开笔记",
+		"addToChat": "添加到对话",
 		"newFolder": "新建文件夹",
 		"invalidName": "名称无效，请勿使用路径分隔符。",
 		"needsVault": "请先打开知识库再创建文件。",
