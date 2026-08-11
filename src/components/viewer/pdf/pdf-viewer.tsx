@@ -1372,8 +1372,10 @@ function PdfViewerInner({
 						rePlaceFormulaAnnotationOnScroll();
 					}}
 				/>
-				{/* Pinch zoom still handled by EmbedPDF; wheel zoom is replaced above so
-				    the step size matches the toolbar +/- buttons. */}
+				{/* Ctrl+wheel and trackpad pinch are handled by WheelZoomHandler (WebKit
+				    pinch arrives as GestureEvents, not ctrl+wheel); EmbedPDF's built-in
+				    wheel zoom is disabled so steps match the toolbar +/- buttons, and
+				    its enablePinch only covers touch devices. */}
 				<ZoomGestureWrapper documentId={docId} enableWheel={false}>
 					<GlobalPointerProvider documentId={docId}>
 						<Scroller documentId={docId} renderPage={renderPage} />

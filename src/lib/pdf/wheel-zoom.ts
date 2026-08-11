@@ -79,6 +79,15 @@ export function createWheelZoomCoalescer({
 /** Wheel stream must be silent this long before a scroll gesture is over. */
 const WHEEL_SCROLL_IDLE_MS = 200;
 
+/**
+ * Wheel deltaY units per unit of natural log magnification. A full 2× pinch
+ * (ln 2 ≈ 0.69) yields ~690 delta ≈ 7 toolbar-sized zoom steps.
+ */
+const GESTURE_SCALE_DELTA_GAIN = 1000;
+
+/** Minimal shape of WebKit's non-standard GestureEvent. */
+type WebKitGestureEvent = { scale: number; preventDefault(): void };
+
 type WheelZoomGestureOptions = {
 	target: Pick<HTMLElement, "addEventListener" | "removeEventListener">;
 	/** Ctrl/Cmd+wheel or trackpad pinch tick, already default-prevented when possible. */
@@ -96,6 +105,12 @@ type WheelZoomGestureOptions = {
  * scale the whole app), so the non-passive listener stays attached until a plain
  * scroll gesture starts and comes back once the wheel stream goes idle. A pinch
  * that begins mid-scroll still zooms; only that first tick keeps its default.
+ *
+ * On WebKit (Safari / macOS WKWebView) trackpad pinch never arrives as
+ * ctrl+wheel; it is delivered as gesturestart/gesturechange/gestureend
+ * instead. Those are translated into wheel-equivalent deltas for the same
+ * `onZoomWheel` path and default-prevented so the platform magnify is
+ * suppressed.
  */
 export function bindWheelZoomGesture({
 	target,
@@ -148,7 +163,38 @@ export function bindWheelZoomGesture({
 		handleWheel(event, false);
 	}
 
+	// WebKit (Safari / macOS WKWebView) delivers trackpad pinch as
+	// GestureEvents instead of ctrl+wheel ticks; feed the same coalescer with a
+	// wheel-equivalent delta derived from the magnification ratio.
+	let gestureScale = 1;
+	const handleGestureStart = (raw: Event) => {
+		if (disposed) return;
+		const event = raw as unknown as WebKitGestureEvent;
+		event.preventDefault();
+		gestureScale = event.scale || 1;
+	};
+	const handleGestureChange = (raw: Event) => {
+		if (disposed) return;
+		const event = raw as unknown as WebKitGestureEvent;
+		event.preventDefault();
+		const scale = event.scale || 1;
+		const ratio = scale / gestureScale;
+		gestureScale = scale;
+		if (!(ratio > 0) || ratio === 1) return;
+		onZoomWheel({
+			deltaY: -GESTURE_SCALE_DELTA_GAIN * Math.log(ratio),
+		} as unknown as WheelEvent);
+	};
+	const handleGestureEnd = (raw: Event) => {
+		if (disposed) return;
+		(raw as unknown as WebKitGestureEvent).preventDefault();
+		gestureScale = 1;
+	};
+
 	target.addEventListener("wheel", activeListener, { passive: false });
+	target.addEventListener("gesturestart", handleGestureStart);
+	target.addEventListener("gesturechange", handleGestureChange);
+	target.addEventListener("gestureend", handleGestureEnd);
 
 	return {
 		dispose() {
@@ -159,6 +205,9 @@ export function bindWheelZoomGesture({
 				"wheel",
 				passive ? passiveListener : activeListener,
 			);
+			target.removeEventListener("gesturestart", handleGestureStart);
+			target.removeEventListener("gesturechange", handleGestureChange);
+			target.removeEventListener("gestureend", handleGestureEnd);
 		},
 	};
 }

@@ -129,31 +129,31 @@ describe("PDF wheel zoom coalescer", () => {
 	});
 });
 
-/** Records listener churn and dispatches to whichever listener is attached. */
+/** Records listeners per type and dispatches wheel events to the wheel one. */
 function wheelTargetHarness() {
-	let listener: ((event: WheelEvent) => void) | null = null;
+	const listeners = new Map<string, (event: WheelEvent) => void>();
 	let attachedPassive: boolean | undefined;
 	return {
 		target: {
 			addEventListener: vi.fn(
 				(
-					_type: string,
+					type: string,
 					next: (event: WheelEvent) => void,
 					options?: AddEventListenerOptions,
 				) => {
-					listener = next;
-					attachedPassive = options?.passive;
+					listeners.set(type, next);
+					if (type === "wheel") attachedPassive = options?.passive;
 				},
 			),
-			removeEventListener: vi.fn((_type: string, prev: unknown) => {
-				if (listener === prev) listener = null;
+			removeEventListener: vi.fn((type: string, prev: unknown) => {
+				if (listeners.get(type) === prev) listeners.delete(type);
 			}),
 		} as unknown as HTMLElement,
 		isPassive: () => attachedPassive,
-		hasListener: () => listener !== null,
+		hasListener: () => listeners.has("wheel"),
 		dispatch: (init: { deltaY: number; ctrlKey?: boolean }) => {
 			const preventDefault = vi.fn();
-			listener?.({
+			listeners.get("wheel")?.({
 				deltaY: init.deltaY,
 				ctrlKey: init.ctrlKey ?? false,
 				metaKey: false,
@@ -235,6 +235,91 @@ describe("PDF wheel zoom gesture binding", () => {
 		binding.dispose();
 		expect(harness.hasListener()).toBe(false);
 		vi.advanceTimersByTime(1000);
-		expect(harness.target.addEventListener).toHaveBeenCalledTimes(2);
+		// wheel + 3 WebKit gesture listeners, plus one passive-toggle re-add.
+		expect(harness.target.addEventListener).toHaveBeenCalledTimes(5);
+	});
+});
+
+/** Records listeners per event type so gesture events can be dispatched. */
+function gestureTargetHarness() {
+	const listeners = new Map<string, (event: unknown) => void>();
+	return {
+		target: {
+			addEventListener: vi.fn(
+				(type: string, listener: (event: unknown) => void) => {
+					listeners.set(type, listener);
+				},
+			),
+			removeEventListener: vi.fn((type: string) => {
+				listeners.delete(type);
+			}),
+		} as unknown as HTMLElement,
+		dispatch: (type: string, scale: number) => {
+			const preventDefault = vi.fn();
+			listeners.get(type)?.({ scale, preventDefault });
+			return preventDefault;
+		},
+		hasListener: (type: string) => listeners.has(type),
+	};
+}
+
+describe("PDF wheel zoom WebKit gesture binding", () => {
+	it("translates pinch-out scale increases into zoom-in deltas", () => {
+		const harness = gestureTargetHarness();
+		const onZoomWheel = vi.fn();
+		bindWheelZoomGesture({ target: harness.target, onZoomWheel });
+
+		const startPrevent = harness.dispatch("gesturestart", 1);
+		expect(startPrevent).toHaveBeenCalledTimes(1);
+
+		const changePrevent = harness.dispatch("gesturechange", 1.1);
+		expect(changePrevent).toHaveBeenCalledTimes(1);
+		expect(onZoomWheel).toHaveBeenCalledTimes(1);
+		// ln(1.1) * 1000 ≈ 95, negated → zoom-in direction.
+		expect(onZoomWheel.mock.calls[0][0].deltaY).toBeCloseTo(-95.3, 0);
+
+		onZoomWheel.mockClear();
+		harness.dispatch("gesturechange", 0.99);
+		expect(onZoomWheel).toHaveBeenCalledTimes(1);
+		// ratio 0.9 → positive delta (zoom out).
+		expect(onZoomWheel.mock.calls[0][0].deltaY).toBeGreaterThan(0);
+	});
+
+	it("resets the scale baseline when the gesture ends", () => {
+		const harness = gestureTargetHarness();
+		const onZoomWheel = vi.fn();
+		bindWheelZoomGesture({ target: harness.target, onZoomWheel });
+
+		harness.dispatch("gesturestart", 1);
+		harness.dispatch("gesturechange", 2);
+		harness.dispatch("gestureend", 2);
+		onZoomWheel.mockClear();
+
+		// A fresh gesture starts from baseline 1 again, not the previous 2.
+		harness.dispatch("gesturestart", 1);
+		harness.dispatch("gesturechange", 1.1);
+		expect(onZoomWheel).toHaveBeenCalledTimes(1);
+		expect(onZoomWheel.mock.calls[0][0].deltaY).toBeCloseTo(-95.3, 0);
+	});
+
+	it("dispose detaches the gesture listeners", () => {
+		const harness = gestureTargetHarness();
+		const onZoomWheel = vi.fn();
+		const binding = bindWheelZoomGesture({
+			target: harness.target,
+			onZoomWheel,
+		});
+
+		expect(harness.hasListener("gesturestart")).toBe(true);
+		expect(harness.hasListener("gesturechange")).toBe(true);
+		expect(harness.hasListener("gestureend")).toBe(true);
+
+		binding.dispose();
+		expect(harness.hasListener("gesturestart")).toBe(false);
+		expect(harness.hasListener("gesturechange")).toBe(false);
+		expect(harness.hasListener("gestureend")).toBe(false);
+
+		harness.dispatch("gesturechange", 2);
+		expect(onZoomWheel).not.toHaveBeenCalled();
 	});
 });
