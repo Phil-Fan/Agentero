@@ -330,6 +330,10 @@ export function ChatTranscript({
 																key={partKey}
 																className="mb-2"
 																isStreaming={streaming}
+																// Collapsed by default so the transcript stays
+																// scannable; expand on click. Also collapsed
+																// while streaming (no auto-expand).
+																defaultOpen={false}
 															>
 																<ReasoningTrigger />
 																<ReasoningContent>{part.text}</ReasoningContent>
