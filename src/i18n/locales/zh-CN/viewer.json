@@ -73,7 +73,8 @@
 		"pillAria": "打开提问：{{preview}}",
 		"editAction": "编辑",
 		"editResend": "重新发送",
-		"editCancel": "取消"
+		"editCancel": "取消",
+		"openInChat": "在外部 AI 中提问"
 	},
 	"pdfExplain": {
 		"selectRegion": "添加视觉批注",

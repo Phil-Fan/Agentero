@@ -1,4 +1,10 @@
-import { MessageSquareIcon, MinusIcon, Pencil, Trash2Icon } from "lucide-react";
+import {
+	MessageSquareIcon,
+	MinusIcon,
+	Pencil,
+	SquareArrowOutUpRightIcon,
+	Trash2Icon,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -10,6 +16,14 @@ import {
 	MessageResponse,
 } from "@/components/ai-elements/message";
 import {
+	OpenIn,
+	OpenInChatGPT,
+	OpenInClaude,
+	OpenInContent,
+	OpenInCursor,
+	OpenInTrigger,
+} from "@/components/ai-elements/open-in-chat";
+import {
 	PromptInput,
 	PromptInputBody,
 	PromptInputSubmit,
@@ -17,6 +31,11 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { SelectionCard } from "@/components/viewer/pdf/cards/selection-card";
 import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import { useImeGuard } from "@/hooks/use-ime-guard";
@@ -30,6 +49,8 @@ import {
 
 type AskPopoverProps = {
 	thread: PdfAskThread;
+	/** Catalog title used to build the external "open in chat" query. */
+	paperTitle?: string;
 	screen: ScreenPoint;
 	/** Match gutter pin side so the card stays next to the pin. */
 	preferRight?: boolean;
@@ -56,6 +77,7 @@ type AskPopoverProps = {
 
 export function AskPopover({
 	thread,
+	paperTitle,
 	screen,
 	preferRight = true,
 	streaming,
@@ -86,6 +108,16 @@ export function AskPopover({
 		const firstUser = thread.messages.find((m) => m.role === "user");
 		return firstUser?.id ?? thread.messages[0]?.id ?? null;
 	}, [thread.messages]);
+
+	/** External AI query: paper title + page + selected quote. */
+	const openInQuery = useMemo(() => {
+		const quote = thread.anchor.quote?.trim();
+		const lines: string[] = [];
+		if (paperTitle?.trim()) lines.push(`Paper: ${paperTitle.trim()}`);
+		lines.push(`Page: ${thread.anchor.page}`);
+		if (quote) lines.push(`"${quote}"`);
+		return lines.join("\n");
+	}, [paperTitle, thread.anchor.page, thread.anchor.quote]);
 
 	// Leave edit mode when the thread changes or a run starts.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reset edit UI when identity/run changes
@@ -165,6 +197,38 @@ export function AskPopover({
 			onPointerLeave={onPointerLeave}
 			// Body only constrains flex; messages own their own scrollport.
 			bodyClassName="min-h-0 overflow-hidden p-0"
+			headerExtra={
+				<OpenIn query={openInQuery}>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<OpenInTrigger
+								aria-label={t("pdfAsk.openInChat")}
+								className={cn(
+									"inline-flex size-6 shrink-0 items-center justify-center rounded-md",
+									"text-muted-foreground transition-colors outline-none",
+									"focus-visible:ring-2 focus-visible:ring-ring/50",
+									"hover:bg-muted hover:text-foreground",
+								)}
+							>
+								<SquareArrowOutUpRightIcon className="size-3.5" />
+							</OpenInTrigger>
+						</TooltipTrigger>
+						<TooltipContent side="bottom">
+							{t("pdfAsk.openInChat")}
+						</TooltipContent>
+					</Tooltip>
+					{/* Portal sits outside the card: keep the hover-hide timer armed
+					    as if the pointer were still over the dialog. */}
+					<OpenInContent
+						onPointerEnter={onPointerEnter}
+						onPointerLeave={onPointerLeave}
+					>
+						<OpenInChatGPT />
+						<OpenInClaude />
+						<OpenInCursor />
+					</OpenInContent>
+				</OpenIn>
+			}
 			actions={[
 				{
 					label: t("pdfAsk.delete"),

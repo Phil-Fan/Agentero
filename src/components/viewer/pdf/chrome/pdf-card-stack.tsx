@@ -63,6 +63,8 @@ type PdfCardStackProps = {
 	onCardHoverLeave: () => void;
 	ask: {
 		thread: PdfAskThread | null;
+		/** Catalog title for the external "open in chat" query. */
+		paperTitle?: string;
 		streaming: boolean;
 		error: string | null;
 		onSend: (question: string) => void;
@@ -173,6 +175,7 @@ export function PdfCardStack({
 			{ask.thread && cardScreen ? (
 				<AskPopover
 					thread={ask.thread}
+					paperTitle={ask.paperTitle}
 					screen={cardScreen}
 					preferRight={cardScreen.preferRight ?? true}
 					streaming={ask.streaming}

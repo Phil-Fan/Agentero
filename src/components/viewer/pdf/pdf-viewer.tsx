@@ -89,6 +89,7 @@ import type {
 import { ActiveCardScrollSync } from "@/components/viewer/pdf/viewport/active-card-scroll-sync";
 import { DockviewViewport } from "@/components/viewer/pdf/viewport/dockview-viewport";
 import { WheelZoomHandler } from "@/components/viewer/pdf/viewport/wheel-zoom-handler";
+import { useLibraryStore } from "@/hooks/use-app-stores";
 import {
 	pinActiveSelection,
 	publishSelection,
@@ -379,6 +380,14 @@ function PdfViewerInner({
 	} = usePdfZoomControls(zoom, zoomLevel);
 
 	const paperKey = paperRelPath || paperAbsPath || null;
+
+	// Catalog title for the ask card's external "open in chat" query.
+	const paperMetaByRelPath = useLibraryStore((s) => s.paperMetaByRelPath);
+	const paperTitle = useMemo(() => {
+		if (!paperRelPath) return undefined;
+		const key = paperRelPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+		return paperMetaByRelPath.get(key)?.title;
+	}, [paperRelPath, paperMetaByRelPath]);
 
 	const { pageField, setPageField, pageFocusedRef, goToPage, commitPageField } =
 		usePdfNavigation({
@@ -1426,6 +1435,7 @@ function PdfViewerInner({
 				onCardHoverLeave={scheduleHoverHide}
 				ask={{
 					thread: activeThread,
+					paperTitle,
 					streaming,
 					error: askError,
 					onSend: sendAskQuestion,

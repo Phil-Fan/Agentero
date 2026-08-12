@@ -73,7 +73,8 @@
 		"pillAria": "Open ask: {{preview}}",
 		"editAction": "Edit",
 		"editResend": "Resend",
-		"editCancel": "Cancel"
+		"editCancel": "Cancel",
+		"openInChat": "Open in Chat"
 	},
 	"pdfExplain": {
 		"selectRegion": "Add visual annotation",
