@@ -34,15 +34,15 @@ import { loadPaperMetadata } from "@/lib/paper/load-meta";
 import { loadSettings } from "@/lib/settings";
 import { joinVaultPath } from "@/lib/vault";
 
-export const PAPER_READER_SKILL_ID = "paper-reader";
+const PAPER_READER_SKILL_ID = "paper-reader";
 
 /** Prevent concurrent reads of the same paper (auto + Zap). */
 const inflightReads = new Set<string>();
 
 /** How this Agentero agent template expects skills to be named in the user prompt. */
-export type SkillMentionStyle = "dollar" | "slash" | "injected";
+type SkillMentionStyle = "dollar" | "slash" | "injected";
 
-export function skillMentionStyleForTemplate(
+function skillMentionStyleForTemplate(
 	template: AgentTemplate | string | null | undefined,
 ): SkillMentionStyle {
 	switch (template) {
@@ -55,10 +55,7 @@ export function skillMentionStyleForTemplate(
 	}
 }
 
-export function formatSkillMention(
-	skillId: string,
-	style: SkillMentionStyle,
-): string {
+function formatSkillMention(skillId: string, style: SkillMentionStyle): string {
 	switch (style) {
 		case "dollar":
 			return `$${skillId}`;

@@ -23,7 +23,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 
 | 能力 | 说明 |
 |---|---|
-| 缩放 | 可输入 50%–300% 精确比例；支持 +/-、⌘滚轮；适应宽度 / 适应整页放在底部栏的沉浸式按钮左侧；真实 scale 重渲染。⌘滚轮步进按动画帧合并（`createWheelZoomCoalescer`）：一帧内多个 wheel 事件先累加抵消，再一次性应用净步进，避免触控板高频事件逐事件触发整页重光栅。wheel 监听不常驻 non-passive（`bindWheelZoomGesture`）：普通滚动手势期间切成 passive，滚轮静默后再换回 non-passive，保证捏合缩放仍可 `preventDefault`，同时普通滚动不被主线程阻塞 |
+| 缩放 | 可输入 50%–300% 精确比例；支持 +/-、⌘滚轮、触控板捏合；适应宽度 / 适应整页放在底部栏的沉浸式按钮左侧；真实 scale 重渲染。⌘滚轮步进按动画帧合并（`createWheelZoomCoalescer`）：一帧内多个 wheel 事件先累加抵消，再一次性应用净步进，避免触控板高频事件逐事件触发整页重光栅。wheel 监听不常驻 non-passive（`bindWheelZoomGesture`）：普通滚动手势期间切成 passive，滚轮静默后再换回 non-passive，保证捏合缩放仍可 `preventDefault`，同时普通滚动不被主线程阻塞。WebKit（Safari / macOS WKWebView）的触控板捏合不以 ctrl+wheel 送达，而是 `gesturestart/change/end`，`bindWheelZoomGesture` 将其 magnification 比值换算为等价 wheel delta 走同一合并路径并 `preventDefault` 抑制平台放大 |
 | 导航 | 底部页码 pill、PageUp/Down、Home/End |
 | 大纲 | 左侧书签浮层 |
 | 查找 | `⌘F` + 命中高亮 |
@@ -41,7 +41,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 |---|---|---|
 | 高亮 | `marks/annotations.json` | 颜色 |
 | 批注 | 高亮 + `comment` | 页边针 + 右侧批注面板 |
-| 提问 | `marks/<id>.json`（kind ask） | 迷你问答；页边针；**hover / 打开卡片时高亮**锚定选区原文；打开时停在用户问题处，不自动滚到回复底部 |
+| 提问 | `marks/<id>.json`（kind ask） | 迷你问答；页边针；**hover / 打开卡片时高亮**锚定选区原文；打开时停在用户问题处，不自动滚到回复底部；卡片右上角 ChatGPT / Claude 图标可把 论文标题 + 页码 + 划选文本 发送到对应外部 AI |
 | 加入对话 | 发送该轮后写 `marks/<id>.json`（kind `ask`） | 选区固定为 Agent composer 文本 chip；**发送**后在选区旁插入**对话卡片**页边针（与「提问」同一 ask 卡 / 非视觉批注）；hover / 打开同样高亮原文，见 [agent.md](agent.md) |
 | 翻译 | `marks/<id>.json`（kind translate） | 浮层结果卡：贴合选区随滚轮重定位；未悬停卡片 / 原文高亮 / 页边针时自动收起（流式中除外）。见 [translate.md](translate.md) |
 | 视觉批注 | `marks/<id>.json`（kind `visual` v2）：区域 + 用户批注 + 可选嵌套 `agent`；裁剪图 `marks/assets/<id>.png`。默认形态为纯批注（与文字「批注备注」同壳）；有 Agent 会话时可切到对话视图。旧版 `agent-trace` v1 仍可读，Doctor 可一键升 v2 | 框选后：**批注备注** 输入 + 取消/保存；右上角「加入侧边栏对话」。已落盘 pin：纯批注模式可改备注；有对话时右上角切换「编辑备注 / 查看对话」。续聊走 ACP 同一 session；`marks/annotations.json` 读写会按 annotation id 去重，避免重复导入脏数据 |
@@ -86,7 +86,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/pdf/hooks/use-pdf-visual-marks.ts` | visual mark 工作流：草稿落盘 / 加入对话 / 续聊 / pin 卡片 |
 | `src/components/viewer/pdf/hooks/use-pdf-layout-regions.ts` | layout store 订阅与按页分桶（hover 命中框 / Eye 叠加层） |
 | `src/components/viewer/pdf/hooks/use-pdf-layout-run.ts` | 版面分析运行：sidecar 优先、headless 队列、可中止任务 |
-| `src/components/viewer/pdf/hooks/use-pdf-layout-hover.ts` | 图/公式 hover 与两张卡（`visualDraftEditor` 与 `formulaAnnotationPreview` 互斥的唯一 owner）、`Annotation.md` 符号表 |
+| `src/components/viewer/pdf/hooks/use-pdf-layout-hover.ts` | 公式 hover 图例与两张卡（`visualDraftEditor` 与 `formulaAnnotationPreview` 互斥的唯一 owner）、`Annotation.md` 符号表 |
 | `src/components/viewer/pdf/hooks/use-pdf-layout-translate.ts` | 全文翻译任务与工具栏三态标签 |
 | `src/components/viewer/pdf/hooks/use-pdf-page-text.ts` | 按需加载页文字矩形（页边针是否压字） |
 | `src/components/viewer/pdf/hooks/use-pdf-citations.ts` | 文中引用 hover 预览与跳转 |
@@ -106,11 +106,11 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/lib/pdf/agent-trace/` | visual mark 契约（v2 + 读兼容 v1）/ mark 资产 IO / prompt / Open-in-Agent / 会话 pending |
 | `src/lib/pdf/highlight/` | 高亮 / 批注 |
 | `src/lib/pdf/ask/` | 划词提问 |
-| `src/lib/pdf/layout/` | EmbedPDF layout-analysis：归一化 bbox、`source/layout.json` raw sidecar、内存 UI store |
+| `src/lib/pdf/layout/` | EmbedPDF layout-analysis：归一化 bbox、`source/layout.json` raw sidecar、`source/layout-translate.json` 全文翻译缓存、内存 UI store |
 | `src/lib/pdf/region.ts` | 区域坐标归一化与 PDF rect 转换 |
 | `src/lib/pdf/translate/` | 划词翻译 IO |
 | `src/lib/pdf/zoom.ts` | 精确缩放比例解析与范围限制 |
-| `src/lib/pdf/wheel-zoom.ts` | ⌘滚轮缩放 delta 累加与每帧合并步进；wheel 监听 passive / non-passive 切换 |
+| `src/lib/pdf/wheel-zoom.ts` | ⌘滚轮缩放 delta 累加与每帧合并步进；wheel 监听 passive / non-passive 切换；WebKit 捏合手势（gesture*）换算为等价 wheel delta |
 | `src/lib/pdf/annotations-store.ts` | 按 tab 状态 |
 | `src/lib/pdf/selection/` | 选区与 marks IO |
 | `src/lib/core/math.ts` | `clamp01` / `clamp`（几何与放置的唯一实现） |
@@ -125,26 +125,39 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 
 → **[pdf-layout-analysis.md](pdf-layout-analysis.md)**
 
-要点：先文字角色再联图；图题须整框在 figure bbox 内；图无 title 丢弃；默认置信度 30%；Paper PDF 的初步解析结果缓存到 `{paper}/source/layout.json`，后续 merge/filter 可重复计算。
+要点：先文字角色再联图；图题须整框在 figure bbox 内；图无 title 丢弃；默认置信度 30%；Paper PDF 的初步解析结果缓存到 `{paper}/source/layout.json`，后续 merge/filter 可重复计算。全文翻译缓存独立写入 `{paper}/source/layout-translate.json`，按 provider / 语言 / region 原文校验后复用。
 
-**Hover 视觉提问：** 指针在插图 / 表 / 算法 / 有编号公式上停留约 600ms 后，自动裁剪该区域并打开 `VisualAnnotationEditor`（与手动框选相同；不自动发送 Agent）。中途移开取消；打开后离开源区 / 草稿卡约 1000ms 自动关闭（与 ask / 视觉 pin 卡 hide 一致，便于指针移到卡片）；框选模式或已有草稿卡时不触发。手动框选草稿不会因移开而自动关闭。
+**单击视觉批注：** hover 插图 / 表 / 算法 / 无符号表公式的命中框时，框上出现 primary 描边（即将裁剪的确切 bbox）与右上角「单击进行批注」提示；单击裁剪该区域并打开 `VisualAnnotationEditor`（与手动框选相同；不自动发送 Agent），草稿卡保持打开直到手动关闭。框选模式或已有草稿卡时命中框不挂载。
 
-**Hover 公式解析：** 当论文目录存在 `Annotation.md`（由 `equation-annotation` Skill 生成的符号词典）且解析到符号表时，hover **有编号公式** 不打开视觉提问，改为弹出「公式解析」卡片：展示符号 / 含义 / 通俗理解对照（符号列 KaTeX 渲染）。卡片可打开 `Annotation.md`。
+交互细节（均有对应实现约束）：
 
-Hover UX（与视觉提问分离）：
+| 项 | 行为 | 原因 |
+|---|---|---|
+| 拖拽容差 | pointerdown 到 click 位移 > 6px 视为拖拽，不裁剪（`LAYOUT_REGION_CLICK_MOVE_TOLERANCE_PX`） | 浏览器只要 down/up 落在同一元素就派发 `click`，起手在图区内的选字或平移会误触发 |
+| 键盘 | 命中框在 Tab 序列内，Enter / Space 裁剪；`MouseEvent.detail === 0` 直接放行容差判定 | 键盘激活没有指针位移可测 |
+| 焦点 | 描边与提示同时响应 `group-hover` 与 `group-focus-visible` | 半透明 UA 焦点环压在不可预测的页面内容上不可靠 |
+| 提示阈值 | 区域实际尺寸小于 `LAYOUT_HINT_MIN_REGION_W/H_PX`（120×28）时不画 chip，并配 `max-w` + `truncate` 兜底 | chip 是固定字号标签，容器随缩放变化，小区域下会溢出压住邻近内容 |
+| 光标 | 图 / 表 / 算法用 `cursor-crosshair`，公式图例用 `cursor-help` | pointer 光标留给会跳转的引用链接 |
+| 裁剪中 | `visualCropRegion` 在页上画描边 + spinner（`role="status"`） | PDFium `renderPageRect` 是异步的，否则单击后到卡片出现之间毫无反馈 |
+
+公式图例命中框没有单击动作，因此 `onFocus` / `onBlur` 承担键盘可达性（聚焦即走同一 dwell 逻辑）。
+
+**Hover 公式解析：** 当论文目录存在 `Annotation.md`（由 `equation-annotation` Skill 生成的符号词典）且解析到符号表时，hover **有编号公式** 不打开视觉批注，改为弹出「公式解析」卡片：展示符号 / 含义 / 通俗理解对照（符号列 KaTeX 渲染）。卡片可打开 `Annotation.md`。
+
+Hover UX（与单击批注分离）：
 
 | 项 | 值 |
 |---|---|
-| 打开 dwell | ~280ms（无裁图，比视觉提问 600ms 更短） |
-| 移走关闭 | 离开公式 hit 或卡片后 ~320ms（够穿越到卡片空隙；比 1s 更利落） |
+| 打开 dwell | ~280ms（无裁图，tooltip 式） |
+| 移走关闭 | 离开公式 hit 或卡片后 ~320ms（够穿越到卡片空隙） |
 | 回到公式 / 卡片 | 取消关闭；同一公式重新进入立即保持打开 |
 | 切换公式 | 图例已开时 hover 另一公式立即切换（无二次 dwell） |
-| 滚动 / 缩放 | 卡片随 bbox 重定位 |
+| 滚动 / 缩放 | 卡片随 bbox 重定位；滚动刚结束的短窗口内不启动 dwell |
 | Escape | 立即关闭 |
 | hit 层 | 图例打开时仍挂载，负责 leave/enter，不依赖第二层 hover surface |
-| 页上框 | 与视觉提问相同的 primary 描边框，标出当前公式区域 |
+| 页上框 | 与视觉批注相同的 primary 描边框，标出当前公式区域 |
 
-无 `Annotation.md` 或表为空时，公式仍走上述视觉提问 hover。实现：`src/lib/pdf/equation-annotation/`、`formula-annotation-card.tsx`、`LAYOUT_FORMULA_HOVER_*`。
+无 `Annotation.md` 或表为空时，公式与插图 / 表 / 算法一致：单击打开视觉批注。实现：`src/lib/pdf/equation-annotation/`、`formula-annotation-card.tsx`、`LAYOUT_FORMULA_HOVER_*`。
 
 Host 下载/解析：[../backend/paper-import.md](../backend/paper-import.md)。
 

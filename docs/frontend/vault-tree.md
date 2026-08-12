@@ -13,8 +13,8 @@
 
 - 本地：Host `vault_tree_build` **一次 IPC** 递归（`features/vault/tree.rs`）。
 - 远程：`remote_list` 前端递归。
-- **全量递归**：`papers/`、`notes/`、`plans/`、`.agents/`；论文内 `source/` **懒加载**（`childrenPending` → `vault_tree_children`）。
-- 其它根目录只 list 一层，展开再 list。
+- **全量递归**：`papers/`、`notes/`、`.agents/`；论文内 `source/` **懒加载**（`childrenPending` → `vault_tree_children`）。
+- 其它根目录（包括旧 Vault 中可能存在的 `plans/`）只 list 一层，展开再 list。
 - **缺失目录**：本地 `read_dir` 失败返回空列表；远程 list 的 `NoSuchFile` 同样按空处理（`isPathMissingError`），避免删除后刷新把整棵树清空。删除成功后会先 `removeTreeNode` 乐观剪枝，再 `refreshTree`。
 - 忽略：`.git`、`.venv`、`node_modules` 等（`TREE_IGNORE_NAMES`）。
 - 默认只展开 `papers/` 及其一级子目录。
@@ -51,7 +51,8 @@
 
 ## 代码
 
-- UI：`src/components/sidebar/file-tree.tsx`、AI Elements `FileTree`
+- UI：`src/components/sidebar/file-tree/`（barrel `index.ts`；`file-tree.tsx` 仅装配，行/菜单/输入/选中条/虚拟列表为独立子模块）、AI Elements `FileTree`
+- 树内状态：`src/components/sidebar/file-tree/hooks/`（`use-tree-model` 路径索引与扁平行、`use-tree-expansion` 展开与懒加载、`use-tree-selection` 多选、`use-tree-reveal` 虚拟化与定位、`use-tree-drag-drop`、`use-paper-row-actions`、`use-tree-context-menu`、`use-move-picker`）
 - 逻辑：`src/lib/vault/`（store、tree、fs-watch、reveal）
 - 标签/排序：`src/lib/paper/tree-label.ts`、`tree-modes.ts`
 

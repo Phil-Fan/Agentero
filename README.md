@@ -12,6 +12,17 @@
   <a href="https://agentero-docs.poco-ai.com"><img src="https://img.shields.io/badge/docs-online-5319E7?logo=mkdocs&logoColor=white" alt="Documentation" /></a>
 </p>
 
+<p align="center">
+  中文 | <a href="README.en.md">English</a>
+</p>
+
+如果本项目对你有帮助，请在右上角**给个 star** 吧！
+
+<p align="center">
+  <a href="https://github.com/poco-ai/agentero/stargazers"><img src="https://github.com/user-attachments/assets/1d49b049-89ae-4992-a92d-d2411c8053b6" alt="Give me a star" width="480" /></a>
+</p>
+
+
 传统文献管理器对 Agent 并不友好：
 
 - 阅读高亮和笔记被锁在单篇文件里，Agent 很难跨论文复用。

@@ -20,6 +20,9 @@ pub enum AgentTemplate {
     /// Grok Build ACP (`npx @xai-official/grok@0.2.100 agent stdio`).
     /// Docs: https://zed.dev/acp/agent/grok-build
     GrokBuild,
+    /// Pi coding agent via the community `pi-acp` adapter (pi has no native ACP).
+    /// Docs: https://pi.dev · https://github.com/svkozak/pi-acp
+    Pi,
     Custom,
 }
 
@@ -34,6 +37,7 @@ impl AgentTemplate {
             Self::CodexAcp => "codex-acp",
             Self::QoderCli => "qodercli",
             Self::GrokBuild => "grok-build",
+            Self::Pi => "pi",
             Self::Custom => "custom",
         }
     }

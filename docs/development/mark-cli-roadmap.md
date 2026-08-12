@@ -2,7 +2,7 @@
 
 > 状态：设计草案。关联 [\#170](https://github.com/poco-ai/Agentero/issues/170)。  
 > 定位策略详情：[惰性](mark-locate-lazy.md) · [即时](mark-locate-eager.md)  
-> 桌面安装包如何带上同版本 `agentero`：[内置桌面 CLI](bundled-cli.md)（[\#165](https://github.com/poco-ai/Agentero/issues/165) / [\#166](https://github.com/poco-ai/Agentero/issues/166)）
+> 桌面安装包如何带上同版本 `agentero`：[CLI 文档](../backend/cli.md)（[\#165](https://github.com/poco-ai/Agentero/issues/165) / [\#166](https://github.com/poco-ai/Agentero/issues/166)）
 
 ## 1. 目标
 
@@ -20,8 +20,8 @@ Issue 原文诉求拆两层：
 | 议题 | Issue | 文档 | 和本篇的关系 |
 |---|---|---|---|
 | **命令能力**：mark / translate 等 | [#170](https://github.com/poco-ai/Agentero/issues/170) | **本文** | 在 `cli/` 实现子命令与 JSON 契约 |
-| **分发形态**：安装包携带同版本 `agentero`、PATH、`open` | [#165](https://github.com/poco-ai/Agentero/issues/165) | [bundled-cli.md](bundled-cli.md) | #170 的命令随 **同一二进制** 交付；不另做一个「标注专用 CLI」 |
-| **paper move 等既有契约** | [#166](https://github.com/poco-ai/Agentero/issues/166) | [bundled-cli.md](bundled-cli.md) | 标注命令与现有 Clap 解析、`--vault` / `--json` / `-y` 一致 |
+| **分发形态**：安装包携带同版本 `agentero`、PATH、`open` | [#165](https://github.com/poco-ai/Agentero/issues/165) | [CLI 文档](../backend/cli.md) | #170 的命令随 **同一二进制** 交付；不另做一个「标注专用 CLI」 |
+| **paper move 等既有契约** | [#166](https://github.com/poco-ai/Agentero/issues/166) | [CLI 文档](../backend/cli.md) | 标注命令与现有 Clap 解析、`--vault` / `--json` / `-y` 一致 |
 
 原则：
 
@@ -48,7 +48,7 @@ Issue 原文诉求拆两层：
 | 翻译 Host | `translate_text` 已有；CLI 未暴露 |
 | 图/公式 | 人框选 + 裁图已有；自动检测未做 |
 | liteparse | 只产 `PAPER.md` 正文；**不**负责页上定位 |
-| 分发 | CLI 现为独立 artifact；内置进桌面包见 [bundled-cli.md](bundled-cli.md) |
+| 分发 | CLI 现为独立 artifact；内置进桌面包见 [CLI 文档](../backend/cli.md) |
 
 ## 4. 方案选型（为何内置进 CLI 文件层）
 
@@ -135,7 +135,7 @@ agentero mark add papers/… --kind translate --quote "…" --result "…" --jso
     → 定位（默认惰性；可读时即时）
         → 上层能力（翻译 / 显示 / 对话锚点 / 可选 headless）
             → Skill（教 Agent 组合使用）
-                → 随 [bundled-cli](bundled-cli.md) 进桌面安装包
+                → 随 [CLI 文档](../backend/cli.md) 进桌面安装包
 ```
 
 定位策略：**能即时则即时，否则 pending + 打开再算**（见两篇定位设计）。  
@@ -192,7 +192,7 @@ agentero mark delete <paper> <id> -y --json
 ### 5.5 基础阶段明确不做
 
 - 页上自动黄底、headless `--resolve`、图公式检测、CLI 翻译。
-- 不在本阶段改 release 打包（打包见 [bundled-cli.md](bundled-cli.md)）。
+- 不在本阶段改 release 打包（打包见 [CLI 文档](../backend/cli.md)）。
 
 ---
 
@@ -268,7 +268,7 @@ Skill 是 **约定与工作流**，不是第二套业务逻辑。实现顺序应
 | S1（对齐定位 P0） | 说明「打开 PDF 后自动补位置」；教写独特 quote、可选 page |
 | S2 | `translate` 命令与 translate mark；与划词翻译语义一致 |
 | S3 | 与 `wiki check`、`[[@id]]` 互链写法；仍不伪造 id |
-| S4 | 若桌面已内置 CLI：说明 PATH / `agentero` 发现方式（与 [bundled-cli](bundled-cli.md) 用户文档对齐） |
+| S4 | 若桌面已内置 CLI：说明 PATH / `agentero` 发现方式（与 [CLI 文档](../backend/cli.md) 用户文档对齐） |
 
 Hard boundaries 保持：
 
@@ -342,7 +342,7 @@ M4 可选
 | M2 | EmbedPDF 搜索已存在 | 打开 PDF 后框/针出现 |
 | M3 | M2 | 更像人手划词；CLI 能翻译 |
 | M4 | 按需 | 无 GUI 也可 resolve；专项 skill |
-| 分发 | [bundled-cli](bundled-cli.md) | 装 App 即得含 mark 的 `agentero` |
+| 分发 | [CLI 文档](../backend/cli.md) | 装 App 即得含 mark 的 `agentero` |
 
 #165 与 #170 **可并行**：先合入 `mark` 命令到 `cli/`，再由 release 把该二进制打进安装包。
 
@@ -380,7 +380,7 @@ M4 可选
 | [frontend/pdf.md](../frontend/pdf.md) | hydrate / geometry 行为 |
 | [backend/data-model.md](../backend/data-model.md) | geometry 字段 |
 | [backend/api.md](../backend/api.md) | 若增加 Host command |
-| [bundled-cli.md](bundled-cli.md) | 验收列表含 mark/translate 子命令 |
+| [CLI 文档](../backend/cli.md) | 验收列表含 mark/translate 子命令 |
 | usage 阅读整理 | Agent 标注一句流程 |
 | 本目录三篇草案 | 完成后改为「已实现」或移入 frontend/backend 并改 index |
 
@@ -388,7 +388,7 @@ M4 可选
 
 - Issue [\#170](https://github.com/poco-ai/Agentero/issues/170)（标注开放 CLI + Skill）
 - Issue [\#165](https://github.com/poco-ai/Agentero/issues/165) / [\#166](https://github.com/poco-ai/Agentero/issues/166)（内置桌面 CLI / paper move）
-- [内置桌面 CLI 设计](bundled-cli.md)
+- [内置桌面 CLI 设计](../backend/cli.md)
 - [惰性定位设计](mark-locate-lazy.md)
 - [即时定位设计](mark-locate-eager.md)
 - [既有 CLI 说明](../backend/cli.md)

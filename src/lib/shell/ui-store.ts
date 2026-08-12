@@ -248,8 +248,6 @@ export function setFeaturePoppedOut(
  * Open a feature view. If its singleton native window is open, focus that
  * window and do not host a second copy in the main right rail (same policy for
  * Agent, Backlinks, Annotations, References).
- *
- * Prefer {@link openLeaf} for new call sites that may use `placement: "window"`.
  */
 export function openRightTab(tab: RightSidebarTab): void {
 	// Citation graph lives inside the References panel; legacy "backlinks"/Graph

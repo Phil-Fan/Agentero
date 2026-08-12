@@ -39,9 +39,6 @@ type PdfCardStackProps = {
 		/** Discard the pending crop. */
 		onDelete: () => void;
 		onClose: () => void;
-		/** Only wired for ephemeral (layout-hover) drafts. */
-		onHoverEnter: () => void;
-		onHoverLeave: () => void;
 	};
 	formulaAnnotation: {
 		state: FormulaAnnotationPreviewState | null;
@@ -63,6 +60,10 @@ type PdfCardStackProps = {
 	onCardHoverLeave: () => void;
 	ask: {
 		thread: PdfAskThread | null;
+		/** Catalog title for the external "open in chat" query. */
+		paperTitle?: string;
+		/** Catalog arXiv / source link for the external "open in chat" query. */
+		paperLink?: string;
 		streaming: boolean;
 		error: string | null;
 		onSend: (question: string) => void;
@@ -141,12 +142,6 @@ export function PdfCardStack({
 					onSendNow={visualDraft.onSendNow}
 					onDelete={visualDraft.onDelete}
 					onClose={visualDraft.onClose}
-					onPointerEnter={
-						visualDraft.state.ephemeral ? visualDraft.onHoverEnter : undefined
-					}
-					onPointerLeave={
-						visualDraft.state.ephemeral ? visualDraft.onHoverLeave : undefined
-					}
 				/>
 			) : null}
 
@@ -173,6 +168,8 @@ export function PdfCardStack({
 			{ask.thread && cardScreen ? (
 				<AskPopover
 					thread={ask.thread}
+					paperTitle={ask.paperTitle}
+					paperLink={ask.paperLink}
 					screen={cardScreen}
 					preferRight={cardScreen.preferRight ?? true}
 					streaming={ask.streaming}

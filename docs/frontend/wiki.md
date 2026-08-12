@@ -23,11 +23,11 @@
 | 库 | `react-force-graph-2d`（Canvas 力导向） |
 | 数据 | Host `paper_refs_graph` → nodes / edges（`agentero-cite.json` + `localMatch`） |
 | 节点 | `paper`（库内）/ `stub`（未入库引用） |
-| 模式 | Near：当前论文邻域（出边含 stub + 库内 BFS）；All：全库库内引用边 |
+| 模式 | 全库库内引用边；不再提供当前论文近邻图 |
 | 壳 | **References 侧栏下方约 35% 高度**（与引用卡片同 tab；无独立 Graph 轨） |
 | 交互 | 缩放、拖拽、点击打开库内 paper；stub 不可打开 |
 
-入库成功（`paper_commit` Created）后 Host 后台自动 `paper_refs_parse`。打开论文 / References 时前端 `loadPaperRefsAuto` 再兜底。全图只读已有 sidecar，不批量解析。
+入库成功（`paper_commit` Created）后 Host 后台自动 `paper_refs_parse`。打开论文 / References 时前端 `loadPaperRefsAuto` 再兜底。引用图谱只读已有 sidecar，不批量解析，也不按当前论文构建近邻图。
 
 与 **Markdown 双链**（`graph_get_graph` / 反链）分层；双链索引仍服务编辑器补全、嵌入与状态栏反链，不驱动关系图。
 

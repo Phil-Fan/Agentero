@@ -89,12 +89,14 @@ import type {
 import { ActiveCardScrollSync } from "@/components/viewer/pdf/viewport/active-card-scroll-sync";
 import { DockviewViewport } from "@/components/viewer/pdf/viewport/dockview-viewport";
 import { WheelZoomHandler } from "@/components/viewer/pdf/viewport/wheel-zoom-handler";
+import { useLibraryStore } from "@/hooks/use-app-stores";
 import {
 	pinActiveSelection,
 	publishSelection,
 } from "@/lib/agent/selection-store";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
+import { arxivUrls } from "@/lib/paper/arxiv";
 import { isVisualMarkKind, tracePreview } from "@/lib/pdf/agent-trace";
 import { threadHasUserQuestion, threadPreview } from "@/lib/pdf/ask/schema";
 import type { PdfAskNormalizedRect, PdfAskThread } from "@/lib/pdf/ask/types";
@@ -104,7 +106,11 @@ import {
 	HIGHLIGHT_HEX_LIST,
 	type HighlightColor,
 } from "@/lib/pdf/highlight/palette";
-import { getPdfAiRuntime, layoutAnalysisStore } from "@/lib/pdf/layout";
+import {
+	getPdfAiRuntime,
+	layoutAnalysisStore,
+	type PdfLayoutRegion,
+} from "@/lib/pdf/layout";
 import {
 	type ActiveSelectionCard,
 	pinFromRects,
@@ -380,6 +386,20 @@ function PdfViewerInner({
 
 	const paperKey = paperRelPath || paperAbsPath || null;
 
+	// Catalog title + link for the ask card's external "open in chat" query.
+	const paperMetaByRelPath = useLibraryStore((s) => s.paperMetaByRelPath);
+	const paperMeta = useMemo(() => {
+		if (!paperRelPath) return undefined;
+		const key = paperRelPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+		return paperMetaByRelPath.get(key);
+	}, [paperRelPath, paperMetaByRelPath]);
+	const paperTitle = paperMeta?.title;
+	const paperLink = useMemo(() => {
+		if (!paperMeta) return undefined;
+		if (paperMeta.arxiv_id) return arxivUrls(paperMeta.arxiv_id)?.abs;
+		return paperMeta.source_url ?? paperMeta.html_url ?? paperMeta.pdf_url;
+	}, [paperMeta]);
+
 	const { pageField, setPageField, pageFocusedRef, goToPage, commitPageField } =
 		usePdfNavigation({
 			paperKey,
@@ -482,19 +502,6 @@ function PdfViewerInner({
 		paperAbsPath,
 	});
 
-	/**
-	 * Latest `beginVisualAnnotation`. The layout-hover dwell timer opens a crop,
-	 * but the visual-mark cluster is declared after the layout cluster (it consumes
-	 * the draft-card owner), so this edge goes through a ref assigned right after
-	 * that hook — the dwell callback keeps its identity.
-	 */
-	const beginVisualAnnotationRef = useRef<
-		(
-			page: number,
-			region: PdfAskNormalizedRect,
-			opts?: { seq?: number; ephemeral?: boolean },
-		) => void
-	>(() => undefined);
 	/**
 	 * Session token of the single in-flight PDF agent run. Shared by ask and
 	 * translate (either can cancel the other's run), so it stays in the parent and
@@ -851,11 +858,8 @@ function PdfViewerInner({
 		closeVisualDraftEditor,
 		closeFormulaAnnotationPreview,
 		screenPointForRegion,
-		layoutHoverSeqRef,
 		scheduleLayoutHoverOpen,
 		handleLayoutHoverLeave,
-		markLayoutDraftHoverEnter,
-		scheduleLayoutDraftHide,
 		markFormulaHoverEnter,
 		scheduleFormulaHide,
 		rePlaceFormulaAnnotationOnScroll,
@@ -867,18 +871,20 @@ function PdfViewerInner({
 		selectionMenuRef,
 		regionSelectingRef,
 		visualCropPendingRef,
-		beginVisualAnnotationRef,
 	});
 
 	const {
 		layoutTranslateItemsByPage,
+		layoutTranslatePageStateByPage,
 		layoutTranslateRunning,
 		layoutTranslateActive,
 		layoutTranslateLabel,
 		toggleLayoutTranslate,
+		togglePageLayoutTranslate,
 	} = usePdfLayoutTranslate({
 		docId,
 		layoutRawRegions,
+		paperAbsPath,
 		paperKey,
 		vaultPath,
 	});
@@ -910,6 +916,7 @@ function PdfViewerInner({
 	const {
 		regionSelecting,
 		visualCropPending,
+		visualCropRegion,
 		toggleRegionSelect,
 		beginVisualAnnotation,
 		handleVisualRegionSelect,
@@ -924,7 +931,6 @@ function PdfViewerInner({
 		closeVisualDraftEditor,
 		closeFormulaAnnotationPreview,
 		screenPointForRegion,
-		layoutHoverSeqRef,
 		regionSelectingRef,
 		visualCropPendingRef,
 	});
@@ -960,7 +966,6 @@ function PdfViewerInner({
 		visualDraftEditor,
 		closeVisualDraftEditor,
 	});
-	beginVisualAnnotationRef.current = beginVisualAnnotation;
 	resetVisualCardChromeRef.current = resetVisualCardChrome;
 
 	const {
@@ -1199,6 +1204,7 @@ function PdfViewerInner({
 			activeTranslateAnchor,
 			activeVisualTrace,
 			visualDraftRegion,
+			visualCropRegion,
 			formulaAnnotationRegion,
 			focusedLayoutRegion,
 			pinsByPage,
@@ -1210,6 +1216,7 @@ function PdfViewerInner({
 			activeTranslateAnchor,
 			activeVisualTrace,
 			visualDraftRegion,
+			visualCropRegion,
 			formulaAnnotationRegion,
 			focusedLayoutRegion,
 			pinsByPage,
@@ -1224,16 +1231,16 @@ function PdfViewerInner({
 			rawRegionsByPage,
 			layoutOverlayVisible,
 			layoutTranslateItemsByPage,
+			layoutTranslatePageStateByPage,
 			equationSymbolCount: equationSymbols.length,
-			visualDraftEphemeral: Boolean(visualDraftEditor?.ephemeral),
 		}),
 		[
 			hoverableRegionsByPage,
 			rawRegionsByPage,
 			layoutOverlayVisible,
 			layoutTranslateItemsByPage,
+			layoutTranslatePageStateByPage,
 			equationSymbols.length,
-			visualDraftEditor?.ephemeral,
 		],
 	);
 
@@ -1246,6 +1253,13 @@ function PdfViewerInner({
 		[regionSelecting, visualCropPending, visualDraftEditor],
 	);
 
+	const handleLayoutRegionClick = useCallback(
+		(region: PdfLayoutRegion) => {
+			void beginVisualAnnotation(region.pageIndex + 1, region.bbox);
+		},
+		[beginVisualAnnotation],
+	);
+
 	const pageHandlers = useMemo<PdfPageHandlers>(
 		() => ({
 			onOpenPin: handleOpenPin,
@@ -1256,8 +1270,8 @@ function PdfViewerInner({
 			onRegionSelect: handleVisualRegionSelect,
 			onLayoutHoverEnter: scheduleLayoutHoverOpen,
 			onLayoutHoverLeave: handleLayoutHoverLeave,
-			onDraftHoverEnter: markLayoutDraftHoverEnter,
-			onDraftHoverLeave: scheduleLayoutDraftHide,
+			onLayoutRegionClick: handleLayoutRegionClick,
+			onTogglePageLayoutTranslate: togglePageLayoutTranslate,
 			onDeleteHighlightAnnotation: handleDeleteHighlightAnnotation,
 			onEditHighlightAnnotation: handleEditHighlightAnnotation,
 			onChangeHighlightColor: handleChangeHighlightColor,
@@ -1271,8 +1285,8 @@ function PdfViewerInner({
 			handleVisualRegionSelect,
 			scheduleLayoutHoverOpen,
 			handleLayoutHoverLeave,
-			markLayoutDraftHoverEnter,
-			scheduleLayoutDraftHide,
+			handleLayoutRegionClick,
+			togglePageLayoutTranslate,
 			handleDeleteHighlightAnnotation,
 			handleEditHighlightAnnotation,
 			handleChangeHighlightColor,
@@ -1362,8 +1376,10 @@ function PdfViewerInner({
 						rePlaceFormulaAnnotationOnScroll();
 					}}
 				/>
-				{/* Pinch zoom still handled by EmbedPDF; wheel zoom is replaced above so
-				    the step size matches the toolbar +/- buttons. */}
+				{/* Ctrl+wheel and trackpad pinch are handled by WheelZoomHandler (WebKit
+				    pinch arrives as GestureEvents, not ctrl+wheel); EmbedPDF's built-in
+				    wheel zoom is disabled so steps match the toolbar +/- buttons, and
+				    its enablePinch only covers touch devices. */}
 				<ZoomGestureWrapper documentId={docId} enableWheel={false}>
 					<GlobalPointerProvider documentId={docId}>
 						<Scroller documentId={docId} renderPage={renderPage} />
@@ -1389,8 +1405,6 @@ function PdfViewerInner({
 					onSendNow: handleVisualSendNow,
 					onDelete: closeVisualDraftEditor,
 					onClose: closeVisualDraftEditor,
-					onHoverEnter: markLayoutDraftHoverEnter,
-					onHoverLeave: scheduleLayoutDraftHide,
 				}}
 				formulaAnnotation={{
 					state: formulaAnnotationPreview,
@@ -1414,6 +1428,8 @@ function PdfViewerInner({
 				onCardHoverLeave={scheduleHoverHide}
 				ask={{
 					thread: activeThread,
+					paperTitle,
+					paperLink,
 					streaming,
 					error: askError,
 					onSend: sendAskQuestion,

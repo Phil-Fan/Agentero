@@ -79,6 +79,8 @@ pub fn run() {
         .manage(crate::features::agent::AskUserGate::new())
         .manage(crate::features::bridge::BridgeController::new())
         .manage(crate::features::bridge::BridgeClientController::new())
+        .manage(crate::features::jobs::JobCenter::new())
+        .manage(crate::features::catalog::CapsCache::new())
         .manage(WikiIndexState::new())
         .manage(crate::features::doctor::DoctorDirtyPathsState::default())
         .manage(ExternalRenameRepairStore::new())
@@ -99,7 +101,13 @@ pub fn run() {
         builder = builder.on_page_load(|webview, payload| {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
                 // The HTML boot shell is ready now; reveal it while React hydrates.
-                let _ = webview.window().show();
+                // On Linux/GTK, calling show() on an already-visible window can
+                // corrupt the native titlebar hit-test (buttons become dead until
+                // a resize/double-click). Only show if currently hidden.
+                let win = webview.window();
+                if !win.is_visible().unwrap_or(false) {
+                    let _ = win.show();
+                }
             }
         });
     }

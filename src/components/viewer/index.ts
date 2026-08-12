@@ -31,4 +31,5 @@ export {
 	pdfHandleFor,
 	registerPdfHandle,
 	resolveActivePdfHandle,
+	subscribePdfHandles,
 } from "@/components/viewer/pdf-viewer-registry";

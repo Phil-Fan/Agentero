@@ -4,7 +4,7 @@ import {
 	findWikiBlockIdRange,
 	findWikiHeadingIndex,
 	hasWikiBlockAnchor,
-} from "@/lib/wiki-navigation";
+} from "@/lib/wiki/navigation";
 
 describe("wikilink navigation anchors", () => {
 	it("uses the full heading path when leaf headings repeat", () => {

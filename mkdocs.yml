@@ -78,7 +78,6 @@ nav:
       - 概览: development/index.md
       - 路线图: development/roadmap.md
       - TODO: development/todo.md
-      - 内置桌面 CLI: development/bundled-cli.md
       - Word 引用集成: development/zotero-word-integration.md
       - 标注 CLI 路线 (#170): development/mark-cli-roadmap.md
       - 标注惰性定位: development/mark-locate-lazy.md

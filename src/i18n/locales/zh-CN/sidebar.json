@@ -3,6 +3,7 @@
 		"empty": "空文件夹",
 		"newFile": "新建文件",
 		"openNotes": "打开笔记",
+		"addToChat": "添加到对话",
 		"newFolder": "新建文件夹",
 		"invalidName": "名称无效，请勿使用路径分隔符。",
 		"needsVault": "请先打开知识库再创建文件。",
@@ -224,11 +225,8 @@
 		"skillCandidatesFound": "找到 {{count}} 个 Skill 候选，请选择要安装的项目。"
 	},
 	"graph": {
-		"near": "邻近",
-		"all": "全部",
 		"title": "引用图谱",
 		"loading": "正在加载引用图谱…",
-		"selectPrompt": "选择一篇论文以查看引用邻域。",
 		"noEdges": "暂无引用连接。打开论文以解析参考文献，或入库更多相关论文。"
 	},
 	"paperInfo": {
@@ -247,9 +245,12 @@
 		"tagsDesktopOnly": "编辑标签需要桌面应用。",
 		"tagsSaveFailed": "保存标签失败。",
 		"pdf": "PDF",
-		"html": "HTML",
 		"abs": "摘要",
-		"modelscopeInterpretation": "前往魔搭论文解读",
-		"alphaXiv": "alphaXiv"
+		"modelscopeInterpretation": "魔搭解读",
+		"alphaXiv": "alphaXiv",
+		"arxivId": "arXiv 标识号",
+		"copyHint": "单击复制{{label}}",
+		"copied": "已复制{{label}}",
+		"copyFailed": "无法复制到剪贴板"
 	}
 }

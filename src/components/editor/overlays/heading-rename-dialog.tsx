@@ -10,7 +10,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import type { WikiHeadingAnchor } from "@/lib/wiki-heading-rename";
+import type { WikiHeadingAnchor } from "@/lib/wiki/heading-rename";
 
 export type HeadingRenameDialogProps = {
 	open: boolean;

@@ -961,7 +961,8 @@ export function selectFormulasForNumber(
 	};
 
 	const seeds = formulas.filter(eligible);
-	if (!seeds.length) return [];
+	const firstSeed = seeds[0];
+	if (!firstSeed) return [];
 
 	// Prefer highest-confidence body, then closest to the number.
 	// (dy-first used to pick tiny margin scraps next to the number box.)
@@ -976,9 +977,9 @@ export function selectFormulasForNumber(
 	});
 
 	// Same-line fragments only — never grow to lines above/below (body text).
-	const chosen = new Set<string>([seeds[0]!.id]);
+	const chosen = new Set<string>([firstSeed.id]);
 	for (const s of seeds) {
-		if (verticalOverlapRatio(s.bbox, seeds[0]!.bbox) >= 0.35) {
+		if (verticalOverlapRatio(s.bbox, firstSeed.bbox) >= 0.35) {
 			chosen.add(s.id);
 		}
 	}

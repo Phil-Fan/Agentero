@@ -3,11 +3,27 @@
 
 use super::latex;
 use super::RefDraft;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 const USER_AGENT: &str =
     "agentero/0.2 (+https://github.com/poco-ai/agentero; mailto:agentero@users.noreply.github.com)";
 const CROSSREF_MAILTO: &str = "agentero@users.noreply.github.com";
+const ONLINE_REFERENCE_CONCURRENCY: usize = 2;
+
+fn online_reference_limiter() -> &'static Arc<Semaphore> {
+    static LIMITER: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    LIMITER.get_or_init(|| Arc::new(Semaphore::new(ONLINE_REFERENCE_CONCURRENCY)))
+}
+
+async fn acquire_online_reference_permit() -> OwnedSemaphorePermit {
+    online_reference_limiter()
+        .clone()
+        .acquire_owned()
+        .await
+        .expect("online reference limiter should not be closed")
+}
 
 pub struct OnlineOutcome {
     pub refs: Vec<RefDraft>,
@@ -67,6 +83,7 @@ fn http_client() -> Result<reqwest::Client, String> {
 }
 
 async fn get_json(url: &str) -> Result<serde_json::Value, String> {
+    let _permit = acquire_online_reference_permit().await;
     let client = http_client()?;
     let res = client
         .get(url)

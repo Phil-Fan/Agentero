@@ -10,7 +10,7 @@
 
 mod download;
 
-use crate::core::error::{map_err, ApiResult, AppError};
+use crate::core::error::AppError;
 use crate::core::install_dirs::{ABS_BIN_DIRS, HOME_BIN_DIRS};
 use download::{
     download_and_extract, host_triple, managed_binary_name, normalize_version,
@@ -21,6 +21,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::{AppHandle, Manager, Runtime};
+
+pub mod commands;
 
 const SHIM_NAME: &str = if cfg!(windows) {
     "agentero.cmd"
@@ -78,7 +80,7 @@ pub struct CliInstallResult {
 }
 
 #[derive(Debug, Clone)]
-struct ResolvedCli {
+pub(crate) struct ResolvedCli {
     path: PathBuf,
     source: &'static str,
     version: Option<String>,
@@ -102,7 +104,7 @@ fn is_runnable_cli(path: &Path) -> bool {
 }
 
 /// Directory for the downloaded/managed CLI binary (outside the App bundle).
-fn managed_cli_dir() -> PathBuf {
+pub(crate) fn managed_cli_dir() -> PathBuf {
     if let Some(base) = dirs::data_local_dir() {
         return base.join("Agentero").join("cli");
     }
@@ -114,7 +116,7 @@ fn managed_cli_dir() -> PathBuf {
         .join("cli")
 }
 
-fn managed_cli_binary() -> PathBuf {
+pub(crate) fn managed_cli_binary() -> PathBuf {
     managed_cli_dir().join(managed_binary_name())
 }
 
@@ -123,7 +125,7 @@ pub fn resolve_bundled_cli<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     resolve_local_cli(app).map(|r| r.path)
 }
 
-fn resolve_local_cli<R: Runtime>(app: &AppHandle<R>) -> Option<ResolvedCli> {
+pub(crate) fn resolve_local_cli<R: Runtime>(app: &AppHandle<R>) -> Option<ResolvedCli> {
     // 1) Managed download cache (product path after Install).
     let managed = managed_cli_binary();
     if is_runnable_cli(&managed) {
@@ -243,7 +245,7 @@ fn preferred_bin_dir() -> PathBuf {
         .join("bin")
 }
 
-fn managed_shim_path() -> PathBuf {
+pub(crate) fn managed_shim_path() -> PathBuf {
     preferred_bin_dir().join(SHIM_NAME)
 }
 
@@ -401,7 +403,7 @@ pub fn collect_status<R: Runtime>(app: &AppHandle<R>) -> CliInstallStatus {
     }
 }
 
-fn install_shim(binary: &Path, shim: &Path) -> Result<(), AppError> {
+pub(crate) fn install_shim(binary: &Path, shim: &Path) -> Result<(), AppError> {
     if !is_plausible_cli_file(binary) {
         return Err(AppError::message(format!(
             "CLI binary is missing or empty: {}",
@@ -468,7 +470,7 @@ fn install_shim(binary: &Path, shim: &Path) -> Result<(), AppError> {
     }
 }
 
-fn uninstall_shim(shim: &Path, binary: Option<&Path>) -> Result<bool, AppError> {
+pub(crate) fn uninstall_shim(shim: &Path, binary: Option<&Path>) -> Result<bool, AppError> {
     if !shim.exists() {
         return Ok(false);
     }
@@ -483,7 +485,7 @@ fn uninstall_shim(shim: &Path, binary: Option<&Path>) -> Result<bool, AppError> 
 }
 
 /// Ensure a same-version CLI binary is available (local or download), return its path.
-async fn ensure_cli_binary<R: Runtime>(
+pub(crate) async fn ensure_cli_binary<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<(PathBuf, &'static str), AppError> {
     let app_ver = app_version();
@@ -528,59 +530,6 @@ async fn ensure_cli_binary<R: Runtime>(
         )));
     }
     Ok((dest, "download-install"))
-}
-
-#[tauri::command]
-pub fn cli_install_status<R: Runtime>(app: AppHandle<R>) -> ApiResult<CliInstallStatus> {
-    ApiResult::ok(collect_status(&app))
-}
-
-#[tauri::command]
-pub async fn cli_install_command<R: Runtime>(app: AppHandle<R>) -> ApiResult<CliInstallResult> {
-    let (binary, action) = match ensure_cli_binary(&app).await {
-        Ok(v) => v,
-        Err(e) => return map_err(e),
-    };
-    let shim = managed_shim_path();
-    if let Err(e) = install_shim(&binary, &shim) {
-        return map_err(e);
-    }
-    let mut status = collect_status(&app);
-    if !status.preferred_bin_on_path {
-        status.message = Some(format!(
-            "Installed to {}. Add that directory to PATH if `agentero` is not found in new terminals.",
-            status.preferred_bin_dir
-        ));
-    } else {
-        status.message = Some("Installed. Run `agentero --version` in a new terminal.".to_string());
-    }
-    ApiResult::ok(CliInstallResult {
-        status,
-        action: action.into(),
-    })
-}
-
-#[tauri::command]
-pub fn cli_uninstall_command<R: Runtime>(app: AppHandle<R>) -> ApiResult<CliInstallResult> {
-    let local = resolve_local_cli(&app);
-    let binary = local.as_ref().map(|r| r.path.as_path());
-    let shim = managed_shim_path();
-    match uninstall_shim(&shim, binary) {
-        Ok(_) => {}
-        Err(e) => return map_err(e),
-    }
-    // Drop download cache only (never delete dev target/ or App bundle binaries).
-    let managed = managed_cli_binary();
-    if managed.is_file() {
-        let _ = fs::remove_file(&managed);
-        let _ = fs::remove_dir(managed_cli_dir());
-    }
-    let mut status = collect_status(&app);
-    status.message = Some("Removed the Agentero-managed CLI shim.".into());
-    ApiResult::ok(CliInstallResult {
-        status,
-        action: "uninstall".into(),
-    })
 }
 
 /// Optional helper: list user bin candidates (for diagnostics).

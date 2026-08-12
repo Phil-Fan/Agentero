@@ -13,8 +13,6 @@ import { basenameOf } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import { imageMimeFromPath } from "@/lib/workspace/viewer";
 
-export { fileMatchesAccept } from "@/lib/core/file-accept";
-
 /** Extensions for Tauri `dialog.open` filters (no leading dots). */
 export const COMPOSER_IMAGE_EXTENSIONS = [
 	"png",

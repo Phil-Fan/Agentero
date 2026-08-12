@@ -52,7 +52,6 @@ ResearchVault/
 │   ├── 01 论文导入与管理.md
 │   ├── 02 Agent 与 Skill.md
 │   └── 03 Markdown 与双链.md
-├── plans/
 ├── .agents/
 │   └── skills/
 ├── AGENTS.md

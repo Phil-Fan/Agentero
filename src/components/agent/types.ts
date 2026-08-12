@@ -58,3 +58,15 @@ export type AgentPanelProps = {
 	 */
 	onOpenSource?: (source: string) => void;
 };
+
+export type UseAgentPanelArgs = Pick<
+	AgentPanelProps,
+	| "vaultPath"
+	| "selectedPath"
+	| "selectedPaperTitle"
+	| "vaultMarkdownPaths"
+	| "vaultDirectoryPaths"
+	| "vaultPaperPaths"
+	| "paperMetaByRelPath"
+	| "paperTreeLabelMode"
+>;

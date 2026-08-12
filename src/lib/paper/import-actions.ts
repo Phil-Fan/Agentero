@@ -8,8 +8,9 @@ import {
 	enqueueBackgroundTask,
 	isBackgroundTaskCancelledError,
 } from "@/lib/core/background-tasks";
+import { invokeApi } from "@/lib/core/ipc";
+import { logger } from "@/lib/core/logger";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
-import { collectPapersNeedingAssetDownload } from "@/lib/paper";
 import { currentLookupParentDir } from "@/lib/paper/library-actions";
 import {
 	libraryStore,
@@ -20,7 +21,6 @@ import {
 import {
 	addPapersByIdentifiers,
 	discardSkillDiscovery,
-	downloadPaperAssets,
 	importLocalPdfs,
 	installDiscoveredSkills,
 	type LocalPdfImportEntry,
@@ -40,7 +40,7 @@ import {
 } from "@/lib/shell/ui-store";
 import { joinVaultPath } from "@/lib/vault";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
-import { getVaultPath, refreshTree, vaultStore } from "@/lib/vault/store";
+import { getVaultPath, refreshTree } from "@/lib/vault/store";
 import { toVaultRelative } from "@/lib/wiki";
 import { rebuildWikiAndNotify } from "@/lib/wiki/store";
 import { openPaper } from "@/lib/workspace/actions";
@@ -142,10 +142,20 @@ export async function lookupSubmit(
 									.replace(/^\/+|\/+$/g, ""),
 							);
 					if (abs) {
-						enqueuePaperLayoutAnalysis({
-							paperAbsPath: abs,
-							paperLabel: paper.title?.trim() || paper.path,
-						});
+						const rel = toVaultRelative(vaultPath, abs)
+							.replace(/\\/g, "/")
+							.replace(/^\/+|\/+$/g, "");
+						void invokeApi(
+							"job_layout_analyze_enqueue",
+							{
+								args: {
+									vaultPath,
+									path: rel,
+									force: false,
+								},
+							},
+							{ fallback: "layout analysis enqueue failed" },
+						);
 					}
 				}
 
@@ -154,48 +164,47 @@ export async function lookupSubmit(
 				}
 				await opts.onComplete?.(result);
 
-				// Enqueue any newly imported paper that still lacks assets.
-				const newPaths = result.imported.map((r) => r.path);
+				// Enqueue a DownloadAssets job for each newly imported paper that
+				// still lacks assets. Uses the CapsCache-backed query (§8.4) instead
+				// of the frontend tree walk; the runner is idempotent and backfills
+				// PAPER.md + layout.
+				const newPaths = result.imported
+					.map((r) =>
+						(r.path || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""),
+					)
+					.filter(Boolean);
 				if (newPaths.length > 0) {
-					const needing = collectPapersNeedingAssetDownload(
-						vaultStore.getState().tree,
-					).filter((p) =>
-						newPaths.some((rel) => {
-							const n = p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-							const r = rel.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-							return n === r || n.startsWith(`${r}/`);
-						}),
-					);
-					for (const paperPath of needing) {
-						const rel = toVaultRelative(vaultPath, paperPath)
-							.replace(/\\/g, "/")
-							.replace(/^\/+|\/+$/g, "");
-						void enqueueBackgroundTask(
-							{
-								kind: "download",
-								title: i18n.t("app:tasks.downloadPaper"),
-								detail: rel,
-							},
-							async ({ id: downloadTaskId, signal }) => {
-								if (signal.aborted) throw new Error("cancelled");
-								await downloadPaperAssets({
-									vaultRoot: vaultPath,
-									paperPath: rel,
-									progressTaskId: downloadTaskId,
-								});
-								await refreshTree(vaultPath);
-								await refreshLibrary();
-								enqueuePaperLayoutAnalysis({
-									paperAbsPath: joinVaultPath(vaultPath, rel),
-								});
-							},
-							{ concurrency: settings.batchImportConcurrency },
-						).catch((e) => {
-							if (isBackgroundTaskCancelledError(e)) return;
-							notifyError(
-								`${rel}: ${e instanceof Error ? e.message : String(e)}`,
-							);
+					let needingAssets: string[] = [];
+					try {
+						needingAssets = await invokeApi<string[]>(
+							"job_papers_needing_assets",
+							{ args: { vaultPath } },
+							{ fallback: "collect papers needing assets failed" },
+						);
+					} catch (e) {
+						logger.warn("post-import asset check failed", {
+							error: e instanceof Error ? e.message : String(e),
 						});
+					}
+					const needingSet = new Set(
+						needingAssets.map((p) =>
+							p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""),
+						),
+					);
+					for (const rel of newPaths) {
+						if (!needingSet.has(rel)) continue;
+						void invokeApi(
+							"job_download_assets_enqueue",
+							{
+								args: { vaultPath, path: rel, lane: "normal", force: false },
+							},
+							{ fallback: "download enqueue failed" },
+						).catch((e) =>
+							logger.warn("post-import download enqueue failed", {
+								rel,
+								error: e instanceof Error ? e.message : String(e),
+							}),
+						);
 					}
 				}
 			},

@@ -3,6 +3,7 @@
 		"empty": "Empty folder",
 		"newFile": "New file",
 		"openNotes": "Open Notes",
+		"addToChat": "Add to conversation",
 		"newFolder": "New folder",
 		"invalidName": "Invalid name. Do not use path separators.",
 		"needsVault": "Open a vault before creating files.",
@@ -224,11 +225,8 @@
 		"skillCandidatesFound": "Found {{count}} Skill candidates. Choose which to install."
 	},
 	"graph": {
-		"near": "Near",
-		"all": "All",
 		"title": "Citation graph",
 		"loading": "Loading citation graph…",
-		"selectPrompt": "Select a paper for its citation neighborhood.",
 		"noEdges": "No citation links yet. Open a paper to parse references, or import more library papers."
 	},
 	"paperInfo": {
@@ -247,9 +245,12 @@
 		"tagsDesktopOnly": "Editing tags requires the desktop app.",
 		"tagsSaveFailed": "Failed to save tags.",
 		"pdf": "PDF",
-		"html": "HTML",
 		"abs": "Abs",
-		"modelscopeInterpretation": "Open ModelScope paper reading",
-		"alphaXiv": "alphaXiv"
+		"modelscopeInterpretation": "ModelScope reading",
+		"alphaXiv": "alphaXiv",
+		"arxivId": "arXiv ID",
+		"copyHint": "Click to copy {{label}}",
+		"copied": "Copied {{label}}",
+		"copyFailed": "Could not copy to clipboard"
 	}
 }

@@ -10,6 +10,7 @@ import {
 	useEffect,
 	useMemo,
 	useState,
+	useSyncExternalStore,
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { PdfViewerHandle } from "@/components/viewer";
@@ -20,6 +21,7 @@ import {
 	FiguresPanel,
 	pdfHandleFor,
 	ReferencesPanel,
+	subscribePdfHandles,
 	type VisualTraceRow,
 } from "@/components/viewer";
 import {
@@ -142,18 +144,11 @@ function FiguresSidebar() {
 		[activeTab, vaultPath, paperFolders],
 	);
 	const pdfTabId = paperAbs ? pdfTabIdForPaper(paperAbs) : null;
-	// Re-check handle registration when the active PDF tab changes.
-	const [viewerReady, setViewerReady] = useState(false);
-	useEffect(() => {
-		if (!pdfTabId) {
-			setViewerReady(false);
-			return;
-		}
-		const tick = () => setViewerReady(Boolean(pdfHandleFor(pdfTabId)));
-		tick();
-		const id = window.setInterval(tick, 400);
-		return () => window.clearInterval(id);
-	}, [pdfTabId]);
+	const viewerReady = useSyncExternalStore(
+		subscribePdfHandles,
+		() => Boolean(pdfTabId && pdfHandleFor(pdfTabId)),
+		() => false,
+	);
 
 	const withHandle = useCallback(
 		(fn: (h: PdfViewerHandle) => void) => {

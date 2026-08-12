@@ -12,6 +12,7 @@ pub mod connector;
 pub mod doctor;
 pub mod export;
 pub mod import;
+pub mod jobs;
 pub mod layout_model;
 pub mod network;
 pub mod open_request;

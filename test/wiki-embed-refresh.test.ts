@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	notifyWikiEmbedTargets,
 	subscribeWikiEmbedTarget,
-} from "@/lib/wiki-embed-refresh";
+} from "@/lib/wiki/embed-refresh";
 
 describe("wiki embed target refresh", () => {
 	it("notifies only embeds resolved to the changed target", () => {

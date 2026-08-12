@@ -13,7 +13,7 @@ import {
 	type TText,
 } from "platejs";
 import { insertEditorLinkTemplate } from "@/lib/markdown/editor-context-menu";
-import { findWikiCompletionTrigger } from "@/lib/wiki-completion";
+import { findWikiCompletionTrigger } from "@/lib/wiki/completion";
 
 export type SlashCommandId =
 	| "heading1"

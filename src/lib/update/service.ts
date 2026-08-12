@@ -1,6 +1,7 @@
 import type { Update } from "@tauri-apps/plugin-updater";
 import { logger } from "@/lib/core/logger";
 import { isTauri } from "@/lib/core/tauri";
+import { ensureSettingsLoaded } from "@/lib/settings/store";
 import type { UpdateSnapshot } from "@/lib/update/types";
 
 const UNSUPPORTED: UpdateSnapshot = { phase: "unsupported" };
@@ -15,6 +16,24 @@ const listeners = new Set<(next: UpdateSnapshot) => void>();
 
 function isUpdaterSupported(): boolean {
 	return isTauri() && !import.meta.env.DEV;
+}
+
+/**
+ * Settings → General → network proxy, which the updater plugin would otherwise
+ * ignore: it ships its own reqwest client instead of Host `network::client_builder`.
+ */
+async function resolveProxyUrl(): Promise<string | undefined> {
+	const settings = await ensureSettingsLoaded();
+	if (!settings.networkProxyEnabled) return undefined;
+	const url = settings.networkProxyUrl.trim();
+	if (!url) return undefined;
+	// The plugin's client has no SOCKS support, so forwarding such a URL would
+	// fail every check — even where a direct connection still works.
+	if (!/^https?:\/\//i.test(url)) {
+		logger.warn(`updater_check proxy_unsupported scheme=${url.split(":")[0]}`);
+		return undefined;
+	}
+	return url;
 }
 
 function emit(next: UpdateSnapshot): UpdateSnapshot {
@@ -56,10 +75,12 @@ export async function checkForUpdate(): Promise<UpdateSnapshot> {
 	checkPromise = (async () => {
 		await closeAvailableUpdate();
 		emit({ phase: "checking" });
-		logger.info("op start updater_check");
+		const proxy = await resolveProxyUrl();
+		logger.info(`op start updater_check proxy=${proxy ? "on" : "off"}`);
 		try {
 			const { check } = await import("@tauri-apps/plugin-updater");
-			const update = await check({ timeout: 10_000 });
+			// The returned Update carries this proxy into the later download.
+			const update = await check({ timeout: 10_000, proxy });
 			if (!update) {
 				logger.info("op end updater_check ok=true available=false");
 				return emit({ phase: "up-to-date" });

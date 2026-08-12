@@ -7,7 +7,7 @@ export type DoctorIssue = {
 	path?: string;
 };
 
-export type DoctorSection = {
+type DoctorSection = {
 	ok: boolean;
 	issues: DoctorIssue[];
 };
@@ -44,9 +44,9 @@ export type VisualMarkCandidate = {
 	selectedByDefault: boolean;
 };
 
-export type DuplicateKind = "id" | "path";
+type DuplicateKind = "id" | "path";
 
-export type DuplicateRow = {
+type DuplicateRow = {
 	path: string;
 	id: string;
 	title: string;
@@ -54,19 +54,19 @@ export type DuplicateRow = {
 	pathExists: boolean;
 };
 
-export type DuplicateGroup = {
+type DuplicateGroup = {
 	kind: DuplicateKind;
 	key: string;
 	rows: DuplicateRow[];
 };
 
-export type DuplicateReport = {
+type DuplicateReport = {
 	duplicateIds: DuplicateGroup[];
 	duplicatePaths: DuplicateGroup[];
 	totalDuplicateRows: number;
 };
 
-export type DuplicateRepairResult = {
+type DuplicateRepairResult = {
 	removedRows: number;
 	removedPaths: string[];
 	keptPaths: string[];
@@ -107,19 +107,19 @@ export type DoctorReport = {
 	};
 };
 
-export type DoctorVaultState = {
+type DoctorVaultState = {
 	ignoredAliasPaths: string[];
 };
 
-export type AliasRepairChange = {
+type AliasRepairChange = {
 	path: string;
 	titleAlias: string;
 	shortAlias: string;
 	expectedHash: string;
 };
 
-export type WikilinkRepairLayer = "deterministic" | "manual";
-export type WikilinkEditKind = "target" | "fragment";
+type WikilinkRepairLayer = "deterministic" | "manual";
+type WikilinkEditKind = "target" | "fragment";
 
 export type WikilinkRepairSuggestion = {
 	id: string;
@@ -172,7 +172,7 @@ export type WikilinkRepairPlan = {
 	residuals: WikilinkRepairResidual[];
 };
 
-export type WikilinkRepairChange = {
+type WikilinkRepairChange = {
 	source: string;
 	rangeStart: number;
 	rangeEnd: number;
@@ -235,7 +235,7 @@ export function doctorSetDirtyPaths(
 	);
 }
 
-export type VisualMarkRepairChange = {
+type VisualMarkRepairChange = {
 	path: string;
 };
 

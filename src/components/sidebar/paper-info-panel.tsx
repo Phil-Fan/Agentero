@@ -34,6 +34,7 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
+import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { cn } from "@/lib/core/utils";
 import type { PaperMetadata } from "@/lib/paper";
 import { arxivUrls } from "@/lib/paper/arxiv";
@@ -79,6 +80,38 @@ function MetaRow({
 				</div>
 			</div>
 		</div>
+	);
+}
+
+/** Single-click-to-copy value control, same interaction as Library cells. */
+function CopyValue({
+	text,
+	label,
+	className,
+	onCopy,
+}: {
+	text: string;
+	label: string;
+	className?: string;
+	onCopy: (text: string, label: string) => void;
+}) {
+	const { t } = useTranslation("sidebar");
+	const hint = t("paperInfo.copyHint", { label });
+	return (
+		<button
+			type="button"
+			title={hint}
+			aria-label={hint}
+			onClick={() => onCopy(text, label)}
+			className={cn(
+				"block w-full cursor-pointer rounded-sm text-left",
+				"hover:bg-muted/60 hover:text-foreground",
+				"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+			)}
+		>
+			{/* No `block` here: it sorts after line-clamp-* and would override display:-webkit-box. */}
+			<span className={cn("w-full", className)}>{text}</span>
+		</button>
 	);
 }
 
@@ -432,6 +465,19 @@ export function PaperInfoPanel({
 		? `https://www.alphaxiv.org/abs/${arxivId}`
 		: null;
 
+	const copyField = async (text: string | null | undefined, label: string) => {
+		const value = text?.trim();
+		if (!value) return;
+		await copyTextToClipboard(value, {
+			successMessage: t("paperInfo.copied", { label }),
+			errorMessage: t("paperInfo.copyFailed"),
+			successNotify: {
+				duration: 1500,
+				id: "paper-info-copied",
+			},
+		});
+	};
+
 	return (
 		<div
 			className={cn(
@@ -468,24 +514,47 @@ export function PaperInfoPanel({
 				onOpenChange={setOpen}
 				className="flex min-h-0 flex-1 flex-col"
 			>
-				<CollapsibleTrigger
-					className={cn(
-						"flex h-8 min-h-8 shrink-0 w-full items-center gap-1.5 px-2 text-left outline-none",
-						"text-muted-foreground text-xs font-medium tracking-wide",
-						"hover:bg-muted/40 hover:text-foreground",
-						"focus-visible:ring-1 focus-visible:ring-ring",
-					)}
-				>
-					<ChevronRight
+				<div className="flex h-8 min-h-8 shrink-0 items-center pr-1.5">
+					<CollapsibleTrigger
 						className={cn(
-							"size-3.5 shrink-0 transition-transform",
-							open && "rotate-90",
+							"flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left outline-none",
+							"text-muted-foreground text-xs font-medium tracking-wide",
+							"hover:bg-muted/40 hover:text-foreground",
+							"focus-visible:ring-1 focus-visible:ring-ring",
 						)}
-						aria-hidden
-					/>
-					<Info className="size-3.5 shrink-0" aria-hidden />
-					<span className="truncate">{t("paperInfo.info")}</span>
-				</CollapsibleTrigger>
+					>
+						<ChevronRight
+							className={cn(
+								"size-3.5 shrink-0 transition-transform",
+								open && "rotate-90",
+							)}
+							aria-hidden
+						/>
+						<Info className="size-3.5 shrink-0" aria-hidden />
+						<span className="truncate">{t("paperInfo.info")}</span>
+					</CollapsibleTrigger>
+					{arxivId ? (
+						<button
+							type="button"
+							title={t("paperInfo.copyHint", {
+								label: t("paperInfo.arxivId"),
+							})}
+							aria-label={t("paperInfo.copyHint", {
+								label: t("paperInfo.arxivId"),
+							})}
+							onClick={() => void copyField(arxivId, t("paperInfo.arxivId"))}
+							className={cn(
+								"flex min-w-0 max-w-[55%] shrink cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5",
+								"text-[10px] text-muted-foreground tabular-nums transition-colors",
+								"hover:bg-muted hover:text-foreground",
+								"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+							)}
+						>
+							<SiArxiv className="size-3 shrink-0" aria-hidden />
+							<span className="truncate">{arxivId}</span>
+						</button>
+					) : null}
+				</div>
 				<CollapsibleContent className="flex min-h-0 flex-1 flex-col">
 					{!meta ? (
 						<p className="px-3 pb-3 text-muted-foreground text-xs leading-snug">
@@ -494,11 +563,21 @@ export function PaperInfoPanel({
 					) : (
 						<div className="agentero-scroll min-h-0 flex-1 overflow-y-auto pb-2">
 							<MetaRow icon={BookOpen} label={t("paperInfo.title")}>
-								<span className="font-medium">{meta.title}</span>
+								<CopyValue
+									text={meta.title}
+									label={t("paperInfo.title")}
+									onCopy={copyField}
+									className="line-clamp-2 font-medium"
+								/>
 							</MetaRow>
 							{meta.authors?.length ? (
 								<MetaRow icon={Users} label={t("paperInfo.authors")}>
-									<span>{meta.authors.join(", ")}</span>
+									<CopyValue
+										text={meta.authors.join(", ")}
+										label={t("paperInfo.authors")}
+										onCopy={copyField}
+										className="line-clamp-2"
+									/>
 								</MetaRow>
 							) : null}
 							{meta.year ? (
@@ -517,10 +596,7 @@ export function PaperInfoPanel({
 									}}
 								/>
 							</MetaRow>
-							{(meta.pdf_url ||
-								meta.html_url ||
-								meta.source_url ||
-								meta.arxiv_id) && (
+							{(meta.pdf_url || meta.source_url || meta.arxiv_id) && (
 								<div className="flex flex-wrap gap-1.5 px-3 pt-1">
 									{meta.pdf_url || meta.arxiv_id ? (
 										<LinkChip
@@ -528,15 +604,6 @@ export function PaperInfoPanel({
 												meta.pdf_url ?? `https://arxiv.org/pdf/${meta.arxiv_id}`
 											}
 											label={t("paperInfo.pdf")}
-										/>
-									) : null}
-									{meta.html_url || meta.arxiv_id ? (
-										<LinkChip
-											href={
-												meta.html_url ??
-												`https://arxiv.org/html/${meta.arxiv_id}`
-											}
-											label={t("paperInfo.html")}
 										/>
 									) : null}
 									{meta.source_url || meta.arxiv_id ? (

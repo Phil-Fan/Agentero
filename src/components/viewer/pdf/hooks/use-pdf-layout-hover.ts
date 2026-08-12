@@ -1,18 +1,15 @@
 /**
- * Figure / formula hover for layout regions, and the two cards it opens.
+ * Layout-region hover for the PDF viewer, and the two cards it coordinates.
  *
- * Dwelling on a figure, table or algorithm opens a region-crop draft card;
- * dwelling on a formula opens the `{paper}/Annotation.md` glossary card. The two
- * cards are **mutually exclusive**, which is why this hook owns both
- * `visualDraftEditor` and `formulaAnnotationPreview` even though the draft
- * card's *content* belongs to {@link usePdfVisualMarks}: the setters stay
- * private and `openVisualDraftEditor` / `closeVisualDraftEditor` /
- * `closeFormulaAnnotationPreview` are the only transitions, so neither state can
- * move without the other's guard.
- *
- * The crop itself belongs to the visual-mark cluster (it owns the engine call
- * and every save path), so the dwell timer reaches it through the parent-owned
- * `beginVisualAnnotationRef` and this hook only receives the opened draft.
+ * Clicking a figure, table or algorithm opens a region-crop draft card (wired
+ * in the page layers, not here); dwelling on a formula opens the
+ * `{paper}/Annotation.md` glossary card. The two cards are **mutually
+ * exclusive**, which is why this hook owns both `visualDraftEditor` and
+ * `formulaAnnotationPreview` even though the draft card's *content* belongs to
+ * {@link usePdfVisualMarks}: the setters stay private and
+ * `openVisualDraftEditor` / `closeVisualDraftEditor` /
+ * `closeFormulaAnnotationPreview` are the only transitions, so neither state
+ * can move without the other's guard.
  */
 
 import {
@@ -23,7 +20,6 @@ import {
 	useState,
 } from "react";
 import { pageElByIndex } from "@/components/viewer/pdf/coords";
-import type { BeginVisualAnnotationOptions } from "@/components/viewer/pdf/hooks/use-pdf-region-framing";
 import type {
 	FormulaAnnotationPreviewState,
 	ScreenPoint,
@@ -39,10 +35,9 @@ import {
 } from "@/lib/pdf/equation-annotation";
 import {
 	isFormulaLayoutKind,
+	isLayoutHoverSuppressedByScroll,
 	LAYOUT_FORMULA_HOVER_DWELL_MS,
 	LAYOUT_FORMULA_HOVER_HIDE_MS,
-	LAYOUT_HOVER_DWELL_MS,
-	LAYOUT_HOVER_HIDE_MS,
 	type PdfLayoutRegion,
 	setFocusedLayoutRegion,
 } from "@/lib/pdf/layout";
@@ -67,17 +62,6 @@ export type UsePdfLayoutHoverOptions = {
 	 */
 	regionSelectingRef: RefObject<boolean>;
 	visualCropPendingRef: RefObject<boolean>;
-	/**
-	 * Latest `beginVisualAnnotation`. Parent-owned because the visual-mark hook
-	 * consumes this hook's draft-card API and is therefore declared after it.
-	 */
-	beginVisualAnnotationRef: RefObject<
-		(
-			page: number,
-			region: PdfAskNormalizedRect,
-			opts?: BeginVisualAnnotationOptions,
-		) => void
-	>;
 };
 
 export type PdfLayoutHover = {
@@ -96,13 +80,9 @@ export type PdfLayoutHover = {
 		pageIndex0: number,
 		region: PdfAskNormalizedRect,
 	) => ScreenPoint;
-	/** Bumped on leave / supersede so a late crop cannot open the draft. */
-	layoutHoverSeqRef: RefObject<number>;
-	/** Pointer entered a layout hit target → start the dwell timer. */
+	/** Pointer entered a layout hit target → start the formula legend dwell. */
 	scheduleLayoutHoverOpen: (region: PdfLayoutRegion) => void;
 	handleLayoutHoverLeave: (regionId: string) => void;
-	markLayoutDraftHoverEnter: () => void;
-	scheduleLayoutDraftHide: () => void;
 	markFormulaHoverEnter: () => void;
 	scheduleFormulaHide: () => void;
 	/** Re-anchor the open formula legend after the page moved under it. */
@@ -117,7 +97,6 @@ export function usePdfLayoutHover({
 	selectionMenuRef,
 	regionSelectingRef,
 	visualCropPendingRef,
-	beginVisualAnnotationRef,
 }: UsePdfLayoutHoverOptions): PdfLayoutHover {
 	const [visualDraftEditor, setVisualDraftEditor] =
 		useState<VisualDraftEditorState | null>(null);
@@ -133,20 +112,7 @@ export function usePdfLayoutHover({
 	const equationSymbolsRef = useRef(equationSymbols);
 	equationSymbolsRef.current = equationSymbols;
 
-	/** Pending dwell timer for layout-region hover → visual editor. */
-	const layoutHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-		null,
-	);
-	const layoutHoverRegionIdRef = useRef<string | null>(null);
-	/** Bumped to drop late crops after leave / supersede. */
-	const layoutHoverSeqRef = useRef(0);
-	/** Auto-hide timer for ephemeral layout-hover draft editors. */
-	const layoutDraftHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-		null,
-	);
-	/** True while pointer is over the ephemeral source region or draft card. */
-	const layoutDraftHoverSurfaceRef = useRef(false);
-	/** Formula legend dwell (separate from visual-ask dwell). */
+	/** Formula legend dwell (tooltip-like). */
 	const formulaHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
@@ -157,6 +123,16 @@ export function usePdfLayoutHover({
 	);
 	/** True while pointer is over the formula hit region or legend card. */
 	const formulaHoverSurfaceRef = useRef(false);
+	/** Last wheel / scroll inside the PDF viewport; suppresses accidental hover. */
+	const lastLayoutScrollAtRef = useRef(0);
+
+	const nowMs = useCallback(() => performance.now(), []);
+
+	const layoutHoverSuppressedByScroll = useCallback(
+		() =>
+			isLayoutHoverSuppressedByScroll(lastLayoutScrollAtRef.current, nowMs()),
+		[nowMs],
+	);
 
 	// Load `{paper}/Annotation.md` symbol glossary for formula hover cards.
 	useEffect(() => {
@@ -214,29 +190,6 @@ export function usePdfLayoutHover({
 		};
 	}, [paperAbsPath]);
 
-	const cancelLayoutHover = useCallback((regionId?: string) => {
-		if (
-			regionId != null &&
-			layoutHoverRegionIdRef.current != null &&
-			layoutHoverRegionIdRef.current !== regionId
-		) {
-			return;
-		}
-		if (layoutHoverTimerRef.current) {
-			clearTimeout(layoutHoverTimerRef.current);
-			layoutHoverTimerRef.current = null;
-		}
-		if (regionId == null || layoutHoverRegionIdRef.current === regionId) {
-			layoutHoverRegionIdRef.current = null;
-		}
-	}, []);
-
-	const cancelLayoutDraftHide = useCallback(() => {
-		if (!layoutDraftHideTimerRef.current) return;
-		clearTimeout(layoutDraftHideTimerRef.current);
-		layoutDraftHideTimerRef.current = null;
-	}, []);
-
 	const cancelFormulaHover = useCallback((regionId?: string) => {
 		if (
 			regionId != null &&
@@ -261,16 +214,8 @@ export function usePdfLayoutHover({
 	}, []);
 
 	const closeVisualDraftEditor = useCallback(() => {
-		cancelLayoutDraftHide();
-		layoutDraftHoverSurfaceRef.current = false;
-		// Layout-hover also sets figures-rail focus for the bbox frame; clear it
-		// with the draft so the image selection outline does not linger.
-		const wasEphemeral = visualDraftEditorRef.current?.ephemeral === true;
 		setVisualDraftEditor(null);
-		if (wasEphemeral && !formulaAnnotationPreviewRef.current) {
-			setFocusedLayoutRegion(docId, null);
-		}
-	}, [cancelLayoutDraftHide, docId]);
+	}, []);
 
 	const closeFormulaAnnotationPreview = useCallback(() => {
 		cancelFormulaHover();
@@ -278,32 +223,10 @@ export function usePdfLayoutHover({
 		formulaHoverSurfaceRef.current = false;
 		const had = formulaAnnotationPreviewRef.current != null;
 		setFormulaAnnotationPreview(null);
-		if (had && !visualDraftEditorRef.current?.ephemeral) {
+		if (had && !visualDraftEditorRef.current) {
 			setFocusedLayoutRegion(docId, null);
 		}
 	}, [cancelFormulaHide, cancelFormulaHover, docId]);
-
-	const markLayoutDraftHoverEnter = useCallback(() => {
-		layoutDraftHoverSurfaceRef.current = true;
-		cancelLayoutDraftHide();
-	}, [cancelLayoutDraftHide]);
-
-	/**
-	 * Leave ephemeral layout-hover source region or draft card.
-	 * Manual region-select drafts ignore this (no auto-hide).
-	 */
-	const scheduleLayoutDraftHide = useCallback(() => {
-		if (visualDraftEditorRef.current?.ephemeral !== true) return;
-		layoutDraftHoverSurfaceRef.current = false;
-		cancelLayoutDraftHide();
-		layoutDraftHideTimerRef.current = setTimeout(() => {
-			layoutDraftHideTimerRef.current = null;
-			if (layoutDraftHoverSurfaceRef.current) return;
-			if (!visualDraftEditorRef.current?.ephemeral) return;
-			// Clears draft + focused layout bbox (see closeVisualDraftEditor).
-			closeVisualDraftEditor();
-		}, LAYOUT_HOVER_HIDE_MS);
-	}, [cancelLayoutDraftHide, closeVisualDraftEditor]);
 
 	/** Keep formula legend open while pointer is on the hit region or card. */
 	const markFormulaHoverEnter = useCallback(() => {
@@ -327,11 +250,25 @@ export function usePdfLayoutHover({
 		}, LAYOUT_FORMULA_HOVER_HIDE_MS);
 	}, [cancelFormulaHide, closeFormulaAnnotationPreview]);
 
-	/** Drop in-flight hover dwell / crop so a late result does not open the editor. */
-	const invalidateLayoutHover = useCallback(() => {
-		layoutHoverSeqRef.current += 1;
-		cancelLayoutHover();
-	}, [cancelLayoutHover]);
+	useEffect(() => {
+		const host = hostRef.current;
+		if (!host) return;
+		const markScroll = () => {
+			lastLayoutScrollAtRef.current = nowMs();
+		};
+		host.addEventListener("wheel", markScroll, {
+			capture: true,
+			passive: true,
+		});
+		host.addEventListener("scroll", markScroll, {
+			capture: true,
+			passive: true,
+		});
+		return () => {
+			host.removeEventListener("wheel", markScroll, true);
+			host.removeEventListener("scroll", markScroll, true);
+		};
+	}, [hostRef, nowMs]);
 
 	/** Screen point near a layout bbox (right edge) for hover cards. */
 	const screenPointForRegion = useCallback(
@@ -392,16 +329,9 @@ export function usePdfLayoutHover({
 		(draft: VisualDraftEditorState) => {
 			// Visual draft and formula legend are mutually exclusive.
 			closeFormulaAnnotationPreview();
-			// Pointer is still over the region when hover-open completes; keep
-			// the surface active so unmounting hit targets does not auto-hide.
-			if (draft.ephemeral) {
-				layoutDraftHoverSurfaceRef.current = true;
-				cancelLayoutDraftHide();
-			}
 			setVisualDraftEditor(draft);
-			layoutHoverRegionIdRef.current = null;
 		},
-		[cancelLayoutDraftHide, closeFormulaAnnotationPreview],
+		[closeFormulaAnnotationPreview],
 	);
 
 	/**
@@ -421,82 +351,53 @@ export function usePdfLayoutHover({
 	);
 
 	/**
-	 * After dwelling on a layout region:
-	 * - formula + Annotation.md symbols → 「公式解析」glossary card (light UX)
-	 * - otherwise → same visual editor as manual region-select (crop only)
+	 * After dwelling on a formula region with Annotation.md symbols →「公式解析」
+	 * glossary card. Figures / tables / algorithms ignore hover (click opens the
+	 * draft card; the hit target shows the「单击进行批注」hint).
 	 */
 	const scheduleLayoutHoverOpen = useCallback(
 		(region: PdfLayoutRegion) => {
 			if (layoutHoverBlocked()) return;
-
+			if (layoutHoverSuppressedByScroll()) return;
 			const symbols = equationSymbolsRef.current;
-			const formulaLegend =
-				isFormulaLayoutKind(region.kind) && symbols.length > 0;
+			if (!isFormulaLayoutKind(region.kind) || symbols.length === 0) return;
+			// Don't stack a formula legend while a visual draft is open
+			// (layoutHoverBlocked already covers it; keep the cards exclusive
+			// in both directions).
+			if (visualDraftEditorRef.current) return;
 
-			// ---- Formula legend path (tooltip-like; independent timers) ----
-			if (formulaLegend) {
-				// Already showing this formula: cancel pending hide, stay open.
-				if (formulaAnnotationPreviewRef.current?.regionId === region.id) {
-					markFormulaHoverEnter();
-					return;
-				}
-				// Switching formulas: open the new one after a short dwell (or
-				// immediately if a legend is already open — seamless switch).
-				if (
-					formulaHoverRegionIdRef.current === region.id &&
-					formulaHoverTimerRef.current
-				) {
-					return;
-				}
-				cancelFormulaHover();
-				// Leave visual-ask dwell alone when entering a formula hit.
-				cancelLayoutHover();
-				// Switching while another legend is open: no extra dwell.
-				if (formulaAnnotationPreviewRef.current) {
-					openFormulaLegend(region);
-					return;
-				}
-				formulaHoverRegionIdRef.current = region.id;
-				formulaHoverTimerRef.current = setTimeout(() => {
-					formulaHoverTimerRef.current = null;
-					if (formulaHoverRegionIdRef.current !== region.id) return;
-					if (layoutHoverBlocked()) return;
-					openFormulaLegend(region);
-				}, LAYOUT_FORMULA_HOVER_DWELL_MS);
+			// Already showing this formula: cancel pending hide, stay open.
+			if (formulaAnnotationPreviewRef.current?.regionId === region.id) {
+				markFormulaHoverEnter();
 				return;
 			}
-
-			// ---- Visual-ask path (figures / tables / algorithms / bare formula) ----
-			// Don't stack a visual draft while a formula legend is open.
-			if (formulaAnnotationPreviewRef.current) return;
-
+			// Switching formulas: open the new one after a short dwell (or
+			// immediately if a legend is already open — seamless switch).
 			if (
-				layoutHoverRegionIdRef.current === region.id &&
-				layoutHoverTimerRef.current
+				formulaHoverRegionIdRef.current === region.id &&
+				formulaHoverTimerRef.current
 			) {
 				return;
 			}
-			cancelLayoutHover();
 			cancelFormulaHover();
-			layoutHoverRegionIdRef.current = region.id;
-			layoutHoverTimerRef.current = setTimeout(() => {
-				layoutHoverTimerRef.current = null;
-				if (layoutHoverRegionIdRef.current !== region.id) return;
-				if (layoutHoverBlocked() || formulaAnnotationPreviewRef.current) return;
-				setFocusedLayoutRegion(docId, region.id);
-				const seq = ++layoutHoverSeqRef.current;
-				beginVisualAnnotationRef.current(region.pageIndex + 1, region.bbox, {
-					seq,
-					ephemeral: true,
-				});
-			}, LAYOUT_HOVER_DWELL_MS);
+			// Switching while another legend is open: no extra dwell.
+			if (formulaAnnotationPreviewRef.current) {
+				openFormulaLegend(region);
+				return;
+			}
+			formulaHoverRegionIdRef.current = region.id;
+			formulaHoverTimerRef.current = setTimeout(() => {
+				formulaHoverTimerRef.current = null;
+				if (formulaHoverRegionIdRef.current !== region.id) return;
+				if (layoutHoverBlocked()) return;
+				if (layoutHoverSuppressedByScroll()) return;
+				openFormulaLegend(region);
+			}, LAYOUT_FORMULA_HOVER_DWELL_MS);
 		},
 		[
-			beginVisualAnnotationRef,
 			cancelFormulaHover,
-			cancelLayoutHover,
-			docId,
 			layoutHoverBlocked,
+			layoutHoverSuppressedByScroll,
 			markFormulaHoverEnter,
 			openFormulaLegend,
 		],
@@ -511,49 +412,18 @@ export function usePdfLayoutHover({
 			if (formulaAnnotationPreviewRef.current?.regionId === regionId) {
 				scheduleFormulaHide();
 			}
-
-			if (layoutHoverRegionIdRef.current === regionId) {
-				// Timer still running → just cancel. Timer already fired / crop
-				// in flight → invalidate so a late crop does not open the editor.
-				if (
-					layoutHoverTimerRef.current == null ||
-					visualCropPendingRef.current
-				) {
-					layoutHoverSeqRef.current += 1;
-				}
-			}
-			cancelLayoutHover(regionId);
 		},
-		[
-			cancelFormulaHover,
-			cancelLayoutHover,
-			scheduleFormulaHide,
-			visualCropPendingRef,
-		],
+		[cancelFormulaHover, scheduleFormulaHide],
 	);
 
 	useEffect(() => {
-		// Drop in-flight hover when switching PDF documents or unmounting.
-		if (!docId) {
-			invalidateLayoutHover();
-			cancelLayoutDraftHide();
-			closeFormulaAnnotationPreview();
-			return;
-		}
-		invalidateLayoutHover();
-		cancelLayoutDraftHide();
+		// Drop in-flight hover when switching PDF documents or unmounting
+		// (closeFormulaAnnotationPreview identity tracks docId).
 		closeFormulaAnnotationPreview();
 		return () => {
-			invalidateLayoutHover();
-			cancelLayoutDraftHide();
 			closeFormulaAnnotationPreview();
 		};
-	}, [
-		docId,
-		invalidateLayoutHover,
-		cancelLayoutDraftHide,
-		closeFormulaAnnotationPreview,
-	]);
+	}, [closeFormulaAnnotationPreview]);
 
 	// Escape closes the formula legend (same expectation as other floaters).
 	useEffect(() => {
@@ -586,11 +456,8 @@ export function usePdfLayoutHover({
 		closeVisualDraftEditor,
 		closeFormulaAnnotationPreview,
 		screenPointForRegion,
-		layoutHoverSeqRef,
 		scheduleLayoutHoverOpen,
 		handleLayoutHoverLeave,
-		markLayoutDraftHoverEnter,
-		scheduleLayoutDraftHide,
 		markFormulaHoverEnter,
 		scheduleFormulaHide,
 		rePlaceFormulaAnnotationOnScroll,

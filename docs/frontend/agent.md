@@ -83,6 +83,6 @@ Skill 语法由 Host 按 provider 分流（Claude `/id`，其它注入 `SKILL.md
 
 ## 代码
 
-- UI：`src/components/agent/`
+- UI：`src/components/agent/`（`agent-panel.tsx` / `agent-composer.tsx` 外壳、`hooks/` 面板与 composer 状态、`composer/` 输入区子件：附件 / 队列 / context chip / @ 与 $ 与 / 菜单 / 模型选择 / 工具条）
 - 状态：`src/lib/agent/`（chat-state、composer-state、stream-parse、mention）
 - 精读编排：`src/lib/paper/reader.ts`

@@ -1,6 +1,7 @@
 import {
 	buildLayoutIndexSidecar,
 	LAYOUT_INDEX_FILE,
+	type LayoutIndexItem,
 	type LayoutIndexSidecar,
 	parseLayoutIndexSidecar,
 } from "@/lib/pdf/layout/layout-index";
@@ -179,13 +180,50 @@ export async function readLayoutIndex(
 	}
 }
 
-/** Write sidebar-aligned index from **post-merge** regions. */
+function layoutIndexItemEqual(a: LayoutIndexItem, b: LayoutIndexItem): boolean {
+	return (
+		a.id === b.id &&
+		a.stableKey === b.stableKey &&
+		a.kind === b.kind &&
+		a.section === b.section &&
+		a.page === b.page &&
+		a.pageIndex === b.pageIndex &&
+		a.score === b.score &&
+		a.layoutRegionId === b.layoutRegionId &&
+		(a.title ?? "") === (b.title ?? "") &&
+		a.bbox.x === b.bbox.x &&
+		a.bbox.y === b.bbox.y &&
+		a.bbox.w === b.bbox.w &&
+		a.bbox.h === b.bbox.h
+	);
+}
+
+/** Content comparison that ignores the volatile `generatedAt` timestamp. */
+function layoutIndexContentEqual(
+	a: LayoutIndexSidecar,
+	b: LayoutIndexSidecar,
+): boolean {
+	if (a.schemaVersion !== b.schemaVersion) return false;
+	if (a.source.minScore !== b.source.minScore) return false;
+	if (a.items.length !== b.items.length) return false;
+	return a.items.every((item, i) => layoutIndexItemEqual(item, b.items[i]));
+}
+
+/**
+ * Write sidebar-aligned index from **post-merge** regions.
+ * Skips the disk write when the existing sidecar already matches, so a cache
+ * hit produces zero writes (and no watcher echo).
+ */
 export async function writeLayoutIndex(
 	paperAbsPath: string | null | undefined,
 	mergedRegions: readonly PdfLayoutRegion[],
 ): Promise<LayoutIndexSidecar | null> {
 	if (!paperAbsPath) return null;
 	const index = buildLayoutIndexSidecar(mergedRegions);
+	const existing = await readLayoutIndex(paperAbsPath);
+	if (existing && layoutIndexContentEqual(existing, index)) {
+		return existing;
+	}
 	await writeVaultFile(
 		layoutIndexPath(paperAbsPath),
 		`${JSON.stringify(index, null, 2)}\n`,

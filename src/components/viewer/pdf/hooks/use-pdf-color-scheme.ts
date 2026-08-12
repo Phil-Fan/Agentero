@@ -6,7 +6,7 @@
  * listens instead of threading the value through the workspace.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	PDF_COLOR_SCHEME_EVENT,
 	type PdfColorScheme,
@@ -23,19 +23,23 @@ export type PdfColorSchemeControls = {
 export function usePdfColorScheme(): PdfColorSchemeControls {
 	const [pdfColorScheme, setPdfColorScheme] =
 		useState<PdfColorScheme>(readPdfColorScheme);
+	const pdfColorSchemeRef = useRef(pdfColorScheme);
 
 	const togglePdfColorScheme = useCallback(() => {
-		setPdfColorScheme((current) => {
-			const next: PdfColorScheme = current === "dark" ? "light" : "dark";
-			writePdfColorScheme(next);
-			return next;
-		});
+		const next: PdfColorScheme =
+			pdfColorSchemeRef.current === "dark" ? "light" : "dark";
+		pdfColorSchemeRef.current = next;
+		setPdfColorScheme(next);
+		writePdfColorScheme(next);
 	}, []);
 
 	useEffect(() => {
 		const onColorSchemeChange = (event: Event) => {
 			const next = (event as CustomEvent<PdfColorScheme>).detail;
-			if (next === "light" || next === "dark") setPdfColorScheme(next);
+			if (next === "light" || next === "dark") {
+				pdfColorSchemeRef.current = next;
+				setPdfColorScheme(next);
+			}
 		};
 		window.addEventListener(PDF_COLOR_SCHEME_EVENT, onColorSchemeChange);
 		return () => {

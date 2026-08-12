@@ -40,12 +40,7 @@ export const TREE_IGNORE_NAMES = new Set([
  * Vault-root segment names that are fully recursive on open (product surface).
  * Everything else at the vault root is shallow (one level) until expanded.
  */
-export const TREE_EAGER_ROOT_NAMES = new Set([
-	"papers",
-	"notes",
-	"plans",
-	".agents",
-]);
+export const TREE_EAGER_ROOT_NAMES = new Set(["papers", "notes", ".agents"]);
 
 /**
  * Dot-directories that are still part of the product surface (not ignored).
@@ -73,7 +68,7 @@ export function shouldIgnoreTreeName(name: string): boolean {
 
 /**
  * Whether a directory under the vault should be fully walked on open.
- * - Under `papers/` / `notes/` / `plans/` / `.agents/`: always eager (markers, skills).
+ * - Under `papers/` / `notes/` / `.agents/`: always eager (markers, skills).
  * - Other vault-root trees (`src/`, `thesis/`, …): shallow only until user expands.
  */
 export function isEagerTreeRel(rel: string): boolean {
@@ -482,7 +477,7 @@ export function collectWikiTargetRelPaths(
 /**
  * Build the vault file tree.
  *
- * - Eager recursive: `papers/`, `notes/`, `plans/`, `.agents/`
+ * - Eager recursive: `papers/`, `notes/`, `.agents/`
  * - Shallow elsewhere: vault-root extras (`src/`, `thesis/`, …) appear as
  *   one level with `childrenPending`; expand via {@link listVaultDirChildren}.
  * - Ignored names ({@link TREE_IGNORE_NAMES} / dots / `*.egg-info`) are never listed.

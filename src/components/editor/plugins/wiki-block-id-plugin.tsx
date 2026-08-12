@@ -5,7 +5,7 @@ import {
 	PlateLeaf,
 	type PlateLeafProps,
 } from "platejs/react";
-import { findWikiBlockIdRange } from "@/lib/wiki-navigation";
+import { findWikiBlockIdRange } from "@/lib/wiki/navigation";
 
 function WikiBlockIdLeaf(props: PlateLeafProps) {
 	return (

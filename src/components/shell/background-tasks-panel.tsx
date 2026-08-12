@@ -57,6 +57,7 @@ function kindIcon(kind: BackgroundTaskKind | undefined) {
 		case "export":
 			return <Package className={cls} aria-hidden />;
 		case "parse":
+		case "layout":
 			return <LayoutGrid className={cls} aria-hidden />;
 		case "paperRead":
 			return <BookOpen className={cls} aria-hidden />;

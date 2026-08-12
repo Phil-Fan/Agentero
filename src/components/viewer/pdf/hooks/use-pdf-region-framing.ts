@@ -48,14 +48,6 @@ type InteractionManagerCapability = ReturnType<
 	typeof useInteractionManagerCapability
 >["provides"];
 
-/** Crop options shared by the manual (⌘.) and the layout-hover entry points. */
-export type BeginVisualAnnotationOptions = {
-	/** Layout-hover sequence token; a stale crop is dropped instead of opening. */
-	seq?: number;
-	/** Hover-opened drafts auto-hide after the pointer leaves. */
-	ephemeral?: boolean;
-};
-
 export type UsePdfRegionFramingOptions = {
 	docId: string;
 	/** Shared PDFium engine (null until the WASM host finished booting). */
@@ -76,8 +68,6 @@ export type UsePdfRegionFramingOptions = {
 		pageIndex0: number,
 		region: PdfAskNormalizedRect,
 	) => ScreenPoint;
-	/** Bumped by the layout cluster to drop late crops after leave / supersede. */
-	layoutHoverSeqRef: RefObject<number>;
 	/** Mirrors written here and read by the layout-hover guard. */
 	regionSelectingRef: RefObject<boolean>;
 	visualCropPendingRef: RefObject<boolean>;
@@ -88,13 +78,17 @@ export type PdfRegionFraming = {
 	regionSelecting: boolean;
 	/** A crop is in flight; blocks re-entry and layout hover. */
 	visualCropPending: boolean;
+	/**
+	 * Region whose crop is in flight (null when idle). Rendered on the page so a
+	 * click has a visible response before the draft card opens.
+	 */
+	visualCropRegion: { page: number; region: PdfAskNormalizedRect } | null;
 	/** Enter / leave region framing. Shared by the toolbar and the handle (⌘.). */
 	toggleRegionSelect: () => void;
 	/** Crop a region and open the draft editor (does not send). */
 	beginVisualAnnotation: (
 		page: number,
 		region: PdfAskNormalizedRect,
-		opts?: BeginVisualAnnotationOptions,
 	) => Promise<void>;
 	/** Marquee release on a page → crop that region. */
 	handleVisualRegionSelect: (
@@ -114,13 +108,16 @@ export function usePdfRegionFraming({
 	closeVisualDraftEditor,
 	closeFormulaAnnotationPreview,
 	screenPointForRegion,
-	layoutHoverSeqRef,
 	regionSelectingRef,
 	visualCropPendingRef,
 }: UsePdfRegionFramingOptions): PdfRegionFraming {
 	const { t } = useTranslation("viewer");
 	const [regionSelecting, setRegionSelecting] = useState(false);
 	const [visualCropPending, setVisualCropPending] = useState(false);
+	const [visualCropRegion, setVisualCropRegion] = useState<{
+		page: number;
+		region: PdfAskNormalizedRect;
+	} | null>(null);
 	regionSelectingRef.current = regionSelecting;
 	visualCropPendingRef.current = visualCropPending;
 
@@ -147,11 +144,7 @@ export function usePdfRegionFraming({
 
 	/** Crop a region and open the visual-annotation draft editor (does not send). */
 	const beginVisualAnnotation = useCallback(
-		async (
-			page: number,
-			region: PdfAskNormalizedRect,
-			opts?: BeginVisualAnnotationOptions,
-		) => {
+		async (page: number, region: PdfAskNormalizedRect) => {
 			if (!engine || !docCap || visualCropPendingRef.current) return;
 			if (!docCap.isDocumentOpen(docId)) return;
 			const document = docCap.getDocument(docId);
@@ -160,6 +153,7 @@ export function usePdfRegionFraming({
 				return;
 			}
 			setVisualCropPending(true);
+			setVisualCropRegion({ page, region });
 			setRegionSelecting(false);
 			// Visual draft and formula legend are mutually exclusive; close the
 			// legend up front so it does not linger for the length of the crop.
@@ -172,22 +166,14 @@ export function usePdfRegionFraming({
 					region,
 				});
 				if (!docCap.isDocumentOpen(docId)) return;
-				if (opts?.seq != null && opts.seq !== layoutHoverSeqRef.current) {
-					return;
-				}
 				const screen = screenPointForRegion(page - 1, region);
-				const ephemeral = opts?.ephemeral === true;
 				openVisualDraftEditor({
 					screen,
 					page,
 					region,
 					image,
-					ephemeral: ephemeral || undefined,
 				});
 			} catch (error) {
-				if (opts?.seq != null && opts.seq !== layoutHoverSeqRef.current) {
-					return;
-				}
 				if (
 					!docCap.isDocumentOpen(docId) ||
 					isPdfDocumentCloseRaceError(error)
@@ -199,6 +185,7 @@ export function usePdfRegionFraming({
 				notifyError(t("pdfExplain.cropFailed"), { description: message });
 			} finally {
 				setVisualCropPending(false);
+				setVisualCropRegion(null);
 			}
 		},
 		[
@@ -209,7 +196,6 @@ export function usePdfRegionFraming({
 			closeFormulaAnnotationPreview,
 			openVisualDraftEditor,
 			screenPointForRegion,
-			layoutHoverSeqRef,
 			visualCropPendingRef,
 		],
 	);
@@ -247,6 +233,7 @@ export function usePdfRegionFraming({
 	return {
 		regionSelecting,
 		visualCropPending,
+		visualCropRegion,
 		toggleRegionSelect,
 		beginVisualAnnotation,
 		handleVisualRegionSelect,

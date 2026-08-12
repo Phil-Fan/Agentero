@@ -51,6 +51,11 @@
 			"start": "全文翻译",
 			"stop": "停止全文翻译",
 			"clear": "清除全文译文",
+			"translatePage": "翻译本页",
+			"translatePageShort": "翻译页面",
+			"hidePage": "隐藏本页译文",
+			"hidePageShort": "隐藏本页",
+			"pageRunning": "正在翻译本页…",
 			"needLayout": "请先运行版面分析（Figures 面板）。",
 			"noText": "没有可提取文字的版面区域可翻译。",
 			"failed": "全文翻译失败"
@@ -68,7 +73,10 @@
 		"pillAria": "打开提问：{{preview}}",
 		"editAction": "编辑",
 		"editResend": "重新发送",
-		"editCancel": "取消"
+		"editCancel": "取消",
+		"openInChatGPT": "在 ChatGPT 中提问",
+		"openInClaude": "在 Claude 中提问",
+		"openInPrompt": "请讲解以下论文选段："
 	},
 	"pdfExplain": {
 		"selectRegion": "添加视觉批注",
@@ -77,6 +85,7 @@
 		"formulaQuestion": "解释这个公式或技术表达式。",
 		"figureQuestion": "解释这张图片、图表、表格或视觉区域。",
 		"cropFailed": "无法截取所选 PDF 区域。",
+		"cropping": "正在截取区域…",
 		"annotationEditorLabel": "批注备注",
 		"annotationPlaceholder": "写点备注…",
 		"annotationSave": "保存",
@@ -163,7 +172,8 @@
 		"analyzing": "正在分析版面…",
 		"progressPages": "{{page}} / {{total}} 页",
 		"progressPct": "{{pct}}%",
-		"hoverAskAria": "对此插图、表格、算法或公式打开视觉提问",
+		"clickAnnotateAria": "批注此{{kind}}",
+		"clickAnnotateHint": "单击进行批注",
 		"sectionFigures": "插图",
 		"sectionTables": "表格",
 		"sectionAlgorithms": "算法",

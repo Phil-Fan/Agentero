@@ -15,7 +15,6 @@ This file is the L0 map for agents working in this Agentero research vault.
 
 - `papers/` — paper folders (any depth). A **paper folder** is the minimal unit: it contains `NOTES.md`, optional `PAPER.md` / `marks/`, and `source/`.
 - `notes/` — free-form concept notes and ideas. Supports `[[wikilinks]]`, `![[embeds]]`, Mermaid diagrams, and Obsidian `> [!callout]` blocks.
-- `plans/` — research plans and drafts.
 - `.agents/` — vault-local agent assets (e.g. `skills/<id>/SKILL.md` for Composer `$` skills).
 - `.agentero/catalog.sqlite` — paper **catalog** (collection + metadata). There is usually **no** root `PAPERS.md` or `library.bib` unless the user exports them.
 - Headless tooling: optional **`agentero` CLI** (discover / list / import). Prefer skill **`agentero-cli`** (`$agentero-cli` / `/agentero-cli`) with `--json`. CLI does **not** run agents or paper-reader.
@@ -367,7 +366,7 @@ fn seed_or_upgrade_bundled_file(
 
 /// Idempotent vault scaffold under `path` without overwriting existing user files.
 ///
-/// Creates: `papers/`, `notes/`, `plans/`, `.agentero/`, `.agents/` (+ `skills/`),
+/// Creates: `papers/`, `notes/`, `.agentero/`, `.agents/` (+ `skills/`),
 /// `AGENTS.md` (if missing), seeds `.agents/README.md` and bundled skills from
 /// the app template, safely upgrades managed first-party skills (frontmatter
 /// `version`), seeds localized onboarding tutorial notes under `notes/`, and
@@ -390,14 +389,7 @@ pub fn ensure_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppE
     let mut created: Vec<String> = Vec::new();
     let mut updated: Vec<String> = Vec::new();
 
-    for dir in [
-        "papers",
-        "notes",
-        "plans",
-        ".agentero",
-        ".agents",
-        ".agents/skills",
-    ] {
+    for dir in ["papers", "notes", ".agentero", ".agents", ".agents/skills"] {
         let p = join_rel(path, dir);
         if !p.exists() {
             fs::create_dir_all(&p)?;
@@ -477,7 +469,7 @@ mod tests {
         let r = create_vault(&dir, "en").expect("create");
         assert!(dir.join("papers").is_dir());
         assert!(dir.join("notes").is_dir());
-        assert!(dir.join("plans").is_dir());
+        assert!(!dir.join("plans").exists());
         assert!(dir.join(".agentero").is_dir());
         assert!(dir.join(".agents").is_dir());
         assert!(dir.join(".agents/skills").is_dir());

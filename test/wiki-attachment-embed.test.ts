@@ -4,7 +4,7 @@ import {
 	parseWikiImageEmbedDimensions,
 } from "@/components/editor/embeds/wiki-attachment-embed";
 import type { WikiEmbedResponse } from "@/lib/wiki";
-import { wikiEmbedResponseKind } from "@/lib/wiki-embed";
+import { wikiEmbedResponseKind } from "@/lib/wiki/embed";
 
 function attachmentResponse(contentKind: "image" | "pdf"): WikiEmbedResponse {
 	return {

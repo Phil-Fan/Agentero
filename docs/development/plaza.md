@@ -190,7 +190,7 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 | 设计 | `docs/development/plaza.md`（本文） |
 | UI 规范摘录 | `docs/frontend/shell.md` § 广场 |
 | 虚拟 path | `src/lib/paper/api.ts` 或 `src/lib/plaza/` |
-| 文件树 | `src/components/sidebar/file-tree.tsx` |
+| 文件树 | `src/components/sidebar/file-tree/` |
 | 中间栏 | `src/components/plaza/*` + `doc-view` |
 | Cool Papers WebView | `src/components/plaza/cool-papers-view.tsx`（Tauri webview 封装） |
 | 推荐 | `src/lib/plaza/recommend.ts` + `src/components/plaza/recommend-view.tsx` |

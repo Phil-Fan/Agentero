@@ -153,11 +153,10 @@ describe("shouldIgnoreTreeName", () => {
 });
 
 describe("isEagerTreeRel", () => {
-	it("treats papers/notes/plans/.agents as eager", () => {
+	it("treats papers/notes/.agents as eager", () => {
 		expect(isEagerTreeRel("papers")).toBe(true);
 		expect(isEagerTreeRel("papers/topic/x")).toBe(true);
 		expect(isEagerTreeRel("notes/todo.md")).toBe(true);
-		expect(isEagerTreeRel("plans")).toBe(true);
 		expect(isEagerTreeRel(".agents/skills")).toBe(true);
 	});
 
@@ -165,6 +164,7 @@ describe("isEagerTreeRel", () => {
 		expect(isEagerTreeRel("src")).toBe(false);
 		expect(isEagerTreeRel("src/agents")).toBe(false);
 		expect(isEagerTreeRel("thesis")).toBe(false);
+		expect(isEagerTreeRel("plans")).toBe(false);
 		expect(isEagerTreeRel("scripts")).toBe(false);
 	});
 });

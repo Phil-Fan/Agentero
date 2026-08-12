@@ -17,7 +17,6 @@ Vault/
 ├── AGENTS.md
 ├── papers/
 ├── notes/
-├── plans/
 ├── .agents/skills/
 └── .agentero/
     ├── catalog.sqlite

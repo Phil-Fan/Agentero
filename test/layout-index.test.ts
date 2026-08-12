@@ -1,11 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
 	buildLayoutIndexItems,
+	buildLayoutIndexSidecar,
 	parseLayoutIndexSidecar,
 	slugFromTitle,
 } from "@/lib/pdf/layout/layout-index";
 import type { PdfLayoutRegion } from "@/lib/pdf/layout/types";
+
+vi.mock("@/lib/vault", () => ({
+	joinVaultPath: (parent: string, name: string) => `${parent}/${name}`,
+	readVaultFile: vi.fn(),
+	writeVaultFile: vi.fn(),
+}));
 
 function region(
 	partial: Partial<PdfLayoutRegion> &
@@ -108,5 +115,58 @@ describe("buildLayoutIndexItems", () => {
 		const parsed = parseLayoutIndexSidecar(sidecar);
 		expect(parsed?.items).toHaveLength(1);
 		expect(parsed?.items[0]?.id).toBe("algorithm-2");
+	});
+});
+
+describe("writeLayoutIndex skip-if-unchanged", () => {
+	const regions = [
+		region({
+			id: "fig1",
+			pageIndex: 0,
+			kind: "image",
+			title: "Figure 1: Overview",
+			score: 0.9,
+			readingOrder: 1,
+		}),
+	];
+
+	beforeEach(async () => {
+		const vault = await import("@/lib/vault");
+		vi.mocked(vault.readVaultFile).mockReset();
+		vi.mocked(vault.writeVaultFile).mockReset();
+	});
+
+	it("skips the write when the existing index matches", async () => {
+		const vault = await import("@/lib/vault");
+		const { writeLayoutIndex } = await import("@/lib/pdf/layout/io");
+		const existing = buildLayoutIndexSidecar(regions);
+		existing.source.generatedAt = "2020-01-01T00:00:00.000Z";
+		vi.mocked(vault.readVaultFile).mockResolvedValue(JSON.stringify(existing));
+
+		await writeLayoutIndex("/vault/paper", regions);
+
+		expect(vault.writeVaultFile).not.toHaveBeenCalled();
+	});
+
+	it("writes when no index exists yet", async () => {
+		const vault = await import("@/lib/vault");
+		const { writeLayoutIndex } = await import("@/lib/pdf/layout/io");
+		vi.mocked(vault.readVaultFile).mockRejectedValue(new Error("not found"));
+
+		await writeLayoutIndex("/vault/paper", regions);
+
+		expect(vault.writeVaultFile).toHaveBeenCalledTimes(1);
+	});
+
+	it("writes when the existing index differs", async () => {
+		const vault = await import("@/lib/vault");
+		const { writeLayoutIndex } = await import("@/lib/pdf/layout/io");
+		const existing = buildLayoutIndexSidecar(regions);
+		existing.items = [];
+		vi.mocked(vault.readVaultFile).mockResolvedValue(JSON.stringify(existing));
+
+		await writeLayoutIndex("/vault/paper", regions);
+
+		expect(vault.writeVaultFile).toHaveBeenCalledTimes(1);
 	});
 });

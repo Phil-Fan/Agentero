@@ -18,8 +18,35 @@ pub const CLAUDE_ACP_INSTALL_COMMAND: &str = if cfg!(windows) {
     "npm i -g @agentclientprotocol/claude-agent-acp --prefix \"$HOME/.local\""
 };
 
+/// Community `pi-acp` adapter — pi itself has no native ACP mode, the adapter
+/// spawns `pi --mode rpc`. Same prefix reasoning as the Claude adapter above.
+pub const PI_ACP_INSTALL_COMMAND: &str = if cfg!(windows) {
+    "npm i -g pi-acp@latest"
+} else {
+    "npm i -g pi-acp@latest --prefix \"$HOME/.local\""
+};
+
+/// Host pi CLI. The official `pi.dev/install.sh` is an interactive TUI installer,
+/// so the silent lifecycle uses npm (what that script ultimately runs) everywhere.
+pub const PI_HOST_INSTALL_COMMAND: &str = "npm i -g @earendil-works/pi-coding-agent@latest";
+
 pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
     vec![
+        AgentTemplateInfo {
+            id: AgentTemplate::Pi.as_str().to_string(),
+            name: "Pi".to_string(),
+            description:
+                "Pi coding agent via the community ACP adapter (`pi-acp` spawns `pi --mode rpc`)."
+                    .to_string(),
+            // ACP entrypoint is the adapter; "installed" badge uses the host pi CLI.
+            command: "pi-acp".to_string(),
+            args: vec![],
+            detect_command: Some("pi".to_string()),
+            install_hint: format!(
+                "{PI_HOST_INSTALL_COMMAND} + {PI_ACP_INSTALL_COMMAND}  ·  needs Node 22+  ·  https://pi.dev"
+            ),
+            install_command: Some(PI_ACP_INSTALL_COMMAND.to_string()),
+        },
         AgentTemplateInfo {
             id: AgentTemplate::Opencode.as_str().to_string(),
             name: "OpenCode".to_string(),
@@ -154,6 +181,7 @@ pub fn template_from_id(id: &str) -> AgentTemplate {
         "codex-acp" => AgentTemplate::CodexAcp,
         "qodercli" => AgentTemplate::QoderCli,
         "grok-build" => AgentTemplate::GrokBuild,
+        "pi" => AgentTemplate::Pi,
         _ => AgentTemplate::Custom,
     }
 }

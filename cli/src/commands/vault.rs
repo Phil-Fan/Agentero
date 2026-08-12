@@ -215,7 +215,7 @@ fn check(globals: &GlobalOpts) -> Result<Value, CliError> {
     let path = vault.to_string_lossy().to_string();
     let mut issues = Vec::new();
 
-    for dir in ["papers", "notes", "plans", ".agentero"] {
+    for dir in ["papers", "notes", ".agentero"] {
         if !vault.join(dir).is_dir() {
             issues.push(CheckIssue {
                 code: "missing_dir".into(),

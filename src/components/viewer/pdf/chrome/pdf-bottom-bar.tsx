@@ -1,4 +1,4 @@
-import { Moon, MoveVertical, RotateCcw, Sun } from "lucide-react";
+import { Moon, MoveHorizontal, MoveVertical, Sun } from "lucide-react";
 import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -107,7 +107,7 @@ export function PdfBottomBar({
 								aria-label={t("pdf.zoomFit")}
 								onClick={onFitWidth}
 							>
-								<RotateCcw className="size-3.5" />
+								<MoveHorizontal className="size-3.5" />
 							</Button>
 						</TooltipTrigger>
 						<TooltipContent side="top">{t("pdf.zoomFit")}</TooltipContent>

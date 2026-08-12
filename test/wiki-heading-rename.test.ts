@@ -8,7 +8,7 @@ import {
 	savedWikiHeadingAt,
 	wikiHeadingRenameAffectedPaths,
 	wikiHeadingRenameErrorKey,
-} from "@/lib/wiki-heading-rename";
+} from "@/lib/wiki/heading-rename";
 
 describe("saved Wiki heading identity", () => {
 	it("matches Host frontmatter, fence, hierarchy, closing marker, and line rules", () => {

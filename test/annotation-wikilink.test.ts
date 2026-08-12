@@ -19,12 +19,12 @@ import {
 	resolveWikiTarget,
 	splitAnnotationSugar,
 } from "@/lib/wiki";
+import { parseWikiCompletionQuery } from "@/lib/wiki/completion";
 import {
 	parseWikiLinkMarkdown,
 	wikiLinkRules,
 	wikiLinkToMarkdown,
 } from "@/lib/wiki/wikilink-model";
-import { parseWikiCompletionQuery } from "@/lib/wiki-completion";
 
 describe("annotation wikilink parse", () => {
 	it("accepts sugar target@id and #@id fragment", () => {

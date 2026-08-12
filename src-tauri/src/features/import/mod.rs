@@ -9,15 +9,17 @@ pub mod pdf_parse;
 pub mod zotero_commands;
 
 mod assets;
+pub(crate) mod batch;
 pub(crate) mod map;
 pub(crate) mod parse;
 mod skill_import;
 pub(crate) mod zotero_db;
 pub(crate) mod zotero_io;
 
+pub use crate::features::catalog::{has_local_pdf, has_local_tex};
 pub use assets::{
     ensure_paper_assets, ensure_paper_assets_with_cookies, ensure_paper_assets_with_progress,
-    has_local_pdf, has_local_tex, AssetDownloadResult, AssetProgressContext,
+    AssetDownloadResult, AssetProgressContext,
 };
 pub use map::{enrich_remote_urls, map_zotero_item, PaperMeta};
 pub use skill_import::{
@@ -34,7 +36,10 @@ pub use zotero_io::{
 };
 
 use crate::core::error::AppError;
-use crate::features::catalog::papers::{self, PaperRecord};
+use crate::features::catalog::{
+    papers::{self, PaperRecord},
+    CapsCache,
+};
 use crate::features::import::assets::AssetDownloadProgress;
 use futures_util::StreamExt;
 use map::local_pdf_meta;
@@ -222,12 +227,13 @@ pub struct LookupImportBatchResult {
 }
 
 pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImportResult, AppError> {
-    import_by_identifier_with_progress(args, None).await
+    import_by_identifier_with_progress(args, None, None).await
 }
 
 pub async fn import_by_identifier_with_progress(
     args: LookupImportArgs,
     app: Option<&tauri::AppHandle>,
+    cache: Option<&CapsCache>,
 ) -> Result<LookupImportResult, AppError> {
     use crate::features::import::paper_import::{
         paper_commit, AssetsPolicy, DedupePolicy, PaperCommitOptions,
@@ -273,6 +279,7 @@ pub async fn import_by_identifier_with_progress(
             },
             translate_abstract: true,
             fresh_timestamps: false,
+            cache,
         },
     )
     .await?;
@@ -298,86 +305,48 @@ pub async fn import_by_identifier_with_progress(
 pub async fn import_by_identifier_batch(
     args: LookupImportBatchArgs,
     app: Option<&tauri::AppHandle>,
+    cache: Option<&CapsCache>,
 ) -> Result<LookupImportBatchResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
         return Err(AppError::message("vault path is not a directory"));
     }
 
-    let mut skipped: Vec<SkippedImport> = Vec::new();
-    let mut errors: Vec<String> = Vec::new();
     let skills: Vec<SkillImportResult> = Vec::new();
     let mut skill_candidates: Vec<SkillDiscovery> = Vec::new();
-    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut preflight = batch::preflight_identifier_batch(
+        &args.texts,
+        &vault,
+        batch::SkillBatchMode::Collect,
+        false,
+    );
 
-    // Phase 1: parse, deduplicate, and filter against existing catalog.
-    let mut to_import: Vec<(String, LookupImportArgs)> = Vec::new();
-    for raw in &args.texts {
-        let raw = raw.trim();
-        if raw.is_empty() {
-            continue;
+    for pending in &preflight.skills {
+        match discover_skill_source(&vault, &pending.source, app, args.task_id.as_deref()).await {
+            Ok(discovery) => skill_candidates.push(discovery),
+            Err(e) => preflight.errors.push(format!("{}: {e}", pending.raw)),
         }
-        let Some((kind, value)) = extract_primary_identifier(raw) else {
-            errors.push(format!("{raw}: unrecognized identifier"));
-            continue;
-        };
-
-        let kind_str = identifier_kind_str(kind);
-        let dedup_key = format!("{kind_str}:{value}");
-        if seen.contains_key(&dedup_key) {
-            skipped.push(SkippedImport {
-                raw: raw.to_string(),
-                kind: kind_str,
-                value: value.clone(),
-                reason: "duplicate_in_batch".to_string(),
-            });
-            continue;
-        }
-        seen.insert(dedup_key.clone(), raw.to_string());
-
-        if kind == IdentifierKind::Skill {
-            let Some(source) = parse::extract_skill_source(raw) else {
-                errors.push(format!("{raw}: invalid skill source"));
-                continue;
-            };
-            match discover_skill_source(&vault, &source, app, args.task_id.as_deref()).await {
-                Ok(discovery) => skill_candidates.push(discovery),
-                Err(e) => errors.push(format!("{raw}: {e}")),
-            }
-            continue;
-        }
-
-        // Check catalog for existing paper by canonical identifier.
-        if let Some(column) = identifier_kind_column(kind) {
-            match papers::find_by_identifier(&vault, column, &value) {
-                Ok(Some(_record)) => {
-                    skipped.push(SkippedImport {
-                        raw: raw.to_string(),
-                        kind: kind_str,
-                        value: value.clone(),
-                        reason: "already_in_library".to_string(),
-                    });
-                    continue;
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    // Log but do not block import on catalog read failure.
-                    log::warn!("catalog lookup failed for {value}: {e}");
-                }
-            }
-        }
-
-        to_import.push((
-            raw.to_string(),
-            LookupImportArgs {
-                vault_path: args.vault_path.clone(),
-                parent_dir: args.parent_dir.clone(),
-                text: raw.to_string(),
-                translator_base_url: args.translator_base_url.clone(),
-                task_id: args.task_id.clone(),
-            },
-        ));
     }
+
+    let to_import: Vec<(String, LookupImportArgs)> = preflight
+        .papers
+        .into_iter()
+        .map(|pending| {
+            let raw = pending.raw;
+            (
+                raw.clone(),
+                LookupImportArgs {
+                    vault_path: args.vault_path.clone(),
+                    parent_dir: args.parent_dir.clone(),
+                    text: raw,
+                    translator_base_url: args.translator_base_url.clone(),
+                    task_id: args.task_id.clone(),
+                },
+            )
+        })
+        .collect();
+    let skipped = preflight.skipped;
+    let mut errors = preflight.errors;
 
     let total = to_import.len();
     if total == 0 {
@@ -400,7 +369,7 @@ pub async fn import_by_identifier_batch(
         let counter = counter.clone();
         let task_id = args.task_id.clone();
         async move {
-            let result = import_by_identifier_with_progress(single, app).await;
+            let result = import_by_identifier_with_progress(single, app, cache).await;
             let done = counter.fetch_add(1, Ordering::SeqCst) + 1;
             emit_batch_progress(app, task_id.as_deref(), done, total);
             match result {
@@ -424,10 +393,6 @@ pub async fn import_by_identifier_batch(
     let imported = Arc::try_unwrap(imported)
         .expect("all import futures finished")
         .into_inner();
-
-    for r in &imported {
-        crate::features::refs::spawn_parse_after_import(app, &vault, &r.path);
-    }
 
     Ok(LookupImportBatchResult {
         imported,
@@ -490,12 +455,13 @@ pub(crate) fn identifier_kind_column(kind: IdentifierKind) -> Option<&'static st
 pub async fn download_paper_assets(
     args: PaperDownloadAssetsArgs,
 ) -> Result<AssetDownloadResult, AppError> {
-    download_paper_assets_with_progress(args, None).await
+    download_paper_assets_with_progress(args, None, None).await
 }
 
 pub async fn download_paper_assets_with_progress(
     args: PaperDownloadAssetsArgs,
     app: Option<&tauri::AppHandle>,
+    cache: Option<&CapsCache>,
 ) -> Result<AssetDownloadResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
@@ -525,13 +491,16 @@ pub async fn download_paper_assets_with_progress(
         (name, arxiv, pdf, None)
     };
 
-    let mut result = ensure_paper_assets_with_progress(
+    let result = ensure_paper_assets_with_progress(
         &paper_dir,
+        &vault,
+        &path_rel,
         &id,
         arxiv_id.as_deref(),
         pdf_url.as_deref(),
         doi.as_deref(),
         None,
+        cache,
         AssetProgressContext {
             app,
             task_id: args.task_id.as_deref(),
@@ -555,26 +524,10 @@ pub async fn download_paper_assets_with_progress(
         }
     }
 
-    // After download: no TeX + has PDF → liteparse PAPER.md
-    let parse_progress = AssetProgressContext {
-        app,
-        task_id: args.task_id.as_deref(),
-    };
-    check_task_not_cancelled(args.task_id.as_deref())?;
-    parse_progress.emit_phase("parse");
-    let parse =
-        crate::features::import::pdf_parse::maybe_generate_paper_md_after_download_with_task(
-            &vault,
-            &path_rel,
-            &paper_dir,
-            args.task_id.as_deref(),
-        )
-        .await;
-    check_task_not_cancelled(args.task_id.as_deref())?;
-    result.paper_md = parse.paper_md;
-    for m in parse.messages {
-        result.messages.push(m);
+    if result.pdf && !result.tex && !result.paper_md {
+        crate::features::jobs::spawn_parse_body_after_assets(app, &vault, &path_rel, false);
     }
+
     crate::features::refs::spawn_parse_after_import(app, &vault, &path_rel);
     Ok(result)
 }
@@ -633,6 +586,7 @@ pub fn stage_import_file(args: StageImportFileArgs) -> Result<StageImportFileRes
 pub async fn import_local_pdfs(
     args: ImportLocalPdfArgs,
     app: Option<&tauri::AppHandle>,
+    cache: Option<&CapsCache>,
 ) -> Result<ImportLocalPdfResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
@@ -664,6 +618,7 @@ pub async fn import_local_pdfs(
             &vault,
             &parent_rel,
             entry,
+            cache,
             AssetProgressContext {
                 app,
                 task_id: task_id.as_deref(),
@@ -711,6 +666,7 @@ async fn import_one_local_pdf(
     vault: &Path,
     parent_rel: &str,
     entry: &LocalPdfImportEntry,
+    cache: Option<&CapsCache>,
     progress: AssetProgressContext<'_>,
 ) -> Result<LookupImportResult, AppError> {
     use crate::features::import::paper_import::{
@@ -771,6 +727,7 @@ async fn import_one_local_pdf(
             },
             translate_abstract: true,
             fresh_timestamps: false,
+            cache,
         },
     )
     .await?;

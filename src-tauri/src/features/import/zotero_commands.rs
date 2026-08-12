@@ -24,6 +24,7 @@ pub fn zotero_scan(args: ZoteroScanArgs) -> ApiResult<ZoteroScan> {
 /// Streams `{current,total,phase}` progress to the UI via `on_progress`.
 #[tauri::command]
 pub async fn zotero_migrate(
+    app: tauri::AppHandle,
     args: ZoteroMigrateArgs,
     on_progress: Channel<MigrateProgress>,
 ) -> ApiResult<ZoteroMigrateResult> {
@@ -40,7 +41,7 @@ pub async fn zotero_migrate(
             phase: phase.to_string(),
         });
     };
-    op.finish_result_ok_extra(migrate_zotero(args, report).await, |r| {
+    op.finish_result_ok_extra(migrate_zotero(args, report, Some(&app)).await, |r| {
         format!("imported={} skipped={}", r.imported, r.skipped)
     })
 }

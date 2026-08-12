@@ -195,6 +195,7 @@ async fn import_one_item(
             },
             translate_abstract: true,
             fresh_timestamps: false,
+            cache: None,
         },
     )
     .await?;

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Create a Agentero demo vault matching the current data model:
- * - AGENTS.md, papers/, notes/, plans/, assets/, .agentero/catalog.sqlite
+ * - AGENTS.md, papers/, notes/, assets/, .agentero/catalog.sqlite
  * - No default PAPERS.md / library.bib
  * - Paper folders as minimal units (flat + nested under papers/)
  * - Loose PDFs / images outside papers/ (center-pane preview fixtures)
@@ -304,7 +304,6 @@ This file is the L0 map for agents working in this Agentero research vault.
 
 - \`papers/\` — paper folders at **any depth**. A paper folder is the minimal unit (has \`NOTES.md\`, optional \`PAPER.md\` / \`marks/\`, and \`source/\`).
 - \`notes/\` — free-form concept notes (\`[[wikilinks]]\` welcome). May also hold loose PDFs under \`notes/attachments/\`.
-- \`plans/\` — research plans and drafts.
 - \`assets/\` — non-paper media (sample PDF / figures) for preview; not catalogued as papers.
 - \`.agentero/catalog.sqlite\` — paper **catalog** (collection + metadata). There is usually **no** root \`PAPERS.md\` unless exported.
 
@@ -341,13 +340,6 @@ Papers:
 - [[papers/nlp/transformers/1706.03762/NOTES]]
 - [[papers/nlp/pretrain/1810.04805/NOTES]]
 - [[papers/nlp/pretrain/2005.14165/NOTES]]
-`;
-
-const PLANS_README = `# Plans
-
-Research plans and Related Work drafts live here.
-
-Example: draft a comparison of Transformer → BERT → GPT-3 using local NOTES only.
 `;
 
 const ASSETS_README = `# Assets
@@ -613,7 +605,7 @@ async function writeCatalog(root, papers) {
 
 /** Skeleton equivalent to Create Vault (no sample papers / loose media). */
 async function scaffoldEmpty(root) {
-	for (const d of ["papers", "notes", "plans", "assets", ".agentero"]) {
+	for (const d of ["papers", "notes", "assets", ".agentero"]) {
 		await ensureDir(root, d);
 	}
 	await writeText(root, "AGENTS.md", AGENTS_MD);
@@ -645,7 +637,6 @@ async function scaffoldDemo(root) {
 
 	await writeText(root, "notes/idea.md", NOTES_IDEA);
 	await writeText(root, "notes/attention.md", NOTES_ATTENTION);
-	await writeText(root, "plans/README.md", PLANS_README);
 	await writeLooseMedia(root);
 
 	for (const paper of PAPERS) {
@@ -683,7 +674,7 @@ async function pathExists(p) {
  */
 async function verifyVault(root) {
 	const checks = [];
-	const needDirs = ["papers", "notes", "plans", ".agentero"];
+	const needDirs = ["papers", "notes", ".agentero"];
 	for (const d of needDirs) {
 		const full = path.join(root, d);
 		const ok = await pathExists(full);

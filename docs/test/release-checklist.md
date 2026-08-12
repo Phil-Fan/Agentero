@@ -79,7 +79,7 @@ cargo test -p agentero-cli
 
 | # | 界面 | 操作 | 预期 | 结果 |
 |---|---|---|---|---|
-| 1.1 | 欢迎页 | 点 **Create vault**，选空文件夹 | 进入工作台；左栏出现 `papers/` `notes/` `plans/`；磁盘有 `.agentero/catalog.sqlite`、`AGENTS.md`；**无**根级 `PAPERS.md` | ☐ |
+| 1.1 | 欢迎页 | 点 **Create vault**，选空文件夹 | 进入工作台；左栏出现 `papers/` `notes/`；磁盘有 `.agentero/catalog.sqlite`、`AGENTS.md`；**无**根级 `plans/`、`PAPERS.md` | ☐ |
 | 1.2 | 中间栏 | 观察默认中间区 | 为 **Library**（可空表或空状态） | ☐ |
 | 1.3 | 左栏·树 | 点魔棒图标，或 `⇧⌘I` | 打开魔棒弹层 | ☐ |
 | 1.4 | 魔棒弹层 | 粘贴 `1706.03762`，确认入库 | 左下角**任务条**有进度；成功后左栏树**展开并滚到**新论文行；中间打开该 paper | ☐ |
@@ -436,6 +436,7 @@ agentero --vault /tmp/agentero-cli-vault paper list --json
 | 能力 | macOS | Linux | Windows |
 |---|---|---|---|
 | 安装启动 §0.3 | ☐ | ☐ | ☐ |
+| Windows NSIS 安装器品牌图 | N/A | N/A | ☐ |
 | 五分钟冒烟 §1 | ☐ | ☐ | ☐ |
 | 文件树 + 回收站 §3 | ☐ | ☐ | ☐ |
 | PDF + 划词 §7 | ☐ | ☐ | ☐ |

@@ -1,15 +1,27 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fontSizeForLayoutTranslateBox } from "@/components/viewer/pdf/layers/layout-translate-overlay";
 import {
+	applyLayoutTranslateSidecar,
 	groupLayoutTranslateItemsByPage,
+	hasPendingLayoutTranslateItems,
+	LAYOUT_TRANSLATE_WRITE_DEBOUNCE_MS,
+	type LayoutTranslateCacheKey,
 	type LayoutTranslateItem,
 	type LayoutTranslateItemStatus,
 	layoutRegionSourceText,
 	listTranslatableLayoutRegions,
+	parseLayoutTranslateSidecar,
+	persistLayoutTranslateSidecarBestEffort,
 	toLayoutTranslateItems,
 } from "@/lib/pdf/layout/layout-translate";
 import type { PdfLayoutRegion } from "@/lib/pdf/layout/types";
+
+vi.mock("@/lib/vault", () => ({
+	joinVaultPath: (parent: string, name: string) => `${parent}/${name}`,
+	readVaultFile: vi.fn(),
+	writeVaultFile: vi.fn(),
+}));
 
 function region(
 	partial: Partial<PdfLayoutRegion> &
@@ -296,5 +308,159 @@ describe("groupLayoutTranslateItemsByPage", () => {
 		expect(after.get(0)).toBe(before.get(0));
 		expect(after.get(1)).not.toBe(before.get(1));
 		expect(after.get(1)?.map((it) => it.status)).toEqual(["done"]);
+	});
+});
+
+describe("layout translate sidecar cache", () => {
+	const key: LayoutTranslateCacheKey = {
+		providerId: "googleapi",
+		sourceLang: "auto",
+		targetLang: "zh-CN",
+		serviceKey: "googleapi",
+	};
+
+	function item(id: string, source = `source ${id}`): LayoutTranslateItem {
+		return {
+			id,
+			pageIndex: 0,
+			bbox: { x: 0.1, y: 0.1, w: 0.5, h: 0.05 },
+			kind: "text",
+			readingOrder: 0,
+			source,
+			status: "pending",
+		};
+	}
+
+	it("applies cached translations only when key and source text match", () => {
+		const sidecar = parseLayoutTranslateSidecar(
+			{
+				schemaVersion: 1,
+				source: {
+					mode: "pdf-layout-translate",
+					generatedAt: "2026-08-10T00:00:00.000Z",
+					providerId: "googleapi",
+					sourceLang: "auto",
+					targetLang: "zh-CN",
+					serviceKey: "googleapi",
+				},
+				items: [
+					{
+						id: "a",
+						pageIndex: 0,
+						bbox: { x: 0.1, y: 0.1, w: 0.5, h: 0.05 },
+						kind: "text",
+						readingOrder: 0,
+						source: "source a",
+						translated: "甲",
+					},
+					{
+						id: "b",
+						pageIndex: 0,
+						bbox: { x: 0.1, y: 0.2, w: 0.5, h: 0.05 },
+						kind: "text",
+						readingOrder: 1,
+						source: "old source",
+						translated: "乙",
+					},
+				],
+			},
+			key,
+		);
+		const applied = applyLayoutTranslateSidecar(
+			[item("a"), item("b")],
+			sidecar,
+		);
+
+		expect(applied[0]).toMatchObject({
+			status: "done",
+			translated: "甲",
+		});
+		expect(applied[1]?.status).toBe("pending");
+		expect(applied[1]?.translated).toBeUndefined();
+		expect(hasPendingLayoutTranslateItems(applied)).toBe(true);
+	});
+
+	it("rejects caches for a different target language", () => {
+		const sidecar = parseLayoutTranslateSidecar(
+			{
+				schemaVersion: 1,
+				source: {
+					mode: "pdf-layout-translate",
+					generatedAt: "2026-08-10T00:00:00.000Z",
+					providerId: "googleapi",
+					sourceLang: "auto",
+					targetLang: "en",
+					serviceKey: "googleapi",
+				},
+				items: [
+					{
+						id: "a",
+						pageIndex: 0,
+						bbox: { x: 0.1, y: 0.1, w: 0.5, h: 0.05 },
+						kind: "text",
+						readingOrder: 0,
+						source: "source a",
+						translated: "A",
+					},
+				],
+			},
+			key,
+		);
+
+		expect(sidecar).toBeNull();
+		expect(
+			hasPendingLayoutTranslateItems([
+				{ ...item("a"), translated: "甲", status: "done" },
+			]),
+		).toBe(false);
+	});
+});
+
+describe("persistLayoutTranslateSidecarBestEffort debounce", () => {
+	const key: LayoutTranslateCacheKey = {
+		providerId: "googleapi",
+		sourceLang: "auto",
+		targetLang: "zh-CN",
+		serviceKey: "googleapi",
+	};
+	const doneItem: LayoutTranslateItem = {
+		id: "a",
+		pageIndex: 0,
+		bbox: { x: 0.1, y: 0.1, w: 0.5, h: 0.05 },
+		kind: "text",
+		readingOrder: 0,
+		source: "source a",
+		status: "done",
+		translated: "甲",
+	};
+
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("coalesces rapid per-block writes into a single write", async () => {
+		const vault = await import("@/lib/vault");
+		vi.mocked(vault.writeVaultFile).mockReset();
+
+		persistLayoutTranslateSidecarBestEffort("/vault/paper", key, [doneItem]);
+		persistLayoutTranslateSidecarBestEffort("/vault/paper", key, [doneItem]);
+		persistLayoutTranslateSidecarBestEffort("/vault/paper", key, [doneItem]);
+		expect(vault.writeVaultFile).not.toHaveBeenCalled();
+
+		vi.advanceTimersByTime(LAYOUT_TRANSLATE_WRITE_DEBOUNCE_MS + 1);
+		expect(vault.writeVaultFile).toHaveBeenCalledTimes(1);
+	});
+
+	it("keeps a separate debounce timer per paper", async () => {
+		const vault = await import("@/lib/vault");
+		vi.mocked(vault.writeVaultFile).mockReset();
+
+		persistLayoutTranslateSidecarBestEffort("/vault/paper-a", key, [doneItem]);
+		persistLayoutTranslateSidecarBestEffort("/vault/paper-b", key, [doneItem]);
+		vi.advanceTimersByTime(LAYOUT_TRANSLATE_WRITE_DEBOUNCE_MS + 1);
+		expect(vault.writeVaultFile).toHaveBeenCalledTimes(2);
 	});
 });

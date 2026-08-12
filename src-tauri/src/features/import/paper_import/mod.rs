@@ -6,15 +6,15 @@
 //! @see docs/backend/paper-import-pipeline.md
 
 use crate::core::error::AppError;
-use crate::features::catalog::papers;
+use crate::features::catalog::{papers, probe_paper_caps, CapsCache};
 use crate::features::import::{
-    allocate_paper_path, ensure_paper_assets_with_progress, has_local_pdf, has_local_tex,
-    normalize_parent_dir, paper_record_from_meta, write_paper_shell_opts, AssetDownloadResult,
-    AssetProgressContext, PaperMeta,
+    allocate_paper_path, ensure_paper_assets_with_progress, normalize_parent_dir,
+    paper_record_from_meta, write_paper_shell_opts, AssetDownloadResult, AssetProgressContext,
+    PaperMeta,
 };
 use serde::Serialize;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -66,6 +66,8 @@ pub struct PaperCommitOptions<'a> {
     pub translate_abstract: bool,
     /// Stamp `added_at` / `updated_at` with now (Connector semantics).
     pub fresh_timestamps: bool,
+    /// Optional in-memory caps cache; avoids repeated directory walks.
+    pub cache: Option<&'a CapsCache>,
 }
 
 /// Uniform result shape for every entry (camelCase matches the frontend).
@@ -108,7 +110,13 @@ pub async fn paper_commit(
         DedupePolicy::ByCatalogId => {
             if let Ok(Some(existing)) = papers::get_by_id(vault, &meta.id) {
                 let dir = vault.join(&existing.path);
-                return Ok(existing_result(CommitStatus::Deduped, existing, dir));
+                return Ok(existing_result(
+                    CommitStatus::Deduped,
+                    existing,
+                    vault,
+                    &dir,
+                    opts.cache,
+                ));
             }
         }
         DedupePolicy::ByPathOrNotes => {
@@ -118,15 +126,19 @@ pub async fn paper_commit(
                 && (dir.join("NOTES.md").is_file()
                     || papers::get_by_path(vault, &candidate)?.is_some())
             {
+                let caps = opts
+                    .cache
+                    .map(|c| c.caps_for(vault, &candidate))
+                    .unwrap_or_else(|| probe_paper_caps(&dir));
                 return Ok(PaperCommitResult {
                     status: CommitStatus::Skipped,
                     path: candidate,
                     id: meta.id,
                     title: meta.title,
                     paper_dir: dir.to_string_lossy().to_string(),
-                    pdf: has_local_pdf(&dir),
-                    tex: has_local_tex(&dir),
-                    paper_md: dir.join("PAPER.md").is_file(),
+                    pdf: caps.has_pdf(),
+                    tex: caps.has_tex,
+                    paper_md: caps.has_paper_md,
                     asset_messages: Vec::new(),
                     assets_pending: false,
                 });
@@ -156,15 +168,25 @@ pub async fn paper_commit(
     let record = paper_record_from_meta(&path_rel, &meta);
     papers::upsert_paper(vault, &record)?;
 
+    let parse_app = match &opts.assets {
+        AssetsPolicy::SyncDownload { progress, .. } | AssetsPolicy::CopyPdf { progress, .. } => {
+            progress.app
+        }
+        AssetsPolicy::Deferred => None,
+    };
+
     let (assets, assets_pending) = match opts.assets {
         AssetsPolicy::SyncDownload { cookies, progress } => {
-            let mut assets = ensure_paper_assets_with_progress(
+            let assets = ensure_paper_assets_with_progress(
                 &paper_dir,
+                vault,
+                &path_rel,
                 &meta.id,
                 meta.arxiv_id.as_deref(),
                 meta.pdf_url.as_deref(),
                 meta.doi.as_deref(),
                 cookies,
+                opts.cache,
                 progress,
             )
             .await
@@ -173,23 +195,29 @@ pub async fn paper_commit(
                 r.messages.push(format!("asset download error: {e}"));
                 r
             });
-            merge_liteparse(vault, &path_rel, &paper_dir, &mut assets, progress).await;
             (assets, false)
         }
-        AssetsPolicy::CopyPdf { progress, .. } => {
-            let mut assets = AssetDownloadResult {
+        AssetsPolicy::CopyPdf { .. } => {
+            let assets = AssetDownloadResult {
                 pdf: true,
                 ..Default::default()
             };
-            merge_liteparse(vault, &path_rel, &paper_dir, &mut assets, progress).await;
             (assets, false)
         }
         AssetsPolicy::Deferred => (AssetDownloadResult::default(), true),
     };
 
+    if assets.pdf && !assets.tex && !assets.paper_md {
+        crate::features::jobs::spawn_parse_body_after_assets(parse_app, vault, &path_rel, false);
+    }
+
     // Background reference parse so the citation graph / References panel have
     // a sidecar soon after import (fingerprint-cached; safe if callers also spawn).
-    crate::features::refs::spawn_parse_after_import(None, vault, &path_rel);
+    crate::features::refs::spawn_parse_after_import(parse_app, vault, &path_rel);
+
+    if let Some(c) = opts.cache {
+        c.invalidate(vault, &path_rel);
+    }
 
     Ok(PaperCommitResult {
         status: CommitStatus::Created,
@@ -205,39 +233,21 @@ pub async fn paper_commit(
     })
 }
 
-/// No TeX + has PDF → liteparse `PAPER.md`; fold flags/messages into `assets`.
-async fn merge_liteparse(
-    vault: &Path,
-    path_rel: &str,
-    paper_dir: &Path,
-    assets: &mut AssetDownloadResult,
-    progress: AssetProgressContext<'_>,
-) {
-    progress.emit_phase("parse");
-    let parse =
-        crate::features::import::pdf_parse::maybe_generate_paper_md_after_download_with_task(
-            vault,
-            path_rel,
-            paper_dir,
-            progress.task_id,
-        )
-        .await;
-    assets.paper_md = parse.paper_md;
-    for m in parse.messages {
-        assets.messages.push(m);
-    }
-}
-
 fn existing_result(
     status: CommitStatus,
     existing: papers::PaperRecord,
-    dir: PathBuf,
+    vault: &Path,
+    dir: &Path,
+    cache: Option<&CapsCache>,
 ) -> PaperCommitResult {
+    let caps = cache
+        .map(|c| c.caps_for(vault, &existing.path))
+        .unwrap_or_else(|| probe_paper_caps(dir));
     PaperCommitResult {
         status,
-        pdf: has_local_pdf(&dir),
-        tex: has_local_tex(&dir),
-        paper_md: dir.join("PAPER.md").is_file(),
+        pdf: caps.has_pdf(),
+        tex: caps.has_tex,
+        paper_md: caps.has_paper_md,
         paper_dir: dir.to_string_lossy().to_string(),
         path: existing.path,
         id: existing.id,

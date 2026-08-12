@@ -1,9 +1,8 @@
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::features::wiki::heading_rename::run_heading_rename_transaction;
 use crate::features::wiki::models::{
-    BacklinksResponse, GraphResponse, InternalLinkSyntax, OutgoingLinksResponse, RebuildResult,
-    WikiEmbedResponse, WikiRenameHeadingResult, WikiResolveResponse, WikiSearchCandidate,
-    WikiSearchCandidateKind,
+    BacklinksResponse, InternalLinkSyntax, OutgoingLinksResponse, RebuildResult, WikiEmbedResponse,
+    WikiRenameHeadingResult, WikiResolveResponse, WikiSearchCandidate, WikiSearchCandidateKind,
 };
 use crate::features::wiki::WikiIndexState;
 use std::path::PathBuf;
@@ -154,24 +153,6 @@ pub fn wiki_rename_heading(
             }),
         ),
     }
-}
-
-#[tauri::command]
-pub fn graph_get_graph(
-    index: State<'_, WikiIndexState>,
-    vault_path: String,
-    center: Option<String>,
-    depth: Option<u32>,
-) -> ApiResult<GraphResponse> {
-    let mut guard = match index.inner.lock() {
-        Ok(g) => g,
-        Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
-    };
-    if let Err(e) = guard.ensure_vault(&vault_path) {
-        return map_err(AppError::message(e));
-    }
-    let center_ref = center.as_deref().filter(|s| !s.trim().is_empty());
-    ApiResult::ok(guard.get_graph(&vault_path, center_ref, depth))
 }
 
 #[tauri::command]

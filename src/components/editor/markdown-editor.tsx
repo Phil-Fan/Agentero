@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/context-menu";
 import { useLibraryStore } from "@/hooks/use-app-stores";
 import i18n from "@/i18n";
+import { scrollBehavior } from "@/lib/core/motion";
 import { errorMessage, notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
@@ -64,14 +65,14 @@ import type {
 } from "@/lib/markdown/export/types";
 import { splitFrontmatter } from "@/lib/markdown/frontmatter";
 import { saveImageToMarkdownAssets } from "@/lib/markdown/image";
-import { loadSettings } from "@/lib/settings";
+import { loadSettings, useUiScale } from "@/lib/settings";
 import { formatModShortcut } from "@/lib/shell/shortcuts";
 import type { LinkFragment, WikiRenameHeadingRequest } from "@/lib/wiki";
 import { useWikiNav } from "@/lib/wiki/nav-context";
 import {
 	findWikiHeadingIndex,
 	hasWikiBlockAnchor,
-} from "@/lib/wiki-navigation";
+} from "@/lib/wiki/navigation";
 
 export type MarkdownEditorProps = {
 	/** Initial Markdown content for the open file. The component reseeds on remount (key). */
@@ -158,6 +159,9 @@ export function MarkdownEditor({
 	const onAssetsChangedRef = useRef(onAssetsChanged);
 	onAssetsChangedRef.current = onAssetsChanged;
 	const editorContainerRef = useRef<HTMLDivElement | null>(null);
+	// Body text keeps its own px font size (editorFontSize setting) so it must
+	// follow the UI zoom (uiScale) explicitly — rem-based chrome scales for free.
+	const uiScale = useUiScale();
 
 	/**
 	 * Body typography on the editor root. When a custom font stack is set, also
@@ -167,7 +171,8 @@ export function MarkdownEditor({
 	const editorTypographyStyle = useMemo((): CSSProperties | undefined => {
 		const style: CSSProperties = {};
 		if (fontSize != null && fontSize !== "") {
-			style.fontSize = fontSize;
+			style.fontSize =
+				typeof fontSize === "number" ? fontSize * uiScale : fontSize;
 		}
 		if (lineHeight != null && Number.isFinite(lineHeight)) {
 			style.lineHeight = lineHeight;
@@ -179,7 +184,7 @@ export function MarkdownEditor({
 			(style as Record<string, string>)["--font-heading"] = fontFamily;
 		}
 		return Object.keys(style).length > 0 ? style : undefined;
-	}, [fontSize, fontFamily, lineHeight]);
+	}, [fontSize, fontFamily, lineHeight, uiScale]);
 	/** Swallow the `beforeinput` insertParagraph that follows slash Enter confirm. */
 	const suppressNextEditorBreakRef = useRef(false);
 	const [findOpen, setFindOpen] = useState(false);
@@ -229,7 +234,7 @@ export function MarkdownEditor({
 					);
 		if (!target) return;
 		target.dataset.navTarget = "true";
-		target.scrollIntoView({ behavior: "smooth", block: "center" });
+		target.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
 		const timeout = window.setTimeout(() => {
 			delete target.dataset.navTarget;
 		}, 1600);
@@ -637,7 +642,9 @@ export function MarkdownEditor({
 											<Editor
 												placeholder={placeholder}
 												readOnly={readOnly}
-												className="min-h-full px-6 pt-4 pb-48"
+												// `pr-16` reserves a right gutter for the collapsed
+												// TOC strip (`right-2 w-12`) so it never covers text.
+												className="min-h-full pl-6 pr-16 pt-4 pb-48"
 												style={editorTypographyStyle}
 											/>
 											{!readOnly ? (

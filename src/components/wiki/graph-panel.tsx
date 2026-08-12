@@ -1,20 +1,16 @@
 import { Network } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ForceGraph2D from "react-force-graph-2d";
+import type ForceGraph2D from "react-force-graph-2d";
 import { useTranslation } from "react-i18next";
 
 import { PaneHeader } from "@/components/shell/pane-header";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/core/utils";
 import {
 	type CiteGraphNode,
 	type CiteGraphNodeType,
 	type CiteGraphResponse,
-	loadPaperRefsAuto,
 	paperRefsGraph,
 } from "@/lib/paper/refs";
-
-type GraphMode = "neighborhood" | "full";
 
 type GraphPanelProps = {
 	vaultPath: string | null;
@@ -27,14 +23,9 @@ type GraphPanelProps = {
 	 */
 	wikiIndexRevision?: number;
 	/**
-	 * Embedded under References: denser chrome, default Near mode only controls.
+	 * Embedded under References: denser chrome.
 	 */
 	embedded?: boolean;
-	/**
-	 * When false, skip `loadPaperRefsAuto` (parent already loads the sidecar).
-	 * Default true.
-	 */
-	autoParseCenter?: boolean;
 };
 
 /** Force-graph mutates x/y at runtime; only declare what we paint/read. */
@@ -59,6 +50,19 @@ type ThemeColors = {
 };
 
 function readThemeColors(el: HTMLElement | null): ThemeColors {
+	const fallback: ThemeColors = {
+		foreground: "var(--foreground)",
+		mutedForeground: "var(--muted-foreground)",
+		border: "var(--border)",
+		primary: "var(--primary)",
+		muted: "var(--muted)",
+	};
+	if (
+		typeof document === "undefined" ||
+		typeof getComputedStyle === "undefined"
+	) {
+		return fallback;
+	}
 	const style = getComputedStyle(el ?? document.documentElement);
 	const pick = (name: string, fallback: string) => {
 		const v = style.getPropertyValue(name).trim();
@@ -66,11 +70,11 @@ function readThemeColors(el: HTMLElement | null): ThemeColors {
 	};
 	// Prefer resolved color tokens already used by the UI
 	return {
-		foreground: pick("--foreground", "oklch(0.145 0 0)"),
-		mutedForeground: pick("--muted-foreground", "oklch(0.556 0 0)"),
-		border: pick("--border", "oklch(0.922 0 0)"),
-		primary: pick("--primary", "oklch(0.205 0 0)"),
-		muted: pick("--muted", "oklch(0.97 0 0)"),
+		foreground: pick("--foreground", fallback.foreground),
+		mutedForeground: pick("--muted-foreground", fallback.mutedForeground),
+		border: pick("--border", fallback.border),
+		primary: pick("--primary", fallback.primary),
+		muted: pick("--muted", fallback.muted),
 	};
 }
 
@@ -97,35 +101,29 @@ function nodeRadius(type: CiteGraphNodeType, cited: number): number {
 
 export function GraphPanel({
 	vaultPath,
-	selectedPath,
 	onOpenPath,
 	className,
 	wikiIndexRevision = 0,
 	embedded = false,
-	autoParseCenter = true,
 }: GraphPanelProps) {
 	const { t } = useTranslation("sidebar");
 	const wrapRef = useRef<HTMLDivElement>(null);
 	const [size, setSize] = useState({ w: 280, h: 160 });
-	const [mode, setMode] = useState<GraphMode>("neighborhood");
 	const [data, setData] = useState<CiteGraphResponse | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [hoverId, setHoverId] = useState<string | null>(null);
+	const [forceGraph, setForceGraph] = useState<typeof ForceGraph2D | null>(
+		null,
+	);
 	const [colors, setColors] = useState<ThemeColors>(() =>
 		readThemeColors(null),
 	);
-
-	const centerHint = useMemo(() => {
-		if (!selectedPath) return null;
-		// ReferencesPanel already resolves the active document to a vault-relative
-		// paper folder, so use it directly as the graph center.
-		return selectedPath;
-	}, [selectedPath]);
+	const ForceGraph = forceGraph;
 
 	useEffect(() => {
 		const el = wrapRef.current;
-		if (!el) return;
+		if (!el || typeof ResizeObserver === "undefined") return;
 		const ro = new ResizeObserver((entries) => {
 			const cr = entries[0]?.contentRect;
 			if (!cr) return;
@@ -140,6 +138,12 @@ export function GraphPanel({
 
 	// Keep canvas colors in sync with light/dark theme
 	useEffect(() => {
+		if (
+			typeof document === "undefined" ||
+			typeof MutationObserver === "undefined"
+		) {
+			return;
+		}
 		const el = wrapRef.current ?? document.documentElement;
 		const sync = () => setColors(readThemeColors(el));
 		sync();
@@ -152,6 +156,25 @@ export function GraphPanel({
 	}, []);
 
 	useEffect(() => {
+		if (typeof window === "undefined") return;
+		let cancelled = false;
+		void import("react-force-graph-2d")
+			.then(({ default: Component }) => {
+				if (!cancelled) {
+					setForceGraph(() => Component);
+				}
+			})
+			.catch((e) => {
+				if (!cancelled) {
+					setError(e instanceof Error ? e.message : String(e));
+				}
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	useEffect(() => {
 		// Optional external refresh signal (import / vault switch).
 		void wikiIndexRevision;
 		let cancelled = false;
@@ -159,26 +182,7 @@ export function GraphPanel({
 		setError(null);
 		void (async () => {
 			try {
-				if (mode === "neighborhood" && !centerHint) {
-					if (!cancelled) {
-						setData({ nodes: [], edges: [], center: null, depth: 1 });
-					}
-					return;
-				}
-				// Ensure the focused paper has a sidecar before building the neighborhood.
-				if (
-					autoParseCenter &&
-					mode === "neighborhood" &&
-					vaultPath &&
-					centerHint
-				) {
-					await loadPaperRefsAuto(vaultPath, centerHint);
-				}
-				if (cancelled) return;
-				const res = await paperRefsGraph(vaultPath, {
-					center: mode === "neighborhood" ? centerHint : null,
-					depth: mode === "neighborhood" ? 1 : null,
-				});
+				const res = await paperRefsGraph(vaultPath);
 				if (cancelled) return;
 				setData(res);
 			} catch (e) {
@@ -192,7 +196,7 @@ export function GraphPanel({
 		return () => {
 			cancelled = true;
 		};
-	}, [vaultPath, mode, centerHint, wikiIndexRevision, autoParseCenter]);
+	}, [vaultPath, wikiIndexRevision]);
 
 	const graphData = useMemo(() => {
 		if (!data) return { nodes: [] as FgNode[], links: [] as FgLink[] };
@@ -277,37 +281,7 @@ export function GraphPanel({
 				className,
 			)}
 		>
-			<PaneHeader
-				className={embedded ? "h-7 min-h-7 px-2" : undefined}
-				trailing={
-					<div className="flex items-center gap-0.5">
-						<Button
-							type="button"
-							variant="ghost"
-							size="xs"
-							className={cn(
-								"h-6 px-1.5 text-xs",
-								mode === "neighborhood" && "bg-muted text-foreground",
-							)}
-							onClick={() => setMode("neighborhood")}
-						>
-							{t("graph.near")}
-						</Button>
-						<Button
-							type="button"
-							variant="ghost"
-							size="xs"
-							className={cn(
-								"h-6 px-1.5 text-xs",
-								mode === "full" && "bg-muted text-foreground",
-							)}
-							onClick={() => setMode("full")}
-						>
-							{t("graph.all")}
-						</Button>
-					</div>
-				}
-			>
+			<PaneHeader className={embedded ? "h-7 min-h-7 px-2" : undefined}>
 				<Network
 					className="size-3.5 shrink-0 text-muted-foreground"
 					aria-hidden
@@ -335,13 +309,11 @@ export function GraphPanel({
 				) : null}
 				{!loading && !error && graphData.nodes.length === 0 ? (
 					<p className="absolute inset-0 flex items-center justify-center px-3 text-center text-muted-foreground text-xs">
-						{mode === "neighborhood" && !centerHint
-							? t("graph.selectPrompt")
-							: t("graph.noEdges")}
+						{t("graph.noEdges")}
 					</p>
 				) : null}
-				{!loading && !error && graphData.nodes.length > 0 ? (
-					<ForceGraph2D
+				{!loading && !error && graphData.nodes.length > 0 && ForceGraph ? (
+					<ForceGraph
 						width={size.w}
 						height={size.h}
 						graphData={graphData}

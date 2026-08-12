@@ -9,7 +9,6 @@
 //! Host validates the directory, extends fs scope, caches a pending path for
 //! startup races, and emits `vault:open-request` for the renderer.
 
-use crate::core::error::ApiResult;
 use crate::core::error::AppError;
 use crate::core::paths::agentero_config_dir;
 use serde::{Deserialize, Serialize};
@@ -19,6 +18,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_fs::FsExt;
 use url::Url;
+
+pub mod commands;
 
 pub const EVENT_VAULT_OPEN_REQUEST: &str = "vault:open-request";
 
@@ -321,14 +322,6 @@ pub fn spawn_cli_open_request_watcher<R: Runtime>(app: AppHandle<R>) {
             }
         }
     });
-}
-
-/// Take the pending open path (startup race: frontend ready after Host queued).
-#[tauri::command]
-pub fn vault_open_take_pending(
-    state: tauri::State<'_, PendingVaultOpen>,
-) -> ApiResult<Option<String>> {
-    ApiResult::ok(state.take())
 }
 
 #[cfg(test)]

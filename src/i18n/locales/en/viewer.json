@@ -51,6 +51,11 @@
 			"start": "Full-text translate",
 			"stop": "Stop full-text translate",
 			"clear": "Clear full-text translations",
+			"translatePage": "Translate this page",
+			"translatePageShort": "Page",
+			"hidePage": "Hide this page translation",
+			"hidePageShort": "Hide",
+			"pageRunning": "Translating this page…",
 			"needLayout": "Run layout analysis first (Figures panel).",
 			"noText": "No extractable text regions to translate.",
 			"failed": "Full-text translate failed"
@@ -68,7 +73,10 @@
 		"pillAria": "Open ask: {{preview}}",
 		"editAction": "Edit",
 		"editResend": "Resend",
-		"editCancel": "Cancel"
+		"editCancel": "Cancel",
+		"openInChatGPT": "Open in ChatGPT",
+		"openInClaude": "Open in Claude",
+		"openInPrompt": "Please explain the following quoted passage from this paper."
 	},
 	"pdfExplain": {
 		"selectRegion": "Add visual annotation",
@@ -77,6 +85,7 @@
 		"formulaQuestion": "Explain this formula or technical expression.",
 		"figureQuestion": "Explain this figure, chart, table, or visual region.",
 		"cropFailed": "Could not capture the selected PDF region.",
+		"cropping": "Capturing region…",
 		"annotationEditorLabel": "Annotation note",
 		"annotationPlaceholder": "Write a note…",
 		"annotationSave": "Save",
@@ -163,7 +172,8 @@
 		"analyzing": "Analyzing layout…",
 		"progressPages": "{{page}} / {{total}} pages",
 		"progressPct": "{{pct}}%",
-		"hoverAskAria": "Open visual question for this figure, table, algorithm, or formula",
+		"clickAnnotateAria": "Annotate this {{kind}}",
+		"clickAnnotateHint": "Click to annotate",
 		"sectionFigures": "Figures",
 		"sectionTables": "Tables",
 		"sectionAlgorithms": "Algorithms",

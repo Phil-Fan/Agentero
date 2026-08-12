@@ -28,6 +28,11 @@ import {
 	type WikiRenameResult,
 	wikiRenameFailure,
 } from "@/lib/wiki";
+import { notifyWikiEmbedTargets } from "@/lib/wiki/embed-refresh";
+import {
+	wikiHeadingRenameAffectedPaths,
+	wikiHeadingRenameErrorKey,
+} from "@/lib/wiki/heading-rename";
 import {
 	bumpWikiIndexRevision,
 	setExternalRenameFailure,
@@ -36,11 +41,6 @@ import {
 	setExternalRenameVaultPath,
 	trackInternalRenamePaths,
 } from "@/lib/wiki/store";
-import { notifyWikiEmbedTargets } from "@/lib/wiki-embed-refresh";
-import {
-	wikiHeadingRenameAffectedPaths,
-	wikiHeadingRenameErrorKey,
-} from "@/lib/wiki-heading-rename";
 import { applyDiskChange, dirtyVaultPaths } from "@/lib/workspace/actions";
 import { dockHandle } from "@/lib/workspace/dock-registry";
 import {

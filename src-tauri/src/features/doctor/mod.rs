@@ -388,7 +388,7 @@ fn vault_section(vault: &Path) -> DoctorSection {
             None,
         ));
     } else {
-        for directory in ["papers", "notes", "plans", ".agentero"] {
+        for directory in ["papers", "notes", ".agentero"] {
             if !vault.join(directory).is_dir() {
                 issues.push(issue(
                     "missing_directory",
@@ -970,7 +970,6 @@ mod tests {
         let vault = std::env::temp_dir().join(format!("agentero-doctor-{name}-{}", Uuid::new_v4()));
         fs::create_dir_all(vault.join("papers/demo")).unwrap();
         fs::create_dir_all(vault.join("notes")).unwrap();
-        fs::create_dir_all(vault.join("plans")).unwrap();
         vault
     }
 
@@ -1112,7 +1111,6 @@ mod tests {
         let vault = std::env::temp_dir().join(format!("agentero-doctor-{}", Uuid::new_v4()));
         fs::create_dir_all(vault.join("papers/demo")).unwrap();
         fs::create_dir_all(vault.join("notes")).unwrap();
-        fs::create_dir_all(vault.join("plans")).unwrap();
         let connection = catalog::ensure_catalog(&vault).unwrap();
         connection
             .execute(

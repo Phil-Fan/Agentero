@@ -39,14 +39,14 @@ import {
 	splitAnnotationSugar,
 	type WikiEmbedResponse,
 } from "@/lib/wiki";
-import { useWikiNav } from "@/lib/wiki/nav-context";
-import type { WikiSlateNode } from "@/lib/wiki/wikilink-model";
 import {
 	wikiEmbedBoundary,
 	wikiEmbedKey,
 	wikiEmbedResponseKind,
-} from "@/lib/wiki-embed";
-import { subscribeWikiEmbedTarget } from "@/lib/wiki-embed-refresh";
+} from "@/lib/wiki/embed";
+import { subscribeWikiEmbedTarget } from "@/lib/wiki/embed-refresh";
+import { useWikiNav } from "@/lib/wiki/nav-context";
+import type { WikiSlateNode } from "@/lib/wiki/wikilink-model";
 
 const WikiAttachmentEmbed = lazy(async () => {
 	const module = await import(

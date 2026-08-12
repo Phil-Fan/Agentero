@@ -1,5 +1,6 @@
 import i18n from "@/i18n";
 import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
+import { invokeApi } from "@/lib/core/ipc";
 import { toVaultRelative } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import {
@@ -8,20 +9,18 @@ import {
 	findLocalPdfPath,
 	isPaperDirectory,
 	loadPaperMetadata,
+	loadPaperOpenBundle,
 	localFileToArrayBuffer,
 	localImageToViewerSource,
 	notesPathForPaper,
 	type PaperMetadata,
 	paperDirFromPath,
-	paperHasLocalPaperMd,
-	paperHasLocalPdf,
-	paperHasLocalTex,
 	paperRemoteAssetsFromMetadata,
 	revokePdfViewerSource,
 } from "@/lib/paper";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
+import { enqueuePaperPdfParse } from "@/lib/paper/enqueue-paper-pdf-parse";
 import { downloadPaperAssets } from "@/lib/paper/lookup";
-import { loadPaperRefsAuto } from "@/lib/paper/refs";
 import { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout";
 import {
 	ensureLocalFsScope,
@@ -51,47 +50,26 @@ function findChildren(nodes: FileNode[], path: string): FileNode[] | undefined {
 
 const pdfAutoDownloadTried = new Set<string>();
 
-/** Session-scoped: vault-rel paper paths already triggered for deferred body resolve. */
-const paperParseTried = new Set<string>();
-
-function maybeTriggerDeferredParse(
+/**
+ * Open-paper reconcile (§7.4 入口②): ask the Host to backfill `PAPER.md`
+ * (ParseBody) when this paper has a PDF but no TeX and no `PAPER.md`. The
+ * CapsCache check is authoritative and the job is deduped by the JobCenter,
+ * replacing the old client-side precheck + session-set.
+ */
+function reconcilePaperOnOpen(
 	paperDir: string,
 	vaultPath: string | null,
-	treeNode: FileNode | undefined,
-	paperMeta?: PaperMetadata | null,
 ): void {
-	if (!isTauri() || !vaultPath || !treeNode) return;
-	if (
-		!paperHasLocalPdf(treeNode) ||
-		paperHasLocalTex(treeNode) ||
-		paperHasLocalPaperMd(treeNode)
-	) {
-		return;
-	}
+	if (!isTauri() || !vaultPath) return;
 	const rel = toVaultRelative(vaultPath, paperDir)
 		.replace(/\\/g, "/")
 		.replace(/^\/+|\/+$/g, "");
-	if (!rel || paperParseTried.has(rel)) return;
-	paperParseTried.add(rel);
-
-	void enqueueBackgroundTask(
-		{
-			kind: "download",
-			title: i18n.t("app:tasks.downloadPaper"),
-			detail: rel,
-		},
-		async ({ id }) => {
-			await downloadPaperAssets({
-				vaultRoot: vaultPath,
-				paperPath: rel,
-				progressTaskId: id,
-			});
-			enqueuePaperLayoutAnalysis({
-				paperAbsPath: joinVaultPath(vaultPath, rel),
-				paperLabel: paperMeta?.title?.trim(),
-			});
-		},
-	).catch(() => {});
+	if (!rel) return;
+	void invokeApi(
+		"job_reconcile_paper",
+		{ args: { vaultPath, path: rel } },
+		{ fallback: "paper reconcile failed" },
+	).catch(() => undefined);
 }
 
 /**
@@ -144,6 +122,11 @@ async function resolvePaperPdfSource(
 				});
 				enqueuePaperLayoutAnalysis({
 					paperAbsPath: joinVaultPath(vaultPath, rel),
+					paperLabel: meta?.title?.trim(),
+				});
+				enqueuePaperPdfParse({
+					vaultPath,
+					paperRelPath: rel,
 					paperLabel: meta?.title?.trim(),
 				});
 				return r;
@@ -260,34 +243,36 @@ export async function loadTabResources(
 	}
 
 	if (paperDir) {
-		const meta = await loadPaperMetadata(paperDir, vaultPath);
+		const notesPath = notesPathForPaper(paperDir);
+		const bundle = await loadPaperOpenBundle(paperDir, vaultPath);
+		const notesSeedPromise = bundle
+			? Promise.resolve(bundle.notesSeed ?? NOTES_PLACEHOLDER)
+			: readVaultFile(notesPath).catch(() => NOTES_PLACEHOLDER);
+		const meta =
+			bundle?.paper ?? (await loadPaperMetadata(paperDir, vaultPath));
 		const { pdfUrl: remotePdf, htmlUrl } = paperRemoteAssetsFromMetadata(meta);
-		const {
-			pdfUrl: paperPdf,
-			pdfBytes: paperBytes,
-			didDownload,
-		} = await resolvePaperPdfSource(paperDir, vaultPath, meta, remotePdf);
-		if (!didDownload) {
-			maybeTriggerDeferredParse(
+		let paperPdf: string | null = null;
+		let paperBytes: ArrayBuffer | null = null;
+		let didDownload = false;
+		if (bundle?.pdfPath) {
+			paperBytes = await localFileToArrayBuffer(bundle.pdfPath);
+		}
+		if (!paperBytes) {
+			const resolved = await resolvePaperPdfSource(
 				paperDir,
 				vaultPath,
-				treeFindNode(tree, paperDir),
 				meta,
+				remotePdf,
 			);
+			paperPdf = resolved.pdfUrl;
+			paperBytes = resolved.pdfBytes;
+			didDownload = resolved.didDownload;
 		}
-		if (isTauri() && vaultPath) {
-			const rel = toVaultRelative(vaultPath, paperDir)
-				.replace(/\\/g, "/")
-				.replace(/^\/+|\/+$/g, "");
-			if (rel) void loadPaperRefsAuto(vaultPath, rel).catch(() => {});
-		}
-		const notesPath = notesPathForPaper(paperDir);
-		let notesSeed = NOTES_PLACEHOLDER;
-		try {
-			notesSeed = await readVaultFile(notesPath);
-		} catch {
-			// keep placeholder
-		}
+		// Open-paper reconcile (§7.4 入口②): backfill PAPER.md (ParseBody) and
+		// references (ParseRefs) as needed. Idempotent — the JobCenter dedupes
+		// jobs, so this is safe even right after a download.
+		reconcilePaperOnOpen(paperDir, vaultPath);
+		const notesSeed = await notesSeedPromise;
 
 		const openingPaperRoot =
 			normalizePathKey(path) === normalizePathKey(paperDir) ||

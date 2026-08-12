@@ -4,27 +4,105 @@
 //! @see docs/backend/api.md `paper_parse_body`
 
 use crate::core::error::AppError;
-use crate::features::catalog::papers;
-use crate::features::import::{has_local_pdf, has_local_tex};
+use crate::features::catalog::{papers, probe_paper_caps, CapsCache};
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 use liteparse::config::{ImageMode, LiteParseConfig, OutputFormat};
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 use liteparse::LiteParse;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 use std::process::Stdio;
+use std::sync::{Arc, Mutex, OnceLock};
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 use std::time::Duration;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 const PAPER_MD: &str = "PAPER.md";
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_PARSE_WORKER_ARG: &str = "--agentero-internal-pdf-parse-worker";
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_PARSE_TIMEOUT: Duration = Duration::from_secs(120);
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+const MAX_CONCURRENT_PDF_PARSE: usize = 2;
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[derive(Debug)]
+struct PdfParseAdmission {
+    key: PathBuf,
+    _permit: OwnedSemaphorePermit,
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+impl Drop for PdfParseAdmission {
+    fn drop(&mut self) {
+        if let Ok(mut in_flight) = pdf_parse_in_flight().lock() {
+            in_flight.remove(&self.key);
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn pdf_parse_limiter() -> &'static Arc<Semaphore> {
+    static LIMITER: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    LIMITER.get_or_init(|| Arc::new(Semaphore::new(MAX_CONCURRENT_PDF_PARSE)))
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn pdf_parse_in_flight() -> &'static Mutex<HashSet<PathBuf>> {
+    static IN_FLIGHT: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
+    IN_FLIGHT.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn pdf_parse_key(pdf_path: &Path) -> PathBuf {
+    fs::canonicalize(pdf_path).unwrap_or_else(|_| pdf_path.to_path_buf())
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+async fn acquire_pdf_parse_permit(task_id: Option<&str>) -> Result<OwnedSemaphorePermit, AppError> {
+    loop {
+        if pdf_parse_task_is_cancelled(task_id) {
+            return Err(AppError::message("background task cancelled"));
+        }
+        match pdf_parse_limiter().clone().try_acquire_owned() {
+            Ok(permit) => return Ok(permit),
+            Err(tokio::sync::TryAcquireError::NoPermits) => {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            Err(tokio::sync::TryAcquireError::Closed) => {
+                return Err(AppError::message("PDF parse limiter closed"));
+            }
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+async fn enter_pdf_parse(
+    pdf_path: &Path,
+    task_id: Option<&str>,
+) -> Result<Option<PdfParseAdmission>, AppError> {
+    let permit = acquire_pdf_parse_permit(task_id).await?;
+    if pdf_parse_task_is_cancelled(task_id) {
+        return Err(AppError::message("background task cancelled"));
+    }
+    let key = pdf_parse_key(pdf_path);
+    let mut in_flight = pdf_parse_in_flight()
+        .lock()
+        .map_err(|_| AppError::message("PDF parse in-flight set poisoned"))?;
+    if !in_flight.insert(key.clone()) {
+        return Ok(None);
+    }
+    Ok(Some(PdfParseAdmission {
+        key,
+        _permit: permit,
+    }))
+}
 
 #[derive(Debug, Default, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,55 +124,9 @@ pub struct PaperParseBodyArgs {
     /// When true, overwrite existing `PAPER.md`. Default false.
     #[serde(default)]
     pub force: bool,
-}
-
-/// True when `{paper}/PAPER.md` exists.
-pub fn has_paper_md(paper_dir: &Path) -> bool {
-    paper_dir.join(PAPER_MD).is_file()
-}
-
-/// Find first local PDF under the paper folder (prefer root `*.pdf`, then nested).
-pub fn find_local_pdf(paper_dir: &Path) -> Option<PathBuf> {
-    // Prefer direct children of the paper folder (canonical location)
-    if let Ok(entries) = fs::read_dir(paper_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file()
-                && path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
-            {
-                return Some(path);
-            }
-        }
-    }
-    // Recursive: PDFs under source/ or nested dirs
-    find_pdf_under(paper_dir)
-}
-
-fn find_pdf_under(root: &Path) -> Option<PathBuf> {
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if stack.len() < 32 {
-                    stack.push(path);
-                }
-            } else if path
-                .extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
-            {
-                return Some(path);
-            }
-        }
-    }
-    None
+    /// Frontend background-task id; passed to the isolated parser worker for cancellation.
+    #[serde(default)]
+    pub task_id: Option<String>,
 }
 
 /// After PDF/TeX download: if no TeX and PDF present, generate `PAPER.md` when missing.
@@ -117,11 +149,14 @@ pub async fn maybe_generate_paper_md_after_download_with_task(
     paper_dir: &Path,
     task_id: Option<&str>,
 ) -> PaperParseResult {
-    parse_paper_body_inner(vault, path_rel, paper_dir, false, task_id).await
+    parse_paper_body_inner(vault, path_rel, paper_dir, false, task_id, None).await
 }
 
 /// Manual / bulk parse entry (command).
-pub async fn parse_paper_body(args: PaperParseBodyArgs) -> Result<PaperParseResult, AppError> {
+pub async fn parse_paper_body(
+    args: PaperParseBodyArgs,
+    cache: Option<&CapsCache>,
+) -> Result<PaperParseResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
         return Err(AppError::message("vault path is not a directory"));
@@ -132,7 +167,15 @@ pub async fn parse_paper_body(args: PaperParseBodyArgs) -> Result<PaperParseResu
     if !paper_dir.is_dir() {
         return Err(AppError::message("paper folder not found"));
     }
-    Ok(parse_paper_body_inner(&vault, &path_rel, &paper_dir, args.force, None).await)
+    Ok(parse_paper_body_inner(
+        &vault,
+        &path_rel,
+        &paper_dir,
+        args.force,
+        args.task_id.as_deref(),
+        cache,
+    )
+    .await)
 }
 
 async fn parse_paper_body_inner(
@@ -141,28 +184,41 @@ async fn parse_paper_body_inner(
     paper_dir: &Path,
     force: bool,
     task_id: Option<&str>,
+    cache: Option<&CapsCache>,
 ) -> PaperParseResult {
     let mut out = PaperParseResult::default();
+    let caps = cache
+        .map(|c| c.caps_for(vault, path_rel))
+        .unwrap_or_else(|| probe_paper_caps(paper_dir));
 
-    if has_local_tex(paper_dir) {
+    if caps.has_tex {
         out.messages.push("skip: local TeX present".into());
         return out;
     }
 
-    if has_paper_md(paper_dir) && !force {
+    if caps.has_paper_md && !force {
         out.paper_md = true;
         out.messages.push("PAPER.md already present".into());
         return out;
     }
 
-    if !has_local_pdf(paper_dir) {
+    let Some(pdf_path) = caps.pdf_path else {
         out.messages.push("skip: no local PDF".into());
         return out;
-    }
+    };
 
-    let Some(pdf_path) = find_local_pdf(paper_dir) else {
-        out.messages.push("skip: PDF path not found".into());
-        return out;
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    let _admission = match enter_pdf_parse(&pdf_path, task_id).await {
+        Ok(Some(admission)) => admission,
+        Ok(None) => {
+            out.messages
+                .push("skip: PDF parse already in flight".into());
+            return out;
+        }
+        Err(e) => {
+            out.messages.push(format!("liteparse failed: {e}"));
+            return out;
+        }
     };
 
     match run_liteparse_markdown(&pdf_path, task_id).await {
@@ -188,6 +244,10 @@ async fn parse_paper_body_inner(
             }
         }
         Err(e) => out.messages.push(format!("liteparse failed: {e}")),
+    }
+
+    if let Some(c) = cache {
+        c.invalidate(vault, path_rel);
     }
 
     out
@@ -515,6 +575,36 @@ mod tests {
                 serde_json::to_value(response).unwrap()
             );
         }
+    }
+
+    #[tokio::test]
+    async fn pdf_parse_admission_rejects_duplicate_until_guard_drops() {
+        let pdf_path =
+            std::env::temp_dir().join(format!("pdf-parse-admission-{}.pdf", uuid::Uuid::new_v4()));
+
+        let first = enter_pdf_parse(&pdf_path, None)
+            .await
+            .unwrap()
+            .expect("first parse should enter admission");
+        let duplicate = enter_pdf_parse(&pdf_path, None).await.unwrap();
+
+        assert!(duplicate.is_none());
+
+        drop(first);
+
+        let next = enter_pdf_parse(&pdf_path, None).await.unwrap();
+        assert!(next.is_some());
+    }
+
+    #[tokio::test]
+    async fn cancelled_task_does_not_enter_pdf_parse_admission() {
+        let task_id = format!("pdf-parse-test-{}", uuid::Uuid::new_v4());
+        crate::features::agent::background_tasks::cancel(&task_id);
+
+        let result = enter_pdf_parse(Path::new("missing-test-input.pdf"), Some(&task_id)).await;
+
+        crate::features::agent::background_tasks::finish(&task_id);
+        assert_eq!(result.unwrap_err().to_string(), "background task cancelled");
     }
 
     #[tokio::test]

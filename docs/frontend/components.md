@@ -21,7 +21,7 @@ Chat / Agent / 文件树 AI UI **统一使用** [AI Elements](https://elements.a
 | `components/library/` | 论文库表 |
 | `components/editor/` | Plate Markdown |
 | `components/viewer/` | PDF / HTML / 图片。对外只经 `viewer/index.ts`；内部 `pdf/`（外壳 + `hooks/` + `layers/` + `chrome/` + `cards/` + `viewport/`）、`panels/`（右栏面板） |
-| `components/agent/` | Agent 面板 |
+| `components/agent/` | Agent 面板。外壳 + `hooks/`（面板与 composer 状态）+ `composer/`（输入区子件） |
 | `components/wiki/` | Backlinks / Graph |
 | `components/settings/` | 设置页 |
 | `components/dialogs/` | 命令面板、权限、迁移等 |

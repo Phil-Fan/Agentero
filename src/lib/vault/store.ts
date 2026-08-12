@@ -186,38 +186,38 @@ export function bumpTreeGeneration(): void {
 	treeRefreshPaths.clear();
 }
 
-export async function refreshTree(path: string): Promise<void> {
+export async function refreshTree(
+	path: string,
+	{ quiet = false }: { quiet?: boolean } = {},
+): Promise<void> {
 	if (getVaultPath() !== path) return;
 	const generation = treeLoadGeneration;
-	vaultStore.setState({ treeLoading: true, busy: true });
+	if (!quiet) {
+		vaultStore.setState({ treeLoading: true, busy: true });
+	}
 	try {
 		const nodes = await loadVaultTree(path);
 		if (getVaultPath() === path && treeLoadGeneration === generation) {
 			setTree(nodes);
 		}
 	} catch (e) {
-		const message = e instanceof Error ? e.message : String(e);
 		if (getVaultPath() === path && treeLoadGeneration === generation) {
-			notifyError(message);
-			// Keep the previous tree: a transient remote miss must not blank the sidebar.
+			if (quiet) {
+				// best-effort background refresh
+			} else {
+				const message = e instanceof Error ? e.message : String(e);
+				notifyError(message);
+				// Keep the previous tree: a transient remote miss must not blank the sidebar.
+			}
 		}
 	} finally {
-		if (getVaultPath() === path && treeLoadGeneration === generation) {
+		if (
+			!quiet &&
+			getVaultPath() === path &&
+			treeLoadGeneration === generation
+		) {
 			vaultStore.setState({ treeLoading: false, busy: false });
 		}
-	}
-}
-
-/** Quiet reload (no busy flicker); used after background asset downloads. */
-export async function refreshTreeQuiet(path: string): Promise<void> {
-	const generation = treeLoadGeneration;
-	try {
-		const nodes = await loadVaultTree(path);
-		if (getVaultPath() === path && treeLoadGeneration === generation) {
-			setTree(nodes);
-		}
-	} catch {
-		// best-effort background refresh
 	}
 }
 

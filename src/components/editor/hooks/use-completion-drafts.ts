@@ -21,7 +21,7 @@ import type {
 	WikiCompletionDraft,
 } from "@/components/editor/overlays/wiki-link-suggestion";
 import { findSlashCommandTrigger } from "@/lib/markdown/slash-command";
-import { findWikiCompletionTrigger } from "@/lib/wiki-completion";
+import { findWikiCompletionTrigger } from "@/lib/wiki/completion";
 
 type CursorProbe = {
 	/** Text of the leaf holding the collapsed caret. */

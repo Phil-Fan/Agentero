@@ -6,7 +6,7 @@ Doctor 聚合本地 Vault 的只读完整性检查，并为论文别名、双链
 
 `DoctorReport` 包含五组结果：
 
-1. Vault 目录结构（`papers/`、`notes/`、`plans/`、`.agentero/`）；
+1. Vault 目录结构（`papers/`、`notes/`、`.agentero/`）；
 2. `.agentero/catalog.sqlite` 是否存在且 schema 与当前版本一致；
 3. Catalog 中是否存在重复行：同一 `id` 出现在多条记录，或同一 `path` 出现多次（后者为 schema 完整性校验）；
 4. 与桌面导航共用 `WikiIndex::check_links` 的双链语义结果；

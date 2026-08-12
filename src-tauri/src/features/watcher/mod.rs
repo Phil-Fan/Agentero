@@ -92,6 +92,9 @@ impl FsWatchController {
                     log::error!(target: "agentero::watcher", "vault watcher watch failed: {e}");
                     return;
                 }
+                debouncer
+                    .cache()
+                    .add_root(std::path::Path::new(&watch_root), RecursiveMode::Recursive);
                 // Keep the debouncer alive for the lifetime of this loop.
                 loop {
                     if stop_thread.load(Ordering::Relaxed) {
@@ -134,24 +137,10 @@ impl FsWatchController {
     }
 }
 
-/// Ignore churn from internal state and VCS metadata.
+/// Ignore churn from internal state, VCS metadata, and dependencies.
 fn is_ignored(path: &str) -> bool {
     let p = path.replace('\\', "/");
-    // Catalog changes are user-visible in the Library and paper tree labels.
-    // Keep other .agentero churn hidden from the renderer.
-    let is_catalog_storage = p.contains("/.agentero/catalog.sqlite")
-        && matches!(
-            p.rsplit('/').next(),
-            Some(
-                "catalog.sqlite"
-                    | "catalog.sqlite-wal"
-                    | "catalog.sqlite-shm"
-                    | "catalog.sqlite-journal"
-            )
-        );
-    (!is_catalog_storage && p.contains("/.agentero/"))
-        || p.contains("/.git/")
-        || p.contains("/node_modules/")
+    p.contains("/.agentero/") || p.contains("/.git/") || p.contains("/node_modules/")
 }
 
 /// Temp path used by Host `atomic_write` (wiki rename / heading rename).
@@ -262,9 +251,12 @@ mod tests {
     }
 
     #[test]
-    fn catalog_sqlite_changes_are_not_ignored() {
-        assert!(!is_ignored("/vault/.agentero/catalog.sqlite"));
-        assert!(!is_ignored("/vault/.agentero/catalog.sqlite-wal"));
+    fn catalog_sqlite_changes_are_ignored() {
+        assert!(is_ignored("/vault/.agentero/catalog.sqlite"));
+        assert!(is_ignored("/vault/.agentero/catalog.sqlite-wal"));
+        assert!(is_ignored("/vault/.agentero/catalog.sqlite-shm"));
+        assert!(is_ignored("/vault/.agentero/catalog.sqlite-journal"));
+        assert!(is_ignored(r"C:\vault\.agentero\catalog.sqlite"));
         assert!(is_ignored("/vault/.agentero/wiki-cache.json"));
         assert!(is_ignored("/vault/.git/index"));
     }

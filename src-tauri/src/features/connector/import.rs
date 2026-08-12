@@ -67,6 +67,7 @@ pub async fn import_connector_item_with_cookies(
             assets: AssetsPolicy::Deferred,
             translate_abstract: false,
             fresh_timestamps: true,
+            cache: None,
         },
     )
     .await?;
@@ -709,6 +710,7 @@ async fn import_standalone_local(
             assets: AssetsPolicy::Deferred,
             translate_abstract: false,
             fresh_timestamps: true,
+            cache: None,
         },
     )
     .await?;

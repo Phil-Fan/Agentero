@@ -192,6 +192,6 @@ agentero mark add <paper> --kind highlight --quote "…" --resolve --json
 
 - [惰性定位](mark-locate-lazy.md)
 - [开发路线：基础 / 上层 / Skill · CLI 内置命令面](mark-cli-roadmap.md)
-- [内置桌面 CLI 分发](bundled-cli.md)
+- [内置桌面 CLI 分发](../backend/cli.md)
 - [PDF 阅读与划词](../frontend/pdf.md)
 - [CLI](../backend/cli.md)

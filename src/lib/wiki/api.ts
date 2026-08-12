@@ -1022,19 +1022,3 @@ export async function rebuildWikiIndex(
 ): Promise<RebuildResult> {
 	return invokeWikiApi<RebuildResult>("graph_rebuild", { vaultPath });
 }
-
-export async function getGraph(
-	vaultPath: string | null,
-	opts?: { center?: string | null; depth?: number | null },
-): Promise<GraphResponse> {
-	const depth = opts?.depth ?? 2;
-	const center = opts?.center ?? null;
-	if (!vaultPath || !isTauri()) {
-		return { nodes: [], edges: [], center: null, depth };
-	}
-	return invokeWikiApi<GraphResponse>("graph_get_graph", {
-		vaultPath,
-		center,
-		depth,
-	});
-}

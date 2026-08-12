@@ -109,6 +109,7 @@ function catalogTemplateFromId(templateId: string): AgentTemplate {
 		case "codex-acp":
 		case "qodercli":
 		case "grok-build":
+		case "pi":
 			return templateId;
 		default:
 			return "custom";

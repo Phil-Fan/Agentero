@@ -185,7 +185,7 @@ searchAllPages(quote) → page + rects
 
 - [即时定位](mark-locate-eager.md)
 - [开发路线：基础 / 上层 / Skill · CLI 内置命令面](mark-cli-roadmap.md)
-- [内置桌面 CLI 分发](bundled-cli.md)
+- [内置桌面 CLI 分发](../backend/cli.md)
 - [PDF 阅读与划词](../frontend/pdf.md)
 - [Vault 数据模型 · marks](../backend/data-model.md)
 - [CLI](../backend/cli.md)

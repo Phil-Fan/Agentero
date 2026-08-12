@@ -3,6 +3,7 @@
 //! Flow: always try PDF → arXiv also tries e-print TeX → caller may liteparse when no TeX.
 
 use crate::core::error::AppError;
+use crate::features::catalog::{probe_paper_caps, CapsCache};
 use flate2::read::GzDecoder;
 use serde::Serialize;
 use std::fs::{self, File};
@@ -69,40 +70,6 @@ impl AssetProgressContext<'_> {
     }
 }
 
-/// True if `source/` (or paper dir) already has a PDF.
-pub fn has_local_pdf(paper_dir: &Path) -> bool {
-    walk_has_ext(paper_dir, &["pdf"])
-}
-
-/// True if `source/` (or paper dir) already has a TeX / LaTeX source file.
-pub fn has_local_tex(paper_dir: &Path) -> bool {
-    walk_has_ext(paper_dir, &["tex", "ltx"])
-}
-
-fn walk_has_ext(root: &Path, exts: &[&str]) -> bool {
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                // Skip huge trees; paper folders are shallow.
-                if stack.len() < 32 {
-                    stack.push(path);
-                }
-            } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                let lower = ext.to_ascii_lowercase();
-                if exts.iter().any(|x| *x == lower) {
-                    return true;
-                }
-            }
-        }
-    }
-    false
-}
-
 /// Download missing PDF (always try when URL known) and arXiv LaTeX source.
 ///
 /// - **PDF** → paper folder root: `{paper}/{id}.pdf` (not under `source/`)
@@ -119,18 +86,24 @@ pub async fn ensure_paper_assets(
     ensure_paper_assets_with_cookies(paper_dir, id, arxiv_id, pdf_url, doi, None).await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn ensure_paper_assets_with_progress(
     paper_dir: &Path,
+    vault: &Path,
+    paper_path: &str,
     id: &str,
     arxiv_id: Option<&str>,
     pdf_url: Option<&str>,
     doi: Option<&str>,
     cookies: Option<&str>,
+    cache: Option<&CapsCache>,
     progress: AssetProgressContext<'_>,
 ) -> Result<AssetDownloadResult, AppError> {
     tokio::time::timeout(
         super::PAPER_ASSET_TIMEOUT,
-        ensure_paper_assets_impl(paper_dir, id, arxiv_id, pdf_url, doi, cookies, progress),
+        ensure_paper_assets_impl(
+            paper_dir, vault, paper_path, id, arxiv_id, pdf_url, doi, cookies, cache, progress,
+        ),
     )
     .await
     .map_err(|_| {
@@ -155,11 +128,14 @@ pub async fn ensure_paper_assets_with_cookies(
         super::PAPER_ASSET_TIMEOUT,
         ensure_paper_assets_impl(
             paper_dir,
+            paper_dir,
+            "",
             id,
             arxiv_id,
             pdf_url,
             doi,
             cookies,
+            None,
             AssetProgressContext {
                 app: None,
                 task_id: None,
@@ -175,7 +151,89 @@ pub async fn ensure_paper_assets_with_cookies(
     })?
 }
 
+#[derive(Debug, Default)]
+struct PdfAssetResult {
+    ok: bool,
+    messages: Vec<String>,
+}
+
+#[derive(Debug, Default)]
+struct TexAssetResult {
+    ok: bool,
+    messages: Vec<String>,
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn ensure_paper_assets_impl(
+    paper_dir: &Path,
+    vault: &Path,
+    paper_path: &str,
+    id: &str,
+    arxiv_id: Option<&str>,
+    pdf_url: Option<&str>,
+    doi: Option<&str>,
+    cookies: Option<&str>,
+    cache: Option<&CapsCache>,
+    progress: AssetProgressContext<'_>,
+) -> Result<AssetDownloadResult, AppError> {
+    super::check_task_not_cancelled(progress.task_id)?;
+    let mut out = AssetDownloadResult::default();
+    fs::create_dir_all(paper_dir)?;
+
+    let before = cache
+        .map(|c| c.caps_for(vault, paper_path))
+        .unwrap_or_else(|| probe_paper_caps(paper_dir));
+    let need_pdf = !before.has_pdf();
+    let need_tex = !before.has_tex;
+
+    let pdf_task = async {
+        if !need_pdf {
+            return PdfAssetResult {
+                ok: true,
+                messages: vec!["pdf already present".into()],
+            };
+        }
+        fetch_pdf_assets(paper_dir, id, arxiv_id, pdf_url, doi, cookies, progress).await
+    };
+
+    let tex_task = async {
+        if !need_tex {
+            return TexAssetResult {
+                ok: true,
+                messages: vec!["tex already present".into()],
+            };
+        }
+        let Some(aid) = arxiv_id.filter(|a| !a.trim().is_empty()) else {
+            return TexAssetResult::default();
+        };
+        fetch_tex_assets(paper_dir, aid, progress).await
+    };
+
+    let (pdf_res, tex_res) = tokio::join!(pdf_task, tex_task);
+    out.messages.extend(pdf_res.messages);
+    out.messages.extend(tex_res.messages);
+
+    // Refresh presence after attempts. Directory content may have changed, so
+    // invalidate any cached entry first; caps_for then re-probes and caches.
+    if let Some(c) = cache {
+        c.invalidate(vault, paper_path);
+    }
+    let after = cache
+        .map(|c| c.caps_for(vault, paper_path))
+        .unwrap_or_else(|| probe_paper_caps(paper_dir));
+    if after.has_pdf() {
+        out.pdf = true;
+    }
+    if after.has_tex {
+        out.tex = true;
+    }
+    super::check_task_not_cancelled(progress.task_id)?;
+
+    Ok(out)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn fetch_pdf_assets(
     paper_dir: &Path,
     id: &str,
     arxiv_id: Option<&str>,
@@ -183,118 +241,110 @@ async fn ensure_paper_assets_impl(
     doi: Option<&str>,
     cookies: Option<&str>,
     progress: AssetProgressContext<'_>,
-) -> Result<AssetDownloadResult, AppError> {
-    super::check_task_not_cancelled(progress.task_id)?;
-    let mut out = AssetDownloadResult::default();
-    fs::create_dir_all(paper_dir)?;
-
-    let need_pdf = !has_local_pdf(paper_dir);
-    let need_tex = !has_local_tex(paper_dir);
-
-    if need_pdf {
-        let mut candidates = pdf_url_candidates(id, arxiv_id, pdf_url);
-        let mut ok = try_download_candidates_with_cookies(
-            paper_dir,
-            id,
-            &candidates,
-            &mut out,
-            cookies,
-            progress.app,
-            progress.task_id,
-        )
-        .await;
-        // DOI fallback: Crossref often lists a direct / open-access PDF link even
-        // when the Translator gave no pdf_url (or the publisher landing page failed).
-        if !ok {
-            super::check_task_not_cancelled(progress.task_id)?;
-            if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
-                let extra: Vec<String> = crossref_pdf_urls(doi)
-                    .await
-                    .into_iter()
-                    .filter(|u| !candidates.iter().any(|c| c == u))
-                    .collect();
-                if extra.is_empty() {
-                    out.messages
-                        .push("pdf: no Crossref PDF link for DOI".into());
-                } else {
+) -> PdfAssetResult {
+    let mut out = PdfAssetResult::default();
+    let mut candidates = pdf_url_candidates(id, arxiv_id, pdf_url);
+    let mut ok = try_download_candidates_with_cookies(
+        paper_dir,
+        id,
+        &candidates,
+        &mut out,
+        cookies,
+        progress.app,
+        progress.task_id,
+    )
+    .await;
+    // DOI fallback: Crossref often lists a direct / open-access PDF link even
+    // when the Translator gave no pdf_url (or the publisher landing page failed).
+    if !ok {
+        if let Err(e) = super::check_task_not_cancelled(progress.task_id) {
+            out.messages.push(format!("pdf cancelled: {e}"));
+            return out;
+        }
+        if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
+            let extra: Vec<String> = crossref_pdf_urls(doi)
+                .await
+                .into_iter()
+                .filter(|u| !candidates.iter().any(|c| c == u))
+                .collect();
+            if extra.is_empty() {
+                out.messages
+                    .push("pdf: no Crossref PDF link for DOI".into());
+            } else {
+                ok = try_download_candidates_with_cookies(
+                    paper_dir,
+                    id,
+                    &extra,
+                    &mut out,
+                    cookies,
+                    progress.app,
+                    progress.task_id,
+                )
+                .await;
+                candidates.extend(extra);
+            }
+        }
+    }
+    // Unpaywall fallback: open-access PDF for DOI papers (helps some ACM/IEEE
+    // and other paywalled papers that have an OA copy; no API key required).
+    if !ok {
+        if let Err(e) = super::check_task_not_cancelled(progress.task_id) {
+            out.messages.push(format!("pdf cancelled: {e}"));
+            return out;
+        }
+        if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
+            if let Some(url) = unpaywall_pdf_url(doi).await {
+                if !candidates.iter().any(|c| c == &url) {
                     ok = try_download_candidates_with_cookies(
                         paper_dir,
                         id,
-                        &extra,
+                        std::slice::from_ref(&url),
                         &mut out,
                         cookies,
                         progress.app,
                         progress.task_id,
                     )
                     .await;
-                    candidates.extend(extra);
+                    candidates.push(url);
                 }
             }
         }
-        // Unpaywall fallback: open-access PDF for DOI papers (helps some ACM/IEEE
-        // and other paywalled papers that have an OA copy; no API key required).
-        if !ok {
-            super::check_task_not_cancelled(progress.task_id)?;
-            if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
-                if let Some(url) = unpaywall_pdf_url(doi).await {
-                    if !candidates.iter().any(|c| c == &url) {
-                        ok = try_download_candidates_with_cookies(
-                            paper_dir,
-                            id,
-                            std::slice::from_ref(&url),
-                            &mut out,
-                            cookies,
-                            progress.app,
-                            progress.task_id,
-                        )
-                        .await;
-                        candidates.push(url);
-                    }
-                }
-            }
-        }
-        if !ok && candidates.is_empty() {
-            out.messages.push("pdf: no url".into());
-        }
-    } else {
-        out.pdf = true;
-        out.messages.push("pdf already present".into());
     }
+    if !ok && candidates.is_empty() {
+        out.messages.push("pdf: no url".into());
+    }
+    out.ok = ok;
+    out
+}
 
-    // LaTeX only for arXiv papers → unpack into source/
-    if let Some(aid) = arxiv_id.filter(|a| !a.trim().is_empty()) {
-        super::check_task_not_cancelled(progress.task_id)?;
-        if need_tex {
-            let source = paper_dir.join("source");
-            fs::create_dir_all(&source)?;
-            match download_arxiv_source(&source, paper_dir, aid, progress.app, progress.task_id)
-                .await
-            {
-                Ok(()) => {
-                    // A PDF-only e-print also returns Ok (the PDF is written to
-                    // the paper root and no TeX is extracted), so success here
-                    // does not guarantee TeX. The has_local_tex refresh below
-                    // sets `tex` from what actually landed on disk.
-                    out.messages.push("tex ok".into());
-                }
-                Err(e) => out.messages.push(format!("tex failed: {e}")),
-            }
-        } else {
-            out.tex = true;
-            out.messages.push("tex already present".into());
+async fn fetch_tex_assets(
+    paper_dir: &Path,
+    arxiv_id: &str,
+    progress: AssetProgressContext<'_>,
+) -> TexAssetResult {
+    let mut out = TexAssetResult::default();
+    if let Err(e) = super::check_task_not_cancelled(progress.task_id) {
+        out.messages.push(format!("tex cancelled: {e}"));
+        return out;
+    }
+    let source = paper_dir.join("source");
+    if let Err(e) = fs::create_dir_all(&source) {
+        out.messages.push(format!("tex failed: {e}"));
+        return out;
+    }
+    match download_arxiv_source(&source, paper_dir, arxiv_id, progress.app, progress.task_id).await
+    {
+        Ok(()) => {
+            // A PDF-only e-print also returns Ok (the PDF is written to
+            // the paper root and no TeX is extracted), so success here
+            // does not guarantee TeX. The capability refresh below
+            // sets `tex` from what actually landed on disk.
+            out.messages.push("tex ok".into());
+            out.ok = true;
         }
+        Err(e) => out.messages.push(format!("tex failed: {e}")),
     }
-
-    // Refresh presence after attempts
-    if has_local_pdf(paper_dir) {
-        out.pdf = true;
-    }
-    if has_local_tex(paper_dir) {
-        out.tex = true;
-    }
-    super::check_task_not_cancelled(progress.task_id)?;
-
-    Ok(out)
+    out
 }
 
 /// Build ordered PDF URL candidates (first success wins).
@@ -361,7 +411,7 @@ async fn try_download_candidates_with_cookies(
     paper_dir: &Path,
     id: &str,
     urls: &[String],
-    out: &mut AssetDownloadResult,
+    out: &mut PdfAssetResult,
     cookies: Option<&str>,
     app: Option<&AppHandle>,
     task_id: Option<&str>,
@@ -370,7 +420,7 @@ async fn try_download_candidates_with_cookies(
         // PDF lives next to NOTES.md, not under source/
         match download_pdf_with_cookies(paper_dir, id, url, cookies, app, task_id).await {
             Ok(()) => {
-                out.pdf = true;
+                out.ok = true;
                 out.messages.push(format!("pdf ok ({url})"));
                 return true;
             }
@@ -518,9 +568,20 @@ fn unpack_arxiv_eprint(
 
     // PDF-only submissions → paper folder root (not source/)
     if bytes.len() >= 4 && &bytes[..4] == b"%PDF" {
-        // Only write if we don't already have a local PDF
-        if !has_local_pdf(paper_dir) {
-            fs::write(paper_dir.join(safe_filename(bare_id, "pdf")), bytes)?;
+        // Use create_new to avoid racing with a concurrent independent PDF download.
+        // If the file already exists we discard the e-print PDF and keep the existing one.
+        let dest = paper_dir.join(safe_filename(bare_id, "pdf"));
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&dest)
+        {
+            Ok(mut file) => {
+                file.write_all(bytes)
+                    .map_err(|e| AppError::message(format!("write PDF-only e-print: {e}")))?;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(AppError::message(format!("create PDF-only e-print: {e}"))),
         }
         return Ok(());
     }
@@ -798,5 +859,47 @@ mod tests {
         assert!(looks_like_arxiv_id("1412.6980"));
         assert!(looks_like_arxiv_id("1706.03762"));
         assert!(!looks_like_arxiv_id("not-an-id"));
+    }
+
+    #[test]
+    fn pdf_only_eprint_does_not_overwrite_existing_pdf() {
+        let paper = std::env::temp_dir().join(format!(
+            "agentero-pdf-race-{}-{}-existing",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        let source = paper.join("source");
+        let _ = fs::remove_dir_all(&paper);
+        fs::create_dir_all(&source).unwrap();
+
+        let existing_pdf = paper.join("1412.6980.pdf");
+        fs::write(&existing_pdf, b"%PDF existing").unwrap();
+
+        let eprint_pdf = b"%PDF e-print";
+        unpack_arxiv_eprint(&source, &paper, "1412.6980", eprint_pdf).unwrap();
+
+        // Existing PDF must remain; e-print PDF should have been discarded.
+        assert_eq!(fs::read(&existing_pdf).unwrap(), b"%PDF existing");
+        fs::remove_dir_all(&paper).ok();
+    }
+
+    #[test]
+    fn pdf_only_eprint_writes_when_no_existing_pdf() {
+        let paper = std::env::temp_dir().join(format!(
+            "agentero-pdf-race-{}-{}-new",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        let source = paper.join("source");
+        let _ = fs::remove_dir_all(&paper);
+        fs::create_dir_all(&source).unwrap();
+
+        let eprint_pdf = b"%PDF e-print";
+        unpack_arxiv_eprint(&source, &paper, "1412.6980", eprint_pdf).unwrap();
+
+        let written = paper.join("1412.6980.pdf");
+        assert!(written.exists());
+        assert_eq!(fs::read(&written).unwrap(), eprint_pdf);
+        fs::remove_dir_all(&paper).ok();
     }
 }

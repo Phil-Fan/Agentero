@@ -30,6 +30,55 @@ export function paperCatalogPath(
 	return path;
 }
 
+export type PaperOpenBundle = {
+	paper: PaperMetadata;
+	pathRel: string;
+	notesSeed?: string;
+	pdfPath?: string;
+	hasTex: boolean;
+	hasPaperMd: boolean;
+};
+
+/**
+ * Bundle local paper-open data from Host in one round trip.
+ * Remote vaults intentionally fall back to existing remote helpers.
+ */
+export async function loadPaperOpenBundle(
+	paperDir: string,
+	vaultRoot?: string | null,
+): Promise<PaperOpenBundle | null> {
+	const path = paperCatalogPath(paperDir, vaultRoot);
+	if (!isTauri() || !vaultRoot || !path) return null;
+	try {
+		const { isRemoteVaultHandle } = await import(
+			"@/lib/vault/remote/remote-vault"
+		);
+		if (isRemoteVaultHandle(vaultRoot)) return null;
+		void invokeApi(
+			"job_focus_paper",
+			{ args: { vaultPath: vaultRoot, path } },
+			{ allowVoid: true },
+		).catch(() => undefined);
+		const data = await invokeApi<PaperOpenBundle>(
+			"paper_open_bundle",
+			{ args: { vaultPath: vaultRoot, path } },
+			{ allowVoid: true },
+		);
+		if (!data?.paper?.id) return null;
+		return {
+			...data,
+			paper: withNormalizedTags(
+				enrichArxivUrls({
+					...data.paper,
+					path: data.paper.path ?? data.pathRel,
+				}),
+			),
+		};
+	} catch {
+		return null;
+	}
+}
+
 /**
  * Load paper metadata from catalog.sqlite via Host `paper_get`.
  *

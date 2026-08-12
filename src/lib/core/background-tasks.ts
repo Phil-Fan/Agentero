@@ -18,6 +18,8 @@ export type BackgroundTaskKind =
 	| "import"
 	| "export"
 	| "parse"
+	| "pdfParse"
+	| "layout"
 	| "paperRead"
 	| "connector"
 	| "other";
@@ -331,54 +333,76 @@ function throwIfTaskCancelled(id: string, signal: AbortSignal): void {
 	}
 }
 
-async function attachProgressListener(id: string): Promise<UnlistenFn | null> {
-	if (!isTauri()) return null;
-	return listen<BackgroundTaskProgressEvent>(
-		"background-task:progress",
-		(event) => {
-			if (event.payload.taskId !== id) return;
-			const { downloadedBytes, totalBytes, currentCount, totalCount } =
-				event.payload;
-			if (event.payload.phase === "parse") {
-				updateBackgroundTask(id, {
-					progress: mapDownloadProgress(
-						event.payload.phase,
-						event.payload.progress,
-					),
-					detail: phaseLabel(event.payload.phase),
-				});
-				return;
-			}
-			if (currentCount != null && totalCount != null) {
-				updateBackgroundTask(id, {
-					progress: event.payload.progress,
-					detail: i18n.t("app:tasks.batchProgress", {
-						phase: phaseLabel(event.payload.phase),
-						current: currentCount,
-						total: totalCount,
+/**
+ * Single global `background-task:progress` listener, routed by `taskId`.
+ * Previously each enqueued task attached its own listener (N tasks → N
+ * listeners all receiving every event); see §7.6 detail 3.
+ */
+let globalProgressUnlisten: UnlistenFn | null = null;
+let globalProgressAttachPromise: Promise<void> | null = null;
+
+function ensureGlobalProgressListener(): void {
+	if (!isTauri() || globalProgressUnlisten || globalProgressAttachPromise) {
+		return;
+	}
+	globalProgressAttachPromise = (async () => {
+		try {
+			globalProgressUnlisten = await listen<BackgroundTaskProgressEvent>(
+				"background-task:progress",
+				(event) => handleBackgroundTaskProgress(event.payload),
+			);
+		} finally {
+			globalProgressAttachPromise = null;
+		}
+	})();
+}
+
+function handleBackgroundTaskProgress(
+	payload: BackgroundTaskProgressEvent,
+): void {
+	const id = payload.taskId;
+	const task = getBackgroundTasksSnapshot().tasks.find((t) => t.id === id);
+	if (!task) return;
+	const { downloadedBytes, totalBytes, currentCount, totalCount } = payload;
+	if (
+		task.kind === "downloadAll" &&
+		currentCount == null &&
+		totalCount == null
+	) {
+		return;
+	}
+	if (payload.phase === "parse") {
+		updateBackgroundTask(id, {
+			progress: mapDownloadProgress(payload.phase, payload.progress),
+			detail: phaseLabel(payload.phase),
+		});
+		return;
+	}
+	if (currentCount != null && totalCount != null) {
+		updateBackgroundTask(id, {
+			progress: payload.progress,
+			detail: i18n.t("app:tasks.batchProgress", {
+				phase: phaseLabel(payload.phase),
+				current: currentCount,
+				total: totalCount,
+			}),
+		});
+		return;
+	}
+	updateBackgroundTask(id, {
+		progress: mapDownloadProgress(payload.phase, payload.progress),
+		detail:
+			totalBytes == null
+				? i18n.t("app:tasks.downloadBytesUnknown", {
+						phase: phaseLabel(payload.phase),
+						downloaded: formatBytes(downloadedBytes),
+					})
+				: i18n.t("app:tasks.downloadBytes", {
+						phase: phaseLabel(payload.phase),
+						downloaded: formatBytes(downloadedBytes),
+						total: formatBytes(totalBytes),
 					}),
-				});
-				return;
-			}
-			updateBackgroundTask(id, {
-				progress: mapDownloadProgress(
-					event.payload.phase,
-					event.payload.progress,
-				),
-				detail:
-					totalBytes == null
-						? i18n.t("app:tasks.downloadBytesUnknown", {
-								phase: phaseLabel(event.payload.phase),
-								downloaded: formatBytes(downloadedBytes),
-							})
-						: i18n.t("app:tasks.downloadBytes", {
-								phase: phaseLabel(event.payload.phase),
-								downloaded: formatBytes(downloadedBytes),
-								total: formatBytes(totalBytes),
-							}),
-			});
-		},
-	);
+	});
 }
 
 class Semaphore {
@@ -449,7 +473,7 @@ export async function enqueueBackgroundTask<T>(
 	});
 	const controller = new AbortController();
 	controllers.set(id, controller);
-	const unlisten = await attachProgressListener(id);
+	ensureGlobalProgressListener();
 	logger.info(
 		`op enqueue background_task kind=${input.kind} task_id=${id} title=${input.title} concurrency=${concurrency ?? "unlimited"}`,
 	);
@@ -496,7 +520,6 @@ export async function enqueueBackgroundTask<T>(
 			getSemaphore(input.kind, concurrency as number).release();
 		}
 		controllers.delete(id);
-		unlisten?.();
 	}
 }
 

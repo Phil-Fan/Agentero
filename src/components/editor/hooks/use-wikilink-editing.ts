@@ -10,6 +10,7 @@ import {
 	useEffect,
 	useRef,
 } from "react";
+import { wikiLinkArrowDirection } from "@/lib/wiki/completion";
 import {
 	isWikiLinkDraftEditingOffset,
 	isWikiLinkDraftText,
@@ -21,7 +22,6 @@ import {
 	wikiLinkNodeSource,
 	wikiLinkToMarkdown,
 } from "@/lib/wiki/wikilink-model";
-import { wikiLinkArrowDirection } from "@/lib/wiki-completion";
 
 type WikiLinkExteriorBoundary = {
 	path: number[];

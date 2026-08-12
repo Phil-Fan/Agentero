@@ -79,7 +79,7 @@ export function MobileSidebar({
 			<button
 				type="button"
 				className={cn(
-					"absolute inset-0 bg-black/30 transition-opacity",
+					"absolute inset-0 bg-black/30 transition-opacity duration-200 ease-out",
 					open ? "opacity-100" : "opacity-0",
 				)}
 				aria-label={t("settings.closeMenu")}

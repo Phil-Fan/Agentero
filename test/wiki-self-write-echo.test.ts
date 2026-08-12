@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getVaultPath } from "@/lib/vault/store";
 import { rebuildWikiIndex } from "@/lib/wiki";
+import { subscribeWikiEmbedTarget } from "@/lib/wiki/embed-refresh";
 import { scheduleWikiRebuild, trackSelfWrittenPath } from "@/lib/wiki/store";
-import { subscribeWikiEmbedTarget } from "@/lib/wiki-embed-refresh";
 
 vi.mock("@/lib/wiki", () => ({
 	rebuildWikiIndex: vi.fn(async () => ({ added: 0, removed: 0 })),

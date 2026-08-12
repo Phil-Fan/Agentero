@@ -120,7 +120,7 @@ pub fn looks_like_vault(root: &Path) -> bool {
     if catalog.is_file() {
         return true;
     }
-    root.join("papers").is_dir() && root.join("notes").is_dir() && root.join("plans").is_dir()
+    root.join("papers").is_dir() && root.join("notes").is_dir() && root.join(".agentero").is_dir()
 }
 
 fn walk_up_vault(start: &Path) -> Option<PathBuf> {

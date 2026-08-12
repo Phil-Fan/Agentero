@@ -1,5 +1,4 @@
 import { normalizePath } from "@/lib/core/path";
-import { paperNeedsAssetDownload } from "@/lib/paper/assets";
 import {
 	isPapersRoot,
 	isUnderPapers,
@@ -266,22 +265,6 @@ export function collectPaperFoldersFromTree(
 			name?: string;
 		}>,
 	);
-	return out;
-}
-
-/** Paper folders (at any depth) that still need an asset download, by path. */
-export function collectPapersNeedingAssetDownload(nodes: FileNode[]): string[] {
-	const out: string[] = [];
-	const walk = (list: FileNode[]) => {
-		for (const n of list) {
-			if (n.kind === "directory" && isPaperDirectory(n.path, n.children)) {
-				if (paperNeedsAssetDownload(n)) out.push(n.path);
-			} else if (n.children?.length) {
-				walk(n.children);
-			}
-		}
-	};
-	walk(nodes);
 	return out;
 }
 

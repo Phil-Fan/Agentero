@@ -343,7 +343,7 @@
 			"visualMarks": "视觉批注"
 		},
 		"sectionHints": {
-			"vault": "检查顶层 papers/、notes/、plans/、.agentero/ 目录是否齐全。",
+			"vault": "检查顶层 papers/、notes/、.agentero/ 目录是否齐全。",
 			"catalog": "检查 .agentero/catalog.sqlite 是否存在，以及 schema 是否与当前应用一致。",
 			"wikilinks": "检查笔记中的本地双链是否可解析（缺失、歧义、无效标题锚点）。",
 			"aliases": "检查论文 NOTES.md 是否具备至少两个可区分的 frontmatter aliases。",
@@ -419,7 +419,7 @@
 			"downloading": "正在下载更新...",
 			"downloadingProgress": "正在下载更新：{{progress}}%",
 			"installing": "正在安装更新并重启...",
-			"checkFailed": "无法检查更新",
+			"checkFailed": "无法检查更新，请检查网络或代理设置",
 			"installFailed": "无法安装更新，请重试",
 			"check": "检查更新",
 			"downloadInstall": "安装并重启",

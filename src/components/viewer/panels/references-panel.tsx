@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import {
 	ArrowUpRight,
 	BookCheck,
@@ -40,7 +41,7 @@ import {
 	type Citation,
 	type CiteSidecar,
 	citationImportIdentifier,
-	loadPaperRefsAuto,
+	loadPaperRefsReadOnly,
 	paperRefsParse,
 } from "@/lib/paper/refs";
 import { joinVaultPath } from "@/lib/vault/path";
@@ -121,19 +122,45 @@ export function ReferencesPanel({
 		setFilter("");
 		if (!vaultPath || !paperPath) return;
 		let cancelled = false;
+		let unlisten: (() => void) | undefined;
 		setLoading(true);
-		loadPaperRefsAuto(vaultPath, paperPath)
-			.then((s) => {
-				if (!cancelled) setSidecar(s);
-			})
-			.catch(() => {
-				if (!cancelled) setSidecar(null);
-			})
-			.finally(() => {
-				if (!cancelled) setLoading(false);
-			});
+		const reload = () => {
+			loadPaperRefsReadOnly(vaultPath, paperPath)
+				.then((s) => {
+					if (!cancelled) setSidecar(s);
+				})
+				.catch(() => {
+					if (!cancelled) setSidecar(null);
+				})
+				.finally(() => {
+					if (!cancelled) setLoading(false);
+				});
+		};
+		reload();
+		// Reload when this paper's ParseRefs backfill settles (event-driven,
+		// replacing the old blocking list→parse fallback).
+		const norm = (p: string | null | undefined) =>
+			(p ?? "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+		void listen<{
+			job: { kind: string; paperPath?: string | null; state: string };
+		}>("job:changed", (event) => {
+			const job = event.payload.job;
+			if (job.kind !== "parseRefs") return;
+			if (norm(job.paperPath) !== norm(paperPath)) return;
+			if (
+				job.state === "succeeded" ||
+				job.state === "failed" ||
+				job.state === "cancelled"
+			) {
+				if (!cancelled) reload();
+			}
+		}).then((u) => {
+			if (cancelled) u();
+			else unlisten = u;
+		});
 		return () => {
 			cancelled = true;
+			unlisten?.();
 		};
 	}, [vaultPath, paperPath]);
 
@@ -323,7 +350,6 @@ export function ReferencesPanel({
 							onOpenPath={openGraphPath}
 							wikiIndexRevision={graphRevision}
 							embedded
-							autoParseCenter={false}
 							className="h-full min-h-0"
 						/>
 					</div>

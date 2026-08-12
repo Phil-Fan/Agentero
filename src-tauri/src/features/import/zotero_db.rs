@@ -190,6 +190,7 @@ fn parse_year(date: Option<&str>) -> Option<i64> {
 pub async fn migrate_zotero(
     args: ZoteroMigrateArgs,
     progress: impl Fn(usize, usize, &str),
+    app: Option<&tauri::AppHandle>,
 ) -> Result<ZoteroMigrateResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
@@ -218,7 +219,6 @@ pub async fn migrate_zotero(
         pruned,
         ..Default::default()
     };
-    let mut pdf_paths_to_parse = Vec::new();
 
     // Per-paper selection takes precedence; otherwise an optional collection
     // filter (0 = unfiled). Neither set → import everything.
@@ -278,9 +278,6 @@ pub async fn migrate_zotero(
         match migrate_one(&vault, &parent_rel, &item, flags, &mut dedup).await {
             Ok(MigrateOutcome::Imported { path, copied_pdf }) => {
                 out.imported += 1;
-                if copied_pdf {
-                    pdf_paths_to_parse.push(path.clone());
-                }
                 out.paths.push(path);
                 if copied_pdf {
                     out.copied_pdfs += 1;
@@ -302,26 +299,9 @@ pub async fn migrate_zotero(
         }
     }
 
-    // Zotero storage only gives us the PDF. Generate the readable body for
-    // PDF-only papers after the migration pass; the parser itself skips local
-    // TeX and existing PAPER.md files.
-    let parse_total = pdf_paths_to_parse.len();
-    for (idx, path) in pdf_paths_to_parse.into_iter().enumerate() {
-        progress(idx, parse_total, "parse");
-        let paper_dir = vault.join(&path);
-        let parsed = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
-            &vault, &path, &paper_dir,
-        )
-        .await;
-        if !parsed.paper_md && !parsed.messages.is_empty() {
-            out.errors
-                .push(format!("{path}: {}", parsed.messages.join("; ")));
-        }
-    }
-    if parse_total > 0 {
-        progress(parse_total, parse_total, "parse");
-    } else {
-        progress(total, total, "migrate");
+    progress(total, total, "migrate");
+    for path in &out.paths {
+        crate::features::jobs::spawn_parse_body_after_assets(app, &vault, path, false);
     }
     Ok(out)
 }
@@ -1394,6 +1374,7 @@ mod tests {
                 migrate_annotations: false,
             },
             |_c, _t, _p| {},
+            None,
         )
         .await
         .unwrap();
@@ -1463,6 +1444,7 @@ mod tests {
                 migrate_annotations: false,
             },
             |_c, _t, _p| {},
+            None,
         )
         .await
         .unwrap();

@@ -2,11 +2,12 @@
 //!
 //! Provides system UI fonts so exported PDFs can embed selectable CJK text.
 
-use crate::core::error::{map_err, ApiResult, AppError};
+use crate::core::error::AppError;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::command;
+
+pub mod commands;
 
 /// Candidate TrueType / OpenType fonts with broad CJK coverage.
 /// Prefer single-file `.ttf` / `.otf` (pdf-lib does not reliably load `.ttc`).
@@ -73,9 +74,7 @@ pub struct ExportFontPayload {
     pub bytes_base64: String,
 }
 
-/// Read a system font suitable for embedding selectable CJK text in PDF export.
-#[command]
-pub fn export_system_cjk_font() -> ApiResult<ExportFontPayload> {
+pub(crate) fn load_system_cjk_font() -> Result<ExportFontPayload, AppError> {
     let mut last_err: Option<String> = None;
     let mut ordered = cjk_font_candidates();
     ordered.sort_by_key(|p| {
@@ -97,7 +96,7 @@ pub fn export_system_cjk_font() -> ApiResult<ExportFontPayload> {
         }
         match fs::read(&path) {
             Ok(bytes) if !bytes.is_empty() => {
-                return ApiResult::ok(ExportFontPayload {
+                return Ok(ExportFontPayload {
                     path: path.to_string_lossy().into_owned(),
                     bytes_base64: STANDARD.encode(bytes),
                 });
@@ -111,7 +110,7 @@ pub fn export_system_cjk_font() -> ApiResult<ExportFontPayload> {
         }
     }
 
-    map_err(AppError::message(format!(
+    Err(AppError::message(format!(
         "No embeddable CJK system font found{}",
         last_err
             .map(|e| format!(" (last error: {e})"))

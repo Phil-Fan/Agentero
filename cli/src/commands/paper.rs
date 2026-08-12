@@ -413,7 +413,7 @@ fn paths(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {
     if assets.marks_dir {
         paths.push(format!("{}/marks", paper.path));
     }
-    if let Some(pdf) = pdf_parse::find_local_pdf(&dir) {
+    if let Some(pdf) = catalog::find_local_pdf(&dir) {
         if let Ok(rel) = pdf.strip_prefix(&vault) {
             paths.push(rel.to_string_lossy().replace('\\', "/"));
         }
@@ -647,11 +647,15 @@ async fn parse(globals: &GlobalOpts, ref_: &str, force: bool) -> Result<Value, C
             "no local PDF to parse; run paper download first",
         ));
     }
-    let result = pdf_parse::parse_paper_body(PaperParseBodyArgs {
-        vault_path: vault.to_string_lossy().to_string(),
-        path: paper.path.clone(),
-        force,
-    })
+    let result = pdf_parse::parse_paper_body(
+        PaperParseBodyArgs {
+            vault_path: vault.to_string_lossy().to_string(),
+            path: paper.path.clone(),
+            force,
+            task_id: None,
+        },
+        None,
+    )
     .await?;
     let style = globals.style;
     let mut v = to_value(&result)?;
@@ -674,7 +678,7 @@ fn probe_assets(dir: &std::path::Path) -> Assets {
     Assets {
         pdf: import::has_local_pdf(dir),
         tex: import::has_local_tex(dir),
-        paper_md: pdf_parse::has_paper_md(dir),
+        paper_md: catalog::has_paper_md(dir),
         notes_md: dir.join("NOTES.md").is_file(),
         marks_dir: dir.join("marks").is_dir(),
     }

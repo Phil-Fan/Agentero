@@ -1,19 +1,18 @@
 //! Magic-wand / asset import into a remote vault (stage locally → SFTP → catalog push).
 
+use super::paper_commit::{remote_paper_commit, RemoteAssetsPolicy, RemotePaperCommitOptions};
 use super::session::RemoteSession;
 use crate::core::error::AppError;
 use crate::core::fs::{VaultFs, WriteOpts};
 use crate::features::catalog::papers;
-use crate::features::import::parse::{
-    extract_arxiv_id, extract_primary_identifier, IdentifierKind,
-};
+use crate::features::import::batch::{preflight_identifier_batch, SkillBatchMode};
+use crate::features::import::parse::extract_arxiv_id;
 use crate::features::import::{
-    enrich_remote_urls, ensure_paper_assets, identifier_kind_column, identifier_kind_str,
-    map_zotero_item, normalize_parent_dir, paper_record_from_meta, resolve_metadata,
-    slug_from_stem, title_from_stem, write_paper_shell, AssetDownloadResult, ImportLocalPdfArgs,
+    enrich_remote_urls, ensure_paper_assets, map_zotero_item, normalize_parent_dir,
+    resolve_metadata, slug_from_stem, title_from_stem, AssetDownloadResult, ImportLocalPdfArgs,
     ImportLocalPdfResult, LocalPdfImportEntry, LookupImportArgs, LookupImportBatchArgs,
     LookupImportBatchResult, LookupImportResult, PaperDownloadAssetsArgs, PaperImportArgs,
-    PaperImportResult, SkippedImport, DEFAULT_TRANSLATOR_BASE_URL,
+    PaperImportResult, DEFAULT_TRANSLATOR_BASE_URL,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -46,71 +45,30 @@ pub async fn import_by_identifier_remote(
     crate::features::import::check_task_not_cancelled(args.task_id.as_deref())?;
     enrich_remote_urls(&mut meta);
 
-    let id = meta.id.clone();
-    if id.is_empty() {
-        return Err(AppError::message("resolved metadata has empty id"));
-    }
-
-    let (id, path_rel) = unique_remote_paper_path(session.fs.as_ref(), &parent_rel, &id).await?;
-    meta.id = id.clone();
-    let staging = session.work_root.join(&path_rel);
-    if staging.exists() {
-        let _ = fs::remove_dir_all(&staging);
-    }
-    fs::create_dir_all(&staging)?;
-
-    write_paper_shell(&staging, &meta).await?;
-
-    let mut assets = ensure_paper_assets(
-        &staging,
-        &id,
-        meta.arxiv_id.as_deref(),
-        meta.pdf_url.as_deref(),
-        meta.doi.as_deref(),
+    let commit = remote_paper_commit(
+        session.clone(),
+        meta,
+        RemotePaperCommitOptions {
+            parent_rel: &parent_rel,
+            task_id: args.task_id.as_deref(),
+            assets: RemoteAssetsPolicy::SyncDownload,
+            push_catalog: true,
+        },
     )
-    .await
-    .unwrap_or_else(|e| {
-        let mut r = AssetDownloadResult::default();
-        r.messages.push(format!("asset download error: {e}"));
-        r
-    });
-    crate::features::import::check_task_not_cancelled(args.task_id.as_deref())?;
+    .await?;
 
-    let parse = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
-        &session.work_root,
-        &path_rel,
-        &staging,
-    )
-    .await;
-    crate::features::import::check_task_not_cancelled(args.task_id.as_deref())?;
-    assets.paper_md = parse.paper_md;
-    for m in parse.messages {
-        assets.messages.push(m);
-    }
-
-    // Upload staged tree to remote (source of truth)
-    crate::features::import::check_task_not_cancelled(args.task_id.as_deref())?;
-    upload_tree(session.fs.as_ref(), &staging, &path_rel).await?;
-
-    let record = paper_record_from_meta(&path_rel, &meta);
-    papers::upsert_paper(&session.work_root, &record)?;
-    {
-        let mut cat = session.catalog.lock().await;
-        cat.push(session.fs.clone()).await?;
-    }
-
-    let paper_dir = format!("remote:{}/{}", session.id, path_rel);
+    let paper_dir = format!("remote:{}/{}", session.id, commit.path);
     Ok(LookupImportResult {
         paper_dir,
-        path: path_rel,
-        id: meta.id,
-        title: meta.title,
+        path: commit.path,
+        id: commit.id,
+        title: commit.title,
         used_translator,
         translator_base_url: base,
-        pdf: assets.pdf,
-        tex: assets.tex,
-        paper_md: assets.paper_md,
-        asset_messages: assets.messages,
+        pdf: commit.pdf,
+        tex: commit.tex,
+        paper_md: commit.paper_md,
+        asset_messages: commit.asset_messages,
     })
 }
 
@@ -120,67 +78,26 @@ pub async fn import_by_identifier_batch_remote(
     args: LookupImportBatchArgs,
 ) -> Result<LookupImportBatchResult, AppError> {
     let mut imported: Vec<LookupImportResult> = Vec::new();
-    let mut skipped: Vec<SkippedImport> = Vec::new();
-    let mut errors: Vec<String> = Vec::new();
-    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let preflight = preflight_identifier_batch(
+        &args.texts,
+        &session.work_root,
+        SkillBatchMode::RejectRemote,
+        true,
+    );
+    let skipped = preflight.skipped;
+    let mut errors = preflight.errors;
 
-    for raw in &args.texts {
-        let raw = raw.trim();
-        if raw.is_empty() {
-            continue;
-        }
-        let Some((kind, value)) = extract_primary_identifier(raw) else {
-            errors.push(format!("{raw}: unrecognized identifier"));
-            continue;
-        };
-        if kind == IdentifierKind::Skill {
-            errors.push(format!(
-                "{raw}: skill import is not supported for remote vaults"
-            ));
-            continue;
-        }
-
-        let kind_str = identifier_kind_str(kind);
-        let dedup_key = format!("{kind_str}:{value}");
-        if seen.contains_key(&dedup_key) {
-            skipped.push(SkippedImport {
-                raw: raw.to_string(),
-                kind: kind_str,
-                value: value.clone(),
-                reason: "duplicate_in_batch".to_string(),
-            });
-            continue;
-        }
-        seen.insert(dedup_key.clone(), raw.to_string());
-
-        if let Some(column) = identifier_kind_column(kind) {
-            match papers::find_by_identifier(&session.work_root, column, &value) {
-                Ok(Some(_record)) => {
-                    skipped.push(SkippedImport {
-                        raw: raw.to_string(),
-                        kind: kind_str,
-                        value: value.clone(),
-                        reason: "already_in_library".to_string(),
-                    });
-                    continue;
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    log::warn!("remote catalog lookup failed for {value}: {e}");
-                }
-            }
-        }
-
+    for pending in preflight.papers {
         let single = LookupImportArgs {
             vault_path: args.vault_path.clone(),
             parent_dir: args.parent_dir.clone(),
-            text: raw.to_string(),
+            text: pending.raw.clone(),
             translator_base_url: args.translator_base_url.clone(),
             task_id: args.task_id.clone(),
         };
         match import_by_identifier_remote(session.clone(), single).await {
             Ok(r) => imported.push(r),
-            Err(e) => errors.push(format!("{raw}: {e}")),
+            Err(e) => errors.push(format!("{}: {e}", pending.raw)),
         }
     }
 
@@ -221,7 +138,7 @@ pub async fn download_paper_assets_remote(
             (name, arxiv, pdf, None)
         };
 
-    let mut result = ensure_paper_assets(
+    let result = ensure_paper_assets(
         &staging,
         &id,
         arxiv_id.as_deref(),
@@ -230,18 +147,7 @@ pub async fn download_paper_assets_remote(
     )
     .await?;
 
-    let parse = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
-        &session.work_root,
-        &path_rel,
-        &staging,
-    )
-    .await;
-    result.paper_md = parse.paper_md;
-    for m in parse.messages {
-        result.messages.push(m);
-    }
-
-    // Upload new assets (and PAPER.md) — don't re-upload whole tree if huge; upload all staged
+    // Upload new assets — don't re-upload whole tree if huge; upload all staged
     upload_tree(session.fs.as_ref(), &staging, &path_rel).await?;
 
     // Touch catalog updated_at if row exists
@@ -280,7 +186,14 @@ pub async fn import_local_pdfs_remote(
     let mut papers_out = Vec::new();
     let mut errors = Vec::new();
     for entry in &entries {
-        match import_one_local_pdf_remote(session.clone(), &parent_rel, entry).await {
+        match import_one_local_pdf_remote(
+            session.clone(),
+            &parent_rel,
+            entry,
+            args.task_id.as_deref(),
+        )
+        .await
+        {
             Ok(r) => papers_out.push(r),
             Err(e) => {
                 let name = Path::new(entry.file_path.trim())
@@ -308,6 +221,7 @@ async fn import_one_local_pdf_remote(
     session: Arc<RemoteSession>,
     parent_rel: &str,
     entry: &LocalPdfImportEntry,
+    task_id: Option<&str>,
 ) -> Result<LookupImportResult, AppError> {
     let src = PathBuf::from(entry.file_path.trim());
     if !src.is_file() {
@@ -337,18 +251,7 @@ async fn import_one_local_pdf_remote(
         .map(slug_from_stem)
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| slug_from_stem(stem));
-    let (id, path_rel) =
-        unique_remote_paper_path(session.fs.as_ref(), parent_rel, &base_id).await?;
-
-    let staging = session.work_root.join(&path_rel);
-    if staging.exists() {
-        let _ = fs::remove_dir_all(&staging);
-    }
-    fs::create_dir_all(&staging)?;
-    fs::copy(&src, staging.join(format!("{id}.pdf")))
-        .map_err(|e| AppError::message(format!("copy PDF failed: {e}")))?;
-
-    let mut meta = crate::features::import::local_pdf_meta_for_import(id.clone(), title);
+    let mut meta = crate::features::import::local_pdf_meta_for_import(base_id, title);
     if let Some(authors) = &entry.authors {
         meta.authors = authors
             .iter()
@@ -360,30 +263,30 @@ async fn import_one_local_pdf_remote(
     if let Some(year) = entry.year {
         meta.year = Some(year);
     }
-    write_paper_shell(&staging, &meta).await?;
-    let record = paper_record_from_meta(&path_rel, &meta);
-    papers::upsert_paper(&session.work_root, &record)?;
 
-    let parse = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
-        &session.work_root,
-        &path_rel,
-        &staging,
+    let commit = remote_paper_commit(
+        session.clone(),
+        meta,
+        RemotePaperCommitOptions {
+            parent_rel,
+            task_id,
+            assets: RemoteAssetsPolicy::CopyPdf { src: &src },
+            push_catalog: false,
+        },
     )
-    .await;
-
-    upload_tree(session.fs.as_ref(), &staging, &path_rel).await?;
+    .await?;
 
     Ok(LookupImportResult {
-        paper_dir: format!("remote:{}/{}", session.id, path_rel),
-        path: path_rel,
-        id: meta.id,
-        title: meta.title,
+        paper_dir: format!("remote:{}/{}", session.id, commit.path),
+        path: commit.path,
+        id: commit.id,
+        title: commit.title,
         used_translator: false,
         translator_base_url: String::new(),
-        pdf: true,
-        tex: false,
-        paper_md: parse.paper_md,
-        asset_messages: parse.messages,
+        pdf: commit.pdf,
+        tex: commit.tex,
+        paper_md: commit.paper_md,
+        asset_messages: commit.asset_messages,
     })
 }
 
@@ -459,36 +362,18 @@ async fn import_one_zotero_item_remote(
         return Ok(None);
     }
 
-    let (id, path_rel) =
-        unique_remote_paper_path(session.fs.as_ref(), parent_rel, &base_id).await?;
-    meta.id = id.clone();
-
-    let staging = session.work_root.join(&path_rel);
-    if staging.exists() {
-        let _ = fs::remove_dir_all(&staging);
-    }
-    fs::create_dir_all(&staging)?;
-    write_paper_shell(&staging, &meta).await?;
-    let record = paper_record_from_meta(&path_rel, &meta);
-    papers::upsert_paper(&session.work_root, &record)?;
-
-    let _ = ensure_paper_assets(
-        &staging,
-        &id,
-        meta.arxiv_id.as_deref(),
-        meta.pdf_url.as_deref(),
-        meta.doi.as_deref(),
+    let commit = remote_paper_commit(
+        session,
+        meta,
+        RemotePaperCommitOptions {
+            parent_rel,
+            task_id: None,
+            assets: RemoteAssetsPolicy::SyncDownload,
+            push_catalog: false,
+        },
     )
-    .await;
-    let _ = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
-        &session.work_root,
-        &path_rel,
-        &staging,
-    )
-    .await;
-
-    upload_tree(session.fs.as_ref(), &staging, &path_rel).await?;
-    Ok(Some((path_rel, meta.title)))
+    .await?;
+    Ok(Some((commit.path, commit.title)))
 }
 
 pub async fn unique_remote_paper_path(

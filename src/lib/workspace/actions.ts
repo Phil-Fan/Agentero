@@ -38,7 +38,6 @@ import {
 import {
 	getVaultPath,
 	refreshTree,
-	refreshTreeQuiet,
 	setTreeSelectedPath,
 	vaultStore,
 } from "@/lib/vault/store";
@@ -309,7 +308,7 @@ export function openTab(
 
 		const vault = getVaultPath();
 		if (res.didDownloadAssets && vault) {
-			await refreshTreeQuiet(vault);
+			await refreshTree(vault, { quiet: true });
 		}
 	})();
 }
@@ -573,19 +572,25 @@ export function openGraphPath(rel: string): void {
 
 let wikiNavigationIntentId = 0;
 
-/** Retry until the PDF handle is registered after openPaper, then jump. */
+/** Wait for the PDF handle registration after openPaper, then jump. */
 function scheduleAnnotationJump(paperAbs: string, annotationId: string): void {
 	const tabId = tabIdForPath(paperAbs);
-	let attempts = 0;
-	const tryJump = () => {
-		attempts += 1;
-		void import("@/components/viewer/pdf-viewer-registry").then(
-			({ pdfHandleFor }) => {
-				const handle = pdfHandleFor(tabId);
-				if (!handle) {
-					if (attempts < 40) window.setTimeout(tryJump, 50);
-					return;
-				}
+	void import("@/components/viewer/pdf-viewer-registry").then(
+		({ pdfHandleFor, subscribePdfHandles }) => {
+			let unsubscribe: (() => void) | null = null;
+			let timeoutId: number | null = null;
+			let finished = false;
+
+			const finish = () => {
+				if (finished) return false;
+				finished = true;
+				unsubscribe?.();
+				if (timeoutId !== null) window.clearTimeout(timeoutId);
+				return true;
+			};
+
+			const jump = (handle: NonNullable<ReturnType<typeof pdfHandleFor>>) => {
+				if (!finish()) return;
 				void lookupAnnotationRef(paperAbs, annotationId).then((ref) => {
 					if (!ref) {
 						notifyError(
@@ -601,10 +606,21 @@ function scheduleAnnotationJump(paperAbs: string, annotationId: string): void {
 						handle.scrollToHighlight(ref.id);
 					}
 				});
-			},
-		);
-	};
-	window.setTimeout(tryJump, 0);
+			};
+
+			const tryJump = () => {
+				const handle = pdfHandleFor(tabId);
+				if (handle) jump(handle);
+			};
+
+			tryJump();
+			if (finished) return;
+			unsubscribe = subscribePdfHandles(tryJump);
+			timeoutId = window.setTimeout(() => {
+				finish();
+			}, 2000);
+		},
+	);
 }
 
 export async function navigateWiki(nav: WikiNavTarget): Promise<void> {

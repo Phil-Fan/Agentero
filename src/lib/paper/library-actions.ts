@@ -5,13 +5,11 @@
  */
 
 import i18n from "@/i18n";
-import {
-	BackgroundTaskCancelledError,
-	enqueueBackgroundTask,
-} from "@/lib/core/background-tasks";
+import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
+import { invokeApi } from "@/lib/core/ipc";
+import { logger } from "@/lib/core/logger";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
 import {
-	collectPapersNeedingAssetDownload,
 	detectPaperDirectory,
 	notesPathForPaper,
 	type PaperMetadata,
@@ -239,63 +237,40 @@ export async function readPaper(node: FileNode): Promise<void> {
 
 /**
  * Library bulk download: every paper folder missing PDF and/or fetchable TeX.
- * Walks the file tree so local source/ presence matches the row icons.
+ * Enqueues one `DownloadAssets` JobCenter job per paper (idle lane); the
+ * scheduler throttles (cap 3), each job projects into the tasks panel and
+ * backfills PAPER.md + layout, and the library refreshes via the job-completion
+ * hook (§10.2).
  */
 export async function downloadAllMissingAssets(): Promise<void> {
 	const vaultPath = getVaultPath();
 	if (!vaultPath) return;
-	const queue = collectPapersNeedingAssetDownload(vaultStore.getState().tree);
-	if (!queue.length) return;
-
-	const errors: string[] = [];
+	// CapsCache-backed query (§8.4) replaces the frontend tree walk.
+	let queue: string[] = [];
 	try {
-		await enqueueBackgroundTask(
-			{
-				kind: "downloadAll",
-				title: i18n.t("app:tasks.downloadAll"),
-				detail: i18n.t("app:tasks.downloadProgress", {
-					current: 0,
-					total: queue.length,
-				}),
-			},
-			async ({ id, signal, setProgress, setDetail }) => {
-				let i = 0;
-				for (const paperPath of queue) {
-					if (signal.aborted) throw new BackgroundTaskCancelledError();
-					const rel = toVaultRelative(vaultPath, paperPath)
-						.replace(/\\/g, "/")
-						.replace(/^\/+|\/+$/g, "");
-					i += 1;
-					setDetail(
-						`${i18n.t("app:tasks.downloadProgress", { current: i, total: queue.length })} · ${rel}`,
-					);
-					setProgress(Math.round(((i - 1) / queue.length) * 100));
-					try {
-						await downloadPaperAssets({
-							vaultRoot: vaultPath,
-							paperPath: rel,
-							progressTaskId: id,
-						});
-						enqueuePaperLayoutAnalysis({
-							paperAbsPath: joinVaultPath(vaultPath, rel),
-						});
-					} catch (e) {
-						if (signal.aborted) throw e;
-						errors.push(
-							`${rel}: ${e instanceof Error ? e.message : String(e)}`,
-						);
-					}
-					setProgress(Math.round((i / queue.length) * 100));
-				}
-				await refreshTree(vaultPath);
-				await refreshLibrary();
-			},
+		queue = await invokeApi<string[]>(
+			"job_papers_needing_assets",
+			{ args: { vaultPath } },
+			{ fallback: "collect papers needing assets failed" },
 		);
 	} catch (e) {
 		notifyError(e instanceof Error ? e.message : String(e));
+		return;
 	}
-	if (errors.length) {
-		notifyError(errors.slice(0, 3).join("; "));
+	if (!queue.length) return;
+
+	for (const rel of queue) {
+		if (!rel) continue;
+		void invokeApi(
+			"job_download_assets_enqueue",
+			{ args: { vaultPath, path: rel, lane: "idle", force: false } },
+			{ fallback: "download enqueue failed" },
+		).catch((e) =>
+			logger.warn("bulk download enqueue failed", {
+				rel,
+				error: e instanceof Error ? e.message : String(e),
+			}),
+		);
 	}
 }
 

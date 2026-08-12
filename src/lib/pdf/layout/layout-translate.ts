@@ -3,12 +3,14 @@
  * Progressive: callers apply each result as soon as it completes.
  */
 
+import i18n from "@/i18n";
 import {
 	listAgents,
 	listenAgentCompleted,
 	listenAgentFailed,
 	runOnce,
 } from "@/lib/agent";
+import { logger } from "@/lib/core/logger";
 import { LAYOUT_SIDEBAR_MIN_SCORE } from "@/lib/pdf/layout/constants";
 import {
 	isAlgorithmLayoutKind,
@@ -23,14 +25,38 @@ import {
 } from "@/lib/pdf/translate/agent-session-cache";
 import { loadSettings } from "@/lib/settings";
 import { runTranslate } from "@/lib/translate";
+import { langsFromSettings } from "@/lib/translate/lang";
 import { resolveTranslateAgent } from "@/lib/translate/resolve-agent";
-import type { TranslateRunOptions } from "@/lib/translate/types";
+import type {
+	CommercialTranslateProviderId,
+	TranslateProviderId,
+	TranslateRunOptions,
+	TranslateSettings,
+} from "@/lib/translate/types";
+import { joinVaultPath, readVaultFile, writeVaultFile } from "@/lib/vault";
 
 /** Soft cap per block to keep free-MT requests reasonable. */
 export const LAYOUT_TRANSLATE_MAX_CHARS = 2500;
 
 /** Parallel free/commercial MT workers (order of *start* follows reading order). */
 export const LAYOUT_TRANSLATE_CONCURRENCY = 2;
+
+export const LAYOUT_TRANSLATE_SIDECAR_SCHEMA_VERSION = 1;
+export const LAYOUT_TRANSLATE_SIDECAR_FILE = "layout-translate.json";
+
+/**
+ * Trailing debounce for the whole-file `layout-translate.json` write. Each
+ * translated block used to rewrite the entire sidecar immediately (400+ writes
+ * for a long paper); coalescing keeps crash-recovery progress while bounding
+ * disk churn. See paper-pipeline-orchestration.md §8.1.
+ */
+export const LAYOUT_TRANSLATE_WRITE_DEBOUNCE_MS = 500;
+
+/** Pending debounced sidecar writes, keyed by paper folder. */
+const translateSidecarWriteTimers = new Map<
+	string,
+	ReturnType<typeof setTimeout>
+>();
 
 export type LayoutTranslateRegion = {
 	id: string;
@@ -61,6 +87,46 @@ export type LayoutTranslateJobStatus =
 	| "running"
 	| "done"
 	| "cancelled";
+
+export type LayoutTranslateCacheKey = {
+	providerId: TranslateProviderId;
+	sourceLang: string;
+	targetLang: string;
+	serviceKey: string;
+};
+
+export type LayoutTranslateSidecarItem = {
+	id: string;
+	pageIndex: number;
+	bbox: PdfLayoutRegion["bbox"];
+	kind: PdfLayoutRegion["kind"];
+	readingOrder: number;
+	source: string;
+	translated: string;
+};
+
+export type LayoutTranslateSidecar = {
+	schemaVersion: number;
+	source: {
+		mode: "pdf-layout-translate";
+		generatedAt: string;
+		providerId: TranslateProviderId;
+		sourceLang: string;
+		targetLang: string;
+		serviceKey: string;
+	};
+	items: LayoutTranslateSidecarItem[];
+};
+
+export type LayoutTranslateWriteOptions = {
+	/**
+	 * Single-page translation writes only a subset of layout blocks. Preserve
+	 * cached blocks from other pages instead of replacing the whole sidecar.
+	 */
+	preserveExisting?: boolean;
+	/** Existing cached blocks on these pages are replaced by `items`. */
+	replacePageIndexes?: readonly number[];
+};
 
 /** Prefer body extract; fall back to caption title for headers. */
 export function layoutRegionSourceText(region: PdfLayoutRegion): string {
@@ -170,6 +236,271 @@ export function toLayoutTranslateItems(
 	regions: readonly LayoutTranslateRegion[],
 ): LayoutTranslateItem[] {
 	return regions.map((r) => ({ ...r, status: "pending" as const }));
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+	return typeof value === "number" && Number.isFinite(value);
+}
+
+function parseBbox(value: unknown): PdfLayoutRegion["bbox"] | null {
+	if (!isObject(value)) return null;
+	const { x, y, w, h } = value;
+	if (
+		!isFiniteNumber(x) ||
+		!isFiniteNumber(y) ||
+		!isFiniteNumber(w) ||
+		!isFiniteNumber(h)
+	) {
+		return null;
+	}
+	return { x, y, w, h };
+}
+
+function translateServiceKey(settings: TranslateSettings): string {
+	const providerId = settings.provider;
+	if (providerId === "agent") {
+		return `agent:${settings.agentId || "default"}:${settings.modelId || "default"}`;
+	}
+	const configs = settings.providerConfigs as Partial<
+		Record<
+			CommercialTranslateProviderId,
+			{ baseUrl?: string; region?: string; model?: string }
+		>
+	>;
+	const config = configs[providerId as CommercialTranslateProviderId];
+	if (!config) return providerId;
+	return [
+		providerId,
+		config.baseUrl?.trim() ?? "",
+		config.region?.trim() ?? "",
+		config.model?.trim() ?? "",
+	].join(":");
+}
+
+export function currentLayoutTranslateCacheKey(): LayoutTranslateCacheKey {
+	const settings = loadSettings();
+	const langs = langsFromSettings(settings.translate, i18n.language ?? "en");
+	return {
+		providerId: settings.translate.provider,
+		sourceLang: langs.sourceLang,
+		targetLang: langs.targetLang,
+		serviceKey: translateServiceKey(settings.translate),
+	};
+}
+
+function sameLayoutTranslateCacheKey(
+	a: LayoutTranslateCacheKey,
+	b: LayoutTranslateCacheKey,
+): boolean {
+	return (
+		a.providerId === b.providerId &&
+		a.sourceLang === b.sourceLang &&
+		a.targetLang === b.targetLang &&
+		a.serviceKey === b.serviceKey
+	);
+}
+
+export function layoutTranslateSidecarPath(paperAbsPath: string): string {
+	return joinVaultPath(
+		joinVaultPath(paperAbsPath, "source"),
+		LAYOUT_TRANSLATE_SIDECAR_FILE,
+	);
+}
+
+function parseLayoutTranslateSidecarItem(
+	value: unknown,
+): LayoutTranslateSidecarItem | null {
+	if (!isObject(value)) return null;
+	const { id, pageIndex, bbox, kind, readingOrder, source, translated } = value;
+	if (
+		typeof id !== "string" ||
+		!isFiniteNumber(pageIndex) ||
+		typeof kind !== "string" ||
+		!isFiniteNumber(readingOrder) ||
+		typeof source !== "string" ||
+		typeof translated !== "string" ||
+		!translated.trim()
+	) {
+		return null;
+	}
+	const parsedBbox = parseBbox(bbox);
+	if (!parsedBbox) return null;
+	return {
+		id,
+		pageIndex,
+		bbox: parsedBbox,
+		kind: kind as PdfLayoutRegion["kind"],
+		readingOrder,
+		source,
+		translated,
+	};
+}
+
+export function parseLayoutTranslateSidecar(
+	raw: unknown,
+	expectedKey?: LayoutTranslateCacheKey,
+): LayoutTranslateSidecar | null {
+	if (!isObject(raw)) return null;
+	if (raw.schemaVersion !== LAYOUT_TRANSLATE_SIDECAR_SCHEMA_VERSION)
+		return null;
+	if (!isObject(raw.source) || raw.source.mode !== "pdf-layout-translate") {
+		return null;
+	}
+	const { generatedAt, providerId, sourceLang, targetLang, serviceKey } =
+		raw.source;
+	if (
+		typeof generatedAt !== "string" ||
+		typeof providerId !== "string" ||
+		typeof sourceLang !== "string" ||
+		typeof targetLang !== "string" ||
+		typeof serviceKey !== "string"
+	) {
+		return null;
+	}
+	const key: LayoutTranslateCacheKey = {
+		providerId: providerId as TranslateProviderId,
+		sourceLang,
+		targetLang,
+		serviceKey,
+	};
+	if (expectedKey && !sameLayoutTranslateCacheKey(key, expectedKey))
+		return null;
+	if (!Array.isArray(raw.items)) return null;
+	const items = raw.items.map(parseLayoutTranslateSidecarItem);
+	if (items.some((item) => !item)) return null;
+	return {
+		schemaVersion: LAYOUT_TRANSLATE_SIDECAR_SCHEMA_VERSION,
+		source: {
+			mode: "pdf-layout-translate",
+			generatedAt,
+			providerId: key.providerId,
+			sourceLang,
+			targetLang,
+			serviceKey,
+		},
+		items: items as LayoutTranslateSidecarItem[],
+	};
+}
+
+export async function readLayoutTranslateSidecar(
+	paperAbsPath: string | null | undefined,
+	key: LayoutTranslateCacheKey,
+): Promise<LayoutTranslateSidecar | null> {
+	if (!paperAbsPath) return null;
+	try {
+		const text = await readVaultFile(layoutTranslateSidecarPath(paperAbsPath));
+		return parseLayoutTranslateSidecar(JSON.parse(text), key);
+	} catch {
+		return null;
+	}
+}
+
+export function applyLayoutTranslateSidecar(
+	items: readonly LayoutTranslateItem[],
+	sidecar: LayoutTranslateSidecar | null,
+): LayoutTranslateItem[] {
+	if (!sidecar?.items.length) return items.map((it) => ({ ...it }));
+	const byId = new Map(sidecar.items.map((item) => [item.id, item]));
+	return items.map((item) => {
+		const cached = byId.get(item.id);
+		if (!cached || cached.source !== item.source) return { ...item };
+		return {
+			...item,
+			status: "done" as const,
+			translated: cached.translated.trim(),
+			error: undefined,
+		};
+	});
+}
+
+export async function writeLayoutTranslateSidecar(
+	paperAbsPath: string | null | undefined,
+	key: LayoutTranslateCacheKey,
+	items: readonly LayoutTranslateItem[],
+	options: LayoutTranslateWriteOptions = {},
+): Promise<void> {
+	if (!paperAbsPath) return;
+	const done = items
+		.filter((item) => item.status === "done" && item.translated?.trim())
+		.map(
+			(item): LayoutTranslateSidecarItem => ({
+				id: item.id,
+				pageIndex: item.pageIndex,
+				bbox: item.bbox,
+				kind: item.kind,
+				readingOrder: item.readingOrder,
+				source: item.source,
+				translated: item.translated?.trim() ?? "",
+			}),
+		);
+	const merged = new Map<string, LayoutTranslateSidecarItem>();
+	if (options.preserveExisting) {
+		const existing = await readLayoutTranslateSidecar(paperAbsPath, key);
+		const replacePageIndexes = new Set(options.replacePageIndexes ?? []);
+		for (const item of existing?.items ?? []) {
+			if (replacePageIndexes.has(item.pageIndex)) continue;
+			merged.set(item.id, item);
+		}
+	}
+	for (const item of done) {
+		merged.set(item.id, item);
+	}
+	const sidecar: LayoutTranslateSidecar = {
+		schemaVersion: LAYOUT_TRANSLATE_SIDECAR_SCHEMA_VERSION,
+		source: {
+			mode: "pdf-layout-translate",
+			generatedAt: new Date().toISOString(),
+			providerId: key.providerId,
+			sourceLang: key.sourceLang,
+			targetLang: key.targetLang,
+			serviceKey: key.serviceKey,
+		},
+		items: [...merged.values()].sort(
+			(a, b) =>
+				a.pageIndex - b.pageIndex ||
+				a.readingOrder - b.readingOrder ||
+				a.bbox.y - b.bbox.y ||
+				a.bbox.x - b.bbox.x,
+		),
+	};
+	await writeVaultFile(
+		layoutTranslateSidecarPath(paperAbsPath),
+		`${JSON.stringify(sidecar, null, 2)}\n`,
+	);
+}
+
+export function hasPendingLayoutTranslateItems(
+	items: readonly LayoutTranslateItem[],
+): boolean {
+	return items.some(
+		(item) => item.status !== "done" || !item.translated?.trim(),
+	);
+}
+
+export function persistLayoutTranslateSidecarBestEffort(
+	paperAbsPath: string | null | undefined,
+	key: LayoutTranslateCacheKey,
+	items: readonly LayoutTranslateItem[],
+	options: LayoutTranslateWriteOptions = {},
+): void {
+	if (!paperAbsPath) return;
+	const pending = translateSidecarWriteTimers.get(paperAbsPath);
+	if (pending) clearTimeout(pending);
+	const timer = setTimeout(() => {
+		translateSidecarWriteTimers.delete(paperAbsPath);
+		void writeLayoutTranslateSidecar(paperAbsPath, key, items, options).catch(
+			(error) => {
+				logger.warn("layout translate cache write failed", {
+					error: error instanceof Error ? error.message : String(error),
+				});
+			},
+		);
+	}, LAYOUT_TRANSLATE_WRITE_DEBOUNCE_MS);
+	translateSidecarWriteTimers.set(paperAbsPath, timer);
 }
 
 /** Paint-relevant identity of one bucket slot (id, progress, partial text). */
@@ -316,6 +647,7 @@ export async function runLayoutRegionTranslate(options: {
 			if (i >= items.length) return;
 			const item = items[i];
 			if (!item) return;
+			if (item.status === "done" && item.translated?.trim()) continue;
 			item.status = "running";
 			publish();
 			try {

@@ -163,22 +163,6 @@ export function TranslatePane({
 			}),
 		[getProviderConfig, tr.provider],
 	);
-	const patchProviderConfig = useCallback(
-		(
-			providerId: CommercialTranslateProviderId,
-			partial: Partial<TranslateProviderConfig>,
-		) => {
-			const current = tr.providerConfigs[providerId] ?? EMPTY_PROVIDER_CONFIG;
-			patchTranslate({
-				providerConfigs: {
-					...tr.providerConfigs,
-					[providerId]: { ...current, ...partial },
-				},
-			});
-		},
-		[patchTranslate, tr.providerConfigs],
-	);
-
 	/** Free-MT probe status (Agent never probed here). */
 	const [probeMap, setProbeMap] = useState<FreeMtProbeMap>({});
 	const probeAbortRef = useRef<AbortController | null>(null);
@@ -188,10 +172,24 @@ export function TranslatePane({
 	const commercialProbeAbortRef = useRef<
 		Partial<Record<CommercialTranslateProviderId, AbortController>>
 	>({});
-	/** In-progress API keys not yet confirmed (never written until Confirm). */
-	const [apiKeyDrafts, setApiKeyDrafts] = useState<
-		Partial<Record<CommercialTranslateProviderId, string>>
+	/** In-progress edits (API key, base URL, …) not written until Confirm. */
+	const [configDrafts, setConfigDrafts] = useState<
+		Partial<
+			Record<CommercialTranslateProviderId, Partial<TranslateProviderConfig>>
+		>
 	>({});
+	const setDraftField = useCallback(
+		(
+			providerId: CommercialTranslateProviderId,
+			partial: Partial<TranslateProviderConfig>,
+		) => {
+			setConfigDrafts((prev) => ({
+				...prev,
+				[providerId]: { ...prev[providerId], ...partial },
+			}));
+		},
+		[],
+	);
 
 	const agentModelValue = useMemo(
 		() => ({ agentId: tr.agentId, modelId: tr.modelId }),
@@ -285,17 +283,16 @@ export function TranslatePane({
 		[getProviderConfig],
 	);
 
-	/** Confirm: persist key (Host keeps secret), mask UI with same-length `*`, then probe. */
+	/** Confirm: persist drafts (key kept secret by Host), mask UI, then probe. */
 	const confirmCommercialProvider = useCallback(
 		async (providerId: CommercialTranslateProviderId) => {
 			const stored = getProviderConfig(providerId);
-			const draftOrStored = resolveApiKeyDraft(
-				apiKeyDrafts[providerId],
-				stored.apiKey,
-			);
+			const draft = configDrafts[providerId];
+			const draftOrStored = resolveApiKeyDraft(draft?.apiKey, stored.apiKey);
 			// Retype → new plaintext; still showing mask → send mask so Host merge keeps secret.
 			const toSave: TranslateProviderConfig = {
 				...stored,
+				...draft,
 				apiKey: draftOrStored,
 			};
 			if (!isCommercialProviderConfigured(providerId, toSave)) {
@@ -318,7 +315,7 @@ export function TranslatePane({
 				apiKey: displayMask,
 			};
 
-			setApiKeyDrafts((prev) => {
+			setConfigDrafts((prev) => {
 				const next = { ...prev };
 				delete next[providerId];
 				return next;
@@ -347,7 +344,7 @@ export function TranslatePane({
 
 			runCommercialProbe(providerId, maskedCfg);
 		},
-		[apiKeyDrafts, getProviderConfig, patch, runCommercialProbe, settings, tr],
+		[configDrafts, getProviderConfig, patch, runCommercialProbe, settings, tr],
 	);
 
 	/** Probe configured commercial engines when the default-service Select opens. */
@@ -463,7 +460,8 @@ export function TranslatePane({
 				<div className="grid gap-2">
 					{COMMERCIAL_MT_PROVIDER_IDS.map((id) => {
 						const cfg = getProviderConfig(id);
-						const draftKey = apiKeyDrafts[id];
+						const draft = configDrafts[id];
+						const draftKey = draft?.apiKey;
 						const displayApiKey =
 							draftKey !== undefined
 								? draftKey
@@ -474,6 +472,7 @@ export function TranslatePane({
 									: "";
 						const effectiveCfg: TranslateProviderConfig = {
 							...cfg,
+							...draft,
 							apiKey: resolveApiKeyDraft(draftKey, cfg.apiKey),
 						};
 						const configured = isCommercialProviderConfigured(id, effectiveCfg);
@@ -555,16 +554,10 @@ export function TranslatePane({
 													const stripped = next.startsWith(shownMask)
 														? next.slice(shownMask.length)
 														: next;
-													setApiKeyDrafts((prev) => ({
-														...prev,
-														[id]: stripped,
-													}));
+													setDraftField(id, { apiKey: stripped });
 													return;
 												}
-												setApiKeyDrafts((prev) => ({
-													...prev,
-													[id]: next,
-												}));
+												setDraftField(id, { apiKey: next });
 											}}
 											onFocus={(e) => {
 												// Select mask so the next keystroke replaces it entirely.
@@ -592,14 +585,16 @@ export function TranslatePane({
 										</Label>
 										<Input
 											id={`${inputPrefix}-base-url`}
-											value={cfg.baseUrl}
+											value={effectiveCfg.baseUrl}
 											onChange={(e) =>
-												patchProviderConfig(id, { baseUrl: e.target.value })
+												setDraftField(id, { baseUrl: e.target.value })
 											}
 											onBlur={() => {
-												const trimmed = cfg.baseUrl.trim().replace(/\/+$/, "");
-												if (trimmed !== cfg.baseUrl) {
-													patchProviderConfig(id, { baseUrl: trimmed });
+												const trimmed = effectiveCfg.baseUrl
+													.trim()
+													.replace(/\/+$/, "");
+												if (trimmed !== effectiveCfg.baseUrl) {
+													setDraftField(id, { baseUrl: trimmed });
 												}
 											}}
 											placeholder={COMMERCIAL_MT_DEFAULT_BASE_URLS[id]}
@@ -618,9 +613,9 @@ export function TranslatePane({
 											</Label>
 											<Input
 												id={`${inputPrefix}-region`}
-												value={cfg.region}
+												value={effectiveCfg.region}
 												onChange={(e) =>
-													patchProviderConfig(id, {
+													setDraftField(id, {
 														region: e.target.value,
 													})
 												}
@@ -643,9 +638,9 @@ export function TranslatePane({
 											</Label>
 											<Input
 												id={`${inputPrefix}-model`}
-												value={cfg.model}
+												value={effectiveCfg.model}
 												onChange={(e) =>
-													patchProviderConfig(id, {
+													setDraftField(id, {
 														model: e.target.value,
 													})
 												}

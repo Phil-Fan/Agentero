@@ -9,8 +9,8 @@ import { createStore } from "zustand/vanilla";
 import type { VaultFileChangedPayload } from "@/lib/vault/fs-watch";
 import { getVaultPath } from "@/lib/vault/store";
 import { rebuildWikiIndex, type WikiExternalRenamePreview } from "@/lib/wiki";
+import { notifyWikiEmbedTargets } from "@/lib/wiki/embed-refresh";
 import { isWikiTargetPath } from "@/lib/wiki/target-path";
-import { notifyWikiEmbedTargets } from "@/lib/wiki-embed-refresh";
 import { normalizeTabPath } from "@/lib/workspace/tabs";
 
 export type ExternalRenameFailure = {

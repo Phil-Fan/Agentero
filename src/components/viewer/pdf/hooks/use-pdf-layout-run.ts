@@ -4,13 +4,14 @@
  *
  * Separate from hover and from the bulk-translate job because it owns a
  * different lifecycle: at most one abortable task per document, a headless queue
- * entry per open paper, and a poll that waits for a sibling tab (or the CLI) to
- * finish writing the sidecar. EmbedPDF's layout scope is re-created every
- * render, so `layoutCapRef` stays in `PdfViewerInner` and is injected.
+ * entry per open paper, and a sidecar file event that wakes the active viewer.
+ * EmbedPDF's layout scope is re-created every render, so `layoutCapRef` stays in
+ * `PdfViewerInner` and is injected.
  */
 
 import type { useDocumentManagerCapability } from "@embedpdf/plugin-document-manager/react";
 import type { useLayoutAnalysisCapability } from "@embedpdf/plugin-layout-analysis/react";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
@@ -20,6 +21,7 @@ import {
 	isBackgroundTaskCancelledError,
 } from "@/lib/core/background-tasks";
 import { notifyError } from "@/lib/core/notify";
+import { isTauri } from "@/lib/core/tauri";
 import {
 	enqueuePaperLayoutAnalysis,
 	getLayoutDocumentResult,
@@ -28,6 +30,12 @@ import {
 	runDocumentLayoutAnalysis,
 	setLayoutOverlayVisible,
 } from "@/lib/pdf/layout";
+import { layoutSidecarPath } from "@/lib/pdf/layout/io";
+import {
+	VAULT_FILE_CHANGED_EVENT,
+	type VaultFileChangedPayload,
+} from "@/lib/vault/fs-watch";
+import { normalizePathKey } from "@/lib/vault/path";
 
 /** In-flight EmbedPDF layout task (abortable, at most one per document). */
 export type LayoutAnalysisTask = Awaited<
@@ -279,8 +287,8 @@ export function usePdfLayoutRun({
 	}, [paperAbsPath]);
 
 	// Active viewer: pull layout into the tab store once sidecar exists.
-	// Headless may still be writing it for this paper (or a sibling tab);
-	// poll until ready. Loose PDFs (no paper folder) still analyze in-viewer.
+	// Headless may still be writing it for this paper (or a sibling tab).
+	// Loose PDFs (no paper folder) still analyze in-viewer.
 	const layoutAutoStartedForDocRef = useRef<string | null>(null);
 	useEffect(() => {
 		if (!isActive) return;
@@ -290,16 +298,10 @@ export function usePdfLayoutRun({
 		if (!layoutCap.forDocument(docId)) return;
 
 		let cancelled = false;
-		let pollTimer: ReturnType<typeof setTimeout> | null = null;
-		/** Stop polling after ~15 min so a permanent headless failure does not spin. */
-		const pollDeadline = Date.now() + 15 * 60 * 1000;
-
-		const clearPoll = () => {
-			if (pollTimer != null) {
-				clearTimeout(pollTimer);
-				pollTimer = null;
-			}
-		};
+		let unlisten: UnlistenFn | null = null;
+		const sidecarKey = paperAbsPath
+			? normalizePathKey(layoutSidecarPath(paperAbsPath))
+			: null;
 
 		const loadSilent = () => {
 			if (layoutAutoStartedForDocRef.current === docId) return;
@@ -313,6 +315,15 @@ export function usePdfLayoutRun({
 			});
 		};
 
+		const eventHitsSidecar = (payload: VaultFileChangedPayload) => {
+			if (!sidecarKey) return false;
+			const paths = [...payload.paths];
+			if (payload.rename) {
+				paths.push(payload.rename.from, payload.rename.to);
+			}
+			return paths.some((path) => normalizePathKey(path) === sidecarKey);
+		};
+
 		const tryLoad = async () => {
 			if (cancelled) return;
 			if (getLayoutDocumentResult(docId)) return;
@@ -322,18 +333,7 @@ export function usePdfLayoutRun({
 					const hasSidecar = Boolean(await readLayoutSidecar(paperAbsPath));
 					if (cancelled) return;
 					if (getLayoutDocumentResult(docId)) return;
-					if (hasSidecar) {
-						loadSilent();
-						return;
-					}
-					// Sidecar not ready yet — headless job may be queued/running.
-					if (Date.now() < pollDeadline) {
-						pollTimer = setTimeout(() => {
-							void tryLoad();
-						}, 1500);
-					} else if (layoutAutoStartedForDocRef.current === docId) {
-						layoutAutoStartedForDocRef.current = null;
-					}
+					if (hasSidecar) loadSilent();
 					return;
 				}
 
@@ -351,19 +351,37 @@ export function usePdfLayoutRun({
 				if (layoutAutoStartedForDocRef.current === docId) {
 					layoutAutoStartedForDocRef.current = null;
 				}
-				if (!cancelled && paperAbsPath && Date.now() < pollDeadline) {
-					pollTimer = setTimeout(() => {
-						void tryLoad();
-					}, 2500);
-				}
 			}
 		};
 
-		void tryLoad();
+		if (paperAbsPath && isTauri()) {
+			void (async () => {
+				try {
+					const { listen } = await import("@tauri-apps/api/event");
+					if (cancelled) return;
+					const stop = await listen<VaultFileChangedPayload>(
+						VAULT_FILE_CHANGED_EVENT,
+						(event) => {
+							if (cancelled || !eventHitsSidecar(event.payload)) return;
+							void tryLoad();
+						},
+					);
+					if (cancelled) {
+						stop();
+						return;
+					}
+					unlisten = stop;
+				} finally {
+					void tryLoad();
+				}
+			})();
+		} else {
+			void tryLoad();
+		}
 
 		return () => {
 			cancelled = true;
-			clearPoll();
+			unlisten?.();
 			// Strict-mode remount / leave tab before result: allow retry on re-activate.
 			if (!getLayoutDocumentResult(docId)) {
 				layoutAutoStartedForDocRef.current = null;

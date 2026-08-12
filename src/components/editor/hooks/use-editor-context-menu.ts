@@ -33,7 +33,7 @@ import {
 	currentWikiHeadingOrdinal,
 	savedWikiHeadingAt,
 	type WikiHeadingAnchor,
-} from "@/lib/wiki-heading-rename";
+} from "@/lib/wiki/heading-rename";
 
 type UseEditorContextMenuOptions = {
 	editor: PlateEditor;

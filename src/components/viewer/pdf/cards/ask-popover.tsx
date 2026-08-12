@@ -10,6 +10,12 @@ import {
 	MessageResponse,
 } from "@/components/ai-elements/message";
 import {
+	ChatGPTIcon,
+	ClaudeIcon,
+	openInChatGPT,
+	openInClaude,
+} from "@/components/ai-elements/open-in-chat";
+import {
 	PromptInput,
 	PromptInputBody,
 	PromptInputSubmit,
@@ -30,6 +36,10 @@ import {
 
 type AskPopoverProps = {
 	thread: PdfAskThread;
+	/** Catalog title used to build the external "open in chat" query. */
+	paperTitle?: string;
+	/** Catalog arXiv / source link used in the external "open in chat" query. */
+	paperLink?: string;
 	screen: ScreenPoint;
 	/** Match gutter pin side so the card stays next to the pin. */
 	preferRight?: boolean;
@@ -56,6 +66,8 @@ type AskPopoverProps = {
 
 export function AskPopover({
 	thread,
+	paperTitle,
+	paperLink,
 	screen,
 	preferRight = true,
 	streaming,
@@ -86,6 +98,17 @@ export function AskPopover({
 		const firstUser = thread.messages.find((m) => m.role === "user");
 		return firstUser?.id ?? thread.messages[0]?.id ?? null;
 	}, [thread.messages]);
+
+	/** External AI query: explain prompt + paper title/link + page + quote. */
+	const openInQuery = useMemo(() => {
+		const quote = thread.anchor.quote?.trim();
+		const lines: string[] = [t("pdfAsk.openInPrompt"), ""];
+		if (paperTitle?.trim()) lines.push(`Paper: ${paperTitle.trim()}`);
+		if (paperLink?.trim()) lines.push(`Link: ${paperLink.trim()}`);
+		lines.push(`Page: ${thread.anchor.page}`);
+		if (quote) lines.push(`"${quote}"`);
+		return lines.join("\n");
+	}, [t, paperTitle, paperLink, thread.anchor.page, thread.anchor.quote]);
 
 	// Leave edit mode when the thread changes or a run starts.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reset edit UI when identity/run changes
@@ -166,6 +189,16 @@ export function AskPopover({
 			// Body only constrains flex; messages own their own scrollport.
 			bodyClassName="min-h-0 overflow-hidden p-0"
 			actions={[
+				{
+					label: t("pdfAsk.openInChatGPT"),
+					onClick: () => openInChatGPT(openInQuery),
+					icon: <ChatGPTIcon className="size-3.5" />,
+				},
+				{
+					label: t("pdfAsk.openInClaude"),
+					onClick: () => openInClaude(openInQuery),
+					icon: <ClaudeIcon className="size-3.5" />,
+				},
 				{
 					label: t("pdfAsk.delete"),
 					onClick: onDelete,

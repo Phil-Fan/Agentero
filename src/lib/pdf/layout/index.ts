@@ -1,5 +1,11 @@
 export { getPdfAiRuntime } from "@/lib/pdf/layout/ai-runtime";
 export {
+	isLayoutRegionActivation,
+	LAYOUT_REGION_CLICK_MOVE_TOLERANCE_PX,
+	type LayoutRegionActivation,
+	type PointerOrigin,
+} from "@/lib/pdf/layout/click-guard";
+export {
 	LAYOUT_KIND_BADGE_CLASS,
 	LAYOUT_KIND_BORDER,
 	LAYOUT_KIND_FILL,
@@ -11,8 +17,8 @@ export {
 export {
 	LAYOUT_FORMULA_HOVER_DWELL_MS,
 	LAYOUT_FORMULA_HOVER_HIDE_MS,
-	LAYOUT_HOVER_DWELL_MS,
-	LAYOUT_HOVER_HIDE_MS,
+	LAYOUT_HINT_MIN_REGION_H_PX,
+	LAYOUT_HINT_MIN_REGION_W_PX,
 	LAYOUT_SIDEBAR_MIN_SCORE,
 } from "@/lib/pdf/layout/constants";
 export {
@@ -36,6 +42,10 @@ export {
 	rawLayoutRegionsByPage,
 	rawLayoutRegionsOnPage,
 } from "@/lib/pdf/layout/hit-test";
+export {
+	isLayoutHoverSuppressedByScroll,
+	LAYOUT_HOVER_SCROLL_SUPPRESS_MS,
+} from "@/lib/pdf/layout/hover-scroll-guard";
 export {
 	LAYOUT_INDEX_FILE,
 	LAYOUT_SIDECAR_FILE,
@@ -80,17 +90,30 @@ export {
 	slugFromTitle,
 } from "@/lib/pdf/layout/layout-index";
 export {
+	applyLayoutTranslateSidecar,
+	currentLayoutTranslateCacheKey,
 	groupLayoutTranslateItemsByPage,
+	hasPendingLayoutTranslateItems,
 	LAYOUT_TRANSLATE_CONCURRENCY,
 	LAYOUT_TRANSLATE_MAX_CHARS,
+	LAYOUT_TRANSLATE_SIDECAR_FILE,
+	LAYOUT_TRANSLATE_SIDECAR_SCHEMA_VERSION,
+	type LayoutTranslateCacheKey,
 	type LayoutTranslateItem,
 	type LayoutTranslateItemStatus,
 	type LayoutTranslateJobStatus,
 	type LayoutTranslateRegion,
+	type LayoutTranslateSidecar,
+	type LayoutTranslateSidecarItem,
 	layoutRegionSourceText,
+	layoutTranslateSidecarPath,
 	listTranslatableLayoutRegions,
+	parseLayoutTranslateSidecar,
+	persistLayoutTranslateSidecarBestEffort,
+	readLayoutTranslateSidecar,
 	runLayoutRegionTranslate,
 	toLayoutTranslateItems,
+	writeLayoutTranslateSidecar,
 } from "@/lib/pdf/layout/layout-translate";
 export {
 	areFigureNeighbors,

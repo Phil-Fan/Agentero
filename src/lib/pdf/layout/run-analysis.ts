@@ -350,12 +350,10 @@ export async function runDocumentLayoutAnalysis(
 					cache: true,
 					regions: result.regions,
 				});
-				if (needsText) {
-					void writeLayoutSidecar(options.paperAbsPath, raw).catch(
-						() => undefined,
-					);
-				}
-				// Always refresh sidebar index (cheap; keeps CLI in sync with merge rules).
+				// Cache hit stays read-only: text is enriched in memory above, but the
+				// viewer never rewrites layout.json (that is the headless writer's job;
+				// writing here raced it — §8.2). The index write is a no-op when the
+				// content is unchanged.
 				void writeLayoutIndexFromRaw(options.paperAbsPath, raw).catch(
 					() => undefined,
 				);

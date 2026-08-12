@@ -52,7 +52,7 @@ export function visualTraceImageAssetPath(
 	return rel ? joinVaultPath(joinVaultPath(paperAbsPath, "marks"), rel) : null;
 }
 
-export function base64ToBytes(data: string): Uint8Array {
+function base64ToBytes(data: string): Uint8Array {
 	const binary = atob(data);
 	return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }

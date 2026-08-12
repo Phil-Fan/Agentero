@@ -9,7 +9,7 @@ type TextLeaf = {
 	text: string;
 };
 
-export type MarkdownPointBookmark = {
+type MarkdownPointBookmark = {
 	path: number[];
 	offset: number;
 	blockIndex: number;
@@ -18,12 +18,12 @@ export type MarkdownPointBookmark = {
 	after: string;
 };
 
-export type MarkdownSelectionBookmark = {
+type MarkdownSelectionBookmark = {
 	anchor: MarkdownPointBookmark;
 	focus: MarkdownPointBookmark;
 };
 
-export type MarkdownFormatPreparation<T> =
+type MarkdownFormatPreparation<T> =
 	| { status: "stale" }
 	| { status: "unchanged" }
 	| { status: "ready"; markdown: string; value: T };

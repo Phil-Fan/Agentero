@@ -7,6 +7,7 @@ pub mod blob_cache;
 pub mod catalog_mirror;
 pub mod import_bridge;
 pub mod launch;
+pub(crate) mod paper_commit;
 pub mod session;
 #[cfg(unix)]
 pub mod sftp_fs;

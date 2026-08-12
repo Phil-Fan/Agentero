@@ -9,8 +9,11 @@ import { useEffect, useState } from "react";
 import { useSettings, useVaultStore } from "@/hooks/use-app-stores";
 import { useVaultOpenRequest } from "@/hooks/use-vault-open-request";
 import i18n, { resolveLocale } from "@/i18n";
+import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
+import { startJobCompletionRefresh } from "@/lib/paper/job-refresh";
 import { refreshLibrary } from "@/lib/paper/library-store";
+import { initJobCenterExecutors } from "@/lib/pdf/layout/enqueue-paper-layout";
 import { applyDocumentChrome } from "@/lib/settings";
 import { initSettingsStore } from "@/lib/settings/react-store";
 import { setSettingsOpenState } from "@/lib/shell/ui-store";
@@ -89,6 +92,15 @@ export function useAppBootstrap(): void {
 		void refreshTree(vaultPath);
 		void refreshLibrary();
 		seedVaultSkills(vaultPath);
+		if (isTauri()) {
+			// T2 reconcile: backfill PAPER.md for catalog papers missing it. Fire
+			// & forget; jobs are idempotent and throttled (ParseBody cap = 1).
+			void invokeApi(
+				"job_reconcile_vault",
+				{ args: { vaultPath } },
+				{ fallback: "vault reconcile failed" },
+			).catch(() => undefined);
+		}
 	}, [vaultPath]);
 
 	// Mirror the native settings window's lifecycle into the ui store.
@@ -118,5 +130,12 @@ export function useAppBootstrap(): void {
 		return () => {
 			unbind?.();
 		};
+	}, []);
+
+	// Start listening for renderer-executed JobCenter offers.
+	useEffect(() => {
+		if (!isTauri()) return;
+		initJobCenterExecutors();
+		startJobCompletionRefresh();
 	}, []);
 }

@@ -1,7 +1,5 @@
 use crate::core::error::AppError;
-use crate::features::import::assets::{
-    extract_tar_safe, http_get_bytes_with_progress, AssetDownloadProgress,
-};
+use crate::features::import::assets::{extract_tar_safe, http_get_bytes_with_progress};
 use crate::features::import::parse::SkillSource;
 use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
@@ -9,7 +7,7 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use walkdir::WalkDir;
 
 const MAX_ARCHIVE_BYTES: usize = 64 * 1024 * 1024;
@@ -376,24 +374,6 @@ fn copy_dir(source: &Path, target: &Path) -> Result<(), AppError> {
         }
     }
     Ok(())
-}
-
-#[allow(dead_code)]
-fn emit_skill_progress(app: Option<&AppHandle>, task_id: Option<&str>) {
-    if let (Some(app), Some(task_id)) = (app, task_id) {
-        let _ = app.emit(
-            "background-task:progress",
-            AssetDownloadProgress {
-                task_id: task_id.to_string(),
-                phase: "skill".to_string(),
-                downloaded_bytes: 0,
-                total_bytes: None,
-                progress: Some(100),
-                current_count: None,
-                total_count: None,
-            },
-        );
-    }
 }
 
 #[cfg(test)]

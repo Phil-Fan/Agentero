@@ -43,7 +43,7 @@ export async function pickCreateVaultDirectory(): Promise<string | null> {
 
 /**
  * Scaffold a Agentero vault at `path` (Host: vault_create).
- * Creates papers/notes/plans/.agentero, AGENTS.md, catalog.sqlite.
+ * Creates papers/notes/.agentero, AGENTS.md, catalog.sqlite.
  * Does not create PAPERS.md / library.bib. Does not overwrite existing files.
  */
 export async function createVault(

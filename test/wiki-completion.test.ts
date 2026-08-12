@@ -6,14 +6,6 @@ import { describe, expect, it } from "vitest";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import { WikiLinkPlugin } from "@/components/editor/plugins/wikilink-plugin";
 import {
-	isWikiLinkDraftEditingOffset,
-	parseWikiLinkMarkdown,
-	wikiLinkDraftEditableBounds,
-	wikiLinkDraftExteriorPlacement,
-	wikiLinkRules,
-	wikiLinkToMarkdown,
-} from "@/lib/wiki/wikilink-model";
-import {
 	addRecentWikiCandidate,
 	findWikiCompletionMatch,
 	findWikiCompletionTrigger,
@@ -25,7 +17,15 @@ import {
 	wikiCompletionInsert,
 	wikiFileCandidateSecondaryLine,
 	wikiLinkArrowDirection,
-} from "@/lib/wiki-completion";
+} from "@/lib/wiki/completion";
+import {
+	isWikiLinkDraftEditingOffset,
+	parseWikiLinkMarkdown,
+	wikiLinkDraftEditableBounds,
+	wikiLinkDraftExteriorPlacement,
+	wikiLinkRules,
+	wikiLinkToMarkdown,
+} from "@/lib/wiki/wikilink-model";
 
 describe("wikilink completion grammar", () => {
 	it("separates file, heading, block, and same-file queries", () => {

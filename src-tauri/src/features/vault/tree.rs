@@ -3,7 +3,7 @@
 //! The renderer used to build the tree with one `readDir` IPC per directory
 //! (serial); this walks the vault in-process and returns the whole tree in a
 //! single command. Semantics mirror `src/lib/vault/tree.ts`:
-//! - Eager roots (`papers/`, `notes/`, `plans/`, `.agents/`) recurse fully.
+//! - Eager roots (`papers/`, `notes/`, `.agents/`) recurse fully.
 //! - Other vault-root trees are listed one level; subdirs stay pending.
 //! - Inside a paper folder, `source/` (arXiv e-print, often hundreds of
 //!   files) is a pending shell listed lazily on expand.
@@ -39,7 +39,7 @@ const IGNORE_NAMES: &[&str] = &[
 
 const ALLOWED_DOT_NAMES: &[&str] = &[".env.example", ".agents"];
 
-const EAGER_ROOT_NAMES: &[&str] = &["papers", "notes", "plans", ".agents"];
+const EAGER_ROOT_NAMES: &[&str] = &["papers", "notes", ".agents"];
 
 /// Any of these marks a directory as a paper unit whose `source/` is lazy.
 const PAPER_MARKER_FILES: &[&str] = &["NOTES.md", "PAPER.md"];

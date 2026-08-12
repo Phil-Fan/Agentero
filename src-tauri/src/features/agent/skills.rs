@@ -26,6 +26,9 @@ pub enum SkillMentionStyle {
 pub fn skill_mention_style(template: &AgentTemplate) -> SkillMentionStyle {
     match template {
         AgentTemplate::CodexAcp => SkillMentionStyle::Dollar,
+        // pi-acp exposes skills as `/skill:<name>`, so a bare `/<name>` would name a
+        // command that does not exist — rely on body injection instead.
+        AgentTemplate::Pi => SkillMentionStyle::InjectedOnly,
         // All other agents use slash-style skill mentions.
         AgentTemplate::ClaudeAcp
         | AgentTemplate::Opencode

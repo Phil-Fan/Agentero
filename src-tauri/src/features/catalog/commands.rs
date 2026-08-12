@@ -1,12 +1,15 @@
 //! Paper metadata commands — catalog.sqlite is authoritative.
 
 use crate::core::error::{map_err, ApiResult, AppError};
+use crate::core::fs::sanitize_vault_rel;
 use crate::features::catalog::papers::{self, PaperRecord};
+use crate::features::catalog::{probe_paper_caps, CapsCache};
 use crate::features::wiki::models::WikiRenameResult;
 use crate::features::wiki::rename::run_local_rename_transaction;
 use crate::features::wiki::WikiIndexState;
-use serde::Deserialize;
-use std::path::PathBuf;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::{Path, PathBuf};
 use tauri::State;
 
 #[derive(Debug, Deserialize)]
@@ -48,6 +51,78 @@ pub fn paper_get(args: PaperGetArgs) -> ApiResult<PaperRecord> {
         Ok(None) => map_err(AppError::message("paper not found in catalog")),
         Err(e) => map_err(e),
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperOpenBundleArgs {
+    pub vault_path: String,
+    /// Vault-relative paper folder path, e.g. `papers/1706.03762`.
+    pub path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperOpenBundle {
+    pub paper: PaperRecord,
+    pub path_rel: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes_seed: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pdf_path: Option<String>,
+    pub has_tex: bool,
+    pub has_paper_md: bool,
+}
+
+/// Bundle local paper-open data for the renderer's focus path.
+#[tauri::command]
+pub fn paper_open_bundle(
+    args: PaperOpenBundleArgs,
+    cache: State<'_, CapsCache>,
+) -> ApiResult<PaperOpenBundle> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    match paper_open_bundle_inner(&vault, &args.path, Some(&cache)) {
+        Ok(bundle) => ApiResult::ok(bundle),
+        Err(e) => map_err(e),
+    }
+}
+
+fn paper_open_bundle_inner(
+    vault: &Path,
+    path_raw: &str,
+    cache: Option<&CapsCache>,
+) -> Result<PaperOpenBundle, AppError> {
+    if !vault.is_dir() {
+        return Err(AppError::message("vault path is not a directory"));
+    }
+    let path_rel = sanitize_vault_rel(path_raw.trim()).map_err(AppError::message)?;
+    if path_rel.is_empty() {
+        return Err(AppError::message("path is required"));
+    }
+    let paper_dir = vault.join(&path_rel);
+    if !paper_dir.is_dir() {
+        return Err(AppError::message("paper folder not found"));
+    }
+    let paper = papers::get_by_path(vault, &path_rel)?
+        .ok_or_else(|| AppError::message("paper not found in catalog"))?;
+    let caps = cache
+        .map(|c| c.caps_for(vault, &path_rel))
+        .unwrap_or_else(|| probe_paper_caps(&paper_dir));
+    let notes_path = paper_dir.join("NOTES.md");
+    let notes_seed = match fs::read_to_string(&notes_path) {
+        Ok(text) => Some(text),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(AppError::message(format!("read NOTES.md: {e}"))),
+    };
+
+    Ok(PaperOpenBundle {
+        paper,
+        path_rel,
+        notes_seed,
+        pdf_path: caps.pdf_path.map(|path| path.to_string_lossy().to_string()),
+        has_tex: caps.has_tex,
+        has_paper_md: caps.has_paper_md,
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -195,6 +270,109 @@ mod move_tests {
         assert!(!source.exists());
         assert!(vault.join(&result.new_rel).exists());
         let _ = fs::remove_dir_all(vault);
+    }
+}
+
+#[cfg(test)]
+mod open_bundle_tests {
+    use super::*;
+    use uuid::Uuid;
+
+    fn temp_vault(name: &str) -> PathBuf {
+        let vault =
+            std::env::temp_dir().join(format!("agentero-open-bundle-{name}-{}", Uuid::new_v4()));
+        fs::create_dir_all(&vault).expect("create temp vault");
+        vault
+    }
+
+    fn sample_record(path: &str, id: &str) -> PaperRecord {
+        PaperRecord {
+            path: path.into(),
+            id: id.into(),
+            paper_type: "article".into(),
+            title: "Bundled Paper".into(),
+            authors: vec!["A".into()],
+            creators: None,
+            year: Some(2024),
+            date: None,
+            abstract_text: None,
+            tags: vec![],
+            arxiv_id: None,
+            doi: None,
+            isbn: None,
+            issn: None,
+            pmid: None,
+            publication: None,
+            volume: None,
+            issue: None,
+            pages: None,
+            publisher: None,
+            place: None,
+            series: None,
+            language: None,
+            pdf_url: None,
+            html_url: None,
+            source_url: None,
+            body_source: None,
+            body_quality: None,
+            bibtex_key: None,
+            citation_count: None,
+            zotero_item_type: None,
+            meta_source: None,
+            extra: None,
+            summary: None,
+            status: "completed".into(),
+            is_read: false,
+            zotero_item_id: None,
+            zotero_last_synced: None,
+            added_at: "t".into(),
+            updated_at: "t".into(),
+        }
+    }
+
+    #[test]
+    fn paper_open_bundle_returns_catalog_caps_and_notes() {
+        let vault = temp_vault("full");
+        let path = "papers/x";
+        let paper_dir = vault.join(path);
+        fs::create_dir_all(paper_dir.join("source")).expect("create paper dirs");
+        fs::write(paper_dir.join("NOTES.md"), "# Notes\n").expect("write notes");
+        fs::write(paper_dir.join("PAPER.md"), "# Body\n").expect("write paper body");
+        let pdf_path = paper_dir.join("x.pdf");
+        fs::write(&pdf_path, b"%PDF").expect("write pdf");
+        fs::write(
+            paper_dir.join("source/main.tex"),
+            "\\documentclass{article}",
+        )
+        .expect("write tex");
+        papers::upsert_paper(&vault, &sample_record(path, "x")).expect("upsert paper");
+
+        let bundle = paper_open_bundle_inner(&vault, path, None).expect("open bundle");
+
+        assert_eq!(bundle.path_rel, path);
+        assert_eq!(bundle.paper.id, "x");
+        assert_eq!(bundle.notes_seed.as_deref(), Some("# Notes\n"));
+        assert_eq!(bundle.pdf_path.as_deref(), Some(pdf_path.to_str().unwrap()));
+        assert!(bundle.has_tex);
+        assert!(bundle.has_paper_md);
+        fs::remove_dir_all(vault).ok();
+    }
+
+    #[test]
+    fn paper_open_bundle_allows_missing_notes() {
+        let vault = temp_vault("missing-notes");
+        let path = "papers/y";
+        fs::create_dir_all(vault.join(path)).expect("create paper dir");
+        papers::upsert_paper(&vault, &sample_record(path, "y")).expect("upsert paper");
+
+        let bundle = paper_open_bundle_inner(&vault, path, None).expect("open bundle");
+
+        assert_eq!(bundle.paper.id, "y");
+        assert!(bundle.notes_seed.is_none());
+        assert!(bundle.pdf_path.is_none());
+        assert!(!bundle.has_tex);
+        assert!(!bundle.has_paper_md);
+        fs::remove_dir_all(vault).ok();
     }
 }
 

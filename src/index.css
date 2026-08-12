@@ -27,6 +27,39 @@
 }
 
 /*
+ * Rail collapse/expand: use-shell-layout marks every panel in the group with
+ * data-rail-animating, then commits the final layout via collapse()/expand().
+ * Panel size is an inline flex-grow, so transitioning it animates all rails
+ * in lockstep. The attribute is removed when the transition settles (or when
+ * a separator drag cancels it), so manual resizing stays transition-free.
+ */
+[data-panel][data-rail-animating] {
+	transition: flex-grow var(--motion-duration-normal) var(--motion-ease-out);
+}
+
+/*
+ * Global reduced-motion fallback: Radix/tw-animate popovers, sonner toasts and
+ * keyframe loaders have no per-component opt-out, so collapse all motion to a
+ * near-zero duration here (state changes still apply, just without movement).
+ * Loading spinners keep spinning — a frozen spinner reads as a hang, not as
+ * progress.
+ */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+	.animate-spin {
+		animation-duration: 1s !important;
+		animation-iteration-count: infinite !important;
+	}
+}
+
+/*
  * Runtime-overridable font stacks (Settings → Appearance → Fonts).
  * @theme inline bakes token values into utilities, so the theme tokens must
  * point at these variables — never hardcode family names in @theme, or
@@ -40,6 +73,16 @@
 	--agentero-font-mono:
 		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
 		"Courier New", monospace;
+
+	/*
+	 * Motion tokens — single source of truth for custom CSS. Component classes
+	 * mirror them: 100 = micro feedback (hover/press), 150 = overlay enter/exit,
+	 * 200 = layout choreography (rails, panels). Keep RAIL_ANIMATION_MS in
+	 * use-shell-layout.ts in sync with --motion-duration-normal.
+	 */
+	--motion-duration-fast: 150ms;
+	--motion-duration-normal: 200ms;
+	--motion-ease-out: cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 @theme inline {
@@ -180,6 +223,15 @@
 }
 
 /*
+ * Text selection carries the brand instead of the OS default blue. EmbedPDF
+ * paints PDF selection as its own rects, so PDF pages are unaffected.
+ */
+::selection {
+	background-color: color-mix(in oklch, var(--primary) 26%, transparent);
+	color: var(--foreground);
+}
+
+/*
  * Auto-hiding pane scrollbars: hidden by default, shown while scrolling or on
  * hover so content bounds stay clean when idle.
  */
@@ -232,7 +284,7 @@
 	border-radius: 999px;
 	border: 2px solid transparent;
 	background-clip: content-box;
-	transition: background-color 0.2s ease;
+	transition: background-color var(--motion-duration-fast) ease;
 }
 
 .agentero-scroll.scrolling::-webkit-scrollbar-thumb,
@@ -389,6 +441,10 @@
 	max-width: 12rem;
 	min-width: 0;
 	overflow: hidden;
+	/* Tab chrome fades like every other row; content still switches instantly. */
+	transition:
+		background-color var(--motion-duration-fast) var(--motion-ease-out),
+		color var(--motion-duration-fast) var(--motion-ease-out);
 }
 
 .agentero-dockview .dv-tab .dv-default-tab {

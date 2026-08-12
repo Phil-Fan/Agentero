@@ -78,7 +78,6 @@ pub fn paper_refs_list(args: PaperRefsListArgs) -> ApiResult<Option<super::CiteS
 }
 
 /// Citation relationship graph from existing reference sidecars + catalog matches.
-/// Distinct from the wikilink graph (`graph_get_graph`).
 #[tauri::command]
 pub fn paper_refs_graph(args: PaperRefsGraphArgs) -> ApiResult<super::CiteGraphResponse> {
     let center_hint = args

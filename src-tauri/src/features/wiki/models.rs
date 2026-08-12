@@ -309,50 +309,6 @@ pub struct WikiExternalRenamePreview {
     pub skipped: Vec<WikiRenameSkipped>,
 }
 
-/// Graph node type inferred from vault-relative path.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum GraphNodeType {
-    Paper,
-    Note,
-    Index,
-    Stub,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GraphNode {
-    /// Stable id: vault-relative path, or `stub:<raw>` for unresolved targets.
-    pub id: String,
-    pub label: String,
-    #[serde(rename = "type")]
-    pub node_type: GraphNodeType,
-    /// Vault-relative path when resolved; null for stubs.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GraphEdge {
-    pub id: String,
-    pub source: String,
-    pub target: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub target_raw: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GraphResponse {
-    pub nodes: Vec<GraphNode>,
-    pub edges: Vec<GraphEdge>,
-    /// Normalized center path when neighborhood mode; null for full graph.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub center: Option<String>,
-    pub depth: u32,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

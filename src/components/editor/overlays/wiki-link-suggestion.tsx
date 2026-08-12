@@ -35,14 +35,6 @@ import {
 	searchWikiLinks,
 	type WikiSearchCandidate,
 } from "@/lib/wiki";
-import { useWikiNav } from "@/lib/wiki/nav-context";
-import {
-	isWikiLinkDraftText,
-	isWikiLinkNode,
-	parseWikiLinkMarkdown,
-	wikiLinkDraftEditableBounds,
-	wikiLinkToMarkdown,
-} from "@/lib/wiki/wikilink-model";
 import {
 	addRecentWikiCandidate,
 	findWikiCompletionMatch,
@@ -53,7 +45,15 @@ import {
 	wikiCompletionCandidateKey,
 	wikiCompletionInsert,
 	wikiFileCandidateSecondaryLine,
-} from "@/lib/wiki-completion";
+} from "@/lib/wiki/completion";
+import { useWikiNav } from "@/lib/wiki/nav-context";
+import {
+	isWikiLinkDraftText,
+	isWikiLinkNode,
+	parseWikiLinkMarkdown,
+	wikiLinkDraftEditableBounds,
+	wikiLinkToMarkdown,
+} from "@/lib/wiki/wikilink-model";
 import { getActiveTabId, workspaceStore } from "@/lib/workspace/store";
 
 export type WikiCompletionDraft = {

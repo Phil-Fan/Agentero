@@ -12,13 +12,28 @@ import { getVaultPath, vaultStore } from "@/lib/vault/store";
 import { getActiveTab } from "@/lib/workspace/store";
 
 const handles = new Map<string, PdfViewerHandle>();
+const listeners = new Set<() => void>();
+
+function emitPdfHandleChange(): void {
+	for (const listener of listeners) listener();
+}
+
+export function subscribePdfHandles(listener: () => void): () => void {
+	listeners.add(listener);
+	return () => {
+		listeners.delete(listener);
+	};
+}
 
 export function registerPdfHandle(
 	tabId: string,
 	handle: PdfViewerHandle | null,
 ): void {
+	const previous = handles.get(tabId) ?? null;
 	if (handle) handles.set(tabId, handle);
 	else handles.delete(tabId);
+	const next = handles.get(tabId) ?? null;
+	if (previous !== next) emitPdfHandleChange();
 }
 
 export function pdfHandleFor(tabId: string | null): PdfViewerHandle | null {

@@ -28,7 +28,7 @@ import {
 } from "@/lib/pdf/outline-location";
 import { ANNOTATIONS_JSON, MARKS_FOLDER } from "@/lib/pdf/selection/marks-io";
 import { joinVaultPath } from "@/lib/vault";
-import { subscribeWikiEmbedTarget } from "@/lib/wiki-embed-refresh";
+import { subscribeWikiEmbedTarget } from "@/lib/wiki/embed-refresh";
 
 const ANNOTATION_REF_CACHE_LIMIT = 64;
 
