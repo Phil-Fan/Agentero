@@ -91,6 +91,9 @@ pub struct LayoutRemotePageResult {
 #[serde(rename_all = "camelCase")]
 pub struct LayoutRemoteAnalyzePdfResult {
     pub pages: Vec<LayoutRemotePageResult>,
+    /// Per-page rendered pixel sizes reported by the service
+    /// (`dataInfo.pages[].width/height`); empty when absent.
+    pub rendered_pages: Vec<(u32, u32)>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -140,10 +143,22 @@ fn jpeg_dimensions_base64(b64: &str) -> Option<(u32, u32)> {
     None
 }
 
-/// Best-effort rendered-page size: explicit `dataInfo` fields, else the
-/// inline `inputImage` JPEG header.
-fn page_rendered_size(page: &Value, data_info: Option<&Value>) -> (Option<u32>, Option<u32>) {
-    for info in [data_info, page.get("dataInfo")].into_iter().flatten() {
+/// Best-effort rendered-page size: the matching `dataInfo.pages[]` entry,
+/// else the inline `inputImage` JPEG header. The `&'static str` names the
+/// source (`"none"` → frontend must assume a render DPI).
+fn page_rendered_size(
+    page: &Value,
+    data_info: Option<&Value>,
+    rendered_pages: &[(u32, u32)],
+    page_index: usize,
+) -> (Option<u32>, Option<u32>, &'static str) {
+    if let Some(&(w, h)) = rendered_pages.get(page_index) {
+        if w > 0 && h > 0 {
+            return (Some(w), Some(h), "dataInfo");
+        }
+    }
+    // Legacy / alternate shapes: width & height directly on dataInfo.
+    if let Some(info) = data_info {
         let width = info
             .get("width")
             .or_else(|| info.get("pageWidth"))
@@ -156,19 +171,42 @@ fn page_rendered_size(page: &Value, data_info: Option<&Value>) -> (Option<u32>, 
             .and_then(Value::as_u64);
         if let (Some(w), Some(h)) = (width, height) {
             if w > 0 && h > 0 {
-                return (Some(w as u32), Some(h as u32));
+                return (Some(w as u32), Some(h as u32), "dataInfo");
             }
         }
     }
     if let Some(b64) = page.get("inputImage").and_then(Value::as_str) {
         if let Some((w, h)) = jpeg_dimensions_base64(b64) {
-            return (Some(w), Some(h));
+            return (Some(w), Some(h), "inputImage");
         }
     }
-    (None, None)
+    (None, None, "none")
 }
 
-fn parse_cloud_page(page: &Value, data_info: Option<&Value>) -> LayoutRemotePageResult {
+/// Parse `dataInfo.pages` → per-page rendered pixel sizes.
+fn parse_rendered_pages(data_info: Option<&Value>) -> Vec<(u32, u32)> {
+    let Some(pages) = data_info
+        .and_then(|d| d.get("pages"))
+        .and_then(Value::as_array)
+    else {
+        return Vec::new();
+    };
+    pages
+        .iter()
+        .map(|p| {
+            let w = p.get("width").and_then(Value::as_u64).unwrap_or(0) as u32;
+            let h = p.get("height").and_then(Value::as_u64).unwrap_or(0) as u32;
+            (w, h)
+        })
+        .collect()
+}
+
+fn parse_cloud_page(
+    page: &Value,
+    data_info: Option<&Value>,
+    rendered_pages: &[(u32, u32)],
+    page_index: usize,
+) -> (LayoutRemotePageResult, &'static str) {
     let boxes = page
         .get("prunedResult")
         .and_then(|p| p.get("layout_det_res"))
@@ -176,12 +214,16 @@ fn parse_cloud_page(page: &Value, data_info: Option<&Value>) -> LayoutRemotePage
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let (width_px, height_px) = page_rendered_size(page, data_info);
-    LayoutRemotePageResult {
-        boxes: parse_det_boxes(&boxes),
-        width_px,
-        height_px,
-    }
+    let (width_px, height_px, source) =
+        page_rendered_size(page, data_info, rendered_pages, page_index);
+    (
+        LayoutRemotePageResult {
+            boxes: parse_det_boxes(&boxes),
+            width_px,
+            height_px,
+        },
+        source,
+    )
 }
 
 /// Submit one OCR job (multipart file upload) and return the job id.
@@ -380,7 +422,22 @@ pub async fn analyze_pdf(
         )));
     }
 
+    // Keep the raw JSONL for diagnosis (scale/field issues); best effort.
+    let debug_path = crate::core::paths::agentero_cache_dir().join("paddle-last-result.jsonl");
+    if let Some(parent) = debug_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Err(e) = std::fs::write(&debug_path, result_text.as_bytes()) {
+        log::warn!(target: "agentero::layout_remote", "failed to write {debug_path:?}: {e}");
+    } else {
+        log::info!(target: "agentero::layout_remote", "raw cloud result saved to {debug_path:?}");
+    }
+
     let mut pages: Vec<LayoutRemotePageResult> = Vec::new();
+    let mut dim_sources: Vec<&'static str> = Vec::new();
+    let mut unknown_diag: Option<String> = None;
+    // `dataInfo.pages` covers the whole document; take the first occurrence.
+    let mut rendered_pages: Vec<(u32, u32)> = Vec::new();
     for line in result_text.lines() {
         let line = line.trim();
         if line.is_empty() {
@@ -397,11 +454,57 @@ pub async fn analyze_pdf(
             continue;
         };
         let info = result.get("dataInfo").or(data_info.as_ref()).cloned();
+        if rendered_pages.is_empty() {
+            rendered_pages = parse_rendered_pages(info.as_ref());
+        }
         for page in results {
-            pages.push(parse_cloud_page(page, info.as_ref()));
+            let page_index = pages.len();
+            let (parsed, source) =
+                parse_cloud_page(page, info.as_ref(), &rendered_pages, page_index);
+            if source == "none" && unknown_diag.is_none() {
+                // One-time dump so the missing rendered size can be diagnosed:
+                // which fields exist, what dataInfo says, whether inputImage is
+                // present (and how big), and a sample box.
+                let keys: Vec<String> = page
+                    .as_object()
+                    .map(|o| o.keys().cloned().collect())
+                    .unwrap_or_default();
+                let data_info_raw: String = info
+                    .as_ref()
+                    .map(|v| v.to_string())
+                    .unwrap_or_default()
+                    .chars()
+                    .take(300)
+                    .collect();
+                let input_image_chars = page
+                    .get("inputImage")
+                    .and_then(Value::as_str)
+                    .map(str::len)
+                    .unwrap_or(0);
+                unknown_diag = Some(format!(
+                    "page_keys={keys:?} dataInfo={data_info_raw} inputImage_chars={input_image_chars} first_box={:?}",
+                    parsed.boxes.first()
+                ));
+            }
+            dim_sources.push(source);
+            pages.push(parsed);
         }
     }
-    Ok(LayoutRemoteAnalyzePdfResult { pages })
+    let unknown = dim_sources.iter().filter(|s| **s == "none").count();
+    log::info!(
+        target: "agentero::layout_remote",
+        "cloud result: pages={} rendered_size_known={} unknown={}{}",
+        pages.len(),
+        pages.len() - unknown,
+        unknown,
+        unknown_diag
+            .map(|d| format!(" | unknown-size diag: {d}"))
+            .unwrap_or_default()
+    );
+    Ok(LayoutRemoteAnalyzePdfResult {
+        pages,
+        rendered_pages,
+    })
 }
 
 #[derive(Debug, Clone, Deserialize)]

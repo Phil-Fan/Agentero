@@ -44,11 +44,12 @@ export type LayoutRemoteProgressPayload = {
 export const PADDLE_LAYOUT_MIN_SCORE = 0.3;
 
 /**
- * PaddleX renders PDF pages at 200 DPI; used only when the service does not
- * report the rendered size. The normalized bbox stays exact either way —
- * only the point `rect` (text-run enrichment) may drift slightly.
+ * The AI Studio service renders PDF pages at 144 DPI (2x); verified against a
+ * known-size PDF via `dataInfo.pages`. Used only when the response reports no
+ * rendered size — the normalized bbox stays exact either way, only the point
+ * `rect` (text-run enrichment) may drift slightly.
  */
-export const PADDLE_ASSUMED_RENDER_DPI = 200;
+export const PADDLE_ASSUMED_RENDER_DPI = 144;
 
 export async function invokeLayoutRemoteAnalyzePdf(args: {
 	pdfBase64: string;

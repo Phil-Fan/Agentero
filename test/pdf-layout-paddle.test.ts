@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	PADDLE_LAYOUT_MIN_SCORE,
 	paddleBoxesToRegions,
+	paddlePageToRegions,
 } from "@/lib/pdf/layout/paddle";
 
 describe("paddleBoxesToRegions", () => {
@@ -77,5 +78,40 @@ describe("paddleBoxesToRegions", () => {
 		});
 		expect(regions.map((r) => r.label)).toEqual(["image", "text"]);
 		expect(regions.map((r) => r.readingOrder)).toEqual([0, 1]);
+	});
+
+	it("matches a real AI Studio response (144 DPI render of a 612x792 page)", () => {
+		// Diagnostic PDF: MediaBox 612x792 pts, red rect (100,100)-(300,400).
+		// Service rendered at 2x (dataInfo.pages = 1224x1584) and detected:
+		const page = {
+			boxes: [
+				{
+					clsId: 1,
+					label: "image",
+					score: 0.72,
+					coordinate: [199.47, 782.94, 601.01, 1382.03],
+				},
+			],
+			widthPx: 1224,
+			heightPx: 1584,
+		};
+		const regions = paddlePageToRegions({
+			page,
+			pageIndex: 0,
+			pageWidth: 612,
+			pageHeight: 792,
+			idPrefix: "paddle",
+		});
+		const region = regions[0];
+		if (!region) throw new Error("expected region");
+		// px/2 = points, y from top: rect ≈ (99.7, 391.5, 200.8, 299.5).
+		expect(region.rect.x).toBeCloseTo(99.7, 0);
+		expect(region.rect.y).toBeCloseTo(391.5, 0);
+		expect(region.rect.w).toBeCloseTo(200.8, 0);
+		expect(region.rect.h).toBeCloseTo(299.5, 0);
+		expect(region.bbox.x).toBeCloseTo(0.163, 2);
+		expect(region.bbox.y).toBeCloseTo(0.494, 2);
+		expect(region.bbox.w).toBeCloseTo(0.328, 2);
+		expect(region.bbox.h).toBeCloseTo(0.378, 2);
 	});
 });
