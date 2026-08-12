@@ -658,7 +658,14 @@ function PdfViewerInner({
 		scheduleCitationHide,
 		handleCitationLinkActivate,
 		handleCitationLinkHover,
-	} = usePdfCitations({ docId, annotationCap, hostRef, zoomRef });
+	} = usePdfCitations({
+		docId,
+		annotationCap,
+		hostRef,
+		zoomRef,
+		vaultPath,
+		paperPath: paperRelPath,
+	});
 
 	/**
 	 * Pin geometry is anchor data only. While an answer / translation streams,

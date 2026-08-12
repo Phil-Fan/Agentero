@@ -106,6 +106,8 @@ export type SelectionMenuState = {
 export type CitationPreviewState = {
 	screen: ScreenPoint;
 	previewText: string;
+	/** Matched `agentero-cite.json` citation id, when the text resolved to one. */
+	citationId?: string;
 };
 
 export type EditorState = {

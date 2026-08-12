@@ -2,7 +2,8 @@
  * In-text citation / internal PDF link behaviour for the EmbedPDF viewer:
  * activating a link (GoTo destination → scroll, URI → system browser) and the
  * hover preview card that shows the destination text (usually the bibliography
- * entry).
+ * entry). The extracted text is fuzzy-matched against the paper's
+ * `agentero-cite.json` sidecar; the clean parsed entry wins when found.
  *
  * Its own hook because the preview is a self-contained hover state machine — a
  * sequence guard for out-of-order resolves plus a short hide delay so the
@@ -26,7 +27,9 @@ import {
 import { pageElByIndex, rectRightScreen } from "@/components/viewer/pdf/coords";
 import { useDestinationPreviewResolver } from "@/components/viewer/pdf/layers/citation-links";
 import type { CitationPreviewState } from "@/components/viewer/pdf/types";
+import { usePaperRefsSidecar } from "@/hooks/use-paper-refs-sidecar";
 import { openExternalUrl } from "@/lib/core/open-external";
+import { matchCitationByText } from "@/lib/paper/citation-match";
 
 /** Grace period so the pointer can travel from the link into the card. */
 const CITATION_HIDE_MS = 250;
@@ -42,6 +45,10 @@ export type UsePdfCitationsOptions = {
 	hostRef: RefObject<HTMLDivElement | null>;
 	/** Current zoom, mirrored so the preview anchor never re-creates handlers. */
 	zoomRef: RefObject<number>;
+	/** Vault root; with `paperPath` enables sidecar-backed preview matching. */
+	vaultPath: string | null;
+	/** Vault-relative paper folder of the open PDF, or null when not a paper. */
+	paperPath: string | null;
 };
 
 export type PdfCitations = {
@@ -57,6 +64,8 @@ export function usePdfCitations({
 	annotationCap,
 	hostRef,
 	zoomRef,
+	vaultPath,
+	paperPath,
 }: UsePdfCitationsOptions): PdfCitations {
 	const [citationPreview, setCitationPreview] =
 		useState<CitationPreviewState | null>(null);
@@ -66,6 +75,10 @@ export function usePdfCitations({
 	const resolveDestinationPreview = useDestinationPreviewResolver(docId);
 	/** Bumped per hover so a late resolve cannot revive a stale preview. */
 	const linkHoverSeqRef = useRef(0);
+	const { sidecar } = usePaperRefsSidecar(vaultPath, paperPath);
+	/** Mirrored so the hover callback identity does not change per sidecar load. */
+	const citationsRef = useRef(sidecar?.citations ?? []);
+	citationsRef.current = sidecar?.citations ?? [];
 
 	// Reset the hover preview when the active PDF document changes.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: docId is the effect trigger, not a value read inside the effect.
@@ -116,9 +129,13 @@ export function usePdfCitations({
 				if (linkHoverSeqRef.current !== seq || !previewText) return;
 				const pageEl = pageElByIndex(hostRef.current, link.pageIndex);
 				if (!pageEl) return;
+				// The geometric extraction is noisy; prefer the clean sidecar entry
+				// text of the best match (and carry its id for panel linkage).
+				const matched = matchCitationByText(previewText, citationsRef.current);
 				setCitationPreview({
 					screen: rectRightScreen(pageEl, link.rect, zoomRef.current),
-					previewText,
+					previewText: matched?.raw ?? matched?.metadata.title ?? previewText,
+					citationId: matched?.id,
 				});
 			});
 		},
