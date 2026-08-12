@@ -596,10 +596,7 @@ export function PaperInfoPanel({
 									}}
 								/>
 							</MetaRow>
-							{(meta.pdf_url ||
-								meta.html_url ||
-								meta.source_url ||
-								meta.arxiv_id) && (
+							{(meta.pdf_url || meta.source_url || meta.arxiv_id) && (
 								<div className="flex flex-wrap gap-1.5 px-3 pt-1">
 									{meta.pdf_url || meta.arxiv_id ? (
 										<LinkChip
@@ -607,15 +604,6 @@ export function PaperInfoPanel({
 												meta.pdf_url ?? `https://arxiv.org/pdf/${meta.arxiv_id}`
 											}
 											label={t("paperInfo.pdf")}
-										/>
-									) : null}
-									{meta.html_url || meta.arxiv_id ? (
-										<LinkChip
-											href={
-												meta.html_url ??
-												`https://arxiv.org/html/${meta.arxiv_id}`
-											}
-											label={t("paperInfo.html")}
 										/>
 									) : null}
 									{meta.source_url || meta.arxiv_id ? (
