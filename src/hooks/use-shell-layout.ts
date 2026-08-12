@@ -18,6 +18,10 @@ import { tabHasNotesSplit, tabNotesEligible } from "@/lib/workspace/tabs";
 export const SIDEBAR_DEFAULT_PX = 200;
 export const RIGHT_SIDEBAR_DEFAULT_PX = 320;
 
+function prefersReducedMotion(): boolean {
+	return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export type ShellLayout = {
 	sidebarPanelRef: ReturnType<typeof usePanelRef>;
 	rightSidebarPanelRef: ReturnType<typeof usePanelRef>;
@@ -27,7 +31,12 @@ export type ShellLayout = {
 	/** Last expanded rail widths in px (survive collapse / PDF immersive round-trips). */
 	leftWidthPxRef: RefObject<number>;
 	rightWidthPxRef: RefObject<number>;
+	/** Which rail is running a programmatic collapse/expand transition. */
+	animatingRailRef: RefObject<"left" | "right" | null>;
+	cancelRailAnimation: () => void;
 };
+
+const RAIL_ANIMATION_MS = 200;
 
 export function useShellLayout(): ShellLayout {
 	const sidebarPanelRef = usePanelRef();
@@ -37,29 +46,83 @@ export function useShellLayout(): ShellLayout {
 	const editorPaneRef = useRef<HTMLDivElement>(null);
 	const leftWidthPxRef = useRef(SIDEBAR_DEFAULT_PX);
 	const rightWidthPxRef = useRef(RIGHT_SIDEBAR_DEFAULT_PX);
+	const animatingRailRef = useRef<"left" | "right" | null>(null);
+	const railAnimTimerRef = useRef(0);
 
 	const controller = useMemo(() => {
+		const clearRailAnimating = () => {
+			for (const el of document.querySelectorAll("[data-rail-animating]")) {
+				el.removeAttribute("data-rail-animating");
+			}
+		};
+
+		const cancelRailAnimation = () => {
+			if (railAnimTimerRef.current) {
+				window.clearTimeout(railAnimTimerRef.current);
+				railAnimTimerRef.current = 0;
+			}
+			clearRailAnimating();
+			animatingRailRef.current = null;
+		};
+
+		/**
+		 * The library sizes panels via flex-grow and snaps resize() between
+		 * collapsedSize and minSize, so tweening resize() is impossible.
+		 * Instead: mark every panel in the group so `flex-grow` transitions
+		 * (see index.css), then let collapse()/expand() commit the final layout
+		 * — the browser animates all panels in lockstep. A user drag on a
+		 * separator cancels the transition first (see App handles).
+		 */
+		const withRailAnimation = (
+			side: "left" | "right",
+			panelEl: HTMLElement | null,
+			apply: () => void,
+		) => {
+			if (prefersReducedMotion() || !panelEl) {
+				apply();
+				return;
+			}
+			cancelRailAnimation();
+			animatingRailRef.current = side;
+			const groupEl = panelEl.closest("[data-group]") ?? panelEl.parentElement;
+			const targets = groupEl
+				? groupEl.querySelectorAll("[data-panel]")
+				: [panelEl];
+			for (const el of targets) el.setAttribute("data-rail-animating", "");
+			apply();
+			railAnimTimerRef.current = window.setTimeout(() => {
+				railAnimTimerRef.current = 0;
+				clearRailAnimating();
+				animatingRailRef.current = null;
+			}, RAIL_ANIMATION_MS + 40);
+		};
+
 		/** Collapse / expand left file-tree panel without remounting. */
 		const setLeftCollapsed = (collapsed: boolean) => {
 			const panel = sidebarPanelRef.current;
 			if (panel) {
+				const el = document.getElementById("sidebar");
 				if (collapsed) {
-					try {
-						panel.collapse();
-					} catch {
-						// ignore
-					}
+					withRailAnimation("left", el, () => {
+						try {
+							panel.collapse();
+						} catch {
+							// ignore
+						}
+					});
 				} else {
-					try {
-						panel.expand();
-					} catch {
-						// ignore
-					}
-					try {
-						panel.resize(leftWidthPxRef.current || SIDEBAR_DEFAULT_PX);
-					} catch {
-						// ignore
-					}
+					const targetPx = leftWidthPxRef.current || SIDEBAR_DEFAULT_PX;
+					withRailAnimation("left", el, () => {
+						try {
+							panel.expand();
+							panel.resize(targetPx);
+						} catch {
+							// ignore
+						}
+					});
+					// expand() fires onResize synchronously and may overwrite the
+					// remembered width with the library's default expand size.
+					leftWidthPxRef.current = targetPx;
 				}
 			}
 			setSidebarCollapsedState(collapsed);
@@ -72,23 +135,26 @@ export function useShellLayout(): ShellLayout {
 		) => {
 			const panel = rightSidebarPanelRef.current;
 			if (panel) {
+				const el = document.getElementById("right-sidebar");
 				if (collapsed) {
-					try {
-						panel.collapse();
-					} catch {
-						// ignore
-					}
+					withRailAnimation("right", el, () => {
+						try {
+							panel.collapse();
+						} catch {
+							// ignore
+						}
+					});
 				} else {
-					try {
-						panel.expand();
-					} catch {
-						// ignore
-					}
-					try {
-						panel.resize(rightWidthPxRef.current || RIGHT_SIDEBAR_DEFAULT_PX);
-					} catch {
-						// ignore
-					}
+					const targetPx = rightWidthPxRef.current || RIGHT_SIDEBAR_DEFAULT_PX;
+					withRailAnimation("right", el, () => {
+						try {
+							panel.expand();
+							panel.resize(targetPx);
+						} catch {
+							// ignore
+						}
+					});
+					rightWidthPxRef.current = targetPx;
 				}
 			}
 			setRightSidebarOpenState(!collapsed);
@@ -132,12 +198,16 @@ export function useShellLayout(): ShellLayout {
 			focusSidebar,
 			focusEditorPane,
 			focusNotesEditor,
+			cancelRailAnimation,
 		};
 	}, [sidebarPanelRef, rightSidebarPanelRef]);
 
 	useEffect(() => {
 		registerLayoutController(controller);
-		return () => registerLayoutController(null);
+		return () => {
+			registerLayoutController(null);
+			controller.cancelRailAnimation();
+		};
 	}, [controller]);
 
 	return {
@@ -148,5 +218,7 @@ export function useShellLayout(): ShellLayout {
 		editorPaneRef,
 		leftWidthPxRef,
 		rightWidthPxRef,
+		animatingRailRef,
+		cancelRailAnimation: controller.cancelRailAnimation,
 	};
 }

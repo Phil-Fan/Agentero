@@ -27,6 +27,17 @@
 }
 
 /*
+ * Rail collapse/expand: use-shell-layout marks every panel in the group with
+ * data-rail-animating, then commits the final layout via collapse()/expand().
+ * Panel size is an inline flex-grow, so transitioning it animates all rails
+ * in lockstep. The attribute is removed when the transition settles (or when
+ * a separator drag cancels it), so manual resizing stays transition-free.
+ */
+[data-panel][data-rail-animating] {
+	transition: flex-grow 200ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/*
  * Runtime-overridable font stacks (Settings → Appearance → Fonts).
  * @theme inline bakes token values into utilities, so the theme tokens must
  * point at these variables — never hardcode family names in @theme, or
@@ -176,6 +187,34 @@
 	}
 	html {
 		@apply font-sans;
+	}
+}
+
+/*
+ * Text selection carries the brand instead of the OS default blue. EmbedPDF
+ * paints PDF selection as its own rects, so PDF pages are unaffected.
+ */
+::selection {
+	background-color: color-mix(in oklch, var(--primary) 26%, transparent);
+	color: var(--foreground);
+}
+
+/*
+ * Reduced motion: collapse transitions and decorative animation. Loading
+ * spinners keep spinning — a frozen spinner reads as a hang, not as progress.
+ */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+	.animate-spin {
+		animation-duration: 1s !important;
+		animation-iteration-count: infinite !important;
 	}
 }
 

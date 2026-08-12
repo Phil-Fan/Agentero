@@ -8,7 +8,7 @@
   - References：当前激活 paper 的参考文献卡片（数据来自 `agentero-cite.json` sidecar，Host `paper_refs_list` / `paper_refs_parse`）。卡片含编号 `[n]`、标题（无标题回退 raw）、首作者 et al. · 年份 · venue、DOI/arXiv 徽标；已入库（`localMatch`）卡片点击打开库内论文，未入库 hover 出「导入文库」（复用魔棒管线，但导入后不自动打开新论文）；顶部过滤框 + header 重解析按钮。实现：`src/components/viewer/panels/references-panel.tsx`、`src/lib/paper/refs.ts`。
   - **Figures**：版面分析后的插图（image+chart）/ 表 / 算法 / 有编号公式；**分析与 bbox 叠加层按钮在侧栏 header**；固定置信度 ≥30%（无滑条）；联图与标题规则见 [pdf-layout-analysis.md](pdf-layout-analysis.md)。实现：`viewer/panels/figures-panel.tsx` + `src/lib/pdf/layout/`（raw 结果缓存到 `{paper}/source/layout.json`）。
   - **移至新窗口**：标题栏右栏功能图标 **右键** →「移动至新窗口」→ 单例 `feature-{view}` Webview；主窗右栏收起。工具视图默认 **跟随主窗当前激活文档**（`workspace:active-changed`）。
-- 左右栏折叠：`⌥⌘S` / `⌘L`（不重叠）。
+- 左右栏折叠：`⌥⌘S` / `⌘L`（不重叠）。折叠/展开带 200ms `flex-grow` 过渡（`data-rail-animating`，见 `index.css`）；过渡中拖动分隔条立即接管（可打断）；`prefers-reduced-motion` 下直接切换。
 - 标题栏右侧：布局菜单、右栏 tab 切换；有新版本可更新时显示更新指示器按钮（见 [settings.md](settings.md) 「应用更新」）。
 
 实现：`src/components/shell/`、`src/lib/shell/ui-store.ts`、`src/lib/shell/leaf.ts`、`src/lib/shell/feature-window.ts`、`hooks/use-shell-layout.ts`。

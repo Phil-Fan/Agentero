@@ -228,6 +228,8 @@ export default function App() {
 		editorPaneRef,
 		leftWidthPxRef,
 		rightWidthPxRef,
+		animatingRailRef,
+		cancelRailAnimation,
 	} = useShellLayout();
 
 	const vaultPath = useVaultStore((s) => s.vaultPath);
@@ -391,6 +393,8 @@ export default function App() {
 							groupResizeBehavior="preserve-pixel-size"
 							className="min-h-0 overflow-hidden"
 							onResize={(size) => {
+								// Programmatic collapse/expand transition in flight.
+								if (animatingRailRef.current === "left") return;
 								// Only mark collapsed after a real collapse, never mid-drag.
 								if (size.inPixels <= 1) setSidebarCollapsedState(true);
 								else if (size.inPixels >= 80) {
@@ -407,7 +411,9 @@ export default function App() {
 							</aside>
 						</ResizablePanel>
 
-						{sidebarCollapsed ? null : <ResizableHandle />}
+						{sidebarCollapsed ? null : (
+							<ResizableHandle onPointerDown={cancelRailAnimation} />
+						)}
 
 						<ResizablePanel
 							id="source"
@@ -433,7 +439,9 @@ export default function App() {
 						</ResizablePanel>
 
 						{/* Right sidebar: always mounted + collapsible (same as left). */}
-						{rightSidebarOpen ? <ResizableHandle /> : null}
+						{rightSidebarOpen ? (
+							<ResizableHandle onPointerDown={cancelRailAnimation} />
+						) : null}
 						<ResizablePanel
 							id="right-sidebar"
 							panelRef={rightSidebarPanelRef}
@@ -445,6 +453,8 @@ export default function App() {
 							groupResizeBehavior="preserve-pixel-size"
 							className="min-h-0 overflow-hidden"
 							onResize={(size) => {
+								// Programmatic collapse/expand transition in flight.
+								if (animatingRailRef.current === "right") return;
 								if (size.inPixels <= 1) setRightSidebarOpenState(false);
 								else if (size.inPixels >= 80) {
 									setRightSidebarOpenState(true);
