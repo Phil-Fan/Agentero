@@ -1,9 +1,5 @@
 export { getPdfAiRuntime } from "@/lib/pdf/layout/ai-runtime";
 export {
-	createLayoutRegionClickGuard,
-	LAYOUT_REGION_CLICK_MOVE_TOLERANCE_PX,
-} from "@/lib/pdf/layout/click-guard";
-export {
 	LAYOUT_KIND_BADGE_CLASS,
 	LAYOUT_KIND_BORDER,
 	LAYOUT_KIND_FILL,
@@ -15,8 +11,6 @@ export {
 export {
 	LAYOUT_FORMULA_HOVER_DWELL_MS,
 	LAYOUT_FORMULA_HOVER_HIDE_MS,
-	LAYOUT_HOVER_DWELL_MS,
-	LAYOUT_HOVER_HIDE_MS,
 	LAYOUT_SIDEBAR_MIN_SCORE,
 } from "@/lib/pdf/layout/constants";
 export {
@@ -40,6 +34,10 @@ export {
 	rawLayoutRegionsByPage,
 	rawLayoutRegionsOnPage,
 } from "@/lib/pdf/layout/hit-test";
+export {
+	isLayoutHoverSuppressedByScroll,
+	LAYOUT_HOVER_SCROLL_SUPPRESS_MS,
+} from "@/lib/pdf/layout/hover-scroll-guard";
 export {
 	LAYOUT_INDEX_FILE,
 	LAYOUT_SIDECAR_FILE,

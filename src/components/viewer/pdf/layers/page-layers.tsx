@@ -20,7 +20,7 @@ import { SearchLayer } from "@embedpdf/plugin-search/react";
 import { SelectionLayer } from "@embedpdf/plugin-selection/react";
 import { TilingLayer } from "@embedpdf/plugin-tiling/react";
 import { EyeOff, Languages, Loader2 } from "lucide-react";
-import { memo, type RefObject, useEffect, useRef } from "react";
+import { memo, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	EMPTY_CITATION_LINKS,
@@ -40,7 +40,6 @@ import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
 import type { HighlightColor } from "@/lib/pdf/highlight/palette";
 import {
-	createLayoutRegionClickGuard,
 	isFormulaLayoutKind,
 	type LayoutTranslateItem,
 	layoutKindBorder,
@@ -94,8 +93,6 @@ export type PdfPageLayoutSlice = {
 		{ active: boolean; running: boolean }
 	>;
 	equationSymbolCount: number;
-	/** Layout-hover drafts auto-hide, so their frame needs a hover surface. */
-	visualDraftEphemeral: boolean;
 };
 
 /** Interaction modes that unmount or gate page layers. */
@@ -114,10 +111,8 @@ export type PdfPageHandlers = {
 	onRegionSelect: (page: number, region: PdfAskNormalizedRect) => void;
 	onLayoutHoverEnter: (region: PdfLayoutRegion) => void;
 	onLayoutHoverLeave: (regionId: string) => void;
-	/** Click a figure/table/algorithm hit target → open the annotate editor. */
+	/** Click a figure / table / algorithm hit target → crop + draft card. */
 	onLayoutRegionClick: (region: PdfLayoutRegion) => void;
-	onDraftHoverEnter: () => void;
-	onDraftHoverLeave: () => void;
 	onTogglePageLayoutTranslate: (pageIndex: number) => void;
 	/** Delete a highlight annotation directly from its on-page selection menu. */
 	onDeleteHighlightAnnotation: (pageIndex: number, id: string) => void;
@@ -205,105 +200,6 @@ const PageTranslateTab = memo(function PageTranslateTab({
 				))}
 			</span>
 		</button>
-	);
-});
-
-type LayoutRegionHitTargetProps = {
-	region: PdfLayoutRegion;
-	formulaLegend: boolean;
-	ariaLabel: string;
-	onHoverEnter: () => void;
-	onHoverLeave: () => void;
-	onClick: () => void;
-};
-
-/**
- * Layout regions are buttons so they remain keyboard accessible. Pointer
- * activation needs an extra gesture gate because a held pointer can move over
- * a region while the PDF is being scrolled.
- */
-const LayoutRegionHitTarget = memo(function LayoutRegionHitTarget({
-	region,
-	formulaLegend,
-	ariaLabel,
-	onHoverEnter,
-	onHoverLeave,
-	onClick,
-}: LayoutRegionHitTargetProps) {
-	const guardRef = useRef(createLayoutRegionClickGuard());
-	const cleanupRef = useRef<(() => void) | null>(null);
-
-	const cleanupWindowListeners = () => {
-		cleanupRef.current?.();
-		cleanupRef.current = null;
-	};
-
-	useEffect(
-		() => () => {
-			cleanupRef.current?.();
-			cleanupRef.current = null;
-		},
-		[],
-	);
-
-	return (
-		<button
-			type="button"
-			data-layout-hit={region.id}
-			aria-label={ariaLabel}
-			className="absolute z-[2] cursor-pointer rounded-none border-0 bg-transparent p-0 transition-colors hover:bg-primary/5"
-			style={{
-				left: `${region.bbox.x * 100}%`,
-				top: `${region.bbox.y * 100}%`,
-				width: `${region.bbox.w * 100}%`,
-				height: `${region.bbox.h * 100}%`,
-			}}
-			onPointerEnter={formulaLegend ? onHoverEnter : undefined}
-			onPointerLeave={formulaLegend ? onHoverLeave : undefined}
-			onPointerDown={(event) => {
-				if (formulaLegend || event.button !== 0) return;
-				cleanupWindowListeners();
-				guardRef.current.begin(event.pointerId, event.clientX, event.clientY);
-				event.currentTarget.setPointerCapture(event.pointerId);
-				const invalidate = () => guardRef.current.invalidate();
-				const ownerWindow = event.currentTarget.ownerDocument.defaultView;
-				ownerWindow?.addEventListener("wheel", invalidate, {
-					capture: true,
-					passive: true,
-				});
-				ownerWindow?.addEventListener("scroll", invalidate, {
-					capture: true,
-					passive: true,
-				});
-				cleanupRef.current = () => {
-					ownerWindow?.removeEventListener("wheel", invalidate, true);
-					ownerWindow?.removeEventListener("scroll", invalidate, true);
-				};
-			}}
-			onPointerMove={(event) => {
-				if (formulaLegend) return;
-				guardRef.current.move(event.pointerId, event.clientX, event.clientY);
-			}}
-			onPointerUp={(event) => {
-				if (formulaLegend) return;
-				guardRef.current.end(event.pointerId);
-				cleanupWindowListeners();
-			}}
-			onPointerCancel={(event) => {
-				if (formulaLegend) return;
-				guardRef.current.invalidate();
-				guardRef.current.end(event.pointerId);
-				cleanupWindowListeners();
-			}}
-			onClick={(event) => {
-				if (formulaLegend) return;
-				// detail=0 is keyboard activation; pointer activation must pass
-				// the movement / wheel / scroll gate above.
-				if (event.detail === 0 || guardRef.current.consume()) {
-					onClick();
-				}
-			}}
-		/>
 	);
 });
 
@@ -491,8 +387,8 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 				 * unmount leave must not cancel an in-flight crop).
 				 * Formula legend keeps hits mounted so leave/enter can switch
 				 * equations and drive hide without a second hover surface.
-				 * Figures / tables / algorithms annotate on click; formulas keep
-				 * the dwell-triggered glossary legend.
+				 * Figures / tables / algorithms open on click; hover only shows
+				 * the「单击进行批注」hint chip.
 				 */}
 				{!mode.regionSelecting && !mode.visualDraftOpen
 					? layout.hoverableRegionsByPage.get(pageIndex)?.map((region) => {
@@ -500,19 +396,43 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 								isFormulaLayoutKind(region.kind) &&
 								layout.equationSymbolCount > 0;
 							return (
-								<LayoutRegionHitTarget
+								<button
 									key={`layout-hit-${region.id}`}
-									region={region}
-									formulaLegend={formulaLegend}
-									ariaLabel={
+									type="button"
+									data-layout-hit={region.id}
+									aria-label={
 										formulaLegend
 											? t("equationAnnotation.hoverAria")
 											: t("figures.clickAnnotateAria")
 									}
-									onHoverEnter={() => handlers.onLayoutHoverEnter(region)}
-									onHoverLeave={() => handlers.onLayoutHoverLeave(region.id)}
-									onClick={() => handlers.onLayoutRegionClick(region)}
-								/>
+									className="group absolute z-[2] cursor-pointer rounded-none border-0 bg-transparent p-0 transition-colors hover:bg-primary/5"
+									style={{
+										left: `${region.bbox.x * 100}%`,
+										top: `${region.bbox.y * 100}%`,
+										width: `${region.bbox.w * 100}%`,
+										height: `${region.bbox.h * 100}%`,
+									}}
+									onPointerEnter={() => handlers.onLayoutHoverEnter(region)}
+									onPointerLeave={() => handlers.onLayoutHoverLeave(region.id)}
+									onClick={
+										formulaLegend
+											? undefined
+											: (event) => {
+													event.preventDefault();
+													event.stopPropagation();
+													handlers.onLayoutRegionClick(region);
+												}
+									}
+								>
+									{formulaLegend ? null : (
+										<span
+											className="pointer-events-none absolute top-1 right-1 rounded border border-border/60 bg-background/90 px-1.5 py-0.5 font-medium text-[10px] text-foreground/90 opacity-0 shadow-sm backdrop-blur-sm transition-opacity group-hover:opacity-100"
+											aria-hidden="true"
+										>
+											{t("figures.clickAnnotateHint")}
+										</span>
+									)}
+								</button>
 							);
 						})
 					: null}
@@ -554,14 +474,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 				{/* Open visual draft / mark: show the framed source region on-page. */}
 				{visualDraftRegionOnPage ? (
 					<div
-						className={cn(
-							"absolute z-[2] rounded-none border border-primary/40 bg-primary/5 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]",
-							// Ephemeral layout-hover drafts need a hover surface so
-							// leaving the region can schedule auto-hide.
-							layout.visualDraftEphemeral
-								? "pointer-events-auto"
-								: "pointer-events-none",
-						)}
+						className="pointer-events-none absolute z-[2] rounded-none border border-primary/40 bg-primary/5 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
 						style={{
 							left: `${visualDraftRegionOnPage.x * 100}%`,
 							top: `${visualDraftRegionOnPage.y * 100}%`,
@@ -569,16 +482,6 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 							height: `${visualDraftRegionOnPage.h * 100}%`,
 						}}
 						aria-hidden="true"
-						onMouseEnter={
-							layout.visualDraftEphemeral
-								? handlers.onDraftHoverEnter
-								: undefined
-						}
-						onMouseLeave={
-							layout.visualDraftEphemeral
-								? handlers.onDraftHoverLeave
-								: undefined
-						}
 					/>
 				) : null}
 				{/*

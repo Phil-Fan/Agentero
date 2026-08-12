@@ -39,9 +39,6 @@ type PdfCardStackProps = {
 		/** Discard the pending crop. */
 		onDelete: () => void;
 		onClose: () => void;
-		/** Only wired for ephemeral (layout-hover) drafts. */
-		onHoverEnter: () => void;
-		onHoverLeave: () => void;
 	};
 	formulaAnnotation: {
 		state: FormulaAnnotationPreviewState | null;
@@ -145,12 +142,6 @@ export function PdfCardStack({
 					onSendNow={visualDraft.onSendNow}
 					onDelete={visualDraft.onDelete}
 					onClose={visualDraft.onClose}
-					onPointerEnter={
-						visualDraft.state.ephemeral ? visualDraft.onHoverEnter : undefined
-					}
-					onPointerLeave={
-						visualDraft.state.ephemeral ? visualDraft.onHoverLeave : undefined
-					}
 				/>
 			) : null}
 

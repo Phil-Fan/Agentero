@@ -120,11 +120,6 @@ export type VisualDraftEditorState = {
 	page: number;
 	region: PdfAskNormalizedRect;
 	image: PromptImage;
-	/**
-	 * Opened by layout-region hover: auto-closes after leaving the region /
-	 * draft card (grace period). Manual region-select drafts stay until dismiss.
-	 */
-	ephemeral?: boolean;
 };
 
 /** Hover card for formula regions when `{paper}/Annotation.md` has symbols. */

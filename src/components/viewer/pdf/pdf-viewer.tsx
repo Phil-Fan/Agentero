@@ -106,7 +106,11 @@ import {
 	HIGHLIGHT_HEX_LIST,
 	type HighlightColor,
 } from "@/lib/pdf/highlight/palette";
-import { getPdfAiRuntime, layoutAnalysisStore } from "@/lib/pdf/layout";
+import {
+	getPdfAiRuntime,
+	layoutAnalysisStore,
+	type PdfLayoutRegion,
+} from "@/lib/pdf/layout";
 import {
 	type ActiveSelectionCard,
 	pinFromRects,
@@ -499,19 +503,6 @@ function PdfViewerInner({
 	});
 
 	/**
-	 * Latest `beginVisualAnnotation`. The layout-hover dwell timer opens a crop,
-	 * but the visual-mark cluster is declared after the layout cluster (it consumes
-	 * the draft-card owner), so this edge goes through a ref assigned right after
-	 * that hook — the dwell callback keeps its identity.
-	 */
-	const beginVisualAnnotationRef = useRef<
-		(
-			page: number,
-			region: PdfAskNormalizedRect,
-			opts?: { seq?: number; ephemeral?: boolean },
-		) => void
-	>(() => undefined);
-	/**
 	 * Session token of the single in-flight PDF agent run. Shared by ask and
 	 * translate (either can cancel the other's run), so it stays in the parent and
 	 * is injected into both clusters.
@@ -867,12 +858,8 @@ function PdfViewerInner({
 		closeVisualDraftEditor,
 		closeFormulaAnnotationPreview,
 		screenPointForRegion,
-		layoutHoverSeqRef,
 		scheduleLayoutHoverOpen,
 		handleLayoutHoverLeave,
-		handleLayoutRegionClick,
-		markLayoutDraftHoverEnter,
-		scheduleLayoutDraftHide,
 		markFormulaHoverEnter,
 		scheduleFormulaHide,
 		rePlaceFormulaAnnotationOnScroll,
@@ -884,7 +871,6 @@ function PdfViewerInner({
 		selectionMenuRef,
 		regionSelectingRef,
 		visualCropPendingRef,
-		beginVisualAnnotationRef,
 	});
 
 	const {
@@ -944,7 +930,6 @@ function PdfViewerInner({
 		closeVisualDraftEditor,
 		closeFormulaAnnotationPreview,
 		screenPointForRegion,
-		layoutHoverSeqRef,
 		regionSelectingRef,
 		visualCropPendingRef,
 	});
@@ -980,7 +965,6 @@ function PdfViewerInner({
 		visualDraftEditor,
 		closeVisualDraftEditor,
 	});
-	beginVisualAnnotationRef.current = beginVisualAnnotation;
 	resetVisualCardChromeRef.current = resetVisualCardChrome;
 
 	const {
@@ -1246,7 +1230,6 @@ function PdfViewerInner({
 			layoutTranslateItemsByPage,
 			layoutTranslatePageStateByPage,
 			equationSymbolCount: equationSymbols.length,
-			visualDraftEphemeral: Boolean(visualDraftEditor?.ephemeral),
 		}),
 		[
 			hoverableRegionsByPage,
@@ -1255,7 +1238,6 @@ function PdfViewerInner({
 			layoutTranslateItemsByPage,
 			layoutTranslatePageStateByPage,
 			equationSymbols.length,
-			visualDraftEditor?.ephemeral,
 		],
 	);
 
@@ -1266,6 +1248,13 @@ function PdfViewerInner({
 			visualDraftOpen: Boolean(visualDraftEditor),
 		}),
 		[regionSelecting, visualCropPending, visualDraftEditor],
+	);
+
+	const handleLayoutRegionClick = useCallback(
+		(region: PdfLayoutRegion) => {
+			void beginVisualAnnotation(region.pageIndex + 1, region.bbox);
+		},
+		[beginVisualAnnotation],
 	);
 
 	const pageHandlers = useMemo<PdfPageHandlers>(
@@ -1279,8 +1268,6 @@ function PdfViewerInner({
 			onLayoutHoverEnter: scheduleLayoutHoverOpen,
 			onLayoutHoverLeave: handleLayoutHoverLeave,
 			onLayoutRegionClick: handleLayoutRegionClick,
-			onDraftHoverEnter: markLayoutDraftHoverEnter,
-			onDraftHoverLeave: scheduleLayoutDraftHide,
 			onTogglePageLayoutTranslate: togglePageLayoutTranslate,
 			onDeleteHighlightAnnotation: handleDeleteHighlightAnnotation,
 			onEditHighlightAnnotation: handleEditHighlightAnnotation,
@@ -1296,8 +1283,6 @@ function PdfViewerInner({
 			scheduleLayoutHoverOpen,
 			handleLayoutHoverLeave,
 			handleLayoutRegionClick,
-			markLayoutDraftHoverEnter,
-			scheduleLayoutDraftHide,
 			togglePageLayoutTranslate,
 			handleDeleteHighlightAnnotation,
 			handleEditHighlightAnnotation,
@@ -1417,8 +1402,6 @@ function PdfViewerInner({
 					onSendNow: handleVisualSendNow,
 					onDelete: closeVisualDraftEditor,
 					onClose: closeVisualDraftEditor,
-					onHoverEnter: markLayoutDraftHoverEnter,
-					onHoverLeave: scheduleLayoutDraftHide,
 				}}
 				formulaAnnotation={{
 					state: formulaAnnotationPreview,

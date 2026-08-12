@@ -23,9 +23,6 @@ type VisualAnnotationEditorProps = {
 	/** Discard the pending crop (same as cancel for a fresh region). */
 	onDelete: () => void;
 	onClose: () => void;
-	/** Hover surface for ephemeral layout-hover drafts (cancel auto-hide). */
-	onPointerEnter?: () => void;
-	onPointerLeave?: () => void;
 };
 
 /**
@@ -41,8 +38,6 @@ export function VisualAnnotationEditor({
 	onSendNow,
 	onDelete,
 	onClose,
-	onPointerEnter,
-	onPointerLeave,
 }: VisualAnnotationEditorProps) {
 	const { t } = useTranslation("viewer");
 	const [text, setText] = useState(initialComment ?? "");
@@ -92,8 +87,6 @@ export function VisualAnnotationEditor({
 			title={t("annotations.editorLabel")}
 			icon={NotebookPen}
 			ariaLabel={t("annotations.editorLabel")}
-			onPointerEnter={onPointerEnter}
-			onPointerLeave={onPointerLeave}
 			bodyClassName="gap-2 px-3 py-2.5"
 			actions={actions}
 			footer={
@@ -118,8 +111,6 @@ export function VisualAnnotationEditor({
 				placeholder={t("annotations.placeholder")}
 				value={text}
 				onChange={(e) => setText(e.target.value)}
-				onFocus={onPointerEnter}
-				onPointerDown={onPointerEnter}
 				{...compositionProps}
 				onKeyDown={(e) => {
 					if (e.key === "Escape") {
