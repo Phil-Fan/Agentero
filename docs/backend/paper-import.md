@@ -63,10 +63,31 @@ Skill 不写入 catalog、不创建 `papers/` 条目、不执行 `scripts/`。�
 |---|---|
 | 有 TeX | 优先 TeX；不强制 `PAPER.md` |
 | 无 TeX 有 PDF | 下载后由隔离的 liteparse 子进程生成 `PAPER.md`；单次解析限时 120 秒 |
-| 解析失败或超时 | 保留 PDF、`NOTES.md` 与 catalog；返回诊断消息，后续可重新执行 `paper parse` |
+| 解析失败或超时 | 保留 PDF、`NOTES.md` 与 catalog；`paper_parse_body` 返回 `error`，对应 job 标记 `Failed` 并在任务面板展示原因，后续可重新执行 `paper parse` |
 | 质量字段 | catalog `body_source` / `body_quality`（实现以 schema 为准） |
 
 `PAPER.md` 是派生文件，可删可重建；`source/` 与 PDF 才是归档事实来源。
+
+## PDFium 随包分发
+
+liteparse 在**运行时 `dlopen`** PDFium，而 `liteparse-pdfium-sys` 的 build script 只
+把**构建机**的下载缓存绝对路径 bake 进二进制。用户机上那个路径不存在，加载失败会
+直接 panic（子进程退出码 101），表现为“一直解析中 / 解析失败”。因此 PDFium 必须
+随安装包一起分发。
+
+| 环节 | 位置 |
+|---|---|
+| 暂存 | `scripts/prepare-pdfium.mjs` → `src-tauri/pdfium/{libpdfium.dylib \| pdfium.dll \| libpdfium.so}`（gitignore；`beforeDevCommand` / `beforeBuildCommand` 都会跑 `pnpm pdfium:stage`） |
+| 来源优先级 | `PDFIUM_LIB_PATH` → 平台缓存 `<cache>/pdfium-rs/<tag>/<asset>/` → 从 pdfium-binaries release 下载 |
+| macOS 打包 | `bundle.macOS.frameworks` → `Contents/Frameworks/libpdfium.dylib`（tauri-bundler 会把它登记为 codesign target，公证需要） |
+| Windows / Linux 打包 | `bundle.resources: ["pdfium/*"]` → exe 同级 `pdfium/`，deb/AppImage 为 `/usr/lib/agentero/pdfium/` |
+| 运行时定位 | `pdf_parse::bundled_pdfium_dir()` 从 `current_exe` 探测上述位置，作为 `PDFIUM_LIB_PATH` 传给解析子进程；外部已设置该环境变量时不覆盖 |
+
+- iOS/Android 不打包 PDFium：正文解析走配对的桌面 Host，平台 config 已清空 `resources`。
+- 子进程 stderr 落到 worker 临时目录的 `stderr.log`；拿不到 response 时其尾部会拼进错误消息。
+- **升级 `liteparse` 依赖时**，必须同步 `scripts/prepare-pdfium.mjs` 里的
+  `PDFIUM_RELEASE_TAG` 与 `.github/workflows/ci.yml` 的 Provision PDFium 步骤，
+  保持与 `liteparse-pdfium-sys` build script 的 tag 一致。
 
 ## 本地 PDF
 

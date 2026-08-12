@@ -4,6 +4,7 @@
 		"beforeBuildCommand": "pnpm build"
 	},
 	"bundle": {
-		"externalBin": []
+		"externalBin": [],
+		"resources": []
 	}
 }

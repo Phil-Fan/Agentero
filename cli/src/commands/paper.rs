@@ -657,6 +657,9 @@ async fn parse(globals: &GlobalOpts, ref_: &str, force: bool) -> Result<Value, C
         None,
     )
     .await?;
+    if let Some(message) = result.error {
+        return Err(CliError::message(message));
+    }
     let style = globals.style;
     let mut v = to_value(&result)?;
     if let Some(obj) = v.as_object_mut() {

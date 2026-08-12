@@ -4,9 +4,9 @@
   "version": "0.5.5",
   "identifier": "com.poco-ai.agentero",
   "build": {
-    "beforeDevCommand": "pnpm cli:ensure && pnpm dev",
+    "beforeDevCommand": "pnpm cli:ensure && pnpm pdfium:stage && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm cli:bundle:stub && pnpm build",
+    "beforeBuildCommand": "pnpm cli:bundle:release && pnpm pdfium:stage && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -56,6 +56,9 @@
     "category": "Productivity",
     "externalBin": [
       "binaries/agentero-cli"
+    ],
+    "resources": [
+      "pdfium/*"
     ],
     "icon": [
       "icons/32x32.png",

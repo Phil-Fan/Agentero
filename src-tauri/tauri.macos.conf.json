@@ -11,5 +11,11 @@
         }
       }
     ]
+  },
+  "bundle": {
+    "resources": [],
+    "macOS": {
+      "frameworks": ["pdfium/libpdfium.dylib"]
+    }
   }
 }

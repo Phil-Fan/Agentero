@@ -24,12 +24,17 @@ use std::time::Duration;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 const PAPER_MD: &str = "PAPER.md";
+/// Cancellation is a user action, not a parse failure; `PaperParseResult::fail`
+/// keys off this to avoid reporting cancelled work as broken.
+const CANCELLED_MESSAGE: &str = "background task cancelled";
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_PARSE_WORKER_ARG: &str = "--agentero-internal-pdf-parse-worker";
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_PARSE_TIMEOUT: Duration = Duration::from_secs(120);
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const MAX_CONCURRENT_PDF_PARSE: usize = 2;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+const PDFIUM_LIB_PATH_ENV: &str = "PDFIUM_LIB_PATH";
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 #[derive(Debug)]
@@ -68,7 +73,7 @@ fn pdf_parse_key(pdf_path: &Path) -> PathBuf {
 async fn acquire_pdf_parse_permit(task_id: Option<&str>) -> Result<OwnedSemaphorePermit, AppError> {
     loop {
         if pdf_parse_task_is_cancelled(task_id) {
-            return Err(AppError::message("background task cancelled"));
+            return Err(AppError::message(CANCELLED_MESSAGE));
         }
         match pdf_parse_limiter().clone().try_acquire_owned() {
             Ok(permit) => return Ok(permit),
@@ -89,7 +94,7 @@ async fn enter_pdf_parse(
 ) -> Result<Option<PdfParseAdmission>, AppError> {
     let permit = acquire_pdf_parse_permit(task_id).await?;
     if pdf_parse_task_is_cancelled(task_id) {
-        return Err(AppError::message("background task cancelled"));
+        return Err(AppError::message(CANCELLED_MESSAGE));
     }
     let key = pdf_parse_key(pdf_path);
     let mut in_flight = pdf_parse_in_flight()
@@ -112,7 +117,20 @@ pub struct PaperParseResult {
     pub body_source: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body_quality: Option<String>,
+    /// Set only when the parse genuinely failed, never for a skip. Callers
+    /// surface it as an error instead of reporting a silent success.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
     pub messages: Vec<String>,
+}
+
+impl PaperParseResult {
+    fn fail(&mut self, message: String) {
+        if !message.contains(CANCELLED_MESSAGE) {
+            self.error = Some(message.clone());
+        }
+        self.messages.push(message);
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -216,7 +234,7 @@ async fn parse_paper_body_inner(
             return out;
         }
         Err(e) => {
-            out.messages.push(format!("liteparse failed: {e}"));
+            out.fail(format!("liteparse failed: {e}"));
             return out;
         }
     };
@@ -224,7 +242,7 @@ async fn parse_paper_body_inner(
     match run_liteparse_markdown(&pdf_path, task_id).await {
         Ok((markdown, body_source, body_quality)) => {
             if markdown.trim().is_empty() {
-                out.messages.push("liteparse returned empty text".into());
+                out.fail("liteparse returned empty text".into());
                 return out;
             }
             match fs::write(paper_dir.join(PAPER_MD), &markdown) {
@@ -240,10 +258,10 @@ async fn parse_paper_body_inner(
                             .push(format!("catalog body fields update failed: {e}"));
                     }
                 }
-                Err(e) => out.messages.push(format!("write PAPER.md failed: {e}")),
+                Err(e) => out.fail(format!("write PAPER.md failed: {e}")),
             }
         }
-        Err(e) => out.messages.push(format!("liteparse failed: {e}")),
+        Err(e) => out.fail(format!("liteparse failed: {e}")),
     }
 
     if let Some(c) = cache {
@@ -349,12 +367,72 @@ pub fn try_run_pdf_parse_worker() -> Option<i32> {
 }
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn pdfium_lib_name() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "libpdfium.dylib"
+    } else if cfg!(target_os = "windows") {
+        "pdfium.dll"
+    } else {
+        "libpdfium.so"
+    }
+}
+
+/// Directory holding the PDFium shared library shipped with the installed app.
+///
+/// liteparse `dlopen`s PDFium and `liteparse-pdfium-sys`'s build script bakes
+/// the build machine's download cache path into the binary, which does not
+/// exist on a user machine. `scripts/prepare-pdfium.mjs` stages the library
+/// into the bundle instead; these are the places it lands.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn bundled_pdfium_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let exe_dir = exe.parent()?;
+    let mut candidates = Vec::new();
+    if cfg!(target_os = "macos") {
+        candidates.push(exe_dir.join("../Frameworks"));
+    }
+    candidates.push(exe_dir.join("pdfium"));
+    // deb / AppImage put bundle resources under /usr/lib/<product>/.
+    candidates.push(exe_dir.join("../lib/agentero/pdfium"));
+    candidates.push(exe_dir.join("../lib/Agentero/pdfium"));
+    candidates.push(exe_dir.to_path_buf());
+
+    let name = pdfium_lib_name();
+    candidates.into_iter().find(|dir| dir.join(name).is_file())
+}
+
+/// `PDFIUM_LIB_PATH` to hand the worker, unless the caller already set one.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn pdfium_lib_path_override() -> Option<PathBuf> {
+    if std::env::var_os(PDFIUM_LIB_PATH_ENV).is_some() {
+        return None;
+    }
+    bundled_pdfium_dir()
+}
+
+/// Tail of the worker's stderr, so a panic that never reaches the response file
+/// (a missing PDFium library aborts the process with exit code 101) still
+/// reaches the user.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn worker_stderr_tail(path: &Path) -> Option<String> {
+    const MAX_CHARS: usize = 800;
+    let text = fs::read_to_string(path).ok()?;
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let mut tail: Vec<char> = text.chars().rev().take(MAX_CHARS).collect();
+    tail.reverse();
+    Some(tail.into_iter().collect())
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 async fn run_liteparse_markdown(
     pdf_path: &Path,
     task_id: Option<&str>,
 ) -> Result<(String, String, String), AppError> {
     if pdf_parse_task_is_cancelled(task_id) {
-        return Err(AppError::message("background task cancelled"));
+        return Err(AppError::message(CANCELLED_MESSAGE));
     }
     let executable = std::env::current_exe()
         .map_err(|error| AppError::message(format!("resolve PDF parse worker: {error}")))?;
@@ -367,17 +445,31 @@ async fn run_liteparse_markdown(
         AppError::message(format!("create PDF parse worker directory: {error}"))
     })?;
     let response_path = worker_dir.join("response.json");
+    let stderr_path = worker_dir.join("stderr.log");
+    let stderr_sink = match fs::File::create(&stderr_path) {
+        Ok(file) => file,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&worker_dir);
+            return Err(AppError::message(format!(
+                "create PDF parse worker log: {error}"
+            )));
+        }
+    };
 
-    let mut child = match tokio::process::Command::new(executable)
+    let mut command = tokio::process::Command::new(executable);
+    command
         .arg(PDF_PARSE_WORKER_ARG)
         .arg(pdf_path)
         .arg(&response_path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .kill_on_drop(true)
-        .spawn()
-    {
+        .stderr(Stdio::from(stderr_sink))
+        .kill_on_drop(true);
+    if let Some(dir) = pdfium_lib_path_override() {
+        command.env(PDFIUM_LIB_PATH_ENV, dir);
+    }
+
+    let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => {
             let _ = fs::remove_dir_all(&worker_dir);
@@ -418,7 +510,7 @@ async fn run_liteparse_markdown(
                     let _ = child.kill().await;
                     let _ = child.wait().await;
                     let _ = fs::remove_dir_all(&worker_dir);
-                    return Err(AppError::message("background task cancelled"));
+                    return Err(AppError::message(CANCELLED_MESSAGE));
                 }
             }
         }
@@ -426,8 +518,11 @@ async fn run_liteparse_markdown(
 
     let response = fs::read(&response_path)
         .map_err(|error| {
+            let tail = worker_stderr_tail(&stderr_path)
+                .map(|tail| format!(": {tail}"))
+                .unwrap_or_default();
             AppError::message(format!(
-                "read isolated PDF parser response (status {status}): {error}"
+                "isolated PDF parser produced no response ({status}, {error}){tail}"
             ))
         })
         .and_then(|bytes| {
@@ -531,6 +626,43 @@ fn update_catalog_body(
 #[cfg(all(test, not(any(target_os = "ios", target_os = "android"))))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fail_records_real_errors_but_not_cancellation() {
+        let mut broken = PaperParseResult::default();
+        broken.fail("liteparse failed: could not find pdfium".into());
+        assert_eq!(
+            broken.error.as_deref(),
+            Some("liteparse failed: could not find pdfium")
+        );
+        assert_eq!(broken.messages.len(), 1);
+
+        let mut cancelled = PaperParseResult::default();
+        cancelled.fail(format!("liteparse failed: {CANCELLED_MESSAGE}"));
+        assert!(cancelled.error.is_none());
+        assert_eq!(cancelled.messages.len(), 1);
+    }
+
+    #[test]
+    fn worker_stderr_tail_skips_empty_and_truncates() {
+        let dir = std::env::temp_dir().join(format!("pdf-parse-stderr-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+
+        let missing = dir.join("absent.log");
+        assert!(worker_stderr_tail(&missing).is_none());
+
+        let blank = dir.join("blank.log");
+        fs::write(&blank, "  \n\n").unwrap();
+        assert!(worker_stderr_tail(&blank).is_none());
+
+        let long = dir.join("long.log");
+        fs::write(&long, format!("{}tail-marker", "x".repeat(4000))).unwrap();
+        let tail = worker_stderr_tail(&long).unwrap();
+        assert_eq!(tail.chars().count(), 800);
+        assert!(tail.ends_with("tail-marker"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn worker_args_are_private_and_exact() {

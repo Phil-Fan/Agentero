@@ -1005,7 +1005,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   }
   ```
 
-- **返回**：`{ ok: true; data: { paperMd: boolean; bodySource?: string; bodyQuality?: string; messages: string[] } }`
+- **返回**：`{ ok: true; data: { paperMd: boolean; bodySource?: string; bodyQuality?: string; error?: string; messages: string[] } }`
 - **行为**：
   - 有本地 TeX 时跳过（认为 TeX 更干净）。
   - 无 PDF 时跳过。
@@ -1013,6 +1013,8 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - 写 catalog `body_source`（`pdf`/`ocr`）与 `body_quality`（`medium`/`low`）。
   - 远程 vault 在 `session.work_root` 解析后上传 `PAPER.md` 并 push catalog mirror。
   - 解析最长等待 120 秒；取消任务会 kill 当前 liteparse 子进程。
+  - **`error` 只在真正失败时出现**（liteparse 失败 / 正文为空 / 写 `PAPER.md` 失败），跳过与取消不算失败。JobCenter 的 `parseBody` job 见到 `error` 会标记 `Failed` 并把它作为失败原因，任务面板因此能展示真实原因（例如找不到 PDFium 动态库）；否则标记 `Succeeded`。
+  - liteparse 依赖运行时 `dlopen` 的 PDFium，随安装包分发，见 [paper-import.md](paper-import.md) § PDFium 随包分发。
 
 > **正文生成时机**：魔棒 / 本地 PDF 导入 / 下载资产 / Library 导入 / Zotero 迁移 / 打开论文时，前端检查到该 paper 有 PDF、无 TeX、无 `PAPER.md`，就会入队 `paper_parse_body` 作为独立后台任务。原 `paper_download_assets` / 魔棒入库命令不再内联等待解析完成。
 

@@ -5,6 +5,7 @@
 	},
 	"bundle": {
 		"externalBin": [],
+		"resources": [],
 		"iOS": {
 			"template": "src-tauri/ios-project.yml",
 			"minimumSystemVersion": "15.0",

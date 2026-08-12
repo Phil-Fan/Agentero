@@ -723,16 +723,30 @@ impl JobCenter {
             .await;
             crate::features::agent::background_tasks::finish(&task_id);
             let snapshot = match result {
-                Ok(_) => {
-                    self.finish(
-                        &job_id,
-                        JobState::Succeeded,
-                        Some(100.0),
-                        Some("completed"),
-                        None,
-                    )
-                    .await
-                }
+                // A skipped or successful parse returns Ok with no error; a real
+                // liteparse failure also returns Ok, carrying the reason.
+                Ok(parsed) => match parsed.error {
+                    Some(message) => {
+                        self.finish(
+                            &job_id,
+                            JobState::Failed,
+                            None,
+                            Some("failed"),
+                            Some(message),
+                        )
+                        .await
+                    }
+                    None => {
+                        self.finish(
+                            &job_id,
+                            JobState::Succeeded,
+                            Some(100.0),
+                            Some("completed"),
+                            None,
+                        )
+                        .await
+                    }
+                },
                 Err(e) => {
                     self.finish(
                         &job_id,
