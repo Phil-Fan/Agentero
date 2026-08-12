@@ -38,7 +38,7 @@ export function PdfCitationPreview({
 			onPointerEnter={onPointerEnter}
 			onPointerLeave={onPointerLeave}
 		>
-			<p className="line-clamp-4 text-[13px] leading-snug text-foreground">
+			<p className="line-clamp-2 text-[13px] leading-snug text-foreground">
 				{previewText}
 			</p>
 		</div>
