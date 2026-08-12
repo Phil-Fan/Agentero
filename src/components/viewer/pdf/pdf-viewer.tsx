@@ -665,6 +665,7 @@ function PdfViewerInner({
 		zoomRef,
 		vaultPath,
 		paperPath: paperRelPath,
+		paperAbsPath,
 	});
 
 	/**

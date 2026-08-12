@@ -2,6 +2,9 @@
  * Per-page overlay for PDF Link annotations (in-text citations, figure/section
  * refs, external URLs). PDFium already parses each link's rect + target; this
  * layer makes them clickable and shows a destination-preview card on hover.
+ * The preview text is merged from the destination page's text rects; the exact
+ * reference behind a citation comes from the hyperref cite-key map instead (see
+ * `lib/pdf/citation-dest-keys`).
  */
 
 import type {
@@ -20,6 +23,7 @@ import {
 import { useDocumentManagerCapability } from "@embedpdf/plugin-document-manager/react";
 import { memo, useCallback, useRef } from "react";
 import { usePdfEngineContext } from "@/components/viewer/pdf/engine-provider";
+import { citationDestKey } from "@/lib/pdf/citation-dest-keys";
 
 export function isLinkObject(
 	object: PdfAnnotationObject,
@@ -81,7 +85,7 @@ export const CitationLinkLayer = memo(function CitationLinkLayer({
 /** Extract the destination page + vertical position from a link target, if any. */
 function getLinkDestination(
 	target: PdfLinkTarget | undefined,
-): { pageIndex: number; y: number } | null {
+): { pageIndex: number; pdfY: number } | null {
 	if (!target) return null;
 	let destination: PdfDestinationObject | null = null;
 	if (target.type === "destination") {
@@ -94,41 +98,67 @@ function getLinkDestination(
 	}
 	if (!destination) return null;
 	if (destination.zoom.mode === PdfZoomMode.XYZ) {
-		return { pageIndex: destination.pageIndex, y: destination.zoom.params.y };
+		// PDF-native coordinate: origin bottom-left, y grows upward.
+		return {
+			pageIndex: destination.pageIndex,
+			pdfY: destination.zoom.params.y,
+		};
 	}
-	return { pageIndex: destination.pageIndex, y: 0 };
+	return { pageIndex: destination.pageIndex, pdfY: 0 };
 }
+
+/** Extracted destination text plus the coordinates that identify the target. */
+export type DestinationPreview = {
+	/** Text merged from the destination page (noisy: geometric heuristic). */
+	text: string;
+	pageIndex: number;
+	/** PDF-native y, as PDFium reports it — the cite-key map is keyed on this. */
+	pdfY: number;
+};
 
 /**
  * Resolve a preview snippet for a Link annotation by reading the text at its
- * destination (usually the bibliography entry). Returns null when the engine is
- * unavailable or the target is not a GoTo/destination.
+ * destination (usually the bibliography entry), together with the destination
+ * coordinates. Returns null when the engine is unavailable or the target is not
+ * a GoTo/destination.
  */
 export function useDestinationPreviewResolver(
 	docId: string,
-): (link: PdfLinkAnnoObject) => Promise<string | null> {
+): (link: PdfLinkAnnoObject) => Promise<DestinationPreview | null> {
 	const { engine } = usePdfEngineContext();
 	const { provides: docCap } = useDocumentManagerCapability();
-	const cacheRef = useRef(new Map<string, Promise<string | null>>());
+	const cacheRef = useRef(
+		new Map<string, Promise<DestinationPreview | null>>(),
+	);
 
 	return useCallback(
 		async (link) => {
 			const destination = getLinkDestination(link.target);
 			if (!destination) return null;
-			const cacheKey = `${destination.pageIndex}:${destination.y.toFixed(1)}`;
+			const doc: PdfDocumentObject | undefined | null =
+				docCap?.getDocument(docId);
+			const page = doc?.pages[destination.pageIndex];
+			if (!engine || !doc || !page) return null;
+
+			const cacheKey = citationDestKey(destination.pageIndex, destination.pdfY);
 			const cached = cacheRef.current.get(cacheKey);
 			if (cached !== undefined) return cached;
 
 			const promise = (async () => {
-				const doc: PdfDocumentObject | undefined | null =
-					docCap?.getDocument(docId);
-				const page = doc?.pages[destination.pageIndex];
-				if (!engine || !doc || !page) return null;
+				// Destinations are bottom-up but text rects are top-down; EmbedPDF's
+				// own navigateTarget applies the same flip.
+				const y = page.size.height - destination.pdfY;
 				try {
 					const textRects: PdfTextRectObject[] = await engine
 						.getPageTextRects(doc, page)
 						.toPromise();
-					return mergeBibliographyEntryAtY(textRects, destination.y);
+					const text = mergeBibliographyEntryAtY(textRects, y);
+					if (!text) return null;
+					return {
+						text,
+						pageIndex: destination.pageIndex,
+						pdfY: destination.pdfY,
+					};
 				} catch {
 					return null;
 				}
