@@ -419,7 +419,7 @@
 			"downloading": "正在下载更新...",
 			"downloadingProgress": "正在下载更新：{{progress}}%",
 			"installing": "正在安装更新并重启...",
-			"checkFailed": "无法检查更新",
+			"checkFailed": "无法检查更新，请检查网络或代理设置",
 			"installFailed": "无法安装更新，请重试",
 			"check": "检查更新",
 			"downloadInstall": "安装并重启",

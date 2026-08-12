@@ -426,7 +426,7 @@
 			"downloading": "Downloading update...",
 			"downloadingProgress": "Downloading update: {{progress}}%",
 			"installing": "Installing update and restarting...",
-			"checkFailed": "Couldn't check for updates",
+			"checkFailed": "Couldn't check for updates. Check your network or proxy settings",
 			"installFailed": "Couldn't install the update. Try again",
 			"check": "Check for updates",
 			"downloadInstall": "Install and restart",
