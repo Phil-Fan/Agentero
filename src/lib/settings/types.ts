@@ -124,6 +124,11 @@ export type AppSettings = {
 	 * Default **off**; per-export choice can still override.
 	 */
 	exportWatermarkEnabled: boolean;
+	/**
+	 * Anonymous product analytics (app version + device info) via PostHog.
+	 * Default **on**; takes effect from the next launch.
+	 */
+	telemetryEnabled: boolean;
 	// Appearance
 	theme: ThemePreference;
 	/**

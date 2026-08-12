@@ -325,6 +325,9 @@ function normalizePartial(
 	if (typeof parsed.exportWatermarkEnabled !== "boolean") {
 		merged.exportWatermarkEnabled = DEFAULT_SETTINGS.exportWatermarkEnabled;
 	}
+	if (typeof parsed.telemetryEnabled !== "boolean") {
+		merged.telemetryEnabled = DEFAULT_SETTINGS.telemetryEnabled;
+	}
 	if (
 		!Number.isInteger(merged.batchImportConcurrency) ||
 		merged.batchImportConcurrency < 1 ||

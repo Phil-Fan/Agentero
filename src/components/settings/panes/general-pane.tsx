@@ -167,7 +167,37 @@ export function GeneralPane({
 			<ConnectorSettingsBlock settings={settings} patch={patch} />
 			<RemoteCacheSettingsBlock />
 			<ExportSettingsBlock settings={settings} patch={patch} />
+			<PrivacySettingsBlock settings={settings} patch={patch} />
 		</>
+	);
+}
+
+function PrivacySettingsBlock({
+	settings,
+	patch,
+}: {
+	settings: AppSettings;
+	patch: (p: Partial<AppSettings>) => void;
+}) {
+	const { t } = useTranslation("settings");
+	return (
+		<div className="mt-4">
+			<p className="mb-2 px-0.5 font-medium text-[13px]">
+				{t("general.privacy.section")}
+			</p>
+			<SettingsGroup>
+				<SettingsRow
+					label={t("general.privacy.telemetry.label")}
+					htmlFor="telemetry-enabled"
+				>
+					<Switch
+						id="telemetry-enabled"
+						checked={settings.telemetryEnabled}
+						onCheckedChange={(v) => patch({ telemetryEnabled: v })}
+					/>
+				</SettingsRow>
+			</SettingsGroup>
+		</div>
 	);
 }
 
@@ -186,14 +216,7 @@ function ExportSettingsBlock({
 			</p>
 			<SettingsGroup>
 				<SettingsRow
-					label={
-						<span className="inline-flex flex-col gap-0.5">
-							{t("general.export.watermark.label")}
-							<span className="text-[11px] font-normal leading-snug text-muted-foreground/70">
-								{t("general.export.watermark.description")}
-							</span>
-						</span>
-					}
+					label={t("general.export.watermark.label")}
 					htmlFor="export-watermark-enabled"
 				>
 					<Switch

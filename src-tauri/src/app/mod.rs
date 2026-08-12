@@ -91,6 +91,11 @@ pub fn run() {
             .manage(Arc::new(RemoteRegistry::new()));
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        builder = builder.manage(Arc::new(crate::features::telemetry::Telemetry::new()));
+    }
+
     builder = handlers::attach_handlers(builder);
 
     #[cfg(not(target_os = "ios"))]
@@ -160,6 +165,18 @@ pub fn run() {
             "op start app_ready debug={}",
             cfg!(debug_assertions)
         );
+
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            let telemetry = Arc::clone(
+                app.state::<Arc<crate::features::telemetry::Telemetry>>()
+                    .inner(),
+            );
+            let telemetry_settings = settings.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                telemetry.start(&telemetry_settings);
+            });
+        }
 
         // Desktop deep links: cold start + runtime open URLs.
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -257,6 +274,9 @@ pub fn run() {
             ) {
                 #[cfg(not(target_os = "ios"))]
                 app.state::<Arc<ConnectorController>>().stop();
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                app.state::<Arc<crate::features::telemetry::Telemetry>>()
+                    .shutdown();
             }
         });
 }

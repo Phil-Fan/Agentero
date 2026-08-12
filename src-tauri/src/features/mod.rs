@@ -20,6 +20,8 @@ pub mod refs;
 pub mod remote;
 pub mod search;
 pub mod settings;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod telemetry;
 pub mod terminal;
 pub mod translate;
 pub mod trash;

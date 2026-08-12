@@ -97,6 +97,9 @@ pub struct AppSettings {
     /// Prefill Markdown export dialog watermark checkbox (default off).
     #[serde(default)]
     pub export_watermark_enabled: bool,
+    /// PostHog product analytics opt-out (applies from the next launch).
+    #[serde(default = "default_true")]
+    pub telemetry_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -193,6 +196,7 @@ impl Default for AppSettings {
             pdf_ask: PdfAskSettings::default(),
             translate: TranslateSettings::default(),
             export_watermark_enabled: false,
+            telemetry_enabled: default_true(),
         }
     }
 }

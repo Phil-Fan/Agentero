@@ -89,8 +89,13 @@
 		"export": {
 			"section": "Note export",
 			"watermark": {
-				"label": "Agentero watermark by default",
-				"description": "Prefill the Markdown export dialog so new exports include a small “Made with Agentero” mark. You can still turn it off per export."
+				"label": "Agentero watermark by default"
+			}
+		},
+		"privacy": {
+			"section": "Privacy",
+			"telemetry": {
+				"label": "Share anonymous usage data"
 			}
 		}
 	},

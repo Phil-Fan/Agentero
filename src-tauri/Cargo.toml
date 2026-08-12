@@ -71,6 +71,8 @@ fontdb = "0.23"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# Blocking client: telemetry flush happens in the synchronous RunEvent::Exit callback.
+posthog-rs = { version = "0.23", default-features = false }
 
 # LiteParse relies on a desktop PDFium binary. Mobile (iOS/Android) uses the
 # paired desktop Host for PDF parsing instead of packaging PDFium in the app.

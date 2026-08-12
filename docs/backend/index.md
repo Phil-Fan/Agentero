@@ -27,6 +27,7 @@ src-tauri/src/
     connector/ remote/ search/ settings/
     translate/ trash/ watcher/ terminal/ window/
     bridge/ layout_model/ refs/ arxiv_proxy/
+    telemetry/  # 桌面端，PostHog 匿名遥测
   lib.rs
   main.rs
 ```
@@ -104,5 +105,6 @@ src-tauri/src/
 | 设置 | [settings.md](settings.md) |
 | 翻译 | [translate.md](translate.md) |
 | 日志 | [logging.md](logging.md) |
+| 遥测 | [telemetry.md](telemetry.md) |
 | CLI | [cli.md](cli.md) |
 | API 全表 | [api.md](api.md) |

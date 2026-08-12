@@ -82,8 +82,13 @@
 		"export": {
 			"section": "笔记导出",
 			"watermark": {
-				"label": "默认添加 Agentero 水印",
-				"description": "预填 Markdown 导出对话框，使新导出默认带有小号 “Made with Agentero” 标记。单次导出仍可关闭。"
+				"label": "默认添加 Agentero 水印"
+			}
+		},
+		"privacy": {
+			"section": "隐私",
+			"telemetry": {
+				"label": "共享匿名使用数据"
 			}
 		}
 	},
