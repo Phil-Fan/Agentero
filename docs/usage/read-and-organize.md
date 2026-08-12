@@ -50,7 +50,7 @@ PDF 阅读器支持：
 - 自动（或手动点「分析」）运行 PP-DocLayoutV3 ONNX 版面分析。
 - 列出检测到的插图、表格、算法和有编号公式。
 - 点击条目跳转到 PDF 对应位置；可开启叠加层查看模型原始框。
-- 鼠标悬停在插图/表/算法区域约 600ms 会自动打开视觉批注编辑器。
+- 点击插图/表/算法区域会打开视觉批注编辑器；滚动或拖动经过区域不会触发批注。
 
 原始结果缓存到 `{paper}/source/layout.json`，侧栏索引写入 `{paper}/source/layout-index.json`，可用 CLI `agentero layout list|get` 读取。
 

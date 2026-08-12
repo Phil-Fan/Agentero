@@ -127,7 +127,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 
 要点：先文字角色再联图；图题须整框在 figure bbox 内；图无 title 丢弃；默认置信度 30%；Paper PDF 的初步解析结果缓存到 `{paper}/source/layout.json`，后续 merge/filter 可重复计算。全文翻译缓存独立写入 `{paper}/source/layout-translate.json`，按 provider / 语言 / region 原文校验后复用。
 
-**Hover 视觉提问：** 指针在插图 / 表 / 算法 / 有编号公式上停留约 600ms 后，自动裁剪该区域并打开 `VisualAnnotationEditor`（与手动框选相同；不自动发送 Agent）。中途移开取消；打开后离开源区 / 草稿卡约 1000ms 自动关闭（与 ask / 视觉 pin 卡 hide 一致，便于指针移到卡片）；框选模式或已有草稿卡时不触发。手动框选草稿不会因移开而自动关闭。
+**视觉区域批注：** 点击插图 / 表 / 算法区域后，自动裁剪该区域并打开 `VisualAnnotationEditor`（与手动框选相同；不自动发送 Agent）。按住指针滚动、拖动经过区域或触控板滚动不会触发批注；键盘 Enter / Space 仍可激活可聚焦的区域按钮。框选模式或已有草稿卡时不触发。手动框选草稿不会因移开而自动关闭。
 
 **Hover 公式解析：** 当论文目录存在 `Annotation.md`（由 `equation-annotation` Skill 生成的符号词典）且解析到符号表时，hover **有编号公式** 不打开视觉提问，改为弹出「公式解析」卡片：展示符号 / 含义 / 通俗理解对照（符号列 KaTeX 渲染）。卡片可打开 `Annotation.md`。
 
@@ -135,7 +135,7 @@ Hover UX（与视觉提问分离）：
 
 | 项 | 值 |
 |---|---|
-| 打开 dwell | ~280ms（无裁图，比视觉提问 600ms 更短） |
+| 打开方式 | 点击图 / 表 / 算法区域；有 `Annotation.md` 符号表时，公式仍使用 hover dwell |
 | 移走关闭 | 离开公式 hit 或卡片后 ~320ms（够穿越到卡片空隙；比 1s 更利落） |
 | 回到公式 / 卡片 | 取消关闭；同一公式重新进入立即保持打开 |
 | 切换公式 | 图例已开时 hover 另一公式立即切换（无二次 dwell） |

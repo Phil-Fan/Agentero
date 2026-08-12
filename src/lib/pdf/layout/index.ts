@@ -1,5 +1,9 @@
 export { getPdfAiRuntime } from "@/lib/pdf/layout/ai-runtime";
 export {
+	createLayoutRegionClickGuard,
+	LAYOUT_REGION_CLICK_MOVE_TOLERANCE_PX,
+} from "@/lib/pdf/layout/click-guard";
+export {
 	LAYOUT_KIND_BADGE_CLASS,
 	LAYOUT_KIND_BORDER,
 	LAYOUT_KIND_FILL,
