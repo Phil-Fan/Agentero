@@ -1,4 +1,3 @@
-import { listen } from "@tauri-apps/api/event";
 import {
 	ArrowUpRight,
 	BookCheck,
@@ -30,6 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 import { GraphPanel } from "@/components/wiki/graph-panel";
 import { useVaultStore } from "@/hooks/use-app-stores";
+import { usePaperRefsSidecar } from "@/hooks/use-paper-refs-sidecar";
 import { usePapersOrgFolders } from "@/hooks/use-papers-org-folders";
 import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
@@ -39,9 +39,7 @@ import { lookupSubmit } from "@/lib/paper/import-actions";
 import { currentLookupParentDir } from "@/lib/paper/library-actions";
 import {
 	type Citation,
-	type CiteSidecar,
 	citationImportIdentifier,
-	loadPaperRefsReadOnly,
 	paperRefsParse,
 } from "@/lib/paper/refs";
 import { joinVaultPath } from "@/lib/vault/path";
@@ -93,8 +91,10 @@ export function ReferencesPanel({
 	className,
 }: ReferencesPanelProps) {
 	const { t } = useTranslation("viewer");
-	const [sidecar, setSidecar] = useState<CiteSidecar | null>(null);
-	const [loading, setLoading] = useState(false);
+	const { sidecar, loading, setSidecar } = usePaperRefsSidecar(
+		vaultPath,
+		paperPath,
+	);
 	const [parsing, setParsing] = useState(false);
 	const [filter, setFilter] = useState("");
 	const [importingId, setImportingId] = useState<string | null>(null);
@@ -117,52 +117,10 @@ export function ReferencesPanel({
 		);
 	}, [vaultPath, paperPath, tree]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: paperPath is the effect trigger, not a value read inside the effect.
 	useEffect(() => {
-		setSidecar(null);
 		setFilter("");
-		if (!vaultPath || !paperPath) return;
-		let cancelled = false;
-		let unlisten: (() => void) | undefined;
-		setLoading(true);
-		const reload = () => {
-			loadPaperRefsReadOnly(vaultPath, paperPath)
-				.then((s) => {
-					if (!cancelled) setSidecar(s);
-				})
-				.catch(() => {
-					if (!cancelled) setSidecar(null);
-				})
-				.finally(() => {
-					if (!cancelled) setLoading(false);
-				});
-		};
-		reload();
-		// Reload when this paper's ParseRefs backfill settles (event-driven,
-		// replacing the old blocking list→parse fallback).
-		const norm = (p: string | null | undefined) =>
-			(p ?? "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-		void listen<{
-			job: { kind: string; paperPath?: string | null; state: string };
-		}>("job:changed", (event) => {
-			const job = event.payload.job;
-			if (job.kind !== "parseRefs") return;
-			if (norm(job.paperPath) !== norm(paperPath)) return;
-			if (
-				job.state === "succeeded" ||
-				job.state === "failed" ||
-				job.state === "cancelled"
-			) {
-				if (!cancelled) reload();
-			}
-		}).then((u) => {
-			if (cancelled) u();
-			else unlisten = u;
-		});
-		return () => {
-			cancelled = true;
-			unlisten?.();
-		};
-	}, [vaultPath, paperPath]);
+	}, [paperPath]);
 
 	const runParse = useCallback(
 		async (force: boolean) => {
@@ -179,7 +137,7 @@ export function ReferencesPanel({
 				setParsing(false);
 			}
 		},
-		[vaultPath, paperPath, t],
+		[vaultPath, paperPath, t, setSidecar],
 	);
 
 	const importCitation = useCallback(
@@ -213,7 +171,7 @@ export function ReferencesPanel({
 				setImportingId(null);
 			}
 		},
-		[vaultPath, paperPath, t],
+		[vaultPath, paperPath, t, setSidecar],
 	);
 
 	const openMatched = useCallback(
