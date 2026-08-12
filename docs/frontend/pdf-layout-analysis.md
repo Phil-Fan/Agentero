@@ -1,6 +1,6 @@
 # PDF 版面分析（Figures / Tables / Algorithms / Formulas）
 
-浏览器内 ONNX（PP-DocLayoutV3）检测 PDF 版面 → 应用层 **文字角色 + 联图聚合 + 公式按编号框几何聚合（不解析编号文本）+ 置信度去重** → 右栏 **Figures**。
+版面检测（默认浏览器内 ONNX PP-DocLayoutV3，可选远程 Paddle PP-StructureV3 API）→ 应用层 **文字角色 + 联图聚合 + 公式按编号框几何聚合（不解析编号文本）+ 置信度去重** → 右栏 **Figures**。
 
 > 该能力已落地并可随论文打开自动运行；大模型推理在低端设备上可能卡顿，分析结果仅写入可重建 sidecar，不改 PDF 二进制。
 
@@ -102,6 +102,28 @@ LayoutAnalysisPluginPackage: {
 
 实现：`src-tauri/src/features/layout_model/`、`src/lib/pdf/layout/model.ts`、`ai-runtime.ts`。
 
+### 后端选择（本地 ONNX / Paddle API）
+
+设置 →「版面解析」可选择检测后端（`settings.layout.backend`）：
+
+| 后端 | 值 | 说明 |
+|---|---|---|
+| 本地推理（默认） | `local` | 浏览器内 ONNX PP-DocLayoutV3，完全离线 |
+| Paddle API | `paddle` | AI Studio 托管 PP-StructureV3 **异步任务** API，**整份 PDF 会上传到云端** |
+
+Paddle 后端流程（`src/lib/pdf/layout/paddle.ts` + `run-analysis.ts` 的 `startPaddleLayoutAnalysis`）：
+
+1. 读取本地 PDF，整份 base64 交给 Host 命令 `layout_remote_analyze_pdf`（`src-tauri/src/features/layout_remote/`）；
+2. Host 以 multipart 提交异步任务 `POST https://paddleocr.aistudio-app.com/api/v2/ocr/jobs`（端点固定；`model: PP-StructureV3`，`Authorization: bearer <token>`，token 由 Host 从设置注入，WebView 只持有 `*` 掩码），随后每 3s 轮询 `GET …/jobs/{jobId}`（总时限 10 分钟），期间通过 `layout-remote:progress` 事件回报 `extractedPages / totalPages` 进度；
+3. 任务完成后下载 `resultUrl.jsonUrl`（JSONL），提取每页 `prunedResult.layout_det_res.boxes`（像素坐标 + `label` + `score`）；渲染像素尺寸优先取响应 `dataInfo` / `inputImage` JPEG 头，缺失时按 200 DPI 估算（归一化 `bbox` 不受影响，仅 points `rect` 可能有轻微偏差）；
+4. 后续与本地路径完全共用：PDF text runs 补文字 / captionRole → `mergeCaptionsIntoHosts` → sidecar / index。
+
+- 标签词表与本地一致（PP-DocLayoutV3 `id2label`），`labels.ts` 映射直接复用；阈值同为 0.3。
+- sidecar `source.mode` 记为 `paddle-layout`（本地为 `embedpdf-layout`），两者均可被解析。
+- 进度 / 取消沿用 `LayoutTask` 形状（`PaddleLayoutTask`）；JobCenter `layoutAnalyze` 任务无需改动。
+- 无 paper 目录（拿不到 PDF 字节）或页数未知时自动回退本地 ONNX。
+- 端点固定为 `https://paddleocr.aistudio-app.com/api/v2/ocr/jobs`；API Key 在 [AI Studio PaddleOCR 任务页](https://aistudio.baidu.com/paddleocr/task/new) 获取。
+
 ### Layout sidecar
 
 `{paper}/source/layout.json` 保存 **初步解析结果**：模型标签映射后的 `PdfLayoutRegion[]`，并已尽力补充 caption 文本与 `captionRole`（公式编号文本不解析）。它不保存侧栏最终卡片列表，也不保存缩略图；后续 `mergeCaptionsIntoHosts`、去重和置信度筛选都从该 raw sidecar 重新计算。因此修改联图、公式合并或筛选规则后，不需要重新运行 PP-DocLayoutV3。
@@ -109,7 +131,7 @@ LayoutAnalysisPluginPackage: {
 ```ts
 type LayoutSidecar = {
   schemaVersion: 2;
-  source: { mode: "embedpdf-layout"; generatedAt: string };
+  source: { mode: "embedpdf-layout" | "paddle-layout"; generatedAt: string };
   regions: PdfLayoutRegion[]; // raw, pre-merge
 };
 ```

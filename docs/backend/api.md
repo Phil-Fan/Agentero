@@ -2108,6 +2108,41 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 - **参数**：`{ progressTaskId?: string }`（来自 `enqueueBackgroundTask` 的 id）
 - **返回**：`LayoutModelStatus`；未就绪则下载（进程锁；支持取消与字节进度）
 
+### 3.10.2 版面解析后端（本地 ONNX / Paddle API）
+
+`settings.json` 新增 `layout` 段（camelCase，`settings_get` / `settings_set` 同构）：
+
+```jsonc
+{
+  "layout": {
+    "backend": "local", // "local"（默认，ONNX）| "paddle"（AI Studio 异步任务）
+    "providerConfigs": {
+      "paddle": { "apiKey": "***" }
+    }
+  }
+}
+```
+
+- `apiKey` 与翻译 BYOK 同一套掩码机制：`settings_get` 返回 `*` 掩码，`settings_set` 收到掩码时保留已存密钥。Key 在 AI Studio PaddleOCR 任务页获取。
+- 设置 UI：Settings →「版面解析 / Layout」（后端选择 + Paddle API Key / 端点 + 连通性测试）。
+
+#### `layout_remote_analyze_pdf`（已实现）
+
+整份 PDF 的 **异步** PP-StructureV3 解析（无同步逐页接口）：
+
+- **参数**：`{ args: { pdfBase64, fileName?, apiKey? } }`
+  - 端点固定为 `https://paddleocr.aistudio-app.com/api/v2/ocr/jobs`；`apiKey` 为空 / 掩码时由 Host 从设置注入（WebView 不持有明文）。
+- **流程**：multipart 提交任务 `POST /api/v2/ocr/jobs`（`model: PP-StructureV3`，`Authorization: bearer <token>`）→ 每 3s 轮询 `GET /api/v2/ocr/jobs/{jobId}`（总时限 10 分钟）→ 完成后下载 `resultUrl.jsonUrl`（JSONL）并提取每页 `prunedResult.layout_det_res.boxes`。
+- **进度**：轮询期间 emit `layout-remote:progress`，payload `{ phase, extractedPages, totalPages }`（phase：`uploading` / `pending` / `running` / `downloading` / `done`）。
+- **返回**：`{ pages: [{ boxes: [{ clsId, label, score, coordinate }], widthPx, heightPx }] }`；渲染像素尺寸优先取 `dataInfo` / `inputImage` JPEG 头，缺失为 `null`（前端按 200 DPI 估算）。
+- **超时 / 代理**：单请求 120s；走 Host 全局代理（`network::client_builder`）。
+- 实现：`src-tauri/src/features/layout_remote/`；前端 `src/lib/pdf/layout/paddle.ts`。
+
+#### `layout_remote_probe`（已实现）
+
+- **参数**：`{ args: { imageBase64, apiKey? } }`
+- **行为**：用同一异步任务通路提交一张小图任务，返回 `{ jobId }` 即端点 + token 有效。走 Host（无 WebView CORS 限制、遵循代理），供设置页「测试连接」使用。
+
 #### `settings_get`（已实现）
 
 - **返回**（`ApiResult`）：`{ settings: AppSettings, path: string, existed: boolean }`
