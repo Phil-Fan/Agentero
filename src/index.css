@@ -34,7 +34,7 @@
  * a separator drag cancels it), so manual resizing stays transition-free.
  */
 [data-panel][data-rail-animating] {
-	transition: flex-grow 200ms cubic-bezier(0.25, 1, 0.5, 1);
+	transition: flex-grow var(--motion-duration-normal) var(--motion-ease-out);
 }
 
 /*
@@ -73,6 +73,16 @@
 	--agentero-font-mono:
 		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
 		"Courier New", monospace;
+
+	/*
+	 * Motion tokens — single source of truth for custom CSS. Component classes
+	 * mirror them: 100 = micro feedback (hover/press), 150 = overlay enter/exit,
+	 * 200 = layout choreography (rails, panels). Keep RAIL_ANIMATION_MS in
+	 * use-shell-layout.ts in sync with --motion-duration-normal.
+	 */
+	--motion-duration-fast: 150ms;
+	--motion-duration-normal: 200ms;
+	--motion-ease-out: cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 @theme inline {
@@ -274,7 +284,7 @@
 	border-radius: 999px;
 	border: 2px solid transparent;
 	background-clip: content-box;
-	transition: background-color 0.2s ease;
+	transition: background-color var(--motion-duration-fast) ease;
 }
 
 .agentero-scroll.scrolling::-webkit-scrollbar-thumb,

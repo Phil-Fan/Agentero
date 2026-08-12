@@ -34,6 +34,8 @@ React 19 + TypeScript Webview UI。全局状态为按域 **zustand vanilla store
 | next-themes | System / Light / Dark |
 | tweakcn 预设 | `uiTheme` 运行时注入 CSS 变量 |
 
+动效约定：`index.css` `:root` 定义 motion token（`--motion-duration-fast: 150ms` 浮层进出、`--motion-duration-normal: 200ms` 布局编排、`--motion-ease-out`）；组件类对应 100=微反馈 / 150=浮层 / 200=布局。全局 `prefers-reduced-motion` 兜底关闭所有动效（`animate-spin` 除外）。
+
 ### 领域库
 
 | 领域 | 选型 |

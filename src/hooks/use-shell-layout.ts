@@ -36,6 +36,7 @@ export type ShellLayout = {
 	cancelRailAnimation: () => void;
 };
 
+/** Keep in sync with --motion-duration-normal in index.css. */
 const RAIL_ANIMATION_MS = 200;
 
 export function useShellLayout(): ShellLayout {
