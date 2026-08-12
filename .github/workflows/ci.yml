@@ -88,6 +88,11 @@ jobs:
           test -d "$dest/include"
           echo "PDFIUM_LIB_PATH=$dest/lib" >> "$GITHUB_ENV"
           echo "PDFIUM_INCLUDE_PATH=$dest/include" >> "$GITHUB_ENV"
+          # tauri.macos.conf.json lists pdfium/libpdfium.dylib under
+          # bundle.macOS.frameworks; tauri-build hard-fails when the file is
+          # missing even for clippy/tests that never bundle.
+          mkdir -p src-tauri/pdfium
+          cp "$dest/lib/libpdfium.dylib" src-tauri/pdfium/libpdfium.dylib
       - name: Stub bundled CLI for Tauri externalBin
         # tauri.conf.json lists binaries/agentero-cli; build-script requires the
         # triple-suffixed file to exist even for lib/tests (not only app bundle).
