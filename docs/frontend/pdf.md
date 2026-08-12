@@ -30,7 +30,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | 明暗模式 | 底部换页栏旁可单独切换亮色 / 暗色页面，偏好保存在本地，不改变应用全局主题。EmbedPDF 尚无页面 color-scheme API，仅在 PDF 暗色模式下对 `RenderLayer` / `TilingLayer` 做柔和反相（`PDF_PAGE_RASTER_DARK_CLASS`：`invert(0.88)` + `hue-rotate(180)` + 轻亮度/对比）；全文翻译覆盖层同样按浅色纸面绘制后套用同一 filter，以匹配反转后的纸面。选区 / 搜索 / 批注覆盖层与 Agent 裁剪（`renderPageRect`）不受影响。扫描版/插图会被一并反相 |
 | 沉浸 | 底部换页栏旁切换；全屏 + 限宽居中 |
 | 位置 | 记忆阅读位置 |
-| 文中链接 | Link annotation 覆盖层：citation / 图表 / 章节 GoTo 点击跳页，URI 开系统浏览器；hover citation 锚文本（`[12]` / 作者-年份）显示目标条目预览：几何提取的 bibliography 文本与 `agentero-cite.json` sidecar 做 IDF 加权 bigram 匹配（`lib/paper/citation-match.ts`），命中则显示干净的 sidecar 条目文本并携带 `citationId`（References 卡片高亮联动尚未实现，见 #261）。图表、章节、公式等内部链接只保留导航，不显示引用预览 |
+| 文中链接 | Link annotation 覆盖层：citation / 图表 / 章节 GoTo 点击跳页，URI 开系统浏览器；hover citation 锚文本（`[12]` / 作者-年份）显示双段预览卡：上段为几何提取的 bibliography 原文，下段为与 `agentero-cite.json` sidecar 做 IDF 加权 bigram 匹配（`lib/paper/citation-match.ts`）命中的最相似条目（编号 + 标题 + 作者/年份/venue；未命中则只有上段）。References 卡片高亮联动尚未实现，见 #261。图表、章节、公式等内部链接只保留导航，不显示引用预览 |
 | 视觉批注 | 工具栏或 **⌘.** 进入框选。**Enter** → composer 草稿；**⌘/Ctrl+Enter** → 浮层。浮层与右侧 Agent **共用** `agentSessionStore` 会话（同一 send 管线、同一 `lines`），不是两套记录。Host 按能力 `session/load`（Grok）或 `session/resume` 续聊。多轮会回写同一 `marks/<id>.json` 的 `messages[]` / `answerSnapshot`（草稿 id 用 nanoid，跨重启不覆盖）。活动 PDF 才轮询 marks；切换 Vault 清空 composer 视觉草稿。裁剪最长边 1600 px |
 
 ## 划词菜单

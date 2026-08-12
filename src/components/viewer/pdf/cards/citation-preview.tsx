@@ -1,17 +1,20 @@
 import { useTranslation } from "react-i18next";
 import type { ScreenPoint } from "@/components/viewer/pdf/types";
+import type { Citation } from "@/lib/paper/refs";
 
 const CARD_WIDTH = 300;
-const CARD_ESTIMATED_HEIGHT = 116;
+const CARD_ESTIMATED_HEIGHT = 210;
 
 export function PdfCitationPreview({
 	screen,
 	previewText,
+	matched,
 	onPointerEnter,
 	onPointerLeave,
 }: {
 	screen: ScreenPoint;
 	previewText: string;
+	matched?: Citation;
 	onPointerEnter: () => void;
 	onPointerLeave: () => void;
 }) {
@@ -28,6 +31,18 @@ export function PdfCitationPreview({
 		Math.max(12, screen.y),
 		viewportHeight - CARD_ESTIMATED_HEIGHT - 12,
 	);
+	const m = matched?.metadata;
+	const metaParts = matched
+		? [
+				m?.authors?.length
+					? m.authors.length > 1
+						? `${m.authors[0]} et al.`
+						: m.authors[0]
+					: null,
+				m?.year != null ? String(m.year) : null,
+				m?.venue || null,
+			].filter(Boolean)
+		: [];
 
 	return (
 		<div
@@ -38,9 +53,34 @@ export function PdfCitationPreview({
 			onPointerEnter={onPointerEnter}
 			onPointerLeave={onPointerLeave}
 		>
-			<p className="line-clamp-2 text-[13px] leading-snug text-foreground">
+			<p className="font-medium text-[10px] uppercase tracking-wide text-muted-foreground">
+				{t("references.previewExtracted")}
+			</p>
+			<p className="mt-1 line-clamp-3 text-[13px] leading-snug text-foreground">
 				{previewText}
 			</p>
+			{matched ? (
+				<div className="mt-2 border-t border-border/60 pt-2">
+					<p className="font-medium text-[10px] uppercase tracking-wide text-muted-foreground">
+						{t("references.previewMatched")}
+					</p>
+					<div className="mt-1 flex items-baseline gap-1.5">
+						{matched.display ? (
+							<span className="shrink-0 font-medium text-[10px] text-muted-foreground tabular-nums">
+								{matched.display}
+							</span>
+						) : null}
+						<p className="line-clamp-2 text-[13px] leading-snug text-foreground">
+							{m?.title ?? matched.raw ?? matched.rawKey ?? matched.id}
+						</p>
+					</div>
+					{metaParts.length ? (
+						<p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+							{metaParts.join(" · ")}
+						</p>
+					) : null}
+				</div>
+			) : null}
 		</div>
 	);
 }

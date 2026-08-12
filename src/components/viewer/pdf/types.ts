@@ -5,6 +5,7 @@
 
 import type { FormattedSelection } from "@embedpdf/plugin-selection/react";
 import type { PromptImage } from "@/lib/agent/api";
+import type { Citation } from "@/lib/paper/refs";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import type {
 	PdfAskAnchor,
@@ -105,9 +106,10 @@ export type SelectionMenuState = {
 
 export type CitationPreviewState = {
 	screen: ScreenPoint;
+	/** Text geometrically extracted from the link destination page. */
 	previewText: string;
-	/** Matched `agentero-cite.json` citation id, when the text resolved to one. */
-	citationId?: string;
+	/** Best-matching sidecar citation, when the extracted text resolved to one. */
+	matched?: Citation;
 };
 
 export type EditorState = {

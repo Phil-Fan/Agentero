@@ -3,7 +3,8 @@
  * activating a link (GoTo destination → scroll, URI → system browser) and the
  * hover preview card that shows the destination text (usually the bibliography
  * entry). The extracted text is fuzzy-matched against the paper's
- * `agentero-cite.json` sidecar; the clean parsed entry wins when found.
+ * `agentero-cite.json` sidecar; the card shows the raw extraction and the
+ * clean matched entry together.
  *
  * Its own hook because the preview is a self-contained hover state machine — a
  * sequence guard for out-of-order resolves plus a short hide delay so the
@@ -129,13 +130,13 @@ export function usePdfCitations({
 				if (linkHoverSeqRef.current !== seq || !previewText) return;
 				const pageEl = pageElByIndex(hostRef.current, link.pageIndex);
 				if (!pageEl) return;
-				// The geometric extraction is noisy; prefer the clean sidecar entry
-				// text of the best match (and carry its id for panel linkage).
+				// The geometric extraction is noisy; surface the clean sidecar entry
+				// of the best match alongside the raw extracted text.
 				const matched = matchCitationByText(previewText, citationsRef.current);
 				setCitationPreview({
 					screen: rectRightScreen(pageEl, link.rect, zoomRef.current),
-					previewText: matched?.raw ?? matched?.metadata.title ?? previewText,
-					citationId: matched?.id,
+					previewText,
+					matched: matched ?? undefined,
 				});
 			});
 		},
