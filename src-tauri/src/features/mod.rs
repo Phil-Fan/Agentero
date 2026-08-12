@@ -14,6 +14,7 @@ pub mod export;
 pub mod import;
 pub mod jobs;
 pub mod layout_model;
+pub mod layout_remote;
 pub mod network;
 pub mod open_request;
 pub mod refs;

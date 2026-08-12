@@ -94,6 +94,8 @@ pub struct AppSettings {
     pub pdf_ask: PdfAskSettings,
     #[serde(default)]
     pub translate: TranslateSettings,
+    #[serde(default)]
+    pub layout: LayoutSettings,
     /// Prefill Markdown export dialog watermark checkbox (default off).
     #[serde(default)]
     pub export_watermark_enabled: bool,
@@ -165,6 +167,36 @@ pub struct TranslateProviderConfig {
     pub model: String,
 }
 
+/// PDF layout-analysis backend selection.
+/// - `local`: on-device PP-DocLayoutV3 (ONNX in the renderer).
+/// - `paddle`: remote PP-StructureV3 async job API (`POST {base}/api/v2/ocr/jobs`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutSettings {
+    #[serde(default = "default_layout_backend")]
+    pub backend: String,
+    #[serde(default)]
+    pub provider_configs: HashMap<String, LayoutProviderConfig>,
+}
+
+impl Default for LayoutSettings {
+    fn default() -> Self {
+        Self {
+            backend: default_layout_backend(),
+            provider_configs: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutProviderConfig {
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default)]
+    pub base_url: String,
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -195,6 +227,7 @@ impl Default for AppSettings {
             agent_personal_prompt: String::new(),
             pdf_ask: PdfAskSettings::default(),
             translate: TranslateSettings::default(),
+            layout: LayoutSettings::default(),
             export_watermark_enabled: false,
             telemetry_enabled: default_true(),
         }
@@ -285,6 +318,9 @@ fn default_translate_target() -> String {
 fn default_translate_source() -> String {
     "auto".into()
 }
+fn default_layout_backend() -> String {
+    "local".into()
+}
 
 /// In-memory + file-backed settings store.
 pub struct AppSettingsStore {
@@ -363,6 +399,20 @@ impl AppSettingsStore {
             Some(api_key.to_string())
         }
     }
+
+    /// Resolve a layout-provider API key by provider id (e.g. `paddle`).
+    /// Used by the layout_remote commands so the WebView never needs the key.
+    pub fn layout_api_key(&self, provider: &str) -> Option<String> {
+        let key = layout_provider_settings_key(provider)?;
+        let guard = self.inner.lock().ok()?;
+        let cfg = guard.layout.provider_configs.get(key)?;
+        let api_key = cfg.api_key.trim();
+        if api_key.is_empty() || is_translate_api_key_mask(api_key) {
+            None
+        } else {
+            Some(api_key.to_string())
+        }
+    }
 }
 
 fn read_file(path: &PathBuf) -> (AppSettings, bool) {
@@ -426,9 +476,22 @@ pub fn commercial_provider_settings_key(provider: &str) -> Option<&'static str> 
     }
 }
 
+/// Map layout provider id (any case) → settings `layout.providerConfigs` key.
+pub fn layout_provider_settings_key(provider: &str) -> Option<&'static str> {
+    match provider.trim().to_ascii_lowercase().as_str() {
+        "paddle" => Some("paddle"),
+        _ => None,
+    }
+}
+
 /// Replace non-empty commercial API keys with same-length `*` masks.
 fn redact_translate_secrets(mut settings: AppSettings) -> AppSettings {
     for cfg in settings.translate.provider_configs.values_mut() {
+        if !cfg.api_key.trim().is_empty() {
+            cfg.api_key = mask_translate_api_key(&cfg.api_key);
+        }
+    }
+    for cfg in settings.layout.provider_configs.values_mut() {
         if !cfg.api_key.trim().is_empty() {
             cfg.api_key = mask_translate_api_key(&cfg.api_key);
         }
@@ -444,6 +507,15 @@ fn merge_translate_secrets(incoming: &mut AppSettings, previous: &AppSettings) {
                 cfg.api_key = prev.api_key.clone();
             } else {
                 // Mask with no prior secret → treat as unset.
+                cfg.api_key.clear();
+            }
+        }
+    }
+    for (id, cfg) in incoming.layout.provider_configs.iter_mut() {
+        if is_translate_api_key_mask(&cfg.api_key) {
+            if let Some(prev) = previous.layout.provider_configs.get(id) {
+                cfg.api_key = prev.api_key.clone();
+            } else {
                 cfg.api_key.clear();
             }
         }
@@ -584,6 +656,23 @@ fn normalize(s: &mut AppSettings) {
     }
     if s.translate.source_lang != "auto" {
         s.translate.source_lang = default_translate_source();
+    }
+
+    const LAYOUT_BACKENDS: &[&str] = &["local", "paddle"];
+    if !LAYOUT_BACKENDS.contains(&s.layout.backend.as_str()) {
+        s.layout.backend = default_layout_backend();
+    }
+    normalize_layout_provider_configs(&mut s.layout.provider_configs);
+}
+
+fn normalize_layout_provider_configs(configs: &mut HashMap<String, LayoutProviderConfig>) {
+    const PROVIDERS: &[&str] = &["paddle"];
+    configs.retain(|k, _| PROVIDERS.contains(&k.as_str()));
+    for cfg in configs.values_mut() {
+        cfg.api_key = cfg.api_key.trim().to_string();
+        // Keep trailing slashes (same reason as translate configs): normalize
+        // runs on every save and echoes back into the settings UI.
+        cfg.base_url = cfg.base_url.trim().to_string();
     }
 }
 
