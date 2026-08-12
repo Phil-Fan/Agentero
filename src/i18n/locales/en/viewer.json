@@ -75,7 +75,8 @@
 		"editResend": "Resend",
 		"editCancel": "Cancel",
 		"openInChatGPT": "Open in ChatGPT",
-		"openInClaude": "Open in Claude"
+		"openInClaude": "Open in Claude",
+		"openInPrompt": "Please explain the following quoted passage from this paper."
 	},
 	"pdfExplain": {
 		"selectRegion": "Add visual annotation",
