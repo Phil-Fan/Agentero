@@ -25,14 +25,25 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { pageElByIndex, rectRightScreen } from "@/components/viewer/pdf/coords";
 import { getLinkDestination } from "@/components/viewer/pdf/layers/citation-links";
 import type { CitationPreviewState } from "@/components/viewer/pdf/types";
+import { useVaultStore } from "@/hooks/use-app-stores";
 import { usePaperRefsSidecar } from "@/hooks/use-paper-refs-sidecar";
+import { usePapersOrgFolders } from "@/hooks/use-papers-org-folders";
 import { logger } from "@/lib/core/logger";
+import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { findLocalPdfPath, localFileToArrayBuffer } from "@/lib/paper";
-import type { Citation } from "@/lib/paper/refs";
+import { resolvePapersParentDir } from "@/lib/paper/detect";
+import { lookupSubmit } from "@/lib/paper/import-actions";
+import { currentLookupParentDir } from "@/lib/paper/library-actions";
+import {
+	type Citation,
+	citationImportIdentifier,
+	paperRefsParse,
+} from "@/lib/paper/refs";
 import {
 	buildCitationDestKeyMap,
 	type CitationDestKeyMap,
@@ -67,6 +78,13 @@ export type PdfCitations = {
 	scheduleCitationHide: () => void;
 	handleCitationLinkActivate: (link: PdfLinkAnnoObject) => void;
 	handleCitationLinkHover: (link: PdfLinkAnnoObject | null) => void;
+	/** Library-import surface for the hover card; null when not a vault paper. */
+	citationImport: {
+		folders: string[];
+		lastImportParentDir: string;
+		importingId: string | null;
+		importCitation: (citation: Citation, parentDir: string) => void;
+	} | null;
 };
 
 /**
@@ -99,10 +117,75 @@ export function usePdfCitations({
 	const citationHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
-	const { sidecar } = usePaperRefsSidecar(vaultPath, paperPath);
+	const { sidecar, setSidecar } = usePaperRefsSidecar(vaultPath, paperPath);
 	/** Mirrored so the hover callback identity does not change per sidecar load. */
 	const citationsRef = useRef(sidecar?.citations ?? []);
 	citationsRef.current = sidecar?.citations ?? [];
+	const paperPathRef = useRef(paperPath);
+	paperPathRef.current = paperPath;
+
+	// ---- Library import (same flow as the References panel) ----
+	const { t } = useTranslation("viewer");
+	const tree = useVaultStore((s) => s.tree);
+	const folders = usePapersOrgFolders(vaultPath, tree);
+	const [importingId, setImportingId] = useState<string | null>(null);
+	const [lastImportParentDir, setLastImportParentDir] = useState(() =>
+		vaultPath && paperPath
+			? resolvePapersParentDir(vaultPath, paperPath, tree)
+			: currentLookupParentDir(),
+	);
+	useEffect(() => {
+		setLastImportParentDir(
+			vaultPath && paperPath
+				? resolvePapersParentDir(vaultPath, paperPath, tree)
+				: currentLookupParentDir(),
+		);
+	}, [vaultPath, paperPath, tree]);
+
+	const importCitation = useCallback(
+		async (citation: Citation, parentDir: string) => {
+			const identifier = citationImportIdentifier(citation);
+			if (!identifier || !vaultPath || !paperPath) return;
+			setImportingId(citation.id);
+			setLastImportParentDir(parentDir);
+			const origin = paperPath;
+			try {
+				await lookupSubmit([identifier], {
+					openImported: false,
+					parentDir,
+					onComplete: async () => {
+						try {
+							const parsed = await paperRefsParse(vaultPath, origin, true);
+							if (paperPathRef.current === origin) setSidecar(parsed);
+						} catch (error) {
+							notifyError(t("references.importFailed"), {
+								description:
+									error instanceof Error ? error.message : String(error),
+							});
+						}
+					},
+				});
+			} catch (error) {
+				notifyError(t("references.importFailed"), {
+					description: error instanceof Error ? error.message : String(error),
+				});
+			} finally {
+				setImportingId(null);
+			}
+		},
+		[vaultPath, paperPath, t, setSidecar],
+	);
+
+	const citationImport =
+		vaultPath && paperPath
+			? {
+					folders,
+					lastImportParentDir,
+					importingId,
+					importCitation: (citation: Citation, parentDir: string) =>
+						void importCitation(citation, parentDir),
+				}
+			: null;
 
 	/** hyperref `cite.<key>` destinations of the open PDF, by destination coords. */
 	const destKeyMapRef = useRef<CitationDestKeyMap | null>(null);
@@ -213,5 +296,6 @@ export function usePdfCitations({
 		scheduleCitationHide,
 		handleCitationLinkActivate,
 		handleCitationLinkHover,
+		citationImport,
 	};
 }

@@ -150,6 +150,7 @@
 		"noFilterMatch": "No references match the filter.",
 		"inLibrary": "In library",
 		"import": "Import into library",
+		"importing": "Importing…",
 		"importFailed": "Failed to import reference",
 		"openLink": "Open link",
 		"inspect": "Inspect reference",

@@ -658,6 +658,7 @@ function PdfViewerInner({
 		scheduleCitationHide,
 		handleCitationLinkActivate,
 		handleCitationLinkHover,
+		citationImport,
 	} = usePdfCitations({
 		docId,
 		annotationCap,
@@ -1428,6 +1429,17 @@ function PdfViewerInner({
 				}}
 				citationPreview={{
 					state: citationPreview,
+					importMenu: citationImport
+						? {
+								folders: citationImport.folders,
+								lastImportParentDir: citationImport.lastImportParentDir,
+								importing:
+									citationImport.importingId === citationPreview?.matched.id,
+								onImport: citationImport.importCitation,
+								onOpenChange: (open) =>
+									open ? cancelCitationHide() : scheduleCitationHide(),
+							}
+						: undefined,
 					onHoverEnter: cancelCitationHide,
 					onHoverLeave: scheduleCitationHide,
 				}}

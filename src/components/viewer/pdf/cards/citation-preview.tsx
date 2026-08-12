@@ -1,27 +1,42 @@
-import { ArrowUpRight, BookCheck, Import } from "lucide-react";
+import { ArrowUpRight, BookCheck, Import, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { CitationImportPopover } from "@/components/viewer/citation-import-menu";
 import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import { openExternalUrl } from "@/lib/core/open-external";
 import type { Citation } from "@/lib/paper/refs";
-import { citationExternalUrl } from "@/lib/paper/refs";
+import {
+	citationExternalUrl,
+	citationImportIdentifier,
+} from "@/lib/paper/refs";
 
 const CARD_WIDTH = 300;
 const CARD_ESTIMATED_HEIGHT = 110;
 
+export type CitationPreviewImportMenu = {
+	folders: string[];
+	lastImportParentDir: string;
+	importing: boolean;
+	onImport: (citation: Citation, folder: string) => void;
+	/** Lets the hover card stay open while the folder picker is up. */
+	onOpenChange: (open: boolean) => void;
+};
+
 /**
  * Hover card for an in-text citation link: the reference it points at, resolved
  * exactly through the hyperref cite-key map. Only mounted when a match exists.
- * Header mirrors the References panel: in-library badge or import hint, plus an
- * external link.
+ * Header mirrors the References panel: in-library badge or import picker, plus
+ * an external link.
  */
 export function PdfCitationPreview({
 	screen,
 	matched,
+	importMenu,
 	onPointerEnter,
 	onPointerLeave,
 }: {
 	screen: ScreenPoint;
 	matched: Citation;
+	importMenu?: CitationPreviewImportMenu;
 	onPointerEnter: () => void;
 	onPointerLeave: () => void;
 }) {
@@ -49,7 +64,14 @@ export function PdfCitationPreview({
 		m.venue || null,
 	].filter(Boolean);
 	const inLibrary = Boolean(matched.localMatch);
+	const importable = !inLibrary && citationImportIdentifier(matched) != null;
 	const link = citationExternalUrl(matched);
+
+	const importIcon = importMenu?.importing ? (
+		<Loader2 className="size-3.5 animate-spin" aria-hidden />
+	) : (
+		<Import className="size-3.5" aria-hidden />
+	);
 
 	return (
 		<div
@@ -74,6 +96,24 @@ export function PdfCitationPreview({
 							className="size-3.5 text-emerald-600 dark:text-emerald-500"
 							aria-label={t("references.inLibrary")}
 						/>
+					) : importable && importMenu ? (
+						<CitationImportPopover
+							citationId={matched.id}
+							folders={importMenu.folders}
+							lastImportParentDir={importMenu.lastImportParentDir}
+							importing={importMenu.importing}
+							onImport={(folder) => importMenu.onImport(matched, folder)}
+							onOpenChange={importMenu.onOpenChange}
+						>
+							<button
+								type="button"
+								className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+								aria-label={t("references.import")}
+								onClick={(e) => e.stopPropagation()}
+							>
+								{importIcon}
+							</button>
+						</CitationImportPopover>
 					) : (
 						<Import
 							className="size-3.5 text-muted-foreground"
@@ -85,7 +125,10 @@ export function PdfCitationPreview({
 							type="button"
 							className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
 							aria-label={t("references.openLink")}
-							onClick={() => openExternalUrl(link)}
+							onClick={(e) => {
+								e.stopPropagation();
+								openExternalUrl(link);
+							}}
 						>
 							<ArrowUpRight className="size-3.5" aria-hidden />
 						</button>

@@ -150,6 +150,7 @@
 		"noFilterMatch": "没有匹配的参考文献。",
 		"inLibrary": "已在文库",
 		"import": "导入文库",
+		"importing": "导入中…",
 		"importFailed": "导入参考文献失败",
 		"openLink": "打开链接",
 		"inspect": "查看引用详情",

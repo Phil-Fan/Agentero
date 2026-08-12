@@ -2,8 +2,6 @@ import {
 	ArrowUpRight,
 	BookCheck,
 	BookMarked,
-	Check,
-	FolderPlus,
 	Import,
 	Loader2,
 	RefreshCw,
@@ -14,19 +12,13 @@ import { useTranslation } from "react-i18next";
 import { PaneHeader } from "@/components/shell/pane-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-	Popover,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { CitationImportPopover } from "@/components/viewer/citation-import-menu";
 import { GraphPanel } from "@/components/wiki/graph-panel";
 import { useVaultStore } from "@/hooks/use-app-stores";
 import { usePaperRefsSidecar } from "@/hooks/use-paper-refs-sidecar";
@@ -408,23 +400,9 @@ function CitationCard({
 	onImport: (citation: Citation, parentDir: string) => void;
 }) {
 	const { t } = useTranslation("viewer");
-	const [folderMenuOpen, setFolderMenuOpen] = useState(false);
-	const [newFolder, setNewFolder] = useState("");
 	const matched = Boolean(citation.localMatch);
 	const link = citationExternalUrl(citation);
 	const importable = !matched && citationImportIdentifier(citation) != null;
-
-	const typed = newFolder.trim();
-	const normalizedNew = typed ? normalizeNewFolderInput(typed) : "";
-	const newValid = Boolean(
-		normalizedNew && isValidPapersParentDir(normalizedNew),
-	);
-
-	const handleSelectFolder = (folder: string) => {
-		setFolderMenuOpen(false);
-		setNewFolder("");
-		onImport(citation, folder);
-	};
 
 	const activate = () => {
 		if (matched) {
@@ -457,93 +435,28 @@ function CitationCard({
 			)}
 			<div className="absolute top-2 right-2 flex items-center gap-0.5 rounded-lg bg-background/80 p-0.5 opacity-0 shadow-sm ring-1 ring-border/60 backdrop-blur-sm transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
 				{importable ? (
-					<Popover open={folderMenuOpen} onOpenChange={setFolderMenuOpen}>
-						<PopoverTrigger asChild>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-xs"
-								className="size-6 text-muted-foreground hover:text-foreground"
-								aria-label={t("references.import")}
-								disabled={importing}
-							>
-								{importing ? (
-									<Loader2 className="size-3.5 animate-spin" />
-								) : (
-									<Import className="size-3.5" />
-								)}
-							</Button>
-						</PopoverTrigger>
-						<PopoverContent
-							align="end"
-							side="bottom"
-							sideOffset={4}
-							className="w-56 p-2"
+					<CitationImportPopover
+						citationId={citation.id}
+						folders={folders}
+						lastImportParentDir={lastImportParentDir}
+						importing={importing}
+						onImport={(folder) => onImport(citation, folder)}
+					>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-xs"
+							className="size-6 text-muted-foreground hover:text-foreground"
+							aria-label={t("references.import")}
+							disabled={importing}
 						>
-							<div className="space-y-2">
-								<p className="font-medium text-xs text-foreground">
-									{t("references.importToFolder")}
-								</p>
-								<ScrollArea className="h-40 rounded-md border">
-									<div className="space-y-0.5 p-1">
-										{folders.map((folder) => {
-											const active = folder === lastImportParentDir;
-											return (
-												<button
-													key={folder}
-													type="button"
-													disabled={importing}
-													className={cn(
-														"flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors hover:bg-accent",
-														active && "bg-muted",
-													)}
-													onClick={() => handleSelectFolder(folder)}
-												>
-													<span className="flex-1 truncate font-mono">
-														{folder}
-													</span>
-													{active ? (
-														<Check className="size-3 shrink-0 text-primary" />
-													) : null}
-												</button>
-											);
-										})}
-									</div>
-								</ScrollArea>
-								<div className="space-y-1">
-									<Label
-										htmlFor={`ref-new-folder-${citation.id}`}
-										className="text-[10px] text-muted-foreground"
-									>
-										{t("references.newFolder")}
-									</Label>
-									<div className="relative">
-										<FolderPlus className="-translate-y-1/2 absolute top-1/2 left-2 size-3 text-muted-foreground" />
-										<Input
-											id={`ref-new-folder-${citation.id}`}
-											value={newFolder}
-											onChange={(e) => setNewFolder(e.target.value)}
-											placeholder={t("references.newFolderHint")}
-											disabled={importing}
-											spellCheck={false}
-											className="h-7 pl-6 text-xs font-mono"
-											onKeyDown={(e) => {
-												if (e.key === "Enter" && newValid) {
-													e.preventDefault();
-													handleSelectFolder(normalizedNew);
-												}
-											}}
-										/>
-									</div>
-									{typed && !newValid ? (
-										<p className="text-[10px] text-destructive">
-											{t("references.invalidFolderPath")}
-										</p>
-									) : null}
-								</div>
-							</div>
-						</PopoverContent>
-					</Popover>
+							{importing ? (
+								<Loader2 className="size-3.5 animate-spin" />
+							) : (
+								<Import className="size-3.5" />
+							)}
+						</Button>
+					</CitationImportPopover>
 				) : null}
 				{link ? (
 					<TooltipProvider delayDuration={250}>
@@ -569,22 +482,4 @@ function CitationCard({
 			</div>
 		</div>
 	);
-}
-
-function normalizeNewFolderInput(input: string): string {
-	const trimmed = input
-		.trim()
-		.replace(/\\/g, "/")
-		.replace(/^\/+|\/+$/g, "");
-	if (!trimmed) return "";
-	if (trimmed === "papers" || trimmed.startsWith("papers/")) return trimmed;
-	return `papers/${trimmed}`;
-}
-
-function isValidPapersParentDir(path: string): boolean {
-	if (!path) return false;
-	if (path !== "papers" && !path.startsWith("papers/")) return false;
-	return path
-		.split("/")
-		.every((segment) => segment && segment !== "." && segment !== "..");
 }

@@ -1,7 +1,10 @@
 import { createPortal } from "react-dom";
 import { AnnotationEditor } from "@/components/viewer/pdf/cards/annotation-editor";
 import { AskPopover } from "@/components/viewer/pdf/cards/ask-popover";
-import { PdfCitationPreview } from "@/components/viewer/pdf/cards/citation-preview";
+import {
+	type CitationPreviewImportMenu,
+	PdfCitationPreview,
+} from "@/components/viewer/pdf/cards/citation-preview";
 import { FormulaAnnotationCard } from "@/components/viewer/pdf/cards/formula-annotation-card";
 import { SelectionMenu } from "@/components/viewer/pdf/cards/selection-menu";
 import { TranslateCard } from "@/components/viewer/pdf/cards/translate-card";
@@ -50,6 +53,7 @@ type PdfCardStackProps = {
 	};
 	citationPreview: {
 		state: CitationPreviewState | null;
+		importMenu?: CitationPreviewImportMenu;
 		onHoverEnter: () => void;
 		onHoverLeave: () => void;
 	};
@@ -160,6 +164,7 @@ export function PdfCardStack({
 				<PdfCitationPreview
 					screen={citationPreview.state.screen}
 					matched={citationPreview.state.matched}
+					importMenu={citationPreview.importMenu}
 					onPointerEnter={citationPreview.onHoverEnter}
 					onPointerLeave={citationPreview.onHoverLeave}
 				/>
