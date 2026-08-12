@@ -22,7 +22,13 @@ pub enum MarkCmd {
         kind: Option<String>,
     },
     /// Get one mark by id.
-    Get { r#ref: String, id: String },
+    Get {
+        r#ref: String,
+        /// Mark id. Accepts a leading `-`: ids are nanoids and that alphabet
+        /// includes `-`, so ~1 in 64 would otherwise parse as an unknown flag.
+        #[arg(allow_hyphen_values = true)]
+        id: String,
+    },
     /// Add a mark. Prefer `--region` for figure/table/algorithm/formula anchors.
     Add {
         r#ref: String,
@@ -47,7 +53,12 @@ pub enum MarkCmd {
         quote: Option<String>,
     },
     /// Delete a mark file.
-    Delete { r#ref: String, id: String },
+    Delete {
+        r#ref: String,
+        /// Mark id. Accepts a leading `-` (see `Get`).
+        #[arg(allow_hyphen_values = true)]
+        id: String,
+    },
 }
 
 #[derive(Debug, Serialize)]

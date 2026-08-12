@@ -1318,3 +1318,40 @@ fn layout_list_and_mark_add_region() {
         .join(format!("{mark_id}.json"))
         .is_file());
 }
+
+/// Mark ids are nanoids and that alphabet includes `-`, so ~1 in 64 starts with
+/// a hyphen. Those must reach the command instead of tripping clap's flag
+/// parsing: expect a business `mark_not_found` (exit 1), never usage (exit 2).
+#[test]
+fn mark_id_starting_with_hyphen_is_not_parsed_as_a_flag() {
+    let tmp = tempdir().unwrap();
+    let vault = tmp.path().join("v");
+    create_vault(&vault);
+
+    let paper = vault.join("papers").join("demo");
+    fs::create_dir_all(paper.join("marks")).unwrap();
+    fs::write(paper.join("NOTES.md"), "# Demo\n").unwrap();
+    seed_paper(&vault, "papers/demo", "demo", "Demo Paper");
+
+    let out = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "-y",
+            "mark",
+            "delete",
+            "demo",
+            "-gnlmmSEJc",
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let out: Value = serde_json::from_slice(&out).unwrap();
+    assert_eq!(out["ok"], false);
+    assert_eq!(out["error"]["code"], "mark_not_found");
+    assert_eq!(out["error"]["details"]["id"], "-gnlmmSEJc");
+}

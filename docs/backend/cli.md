@@ -45,6 +45,8 @@ agentero mark list papers/demo --json
 agentero mark delete papers/demo <id> -y --json
 ```
 
+Mark id 是 nanoid，字母表含 `-`，约 1/64 的 id 以 `-` 开头。`mark get` / `mark delete` 的 id 位置参数按 `allow_hyphen_values` 接收，无需 `--` 分隔。
+
 | `--kind`（layout list） | 含义 |
 |---|---|
 | `figure` | 侧栏插图分区（image + chart） |
