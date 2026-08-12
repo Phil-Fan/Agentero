@@ -436,6 +436,7 @@ agentero --vault /tmp/agentero-cli-vault paper list --json
 | 能力 | macOS | Linux | Windows |
 |---|---|---|---|
 | 安装启动 §0.3 | ☐ | ☐ | ☐ |
+| Windows NSIS 安装器品牌图 | N/A | N/A | ☐ |
 | 五分钟冒烟 §1 | ☐ | ☐ | ☐ |
 | 文件树 + 回收站 §3 | ☐ | ☐ | ☐ |
 | PDF + 划词 §7 | ☐ | ☐ | ☐ |

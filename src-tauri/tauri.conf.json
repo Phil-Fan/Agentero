@@ -68,6 +68,11 @@
     "macOS": {
       "entitlements": "./Entitlements.plist",
       "minimumSystemVersion": "12.0"
+    },
+    "windows": {
+      "nsis": {
+        "sidebarImage": "icons/nsis-sidebar.bmp"
+      }
     }
   }
 }
