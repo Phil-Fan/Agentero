@@ -246,7 +246,7 @@
 		"tagsSaveFailed": "Failed to save tags.",
 		"pdf": "PDF",
 		"abs": "Abs",
-		"modelscopeInterpretation": "Open ModelScope paper reading",
+		"modelscopeInterpretation": "ModelScope reading",
 		"alphaXiv": "alphaXiv",
 		"arxivId": "arXiv ID",
 		"copyHint": "Click to copy {{label}}",
