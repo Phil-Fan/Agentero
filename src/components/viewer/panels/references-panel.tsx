@@ -20,15 +20,11 @@ import {
 } from "@/components/ui/tooltip";
 import { CitationImportPopover } from "@/components/viewer/citation-import-menu";
 import { GraphPanel } from "@/components/wiki/graph-panel";
-import { useVaultStore } from "@/hooks/use-app-stores";
+import { useCitationImport } from "@/hooks/use-citation-import";
 import { usePaperRefsSidecar } from "@/hooks/use-paper-refs-sidecar";
-import { usePapersOrgFolders } from "@/hooks/use-papers-org-folders";
 import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { cn } from "@/lib/core/utils";
-import { resolvePapersParentDir } from "@/lib/paper/detect";
-import { lookupSubmit } from "@/lib/paper/import-actions";
-import { currentLookupParentDir } from "@/lib/paper/library-actions";
 import {
 	type Citation,
 	citationExternalUrl,
@@ -81,25 +77,12 @@ export function ReferencesPanel({
 	);
 	const [parsing, setParsing] = useState(false);
 	const [filter, setFilter] = useState("");
-	const [importingId, setImportingId] = useState<string | null>(null);
 	const paperPathRef = useRef(paperPath);
 	paperPathRef.current = paperPath;
 	const listRef = useRef<HTMLDivElement>(null);
 
-	const tree = useVaultStore((s) => s.tree);
-	const folders = usePapersOrgFolders(vaultPath, tree);
-	const [lastImportParentDir, setLastImportParentDir] = useState(() =>
-		vaultPath && paperPath
-			? resolvePapersParentDir(vaultPath, paperPath, tree)
-			: currentLookupParentDir(),
-	);
-	useEffect(() => {
-		setLastImportParentDir(
-			vaultPath && paperPath
-				? resolvePapersParentDir(vaultPath, paperPath, tree)
-				: currentLookupParentDir(),
-		);
-	}, [vaultPath, paperPath, tree]);
+	const { folders, lastImportParentDir, importingId, importCitation } =
+		useCitationImport(vaultPath, paperPath, setSidecar);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: paperPath is the effect trigger, not a value read inside the effect.
 	useEffect(() => {
@@ -119,40 +102,6 @@ export function ReferencesPanel({
 				});
 			} finally {
 				setParsing(false);
-			}
-		},
-		[vaultPath, paperPath, t, setSidecar],
-	);
-
-	const importCitation = useCallback(
-		async (citation: Citation, parentDir: string) => {
-			const identifier = citationImportIdentifier(citation);
-			if (!identifier || !vaultPath || !paperPath) return;
-			setImportingId(citation.id);
-			setLastImportParentDir(parentDir);
-			const origin = paperPath;
-			try {
-				await lookupSubmit([identifier], {
-					openImported: false,
-					parentDir,
-					onComplete: async () => {
-						try {
-							const parsed = await paperRefsParse(vaultPath, origin, true);
-							if (paperPathRef.current === origin) setSidecar(parsed);
-						} catch (error) {
-							notifyError(t("references.importFailed"), {
-								description:
-									error instanceof Error ? error.message : String(error),
-							});
-						}
-					},
-				});
-			} catch (error) {
-				notifyError(t("references.importFailed"), {
-					description: error instanceof Error ? error.message : String(error),
-				});
-			} finally {
-				setImportingId(null);
 			}
 		},
 		[vaultPath, paperPath, t, setSidecar],

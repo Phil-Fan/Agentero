@@ -76,7 +76,7 @@ export function PdfCitationPreview({
 	return (
 		<div
 			role="dialog"
-			aria-label={t("references.previewLabel", { marker: "" })}
+			aria-label={t("references.previewLabel")}
 			className="fixed z-50 w-[300px] rounded-xl border border-border/80 bg-background/98 p-3 shadow-xl ring-1 ring-black/5 backdrop-blur-sm dark:ring-white/10"
 			style={{ left, top }}
 			onPointerEnter={onPointerEnter}
