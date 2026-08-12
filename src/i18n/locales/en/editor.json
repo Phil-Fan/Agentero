@@ -216,5 +216,9 @@
 		"words_other": "{{count}} words",
 		"characters_one": "{{count}} character",
 		"characters_other": "{{count}} characters"
+	},
+	"html": {
+		"edit": "Edit HTML",
+		"placeholder": "<div align=\"center\">…</div>"
 	}
 }

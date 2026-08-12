@@ -213,5 +213,9 @@
 		},
 		"words": "{{count}}个词",
 		"characters": "{{count}}个字符"
+	},
+	"html": {
+		"edit": "编辑 HTML",
+		"placeholder": "<div align=\"center\">…</div>"
 	}
 }

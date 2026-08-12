@@ -13,6 +13,7 @@ import {
 	obsidianCalloutRules,
 	remarkObsidianCallout,
 } from "@/lib/markdown/callout";
+import { htmlRules, remarkPreserveHtml } from "@/lib/markdown/html";
 import {
 	remarkWikiLinkLiteralPaths,
 	wikiLinkRules,
@@ -53,8 +54,9 @@ export const MarkdownKit = [
 				remarkMdx,
 				remarkMention,
 				remarkObsidianCallout,
+				remarkPreserveHtml,
 			],
-			rules: { ...wikiLinkRules, ...obsidianCalloutRules },
+			rules: { ...wikiLinkRules, ...obsidianCalloutRules, ...htmlRules },
 		},
 	}),
 	MarkdownPastePlugin,

@@ -94,6 +94,7 @@ import {
 } from "@/components/editor/nodes/leaf";
 import { CalloutPlugin } from "@/components/editor/plugins/callout-plugin";
 import { FindReplaceKit } from "@/components/editor/plugins/find-replace-kit";
+import { HtmlBlockPlugin } from "@/components/editor/plugins/html-plugin";
 import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import { WikiBlockIdPlugin } from "@/components/editor/plugins/wiki-block-id-plugin";
@@ -153,6 +154,7 @@ export const MarkdownEditorKit = [
 		node: { component: BlockquoteElement },
 	}),
 	CalloutPlugin,
+	HtmlBlockPlugin,
 	HorizontalRulePlugin.configure({
 		inputRules: [
 			HorizontalRuleRules.markdown({ variant: "-" }),
