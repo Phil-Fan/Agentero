@@ -106,10 +106,8 @@ export type SelectionMenuState = {
 
 export type CitationPreviewState = {
 	screen: ScreenPoint;
-	/** Text geometrically extracted from the link destination page. */
-	previewText: string;
-	/** Best-matching sidecar citation, when the extracted text resolved to one. */
-	matched?: Citation;
+	/** Sidecar citation the hovered link points at (exact hyperref lookup). */
+	matched: Citation;
 };
 
 export type EditorState = {

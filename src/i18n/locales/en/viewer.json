@@ -154,8 +154,6 @@
 		"openLink": "Open link",
 		"inspect": "Inspect reference",
 		"previewLabel": "Reference preview for {{marker}}",
-		"previewExtracted": "Extracted from PDF",
-		"previewMatched": "Matched reference",
 		"previewUnresolved": "Open References to inspect this citation.",
 		"importToFolder": "Import to folder",
 		"newFolder": "New folder",

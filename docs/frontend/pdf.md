@@ -30,7 +30,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | 明暗模式 | 底部换页栏旁可单独切换亮色 / 暗色页面，偏好保存在本地，不改变应用全局主题。EmbedPDF 尚无页面 color-scheme API，仅在 PDF 暗色模式下对 `RenderLayer` / `TilingLayer` 做柔和反相（`PDF_PAGE_RASTER_DARK_CLASS`：`invert(0.88)` + `hue-rotate(180)` + 轻亮度/对比）；全文翻译覆盖层同样按浅色纸面绘制后套用同一 filter，以匹配反转后的纸面。选区 / 搜索 / 批注覆盖层与 Agent 裁剪（`renderPageRect`）不受影响。扫描版/插图会被一并反相 |
 | 沉浸 | 底部换页栏旁切换；全屏 + 限宽居中 |
 | 位置 | 记忆阅读位置 |
-| 文中链接 | Link annotation 覆盖层：citation / 图表 / 章节 GoTo 点击跳页，URI 开系统浏览器；hover citation 锚文本显示双段预览卡：上段是目标页几何合并出的原文，下段是对应的参考文献。下段优先走**精确路径**——hyperref 把每条 in-text 引用写成命名目标 `cite.<bibtexKey>`，而 sidecar 的 `rawKey` 是同一个 key；因 PDFium 只返回解析后的 `pageIndex + y`，打开论文时用 pdf-lib 读一遍 PDF 建 `pageIndex:pdfY → bibtexKey` 索引（`lib/pdf/citation-dest-keys.ts`），hover 时按目标坐标查表精确命中。坐标被多条目共用时不猜、直接回退到 IDF 加权 bigram 文本匹配（`lib/paper/citation-match.ts`）。31 篇真实论文 / 3703 条 in-text 链接实测：95% 精确、0 误配、5% 回退。图表、章节、公式等内部链接只保留导航，不显示引用预览 |
+| 文中链接 | Link annotation 覆盖层：citation / 图表 / 章节 GoTo 点击跳页，URI 开系统浏览器；hover citation 锚文本显示参考文献卡片（编号 + BibTeX key + 标题 + 作者/年份/venue）。解析走**精确路径**：hyperref 把每条 in-text 引用写成命名目标 `cite.<bibtexKey>`，与 sidecar 的 `rawKey` 同 key；因 PDFium 只返回解析后的 `pageIndex + y`，打开论文时用 pdf-lib 读一遍 PDF 建 `pageIndex:pdfY → bibtexKey` 索引（`lib/pdf/citation-dest-keys.ts`），hover 时按目标坐标查表命中。31 篇真实论文 / 3703 条 in-text 链接实测：95% 命中、0 误配；无法解析的链接（无 hyperref 目标 / 坐标歧义 / sidecar 缺 key）不显示卡片。图表、章节、公式等内部链接只保留导航 |
 | 视觉批注 | 工具栏或 **⌘.** 进入框选。**Enter** → composer 草稿；**⌘/Ctrl+Enter** → 浮层。浮层与右侧 Agent **共用** `agentSessionStore` 会话（同一 send 管线、同一 `lines`），不是两套记录。Host 按能力 `session/load`（Grok）或 `session/resume` 续聊。多轮会回写同一 `marks/<id>.json` 的 `messages[]` / `answerSnapshot`（草稿 id 用 nanoid，跨重启不覆盖）。活动 PDF 才轮询 marks；切换 Vault 清空 composer 视觉草稿。裁剪最长边 1600 px |
 
 ## 划词菜单

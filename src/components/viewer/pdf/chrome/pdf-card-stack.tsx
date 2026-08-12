@@ -159,7 +159,6 @@ export function PdfCardStack({
 			{citationPreview.state ? (
 				<PdfCitationPreview
 					screen={citationPreview.state.screen}
-					previewText={citationPreview.state.previewText}
 					matched={citationPreview.state.matched}
 					onPointerEnter={citationPreview.onHoverEnter}
 					onPointerLeave={citationPreview.onHoverLeave}
