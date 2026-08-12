@@ -11,6 +11,7 @@ describe("agentLogoKeyForTemplate", () => {
 		expect(agentLogoKeyForTemplate("hermes")).toBe("hermes");
 		expect(agentLogoKeyForTemplate("qodercli")).toBe("qodercli");
 		expect(agentLogoKeyForTemplate("grok-build")).toBe("grok-build");
+		expect(agentLogoKeyForTemplate("pi")).toBe("pi");
 	});
 
 	it("falls back to the custom logo for unknown or empty templates", () => {

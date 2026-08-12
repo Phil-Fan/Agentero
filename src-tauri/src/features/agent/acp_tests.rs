@@ -85,6 +85,7 @@ mod acp_live {
         assert!(ids.contains(&"gemini"));
         assert!(ids.contains(&"qodercli"));
         assert!(ids.contains(&"grok-build"));
+        assert!(ids.contains(&"pi"));
         assert!(!ids.contains(&"custom"));
     }
 
@@ -98,6 +99,18 @@ mod acp_live {
         assert_eq!(codex.command, "codex-acp");
         assert_eq!(codex.args, Vec::<String>::new());
         assert_eq!(codex.detect_command.as_deref(), Some("codex"));
+    }
+
+    #[test]
+    fn pi_template_uses_the_acp_adapter() {
+        let pi = catalog_templates()
+            .into_iter()
+            .find(|entry| entry.id == "pi")
+            .expect("Pi template");
+
+        assert_eq!(pi.command, "pi-acp");
+        assert_eq!(pi.args, Vec::<String>::new());
+        assert_eq!(pi.detect_command.as_deref(), Some("pi"));
     }
 
     #[test]
