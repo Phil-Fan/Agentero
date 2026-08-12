@@ -248,6 +248,10 @@
 		"html": "HTML",
 		"abs": "摘要",
 		"modelscopeInterpretation": "前往魔搭论文解读",
-		"alphaXiv": "alphaXiv"
+		"alphaXiv": "alphaXiv",
+		"arxivId": "arXiv 标识号",
+		"copyHint": "单击复制{{label}}",
+		"copied": "已复制{{label}}",
+		"copyFailed": "无法复制到剪贴板"
 	}
 }

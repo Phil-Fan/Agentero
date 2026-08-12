@@ -248,6 +248,10 @@
 		"html": "HTML",
 		"abs": "Abs",
 		"modelscopeInterpretation": "Open ModelScope paper reading",
-		"alphaXiv": "alphaXiv"
+		"alphaXiv": "alphaXiv",
+		"arxivId": "arXiv ID",
+		"copyHint": "Click to copy {{label}}",
+		"copied": "Copied {{label}}",
+		"copyFailed": "Could not copy to clipboard"
 	}
 }
