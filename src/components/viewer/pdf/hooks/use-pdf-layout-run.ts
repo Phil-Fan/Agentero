@@ -159,10 +159,18 @@ export function usePdfLayoutRun({
 					}
 					hooks?.signal?.addEventListener("abort", onAbort);
 
+					// True page sizes for the remote paddle backend (it renders pages itself).
+					const pageSizeAt = (pageIndex: number) => {
+						const docs = docCapRef.current ?? docCap;
+						const size = docs?.getDocument(docId)?.pages[pageIndex]?.size;
+						return size && size.width > 0 && size.height > 0 ? size : null;
+					};
+
 					void runDocumentLayoutAnalysis(la, docId, {
 						paperAbsPath,
 						totalPages: pages > 0 ? pages : null,
 						force: opts?.force === true,
+						pageSizeAt,
 						isDocumentOpen: () =>
 							docCapRef.current?.isDocumentOpen(docId) ?? false,
 						onDone: () => {

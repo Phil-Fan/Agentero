@@ -1,11 +1,14 @@
 import type {
 	DocumentAnalysisProgress,
 	DocumentLayout,
+	LayoutAnalysisErrorReason,
 	LayoutAnalysisScope,
 	LayoutTask,
 } from "@embedpdf/plugin-layout-analysis";
 
 import { logger } from "@/lib/core/logger";
+import { isTauri } from "@/lib/core/tauri";
+import { findLocalPdfPath, localFileToArrayBuffer } from "@/lib/paper";
 import {
 	readLayoutSidecar,
 	writeLayoutIndexFromRaw,
@@ -19,6 +22,12 @@ import {
 	summarizeLayoutResult,
 } from "@/lib/pdf/layout/normalize";
 import {
+	invokeLayoutRemoteAnalyzePdf,
+	LAYOUT_REMOTE_PROGRESS_EVENT,
+	type LayoutRemoteProgressPayload,
+	paddlePageToRegions,
+} from "@/lib/pdf/layout/paddle";
+import {
 	setLayoutAnalysisUi,
 	setLayoutDocumentResult,
 } from "@/lib/pdf/layout/store";
@@ -30,6 +39,7 @@ import type {
 	PdfLayoutDocumentResult,
 	PdfLayoutRegion,
 } from "@/lib/pdf/layout/types";
+import { loadSettings } from "@/lib/settings/store";
 
 export type RunLayoutAnalysisOptions = {
 	/**
@@ -46,9 +56,24 @@ export type RunLayoutAnalysisOptions = {
 	paperLabel?: string;
 	/** Optional live document guard for viewer-bound analysis. */
 	isDocumentOpen?: () => boolean;
+	/**
+	 * True PDF page size in points for the remote `paddle` backend (the
+	 * service renders pages itself, so sizes cannot come from a local render).
+	 */
+	pageSizeAt?: (pageIndex: number) => { width: number; height: number } | null;
 	onProgress?: (messageStage: DocumentAnalysisProgress) => void;
 	onDone?: (summary: string, total: number) => void;
 	onError?: (message: string, aborted: boolean) => void;
+};
+
+/** Structural task shape shared by the local plugin task and the paddle task. */
+export type LayoutTaskLike = {
+	onProgress: (listener: (p: DocumentAnalysisProgress) => void) => void;
+	wait: (
+		ok: (value: DocumentLayout) => void,
+		err: (e: { type?: string; reason?: unknown }) => void,
+	) => void;
+	abort: (reason: LayoutAnalysisErrorReason) => void;
 };
 
 class LayoutDocumentClosedError extends Error {
@@ -278,7 +303,7 @@ export async function runDocumentLayoutAnalysis(
 	scope: LayoutAnalysisScope,
 	documentId: string,
 	options: RunLayoutAnalysisOptions = {},
-): Promise<LayoutTask<DocumentLayout, DocumentAnalysisProgress> | null> {
+): Promise<LayoutTaskLike | null> {
 	const cancelClosedDocument = () => {
 		setLayoutAnalysisUi({ stage: "cancelled" }, documentId);
 		options.onError?.("document closed", true);
@@ -382,6 +407,22 @@ export async function runDocumentLayoutAnalysis(
 		},
 		documentId,
 	);
+
+	// Remote PP-StructureV3 backend (Settings → Layout): whole-PDF async job.
+	// Falls back to local ONNX when the paper folder / page count is unknown.
+	if (
+		loadSettings().layout.backend === "paddle" &&
+		options.paperAbsPath &&
+		typeof options.totalPages === "number" &&
+		options.totalPages > 0
+	) {
+		return startPaddleLayoutAnalysis(scope, documentId, options, {
+			paperAbsPath: options.paperAbsPath,
+			totalPages: Math.floor(options.totalPages),
+			analyzingMessage,
+			cancelClosedDocument,
+		});
+	}
 
 	try {
 		const s = await ensureLayoutModel();
@@ -588,6 +629,316 @@ export async function runDocumentLayoutAnalysis(
 			options.onError?.(message, false);
 		},
 	);
+
+	return task;
+}
+
+/** Minimal LayoutTask-compatible handle for the remote paddle run. */
+class PaddleLayoutTask implements LayoutTaskLike {
+	private progressListeners: Array<(p: DocumentAnalysisProgress) => void> = [];
+	private settled = false;
+	private aborted = false;
+
+	onProgress(listener: (p: DocumentAnalysisProgress) => void): void {
+		this.progressListeners.push(listener);
+	}
+
+	wait(
+		ok: (value: DocumentLayout) => void,
+		err: (e: { type?: string; reason?: unknown }) => void,
+	): void {
+		this.onSettle = (e) => {
+			if (e === "ok") ok({ pages: [] });
+			else err(e);
+		};
+		if (this.settled && this.settleError) {
+			this.onSettle(this.settleError);
+		} else if (this.settled) {
+			this.onSettle("ok");
+		}
+	}
+
+	abort(reason: LayoutAnalysisErrorReason): void {
+		if (this.settled) return;
+		this.aborted = true;
+		this.settle({ type: "abort", reason });
+	}
+
+	get isAborted(): boolean {
+		return this.aborted;
+	}
+
+	private onSettle:
+		| ((e: "ok" | { type?: string; reason?: unknown }) => void)
+		| null = null;
+	private settleError: { type?: string; reason?: unknown } | null = null;
+
+	emit(p: DocumentAnalysisProgress): void {
+		for (const listener of this.progressListeners) listener(p);
+	}
+
+	settle(error?: { type?: string; reason?: unknown }): void {
+		if (this.settled) return;
+		this.settled = true;
+		this.settleError = error ?? null;
+		if (this.onSettle) this.onSettle(error ?? "ok");
+	}
+}
+
+/** Shared tail of both remote runners: enrich → merge → sidecar → store. */
+async function finalizeRemoteLayoutRegions(args: {
+	scope: LayoutAnalysisScope;
+	documentId: string;
+	options: RunLayoutAnalysisOptions;
+	task: PaddleLayoutTask;
+	raw: PdfLayoutRegion[];
+	pageSizes: Map<number, { width: number; height: number }>;
+	totalPages: number;
+	backendLabel: string;
+	cancelClosedDocument: () => void;
+}): Promise<void> {
+	const { scope, documentId, options, task, pageSizes, totalPages } = args;
+	assertDocumentOpen(options.isDocumentOpen);
+	setLayoutAnalysisUi(
+		{
+			stage: "running",
+			message: "Merging figures & captions…",
+			progress: 99,
+			page: totalPages,
+			completed: totalPages,
+			total: totalPages,
+		},
+		documentId,
+	);
+
+	let enriched = await enrichRawRegionsWithPageText(
+		scope,
+		args.raw,
+		pageSizes,
+		options.isDocumentOpen,
+	);
+	assertDocumentOpen(options.isDocumentOpen);
+
+	let result = buildResultFromRawRegions(documentId, enriched);
+	let regions = result.regions;
+	for (const pageIndex of pageSizes.keys()) {
+		assertDocumentOpen(options.isDocumentOpen);
+		const pageSize = pageSizes.get(pageIndex);
+		if (!pageSize) continue;
+		const need = regions.some(
+			(r) => r.pageIndex === pageIndex && r.titleBbox && !r.title?.trim(),
+		);
+		if (!need) continue;
+		try {
+			const textRuns = await taskToPromise(scope.getPageTextRuns(pageIndex));
+			assertDocumentOpen(options.isDocumentOpen);
+			regions = attachTitlesFromTextRuns(
+				regions,
+				pageIndex,
+				textRuns.runs ?? [],
+				pageSize,
+			);
+			result = buildLayoutDocumentResult(documentId, regions, enriched);
+		} catch (error) {
+			if (
+				isLayoutDocumentClosedError(error) ||
+				(options.isDocumentOpen && !options.isDocumentOpen())
+			) {
+				throw new LayoutDocumentClosedError();
+			}
+			// ignore per-page title failures
+		}
+	}
+	enriched = result.rawRegions;
+
+	try {
+		await writeLayoutSidecar(options.paperAbsPath, enriched, "paddle-layout");
+	} catch (e) {
+		const message = e instanceof Error ? e.message : String(e);
+		logger.warn("layout sidecar write failed", { error: message });
+	}
+	try {
+		await writeLayoutIndexFromRaw(options.paperAbsPath, enriched);
+	} catch (e) {
+		const message = e instanceof Error ? e.message : String(e);
+		logger.warn("layout index write failed", { error: message });
+	}
+
+	if (options.isDocumentOpen && !options.isDocumentOpen()) {
+		args.cancelClosedDocument();
+		return;
+	}
+	setLayoutDocumentResult(result);
+	const summary = summarizeLayoutResult(result);
+	setLayoutAnalysisUi(
+		{ stage: "done", message: summary, total: result.regions.length },
+		documentId,
+	);
+	console.info("[layout-analysis]", {
+		documentId,
+		summary,
+		backend: args.backendLabel,
+		regions: result.regions,
+	});
+	options.onDone?.(summary, result.regions.length);
+	task.settle();
+}
+
+type PaddleRunDeps = {
+	paperAbsPath: string;
+	totalPages: number;
+	analyzingMessage: string;
+	cancelClosedDocument: () => void;
+};
+
+/** Only affects the point `rect` when no real page size is known. */
+const CLOUD_FALLBACK_PAGE_SIZE = { width: 595, height: 842 };
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+	const bytes = new Uint8Array(buffer);
+	let binary = "";
+	const chunkSize = 0x8000;
+	for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+		binary += String.fromCharCode(
+			...bytes.subarray(offset, offset + chunkSize),
+		);
+	}
+	return btoa(binary);
+}
+
+/**
+ * Remote PP-StructureV3 run: upload the whole PDF once as an async job; the Host
+ * polls and streams progress events, then per-page boxes come back in one
+ * result — no per-page rendering or requests on our side.
+ */
+function startPaddleLayoutAnalysis(
+	scope: LayoutAnalysisScope,
+	documentId: string,
+	options: RunLayoutAnalysisOptions,
+	deps: PaddleRunDeps,
+): PaddleLayoutTask {
+	const task = new PaddleLayoutTask();
+	const { paperAbsPath, totalPages, analyzingMessage } = deps;
+
+	void (async () => {
+		let unlisten: (() => void) | null = null;
+		try {
+			assertDocumentOpen(options.isDocumentOpen);
+			const pdfPath = await findLocalPdfPath(paperAbsPath);
+			if (!pdfPath) throw new Error("No local PDF for layout analysis");
+			const buffer = await localFileToArrayBuffer(pdfPath);
+			if (!buffer) throw new Error("Failed to read paper PDF");
+			assertDocumentOpen(options.isDocumentOpen);
+
+			// Host emits job progress (upload → pending/running → download).
+			if (isTauri()) {
+				const { listen } = await import("@tauri-apps/api/event");
+				unlisten = await listen<LayoutRemoteProgressPayload>(
+					LAYOUT_REMOTE_PROGRESS_EVENT,
+					(event) => {
+						const p = event.payload;
+						const known =
+							typeof p.totalPages === "number" && p.totalPages > 0
+								? p.totalPages
+								: totalPages;
+						const done =
+							typeof p.extractedPages === "number" ? p.extractedPages : 0;
+						const progress =
+							p.phase === "uploading"
+								? 3
+								: p.phase === "downloading" || p.phase === "done"
+									? 96
+									: clampProgress(6 + (done / known) * 88);
+						setLayoutAnalysisUi(
+							{
+								stage: "running",
+								message: analyzingMessage,
+								progress,
+								page: Math.min(done + 1, known),
+								completed: done,
+								total: known,
+							},
+							documentId,
+						);
+					},
+				);
+			}
+
+			setLayoutAnalysisUi(
+				{
+					stage: "running",
+					message: analyzingMessage,
+					progress: 2,
+					completed: 0,
+					total: totalPages,
+				},
+				documentId,
+			);
+			const res = await invokeLayoutRemoteAnalyzePdf({
+				pdfBase64: arrayBufferToBase64(buffer),
+				fileName: pdfPath.split(/[/\\]/).pop() || "paper.pdf",
+			});
+			unlisten?.();
+			unlisten = null;
+			assertDocumentOpen(options.isDocumentOpen);
+			if (task.isAborted) return;
+
+			const raw: PdfLayoutRegion[] = [];
+			const pageSizes = new Map<number, { width: number; height: number }>();
+			for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
+				const pluginSize = scope.getPageLayout(pageIndex)?.pageSize;
+				const injected = options.pageSizeAt?.(pageIndex) ?? null;
+				const size =
+					pluginSize && pluginSize.width > 0 && pluginSize.height > 0
+						? pluginSize
+						: injected && injected.width > 0 && injected.height > 0
+							? injected
+							: CLOUD_FALLBACK_PAGE_SIZE;
+				pageSizes.set(pageIndex, size);
+				const page = res.pages[pageIndex];
+				if (!page) continue;
+				raw.push(
+					...paddlePageToRegions({
+						page,
+						pageIndex,
+						pageWidth: size.width,
+						pageHeight: size.height,
+						idPrefix: "paddle",
+					}),
+				);
+			}
+
+			await finalizeRemoteLayoutRegions({
+				scope,
+				documentId,
+				options,
+				task,
+				raw,
+				pageSizes,
+				totalPages,
+				backendLabel: "paddle",
+				cancelClosedDocument: deps.cancelClosedDocument,
+			});
+		} catch (error) {
+			if (
+				isLayoutDocumentClosedError(error) ||
+				(options.isDocumentOpen && !options.isDocumentOpen())
+			) {
+				deps.cancelClosedDocument();
+				task.settle({
+					type: "abort",
+					reason: { type: "no-document", message: "document closed" },
+				});
+				return;
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			setLayoutAnalysisUi({ stage: "error", message }, documentId);
+			options.onError?.(message, false);
+			task.settle({ type: "error", reason: { message } });
+		} finally {
+			unlisten?.();
+		}
+	})();
 
 	return task;
 }
