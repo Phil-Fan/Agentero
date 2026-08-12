@@ -250,7 +250,7 @@ export const TitleBar = memo(function TitleBar({
 									<Settings
 										className={cn(
 											"size-3.5",
-											"transition-transform duration-300 ease-out group-hover:rotate-90",
+											"transition-transform duration-200 ease-out group-hover:rotate-90",
 										)}
 									/>
 								</Button>

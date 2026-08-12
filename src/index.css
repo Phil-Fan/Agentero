@@ -441,6 +441,10 @@
 	max-width: 12rem;
 	min-width: 0;
 	overflow: hidden;
+	/* Tab chrome fades like every other row; content still switches instantly. */
+	transition:
+		background-color var(--motion-duration-fast) var(--motion-ease-out),
+		color var(--motion-duration-fast) var(--motion-ease-out);
 }
 
 .agentero-dockview .dv-tab .dv-default-tab {
