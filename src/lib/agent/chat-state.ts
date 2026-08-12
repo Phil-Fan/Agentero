@@ -328,6 +328,7 @@ function catalogTemplateFromId(templateId: string): AgentTemplate | undefined {
 		case "codex-acp":
 		case "qodercli":
 		case "grok-build":
+		case "pi":
 		case "custom":
 			return templateId;
 		default:

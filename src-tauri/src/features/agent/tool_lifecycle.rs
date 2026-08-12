@@ -7,7 +7,9 @@
 #[cfg(target_os = "windows")]
 use crate::features::agent::discover::path_entries;
 use crate::features::agent::discover::resolve_command;
-use crate::features::agent::templates::{template_info, CLAUDE_ACP_INSTALL_COMMAND};
+use crate::features::agent::templates::{
+    template_info, CLAUDE_ACP_INSTALL_COMMAND, PI_ACP_INSTALL_COMMAND, PI_HOST_INSTALL_COMMAND,
+};
 use serde::Serialize;
 use std::io::{self, Read};
 use std::process::{Command, Output, Stdio};
@@ -46,6 +48,7 @@ pub const LIFECYCLE_TEMPLATES: &[&str] = &[
     "gemini",
     "hermes",
     "grok-build",
+    "pi",
 ];
 
 #[derive(Debug, Clone, Serialize)]
@@ -202,6 +205,7 @@ fn adapter_install_command(template_id: &str) -> Result<String, String> {
     match template_id {
         "claude-acp" => Ok(CLAUDE_ACP_INSTALL_COMMAND.to_string()),
         "codex-acp" => Ok("npm i -g @agentclientprotocol/codex-acp@latest".to_string()),
+        "pi" => Ok(PI_ACP_INSTALL_COMMAND.to_string()),
         _ => Err(format!("no ACP adapter install for {template_id}")),
     }
 }
@@ -216,6 +220,7 @@ fn host_install_command(template_id: &str) -> Result<String, String> {
             "opencode" => Ok("npm i -g opencode-ai@latest".to_string()),
             "openclaw" => Ok("npm i -g openclaw@latest".to_string()),
             "hermes" => Ok(hermes_install_windows_command()),
+            "pi" => Ok(PI_HOST_INSTALL_COMMAND.to_string()),
             "grok-build" => Ok(chain_or(
                 &grok_install_windows_command(),
                 "npm i -g @xai-official/grok@latest",
@@ -238,6 +243,7 @@ fn host_install_command(template_id: &str) -> Result<String, String> {
             )),
             "openclaw" => Ok("npm i -g openclaw@latest".to_string()),
             "hermes" => Ok(HERMES_INSTALL_UNIX.to_string()),
+            "pi" => Ok(PI_HOST_INSTALL_COMMAND.to_string()),
             "grok-build" => Ok(chain_or(
                 GROK_INSTALL_UNIX,
                 "npm i -g @xai-official/grok@latest",
@@ -277,6 +283,7 @@ fn host_update_command(template_id: &str) -> Result<String, String> {
             "openclaw update --yes",
             "npm i -g openclaw@latest",
         )),
+        "pi" => Ok(chain_or("pi update --self", PI_HOST_INSTALL_COMMAND)),
         "hermes" => {
             #[cfg(target_os = "windows")]
             {
@@ -387,12 +394,17 @@ npm i -g @google/gemini-cli@latest
 npm i -g opencode-ai@latest
 # OpenClaw
 npm i -g openclaw@latest
+# Pi + ACP adapter
+{pi_host}
+{pi_acp}
 # Hermes Agent
 {hermes}
 # Grok Build
 {grok}
 # (or) npm i -g @xai-official/grok@latest"#,
             claude_acp = CLAUDE_ACP_INSTALL_COMMAND,
+            pi_host = PI_HOST_INSTALL_COMMAND,
+            pi_acp = PI_ACP_INSTALL_COMMAND,
             hermes = hermes_install_windows_command(),
             grok = grok_install_windows_command(),
         )
@@ -412,6 +424,9 @@ npm i -g @google/gemini-cli@latest
 {opencode} || npm i -g opencode-ai@latest
 # OpenClaw
 npm i -g openclaw@latest
+# Pi + ACP adapter
+{pi_host}
+{pi_acp}
 # Hermes Agent
 {hermes}
 # Grok Build
@@ -419,6 +434,8 @@ npm i -g openclaw@latest
             claude_host = CLAUDE_INSTALL_UNIX,
             claude_acp = CLAUDE_ACP_INSTALL_COMMAND,
             opencode = OPENCODE_INSTALL_UNIX,
+            pi_host = PI_HOST_INSTALL_COMMAND,
+            pi_acp = PI_ACP_INSTALL_COMMAND,
             hermes = HERMES_INSTALL_UNIX,
             grok = GROK_INSTALL_UNIX,
         )
@@ -754,6 +771,7 @@ mod tests {
         assert!(adapter_install_command("codex-acp")
             .unwrap()
             .contains("codex-acp"));
+        assert!(adapter_install_command("pi").unwrap().contains("pi-acp"));
         assert!(adapter_install_command("gemini").is_err());
     }
 
@@ -766,6 +784,7 @@ mod tests {
         assert!(text.contains("OpenClaw"));
         assert!(text.contains("Hermes"));
         assert!(text.contains("Grok"));
+        assert!(text.contains("Pi"));
     }
 
     #[test]

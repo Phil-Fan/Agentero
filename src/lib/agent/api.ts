@@ -14,6 +14,7 @@ export type AgentTemplate =
 	| "codex-acp"
 	| "qodercli"
 	| "grok-build"
+	| "pi"
 	| "custom";
 
 export type CatalogAcpStatus = "missing" | "not-probed" | "ready" | "failed";
