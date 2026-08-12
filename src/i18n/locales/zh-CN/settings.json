@@ -9,6 +9,7 @@
 		"appearance": "外观",
 		"agent": "Agent",
 		"translate": "翻译",
+		"layout": "版面解析",
 		"doctor": "知识库诊断",
 		"keyboard": "快捷键",
 		"remote-access": "远程访问",
@@ -322,6 +323,35 @@
 			"label": "模型",
 			"followAgent": "跟随 Agent 默认",
 			"needWarm": "在 Chat 中打开过该 Agent 后，可在此选择具体模型。"
+		}
+	},
+	"layout": {
+		"title": "版面解析",
+		"backend": {
+			"label": "解析方式",
+			"description": "检测 PDF 版面（图、表、公式等区域）所使用的引擎。",
+			"local": "本地推理（PP-DocLayoutV3，ONNX）",
+			"paddle": "Paddle API（PP-StructureV3，异步）"
+		},
+		"privacy": "选择 Paddle API 时，整份 PDF 将上传到 AI Studio OCR 服务，以后台任务方式异步解析并轮询进度。",
+		"providerConfig": {
+			"section": "Paddle API",
+			"paddle": "Paddle（PP-StructureV3）",
+			"confirm": "确定",
+			"test": "测试连接",
+			"openDocs": "打开服务商网站",
+			"notConfigured": "未配置",
+			"apiKey": {
+				"label": "API Key",
+				"placeholder": "AI Studio PaddleOCR 访问令牌"
+			},
+			"endpoint": {
+				"label": "端点"
+			},
+			"probeIdle": "尚未检测",
+			"probeOk": "可用",
+			"probeFail": "不可用",
+			"probeProbing": "正在检测可用性…"
 		}
 	},
 	"doctor": {

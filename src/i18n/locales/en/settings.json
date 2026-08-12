@@ -9,6 +9,7 @@
 		"appearance": "Appearance",
 		"agent": "Agent",
 		"translate": "Translate",
+		"layout": "Layout",
 		"doctor": "Doctor",
 		"keyboard": "Keyboard",
 		"remote-access": "Remote access",
@@ -329,6 +330,35 @@
 			"label": "Model",
 			"followAgent": "Follow agent default",
 			"needWarm": "Open this agent in Chat once to list models here."
+		}
+	},
+	"layout": {
+		"title": "Layout Analysis",
+		"backend": {
+			"label": "Analysis engine",
+			"description": "How PDF page layout (figures, tables, formulas) is detected.",
+			"local": "On-device (PP-DocLayoutV3, ONNX)",
+			"paddle": "Paddle API (PP-StructureV3, async)"
+		},
+		"privacy": "The Paddle backend uploads the whole PDF to the AI Studio OCR service and polls an async job until it finishes.",
+		"providerConfig": {
+			"section": "Paddle API",
+			"paddle": "Paddle (PP-StructureV3)",
+			"confirm": "Confirm",
+			"test": "Test connection",
+			"openDocs": "Open provider website",
+			"notConfigured": "Not configured",
+			"apiKey": {
+				"label": "API key",
+				"placeholder": "AI Studio PaddleOCR access token"
+			},
+			"endpoint": {
+				"label": "Endpoint"
+			},
+			"probeIdle": "Not checked yet",
+			"probeOk": "Available",
+			"probeFail": "Unavailable",
+			"probeProbing": "Checking availability…"
 		}
 	},
 	"doctor": {

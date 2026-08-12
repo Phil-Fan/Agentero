@@ -3,6 +3,7 @@ export type SettingsSection =
 	| "appearance"
 	| "agent"
 	| "translate"
+	| "layout"
 	| "doctor"
 	| "keyboard"
 	| "remote-access"

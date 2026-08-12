@@ -3,6 +3,7 @@ import {
 	Info,
 	Keyboard,
 	Languages,
+	LayoutTemplate,
 	MonitorSmartphone,
 	Paintbrush,
 	SlidersHorizontal,
@@ -43,6 +44,7 @@ const PANE_LOADERS = {
 	appearance: () => import("@/components/settings/panes/appearance-pane"),
 	agent: () => import("@/components/settings/panes/agent-pane"),
 	translate: () => import("@/components/settings/panes/translate-pane"),
+	layout: () => import("@/components/settings/panes/layout-pane"),
 	doctor: () => import("@/components/settings/panes/doctor-pane"),
 	keyboard: () => import("@/components/settings/panes/keyboard-pane"),
 	"remote-access": () =>
@@ -74,6 +76,9 @@ const RemoteAgentPane = lazy(() =>
 const TranslatePane = lazy(() =>
 	PANE_LOADERS.translate().then((m) => ({ default: m.TranslatePane })),
 );
+const LayoutPane = lazy(() =>
+	PANE_LOADERS.layout().then((m) => ({ default: m.LayoutPane })),
+);
 const DoctorPane = lazy(() =>
 	PANE_LOADERS.doctor().then((m) => ({ default: m.DoctorPane })),
 );
@@ -97,6 +102,7 @@ const NAV: {
 	{ id: "appearance", icon: Paintbrush },
 	{ id: "agent", icon: Bot },
 	{ id: "translate", icon: Languages },
+	{ id: "layout", icon: LayoutTemplate },
 	{ id: "doctor", icon: Stethoscope },
 	{ id: "keyboard", icon: Keyboard },
 	{ id: "remote-access", icon: MonitorSmartphone },
@@ -302,6 +308,13 @@ export function SettingsContent({
 									patch={patch}
 									onOpenAgentSettings={() => onSectionChange("agent")}
 								/>
+							</Suspense>
+						</div>
+					)}
+					{visitedSections.includes("layout") && (
+						<div hidden={section !== "layout"}>
+							<Suspense fallback={<PaneFallback />}>
+								<LayoutPane settings={settings} patch={patch} />
 							</Suspense>
 						</div>
 					)}
