@@ -20,7 +20,7 @@ import { SearchLayer } from "@embedpdf/plugin-search/react";
 import { SelectionLayer } from "@embedpdf/plugin-selection/react";
 import { TilingLayer } from "@embedpdf/plugin-tiling/react";
 import { EyeOff, Languages, Loader2 } from "lucide-react";
-import { memo, type RefObject } from "react";
+import { memo, type RefObject, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	EMPTY_CITATION_LINKS,
@@ -41,12 +41,16 @@ import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
 import type { HighlightColor } from "@/lib/pdf/highlight/palette";
 import {
 	isFormulaLayoutKind,
+	isLayoutRegionActivation,
+	LAYOUT_HINT_MIN_REGION_H_PX,
+	LAYOUT_HINT_MIN_REGION_W_PX,
 	type LayoutTranslateItem,
 	layoutKindBorder,
 	layoutKindFill,
 	layoutKindHex,
 	layoutKindI18nKey,
 	type PdfLayoutRegion,
+	type PointerOrigin,
 } from "@/lib/pdf/layout";
 import { PDF_PAGE_RASTER_DARK_CLASS } from "@/lib/pdf/page-theme";
 import type { SelectionPin } from "@/lib/pdf/selection";
@@ -72,6 +76,8 @@ export type PdfPageMarksSlice = {
 	activeTranslateAnchor: PdfActiveCardAnchor | null;
 	activeVisualTrace: PdfVisualSessionTrace | null;
 	visualDraftRegion: PageRegion;
+	/** Region whose crop is in flight; gets a spinner frame. */
+	visualCropRegion: PageRegion;
 	formulaAnnotationRegion: PageRegion;
 	focusedLayoutRegion: PdfLayoutRegion | null;
 	pinsByPage: ReadonlyMap<number, SelectionPin[]>;
@@ -216,6 +222,11 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 	handlers,
 }: PdfPageLayersProps) {
 	const { t } = useTranslation("viewer");
+	/**
+	 * Pointer position at the last pointerdown on a layout hit target. A click
+	 * that travelled beyond the tolerance was a drag, not an activation.
+	 */
+	const pointerOriginRef = useRef<PointerOrigin | null>(null);
 	const pageNumber = pageIndex + 1;
 	const activeAskOnPage =
 		marks.activeAskAnchor?.page === pageNumber ? marks.activeAskAnchor : null;
@@ -230,6 +241,10 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 	const visualDraftRegionOnPage =
 		marks.visualDraftRegion?.page === pageNumber
 			? marks.visualDraftRegion.region
+			: null;
+	const visualCropRegionOnPage =
+		marks.visualCropRegion?.page === pageNumber
+			? marks.visualCropRegion.region
 			: null;
 	const formulaAnnotationRegionOnPage =
 		marks.formulaAnnotationRegion?.page === pageNumber
@@ -387,14 +402,20 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 				 * unmount leave must not cancel an in-flight crop).
 				 * Formula legend keeps hits mounted so leave/enter can switch
 				 * equations and drive hide without a second hover surface.
-				 * Figures / tables / algorithms open on click; hover only shows
-				 * the「单击进行批注」hint chip.
+				 * Figures / tables / algorithms crop on click; hover and keyboard
+				 * focus preview the exact bbox that would be cropped.
 				 */}
 				{!mode.regionSelecting && !mode.visualDraftOpen
 					? layout.hoverableRegionsByPage.get(pageIndex)?.map((region) => {
 							const formulaLegend =
 								isFormulaLayoutKind(region.kind) &&
 								layout.equationSymbolCount > 0;
+							// Fixed-size chip in a zoom-scaled box: only draw it where
+							// it actually fits inside the region.
+							const showHint =
+								!formulaLegend &&
+								region.bbox.w * width >= LAYOUT_HINT_MIN_REGION_W_PX &&
+								region.bbox.h * height >= LAYOUT_HINT_MIN_REGION_H_PX;
 							return (
 								<button
 									key={`layout-hit-${region.id}`}
@@ -403,9 +424,18 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 									aria-label={
 										formulaLegend
 											? t("equationAnnotation.hoverAria")
-											: t("figures.clickAnnotateAria")
+											: t("figures.clickAnnotateAria", {
+													kind: t(layoutKindI18nKey(region.kind)),
+												})
 									}
-									className="group absolute z-[2] cursor-pointer rounded-none border-0 bg-transparent p-0 transition-colors hover:bg-primary/5"
+									className={cn(
+										"group absolute z-[2] rounded-none border-0 bg-transparent p-0 transition-colors",
+										// Click crops in place; pointer cursor is reserved for
+										// navigation (citation links).
+										formulaLegend
+											? "cursor-help hover:bg-primary/5"
+											: "cursor-crosshair hover:bg-primary/5",
+									)}
 									style={{
 										left: `${region.bbox.x * 100}%`,
 										top: `${region.bbox.y * 100}%`,
@@ -414,24 +444,69 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 									}}
 									onPointerEnter={() => handlers.onLayoutHoverEnter(region)}
 									onPointerLeave={() => handlers.onLayoutHoverLeave(region.id)}
+									// Formula legend has no click action, so focus is what makes
+									// it reachable without a pointer.
+									onFocus={
+										formulaLegend
+											? () => handlers.onLayoutHoverEnter(region)
+											: undefined
+									}
+									onBlur={
+										formulaLegend
+											? () => handlers.onLayoutHoverLeave(region.id)
+											: undefined
+									}
+									onPointerDown={
+										formulaLegend
+											? undefined
+											: (event) => {
+													pointerOriginRef.current = {
+														x: event.clientX,
+														y: event.clientY,
+													};
+												}
+									}
 									onClick={
 										formulaLegend
 											? undefined
 											: (event) => {
+													const origin = pointerOriginRef.current;
+													pointerOriginRef.current = null;
+													// A drag that merely started here is not a click.
+													if (
+														!isLayoutRegionActivation({
+															detail: event.detail,
+															origin,
+															end: { x: event.clientX, y: event.clientY },
+														})
+													) {
+														return;
+													}
 													event.preventDefault();
 													event.stopPropagation();
 													handlers.onLayoutRegionClick(region);
 												}
 									}
 								>
+									{/*
+									 * Frame the exact crop bounds before the click commits, and
+									 * give keyboard focus a visible landmark over unpredictable
+									 * page content.
+									 */}
 									{formulaLegend ? null : (
 										<span
-											className="pointer-events-none absolute top-1 right-1 rounded border border-border/60 bg-background/90 px-1.5 py-0.5 font-medium text-[10px] text-foreground/90 opacity-0 shadow-sm backdrop-blur-sm transition-opacity group-hover:opacity-100"
+											className="pointer-events-none absolute inset-0 border border-primary/45 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+											aria-hidden="true"
+										/>
+									)}
+									{showHint ? (
+										<span
+											className="pointer-events-none absolute top-1 right-1 max-w-[calc(100%-0.5rem)] truncate rounded border border-border/60 bg-background/90 px-1.5 py-0.5 font-medium text-[10px] text-foreground/90 opacity-0 shadow-sm backdrop-blur-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
 											aria-hidden="true"
 										>
 											{t("figures.clickAnnotateHint")}
 										</span>
-									)}
+									) : null}
 								</button>
 							);
 						})
@@ -483,6 +558,28 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 						}}
 						aria-hidden="true"
 					/>
+				) : null}
+				{/*
+				 * Crop in flight: PDFium renders the region asynchronously, so frame
+				 * it and spin — otherwise a click looks like nothing happened.
+				 */}
+				{visualCropRegionOnPage ? (
+					<div
+						className="pointer-events-none absolute z-[3] flex items-center justify-center rounded-none border border-primary/50 bg-primary/10 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+						style={{
+							left: `${visualCropRegionOnPage.x * 100}%`,
+							top: `${visualCropRegionOnPage.y * 100}%`,
+							width: `${visualCropRegionOnPage.w * 100}%`,
+							height: `${visualCropRegionOnPage.h * 100}%`,
+						}}
+						role="status"
+						aria-label={t("pdfExplain.cropping")}
+					>
+						<Loader2
+							className="size-4 animate-spin text-primary"
+							aria-hidden="true"
+						/>
+					</div>
 				) : null}
 				{/*
 				 * Formula legend: keep the same primary visual frame as visual-ask

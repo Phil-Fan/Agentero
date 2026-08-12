@@ -1,5 +1,11 @@
 export { getPdfAiRuntime } from "@/lib/pdf/layout/ai-runtime";
 export {
+	isLayoutRegionActivation,
+	LAYOUT_REGION_CLICK_MOVE_TOLERANCE_PX,
+	type LayoutRegionActivation,
+	type PointerOrigin,
+} from "@/lib/pdf/layout/click-guard";
+export {
 	LAYOUT_KIND_BADGE_CLASS,
 	LAYOUT_KIND_BORDER,
 	LAYOUT_KIND_FILL,
@@ -11,6 +17,8 @@ export {
 export {
 	LAYOUT_FORMULA_HOVER_DWELL_MS,
 	LAYOUT_FORMULA_HOVER_HIDE_MS,
+	LAYOUT_HINT_MIN_REGION_H_PX,
+	LAYOUT_HINT_MIN_REGION_W_PX,
 	LAYOUT_SIDEBAR_MIN_SCORE,
 } from "@/lib/pdf/layout/constants";
 export {

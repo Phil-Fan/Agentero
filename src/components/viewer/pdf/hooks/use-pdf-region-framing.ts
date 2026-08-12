@@ -78,6 +78,11 @@ export type PdfRegionFraming = {
 	regionSelecting: boolean;
 	/** A crop is in flight; blocks re-entry and layout hover. */
 	visualCropPending: boolean;
+	/**
+	 * Region whose crop is in flight (null when idle). Rendered on the page so a
+	 * click has a visible response before the draft card opens.
+	 */
+	visualCropRegion: { page: number; region: PdfAskNormalizedRect } | null;
 	/** Enter / leave region framing. Shared by the toolbar and the handle (⌘.). */
 	toggleRegionSelect: () => void;
 	/** Crop a region and open the draft editor (does not send). */
@@ -109,6 +114,10 @@ export function usePdfRegionFraming({
 	const { t } = useTranslation("viewer");
 	const [regionSelecting, setRegionSelecting] = useState(false);
 	const [visualCropPending, setVisualCropPending] = useState(false);
+	const [visualCropRegion, setVisualCropRegion] = useState<{
+		page: number;
+		region: PdfAskNormalizedRect;
+	} | null>(null);
 	regionSelectingRef.current = regionSelecting;
 	visualCropPendingRef.current = visualCropPending;
 
@@ -144,6 +153,7 @@ export function usePdfRegionFraming({
 				return;
 			}
 			setVisualCropPending(true);
+			setVisualCropRegion({ page, region });
 			setRegionSelecting(false);
 			// Visual draft and formula legend are mutually exclusive; close the
 			// legend up front so it does not linger for the length of the crop.
@@ -175,6 +185,7 @@ export function usePdfRegionFraming({
 				notifyError(t("pdfExplain.cropFailed"), { description: message });
 			} finally {
 				setVisualCropPending(false);
+				setVisualCropRegion(null);
 			}
 		},
 		[
@@ -222,6 +233,7 @@ export function usePdfRegionFraming({
 	return {
 		regionSelecting,
 		visualCropPending,
+		visualCropRegion,
 		toggleRegionSelect,
 		beginVisualAnnotation,
 		handleVisualRegionSelect,

@@ -916,6 +916,7 @@ function PdfViewerInner({
 	const {
 		regionSelecting,
 		visualCropPending,
+		visualCropRegion,
 		toggleRegionSelect,
 		beginVisualAnnotation,
 		handleVisualRegionSelect,
@@ -1203,6 +1204,7 @@ function PdfViewerInner({
 			activeTranslateAnchor,
 			activeVisualTrace,
 			visualDraftRegion,
+			visualCropRegion,
 			formulaAnnotationRegion,
 			focusedLayoutRegion,
 			pinsByPage,
@@ -1214,6 +1216,7 @@ function PdfViewerInner({
 			activeTranslateAnchor,
 			activeVisualTrace,
 			visualDraftRegion,
+			visualCropRegion,
 			formulaAnnotationRegion,
 			focusedLayoutRegion,
 			pinsByPage,
