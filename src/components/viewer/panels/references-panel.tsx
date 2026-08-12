@@ -39,6 +39,7 @@ import { lookupSubmit } from "@/lib/paper/import-actions";
 import { currentLookupParentDir } from "@/lib/paper/library-actions";
 import {
 	type Citation,
+	citationExternalUrl,
 	citationImportIdentifier,
 	paperRefsParse,
 } from "@/lib/paper/refs";
@@ -51,15 +52,6 @@ type ReferencesPanelProps = {
 	paperPath: string | null;
 	className?: string;
 };
-
-/** Best external link for a citation: url → DOI resolver → arXiv abs page. */
-function externalUrl(citation: Citation): string | null {
-	const { url, doi, arxivId } = citation.metadata;
-	if (url?.trim()) return url.trim();
-	if (doi?.trim()) return `https://doi.org/${doi.trim()}`;
-	if (arxivId?.trim()) return `https://arxiv.org/abs/${arxivId.trim()}`;
-	return null;
-}
 
 function citationMatchesFilter(citation: Citation, needle: string): boolean {
 	const m = citation.metadata;
@@ -419,7 +411,7 @@ function CitationCard({
 	const [folderMenuOpen, setFolderMenuOpen] = useState(false);
 	const [newFolder, setNewFolder] = useState("");
 	const matched = Boolean(citation.localMatch);
-	const link = externalUrl(citation);
+	const link = citationExternalUrl(citation);
 	const importable = !matched && citationImportIdentifier(citation) != null;
 
 	const typed = newFolder.trim();

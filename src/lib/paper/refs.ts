@@ -146,3 +146,12 @@ export function citationImportIdentifier(citation: Citation): string | null {
 	if (doi?.trim()) return doi.trim();
 	return null;
 }
+
+/** Best external link for a citation: url → DOI resolver → arXiv abs page. */
+export function citationExternalUrl(citation: Citation): string | null {
+	const { url, doi, arxivId } = citation.metadata;
+	if (url?.trim()) return url.trim();
+	if (doi?.trim()) return `https://doi.org/${doi.trim()}`;
+	if (arxivId?.trim()) return `https://arxiv.org/abs/${arxivId.trim()}`;
+	return null;
+}
