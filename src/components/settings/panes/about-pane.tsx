@@ -1,8 +1,9 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Download, LoaderCircle, RefreshCw, Terminal } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { CompactCodeBlock } from "@/components/ai-elements/code-block";
 import {
 	PageTitle,
 	SettingsGroup,
@@ -16,7 +17,7 @@ import {
 	uninstallCliCommand,
 } from "@/lib/cli/api";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
-import { isTauri } from "@/lib/core/tauri";
+import { isMacOS, isTauri } from "@/lib/core/tauri";
 import {
 	checkForUpdate,
 	getUpdateSnapshot,
@@ -25,6 +26,10 @@ import {
 	type UpdateSnapshot,
 } from "@/lib/update";
 
+/** Same as README / homebrew-agentero Formula (headless CLI, not the desktop cask). */
+const CLI_BREW_INSTALL_COMMAND =
+	"brew tap poco-ai/agentero && brew install agentero";
+
 export function AboutPane() {
 	const { t } = useTranslation("settings");
 	const [version, setVersion] = useState<string>();
@@ -32,6 +37,7 @@ export function AboutPane() {
 	const [cli, setCli] = useState<CliInstallStatus | null>(null);
 	const [cliBusy, setCliBusy] = useState(false);
 	const [cliLoading, setCliLoading] = useState(false);
+	const isMac = useMemo(() => isMacOS(), []);
 
 	const refreshCli = useCallback(async () => {
 		if (!isTauri()) return;
@@ -161,6 +167,7 @@ export function AboutPane() {
 	);
 	const canInstallCli = Boolean(cli?.canInstall) && !cliBusy;
 	const showInstall = !cli?.installed || needsCliUpdate;
+	const showBrewCliHint = isMac && showInstall && Boolean(cli);
 
 	return (
 		<>
@@ -272,6 +279,22 @@ export function AboutPane() {
 							) : null}
 						</div>
 					</SettingsRow>
+					{showBrewCliHint ? (
+						<div className="border-t px-3.5 py-3">
+							<p className="mb-2 text-muted-foreground text-xs leading-relaxed">
+								{t("about.cli.brewHint")}
+							</p>
+							<CompactCodeBlock
+								code={CLI_BREW_INSTALL_COMMAND}
+								language="shell"
+								copyButtonProps={{
+									"aria-label": t("about.cli.brewCopy"),
+									onCopy: () => notifySuccess(t("about.cli.brewCopied")),
+									onError: () => notifyError(t("about.cli.brewCopyFailed")),
+								}}
+							/>
+						</div>
+					) : null}
 				</SettingsGroup>
 			) : null}
 		</>
