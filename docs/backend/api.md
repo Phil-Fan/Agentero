@@ -2124,16 +2124,6 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 
 > 设置文件绝对路径已包含在 `settings_get` 返回的 `path` 字段中（About / 诊断用），无独立 command。
 
-#### `telemetry_send_diagnostics`（已实现）
-
-- **返回**（`ApiResult`）：`{ enabled: boolean, sent: boolean }`
-- 手动上报诊断信息（设备/系统/版本/已装 Agent + 最近 ERROR 日志）。`enabled=false` 表示未编译端点或用户已关闭 `telemetryEnabled`，此时不发送。详见 [telemetry.md](telemetry.md)。
-
-#### `telemetry_report_frontend_errors`（已实现）
-
-- **参数**：`{ args: { errors: [{ message, stack?, context? }] } }`（最多 20 条）
-- **返回**：`()`；前端 `src/lib/core/telemetry.ts` 防抖批量调用，Host 按开关与端点决定是否上传。
-
 UI 入口见 `settings_window_open`：Settings 现为独立原生单例窗口，`?window=settings` 路由由 `src/main.tsx` 分支渲染。
 
 实现：`src-tauri/src/features/settings/`（`mod.rs` + `commands.rs`）、`core/paths.rs`、`src-tauri/src/features/window/commands.rs`。

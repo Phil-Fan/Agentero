@@ -2,7 +2,6 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import i18n from "@/i18n";
 import { logger } from "@/lib/core/logger";
-import { reportFrontendError } from "@/lib/core/telemetry";
 
 type Props = {
 	children: ReactNode;
@@ -25,11 +24,6 @@ export class ErrorBoundary extends Component<Props, State> {
 		const label = this.props.label ? `:${this.props.label}` : "";
 		logger.error(
 			`ErrorBoundary${label} ${error.message} componentStack=${(info.componentStack ?? "").trim().slice(0, 400)}`,
-		);
-		reportFrontendError(
-			`${error.message} componentStack=${(info.componentStack ?? "").trim().slice(0, 400)}`,
-			error.stack,
-			`ErrorBoundary${label}`,
 		);
 		console.error(`[ErrorBoundary${label}]`, error, info);
 	}

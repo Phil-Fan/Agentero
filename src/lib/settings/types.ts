@@ -120,12 +120,6 @@ export type AppSettings = {
 	 */
 	batchImportConcurrency: number;
 	/**
-	 * Opt-out switch for diagnostics reporting (crash/error logs, app & OS
-	 * version, installed agents). Default **on**; no-op unless the Host was
-	 * built with a telemetry endpoint.
-	 */
-	telemetryEnabled: boolean;
-	/**
 	 * Prefill the Markdown export dialog's "Agentero watermark" checkbox.
 	 * Default **off**; per-export choice can still override.
 	 */

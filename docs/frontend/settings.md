@@ -10,13 +10,12 @@
 - 落盘：XDG `$XDG_CONFIG_HOME/agentero/settings.json`。
 - 加载策略：设置 webview 不加载完整 `App`，也不加载 PDF 引擎与 KaTeX（二者随 `App` 动态 import）。各分区 pane 按 `lazy()` 分 chunk；**当前分区**的 pane 与外壳并行预热（`preloadSettingsPane`），避免窗口刚可交互时才去拉 pane 而卡一下；其余分区首次访问才加载，已访问的保持挂载。
 - 通用页的「网络代理」是 Host 级配置，启用后用于 Host 创建的 HTTP(S)/SOCKS 请求，并同步注入本地与远端 Agent 进程的 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`。旧版 Settings → Agent 的代理配置会在首次启动时迁移。
-- 通用页「隐私」区块：`telemetryEnabled` 开关（默认开，opt-out）+「立即发送诊断信息」手动按钮。上报内容/时机与编译期端点见 [../backend/telemetry.md](../backend/telemetry.md)；前端错误采集在 `src/lib/core/telemetry.ts`（`window.onerror` / `unhandledrejection` / ErrorBoundary，防抖批量 invoke）。
 
 ## 主要分类
 
 | 分类 | 内容示例 |
 |---|---|
-| 通用 | Translator URL、Connector 开关、文件树标签/排序、打开行为、笔记导出默认水印、诊断上报开关与手动发送 |
+| 通用 | Translator URL、Connector 开关、文件树标签/排序、打开行为、笔记导出默认水印 |
 | Appearance | 明暗、`uiTheme`、`uiScale`；界面/正文/等宽字体；Markdown 字号 / 行距 / 工具栏 |
 | Agent | 目录两层检测（Agent CLI / ACP）、未装「安装」/ 缺 ACP「安装 ACP」/ 已装「升级」、默认 Agent、权限模式、自动精读、可选 **User-Agent**（Codex 中转亲和）、个人提示词、划词提问 Agent |
 | 翻译 | 默认服务选择、商用 API 配置、语言与 Agent 座 |

@@ -1,7 +1,7 @@
 # 使用记录与习惯总结（Usage Analytics）
 
 > 状态：设计草案。关联 [\#239](https://github.com/poco-ai/Agentero/issues/239)。
-> 相关：[`../backend/catalog.md`](../backend/catalog.md)、[`../backend/agent.md`](../backend/agent.md)、[`../backend/logging.md`](../backend/logging.md)、[`../backend/telemetry.md`](../backend/telemetry.md)、[`../frontend/library.md`](../frontend/library.md)、[`plaza.md`](plaza.md)
+> 相关：[`../backend/catalog.md`](../backend/catalog.md)、[`../backend/agent.md`](../backend/agent.md)、[`../backend/logging.md`](../backend/logging.md)、[`../frontend/library.md`](../frontend/library.md)、[`plaza.md`](plaza.md)
 
 ## 1. 目标与非目标
 
@@ -22,7 +22,7 @@ Issue 三条诉求拆成三层：
 **非目标（首版）**
 
 - 不做 embedding / 向量库 / 语义相似度（推荐用图 + 标签 + 时长，见 §7.3）。
-- 不上传任何行为数据；与 `features::telemetry` 的诊断上报**完全隔离**。
+- 不上传任何行为数据。
 - 不跨设备同步使用记录（习惯是设备本地事实，见 §4.1）。
 - 不重复记录已能从 Vault 产物派生的信号（见 §3.1）。
 
@@ -32,7 +32,6 @@ Issue 三条诉求拆成三层：
 |---|---|---|
 | Catalog SQLite | `features/catalog/schema.rs`：`SCHEMA_VERSION` + `MIGRATE_Vn_TO_Vn+1` + `schema_meta` | **复用迁移范式**，不复用同一个库（§4.1） |
 | `papers` 表 | 有 `is_read` / `added_at` / `updated_at`；**无** `opened_at` / 访问计数 | `ATTACH` 后 join 取 title/tags |
-| 诊断上报 | `features/telemetry`：install/session/error → 远端，`AppSettings::telemetry_enabled` 开关 | **只借队列与 flush 模式**，数据不进该通道 |
 | 结构化日志 | `core/log_util.rs` 的 `OpTimer` → `op start\|end <name> k=v` | 沿用字段风格，便于排查；日志不作为数据源 |
 | 阅读产物派生 | `src/lib/paper/reading-heatmap/`：从高亮/提问/翻译派生热力图 | **先例**：能派生的不落库（§3.1） |
 | 已有 recents | `agent/mention.ts` 的 `pushRecentMentionPath`、`vault/session.ts` 的 `rememberRecentVault`、`pdf/reading-position.ts` | 后续可由 usage 库统一供数，首版并存 |
@@ -225,8 +224,8 @@ BYOA Agent 本来就有 shell，这条路**不需要新增 MCP 或 Host command*
 
 ## 8. 隐私与开关
 
-- 新增 `AppSettings::usage_tracking_enabled`（`serde(default = "default_true")`，与 `telemetry_enabled` 同构）。关闭后**不写库**（不是写了不用）。
-- **数据绝不进 `features::telemetry`**。在 `telemetry/mod.rs` 的 `sanitize()` 附近加注释说明边界，并在 `docs/backend/telemetry.md` 写明。
+- 新增 `AppSettings::usage_tracking_enabled`（`serde(default = "default_true")`）。关闭后**不写库**（不是写了不用）。
+- 使用记录只存本地，不经任何网络通道上报。
 - 保留期 180 天，`ensure_usage` 时 prune `usage_events`；`usage_daily` 保留 2 年（体积极小，支撑年度回顾）。
 - `usage_clear()` 命令 + 设置页「清除使用记录」按钮。
 - `search.query` 存原文（否则推荐无从利用），受同一开关与保留期约束，须在设置页文案与文档中明示。
@@ -258,4 +257,4 @@ P0/P1 完全不依赖 Agent，可独立交付价值；P2 起才涉及 prompt 与
 
 - 本文（草案）：`docs/development/usage-analytics.md`，登记进 `development/index.md` 与 `mkdocs.yml`
 - 实现后：`docs/backend/usage.md`（schema / 命令 / CLI）+ `docs/frontend/library.md`（继续阅读卡片）
-- 需同步：`docs/backend/data-model.md`（新库与表）、`docs/backend/agent.md`（注入块）、`docs/backend/telemetry.md`（边界声明）、`docs/backend/remote.md`（不同步）、`docs/backend/cli.md`（`usage` 命令组）、`docs/development/roadmap.md` + `todo.md`
+- 需同步：`docs/backend/data-model.md`（新库与表）、`docs/backend/agent.md`（注入块）、`docs/backend/remote.md`（不同步）、`docs/backend/cli.md`（`usage` 命令组）、`docs/development/roadmap.md` + `todo.md`

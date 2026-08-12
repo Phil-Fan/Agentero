@@ -25,7 +25,7 @@ src-tauri/src/
   features/      # 与前端 lib 域对齐
     vault/ catalog/ import/ wiki/ doctor/ agent/
     connector/ remote/ search/ settings/
-    translate/ trash/ watcher/ terminal/ window/ telemetry/
+    translate/ trash/ watcher/ terminal/ window/
     bridge/ layout_model/ refs/ arxiv_proxy/
   lib.rs
   main.rs
@@ -104,6 +104,5 @@ src-tauri/src/
 | 设置 | [settings.md](settings.md) |
 | 翻译 | [translate.md](translate.md) |
 | 日志 | [logging.md](logging.md) |
-| 诊断上报 | [telemetry.md](telemetry.md) |
 | CLI | [cli.md](cli.md) |
 | API 全表 | [api.md](api.md) |

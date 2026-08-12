@@ -46,7 +46,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	connectorPort: 23119,
 	zoteroSyncDir: "",
 	batchImportConcurrency: 5,
-	telemetryEnabled: true,
 	exportWatermarkEnabled: false,
 	theme: "system",
 	uiTheme: DEFAULT_UI_THEME,

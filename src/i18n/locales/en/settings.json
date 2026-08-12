@@ -86,17 +86,6 @@
 			"clearing": "Clearing…",
 			"clearFailed": "Failed to clear remote cache"
 		},
-		"telemetry": {
-			"section": "Privacy",
-			"label": "Share diagnostics",
-			"description": "Send crash reports, error logs, app/OS version, device model and installed agents to help improve Agentero. No paper content or personal files are included.",
-			"sendLabel": "Manual report",
-			"send": "Send diagnostics now",
-			"sending": "Sending…",
-			"sent": "Diagnostics sent, thank you!",
-			"sendFailed": "Failed to send diagnostics",
-			"disabledHint": "Enable “Share diagnostics” first."
-		},
 		"export": {
 			"section": "Note export",
 			"watermark": {

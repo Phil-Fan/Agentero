@@ -94,9 +94,6 @@ pub struct AppSettings {
     pub pdf_ask: PdfAskSettings,
     #[serde(default)]
     pub translate: TranslateSettings,
-    /// Opt-out switch for diagnostics reporting (see `features::telemetry`).
-    #[serde(default = "default_true")]
-    pub telemetry_enabled: bool,
     /// Prefill Markdown export dialog watermark checkbox (default off).
     #[serde(default)]
     pub export_watermark_enabled: bool,
@@ -195,7 +192,6 @@ impl Default for AppSettings {
             agent_personal_prompt: String::new(),
             pdf_ask: PdfAskSettings::default(),
             translate: TranslateSettings::default(),
-            telemetry_enabled: true,
             export_watermark_enabled: false,
         }
     }

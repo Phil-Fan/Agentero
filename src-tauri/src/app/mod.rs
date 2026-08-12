@@ -24,9 +24,6 @@ pub fn run() {
     // Both ring and aws-lc-rs backends exist in the dependency tree; rustls
     // panics at connect time unless a process-wide default is installed.
     let _ = rustls::crypto::ring::default_provider().install_default();
-    // Persist panics for the next-launch diagnostics report (no-op without a
-    // compiled-in telemetry endpoint).
-    crate::features::telemetry::install_panic_hook();
     let mut builder = tauri::Builder::default();
 
     // Single-instance must be the first plugin so second-instance argv (deep
@@ -163,7 +160,6 @@ pub fn run() {
             "op start app_ready debug={}",
             cfg!(debug_assertions)
         );
-        crate::features::telemetry::commands::spawn_startup_report(app.handle().clone());
 
         // Desktop deep links: cold start + runtime open URLs.
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -261,11 +257,6 @@ pub fn run() {
             ) {
                 #[cfg(not(target_os = "ios"))]
                 app.state::<Arc<ConnectorController>>().stop();
-            }
-            // ExitRequested can be cancelled, so only the final Exit marks the
-            // session end for the next-launch telemetry report.
-            if matches!(event, tauri::RunEvent::Exit) {
-                crate::features::telemetry::commands::record_exit(app);
             }
         });
 }

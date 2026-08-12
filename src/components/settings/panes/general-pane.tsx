@@ -17,7 +17,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { notifyError, notifySuccess } from "@/lib/core/notify";
+import { notifyError } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import {
 	PAPER_TREE_LABEL_MODES,
@@ -167,86 +167,7 @@ export function GeneralPane({
 			<ConnectorSettingsBlock settings={settings} patch={patch} />
 			<RemoteCacheSettingsBlock />
 			<ExportSettingsBlock settings={settings} patch={patch} />
-			<TelemetrySettingsBlock settings={settings} patch={patch} />
 		</>
-	);
-}
-
-function TelemetrySettingsBlock({
-	settings,
-	patch,
-}: {
-	settings: AppSettings;
-	patch: (p: Partial<AppSettings>) => void;
-}) {
-	const { t } = useTranslation("settings");
-	const [busy, setBusy] = useState(false);
-
-	const onSend = async () => {
-		if (!isTauri() || busy) return;
-		if (!settings.telemetryEnabled) {
-			notifyError(t("general.telemetry.disabledHint"));
-			return;
-		}
-		setBusy(true);
-		try {
-			const { invokeApi } = await import("@/lib/core/ipc");
-			const result = await invokeApi<{ enabled: boolean; sent: boolean }>(
-				"telemetry_send_diagnostics",
-			);
-			if (result.sent) {
-				notifySuccess(t("general.telemetry.sent"));
-			} else {
-				notifyError(t("general.telemetry.sendFailed"));
-			}
-		} catch (e) {
-			notifyError(
-				e instanceof Error ? e.message : t("general.telemetry.sendFailed"),
-			);
-		} finally {
-			setBusy(false);
-		}
-	};
-
-	return (
-		<div className="mt-4">
-			<p className="mb-2 px-0.5 font-medium text-[13px]">
-				{t("general.telemetry.section")}
-			</p>
-			<SettingsGroup>
-				<SettingsRow
-					label={
-						<span className="inline-flex flex-col gap-0.5">
-							{t("general.telemetry.label")}
-							<span className="text-[11px] font-normal leading-snug text-muted-foreground/70">
-								{t("general.telemetry.description")}
-							</span>
-						</span>
-					}
-					htmlFor="telemetry-enabled"
-				>
-					<Switch
-						id="telemetry-enabled"
-						checked={settings.telemetryEnabled}
-						onCheckedChange={(v) => patch({ telemetryEnabled: v })}
-					/>
-				</SettingsRow>
-				<SettingsRow label={t("general.telemetry.sendLabel")}>
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						className="h-8"
-						disabled={busy || !isTauri() || !settings.telemetryEnabled}
-						onClick={() => void onSend()}
-					>
-						{busy
-							? t("general.telemetry.sending")
-							: t("general.telemetry.send")}
-					</Button>
-				</SettingsRow>
-			</SettingsGroup>
-		</div>
 	);
 }
 
