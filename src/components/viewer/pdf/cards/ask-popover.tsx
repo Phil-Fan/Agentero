@@ -38,6 +38,8 @@ type AskPopoverProps = {
 	thread: PdfAskThread;
 	/** Catalog title used to build the external "open in chat" query. */
 	paperTitle?: string;
+	/** Catalog arXiv / source link used in the external "open in chat" query. */
+	paperLink?: string;
 	screen: ScreenPoint;
 	/** Match gutter pin side so the card stays next to the pin. */
 	preferRight?: boolean;
@@ -65,6 +67,7 @@ type AskPopoverProps = {
 export function AskPopover({
 	thread,
 	paperTitle,
+	paperLink,
 	screen,
 	preferRight = true,
 	streaming,
@@ -96,15 +99,16 @@ export function AskPopover({
 		return firstUser?.id ?? thread.messages[0]?.id ?? null;
 	}, [thread.messages]);
 
-	/** External AI query: explain prompt + paper title + page + selected quote. */
+	/** External AI query: explain prompt + paper title/link + page + quote. */
 	const openInQuery = useMemo(() => {
 		const quote = thread.anchor.quote?.trim();
 		const lines: string[] = [t("pdfAsk.openInPrompt"), ""];
 		if (paperTitle?.trim()) lines.push(`Paper: ${paperTitle.trim()}`);
+		if (paperLink?.trim()) lines.push(`Link: ${paperLink.trim()}`);
 		lines.push(`Page: ${thread.anchor.page}`);
 		if (quote) lines.push(`"${quote}"`);
 		return lines.join("\n");
-	}, [t, paperTitle, thread.anchor.page, thread.anchor.quote]);
+	}, [t, paperTitle, paperLink, thread.anchor.page, thread.anchor.quote]);
 
 	// Leave edit mode when the thread changes or a run starts.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reset edit UI when identity/run changes

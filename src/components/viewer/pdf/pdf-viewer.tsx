@@ -96,6 +96,7 @@ import {
 } from "@/lib/agent/selection-store";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
+import { arxivUrls } from "@/lib/paper/arxiv";
 import { isVisualMarkKind, tracePreview } from "@/lib/pdf/agent-trace";
 import { threadHasUserQuestion, threadPreview } from "@/lib/pdf/ask/schema";
 import type { PdfAskNormalizedRect, PdfAskThread } from "@/lib/pdf/ask/types";
@@ -381,13 +382,19 @@ function PdfViewerInner({
 
 	const paperKey = paperRelPath || paperAbsPath || null;
 
-	// Catalog title for the ask card's external "open in chat" query.
+	// Catalog title + link for the ask card's external "open in chat" query.
 	const paperMetaByRelPath = useLibraryStore((s) => s.paperMetaByRelPath);
-	const paperTitle = useMemo(() => {
+	const paperMeta = useMemo(() => {
 		if (!paperRelPath) return undefined;
 		const key = paperRelPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-		return paperMetaByRelPath.get(key)?.title;
+		return paperMetaByRelPath.get(key);
 	}, [paperRelPath, paperMetaByRelPath]);
+	const paperTitle = paperMeta?.title;
+	const paperLink = useMemo(() => {
+		if (!paperMeta) return undefined;
+		if (paperMeta.arxiv_id) return arxivUrls(paperMeta.arxiv_id)?.abs;
+		return paperMeta.source_url ?? paperMeta.html_url ?? paperMeta.pdf_url;
+	}, [paperMeta]);
 
 	const { pageField, setPageField, pageFocusedRef, goToPage, commitPageField } =
 		usePdfNavigation({
@@ -1436,6 +1443,7 @@ function PdfViewerInner({
 				ask={{
 					thread: activeThread,
 					paperTitle,
+					paperLink,
 					streaming,
 					error: askError,
 					onSend: sendAskQuestion,
