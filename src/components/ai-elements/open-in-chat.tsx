@@ -1,78 +1,16 @@
 "use client";
 
 import type { ComponentProps } from "react";
-import { createContext, useContext } from "react";
 
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { openExternalUrl } from "@/lib/core/open-external";
 
 /**
  * Open-in-Chat: send a text query to an external AI chat platform
- * (ChatGPT / Claude / Cursor). Adapted from AI Elements `open-in-chat`;
- * URLs open through the system handler so Tauri webviews leave the app.
+ * (ChatGPT / Claude). URLs open through the system handler so Tauri
+ * webviews leave the app.
  */
 
-type OpenInContextValue = {
-	query: string;
-};
-
-const OpenInContext = createContext<OpenInContextValue | null>(null);
-
-function useOpenInContext(component: string) {
-	const context = useContext(OpenInContext);
-	if (!context) {
-		throw new Error(`${component} must be used within <OpenIn>`);
-	}
-	return context;
-}
-
-export type OpenInProps = ComponentProps<typeof DropdownMenu> & {
-	/** Text sent to the external AI platform. */
-	query: string;
-};
-
-export function OpenIn({ query, children, ...props }: OpenInProps) {
-	return (
-		<OpenInContext.Provider value={{ query }}>
-			<DropdownMenu modal={false} {...props}>
-				{children}
-			</DropdownMenu>
-		</OpenInContext.Provider>
-	);
-}
-
-export type OpenInTriggerProps = ComponentProps<typeof DropdownMenuTrigger>;
-
-export function OpenInTrigger(props: OpenInTriggerProps) {
-	return <DropdownMenuTrigger {...props} />;
-}
-
-export type OpenInContentProps = ComponentProps<typeof DropdownMenuContent>;
-
-export function OpenInContent({ children, ...props }: OpenInContentProps) {
-	return (
-		<DropdownMenuContent align="end" sideOffset={6} {...props}>
-			{children}
-		</DropdownMenuContent>
-	);
-}
-
-type OpenInPlatformItemProps = Omit<
-	ComponentProps<typeof DropdownMenuItem>,
-	"onSelect"
->;
-
-function useOpenInPlatform(platform: string, url: (query: string) => string) {
-	const { query } = useOpenInContext(platform);
-	return () => openExternalUrl(url(query));
-}
-
-function ChatGPTIcon(props: ComponentProps<"svg">) {
+export function ChatGPTIcon(props: ComponentProps<"svg">) {
 	return (
 		<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>
 			<title>ChatGPT</title>
@@ -81,7 +19,7 @@ function ChatGPTIcon(props: ComponentProps<"svg">) {
 	);
 }
 
-function ClaudeIcon(props: ComponentProps<"svg">) {
+export function ClaudeIcon(props: ComponentProps<"svg">) {
 	return (
 		<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>
 			<title>Claude</title>
@@ -90,51 +28,10 @@ function ClaudeIcon(props: ComponentProps<"svg">) {
 	);
 }
 
-function CursorIcon(props: ComponentProps<"svg">) {
-	return (
-		<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>
-			<title>Cursor</title>
-			<path d="M12 1.113L2.636 6.587v10.948L12 23.007l9.364-5.474V6.587L12 1.113zm0 1.9l6.06 3.536L12 10.085 5.94 6.549 12 3.013zM4.336 8.06l6.814 3.976v7.99L4.336 16.05V8.06zm15.328 0v7.99l-6.814 3.976v-7.99l6.814-3.976z" />
-		</svg>
-	);
+export function openInChatGPT(query: string): void {
+	openExternalUrl(`https://chatgpt.com/?q=${encodeURIComponent(query)}`);
 }
 
-export function OpenInChatGPT(props: OpenInPlatformItemProps) {
-	const open = useOpenInPlatform(
-		"OpenInChatGPT",
-		(query) => `https://chatgpt.com/?q=${encodeURIComponent(query)}`,
-	);
-	return (
-		<DropdownMenuItem onSelect={open} {...props}>
-			<ChatGPTIcon className="size-4" />
-			ChatGPT
-		</DropdownMenuItem>
-	);
-}
-
-export function OpenInClaude(props: OpenInPlatformItemProps) {
-	const open = useOpenInPlatform(
-		"OpenInClaude",
-		(query) => `https://claude.ai/new?q=${encodeURIComponent(query)}`,
-	);
-	return (
-		<DropdownMenuItem onSelect={open} {...props}>
-			<ClaudeIcon className="size-4" />
-			Claude
-		</DropdownMenuItem>
-	);
-}
-
-export function OpenInCursor(props: OpenInPlatformItemProps) {
-	const open = useOpenInPlatform(
-		"OpenInCursor",
-		(query) =>
-			`cursor://anysphere.cursor-deeplink/prompt?text=${encodeURIComponent(query)}`,
-	);
-	return (
-		<DropdownMenuItem onSelect={open} {...props}>
-			<CursorIcon className="size-4" />
-			Cursor
-		</DropdownMenuItem>
-	);
+export function openInClaude(query: string): void {
+	openExternalUrl(`https://claude.ai/new?q=${encodeURIComponent(query)}`);
 }

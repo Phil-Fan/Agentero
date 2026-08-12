@@ -1,10 +1,4 @@
-import {
-	MessageSquareIcon,
-	MinusIcon,
-	Pencil,
-	SquareArrowOutUpRightIcon,
-	Trash2Icon,
-} from "lucide-react";
+import { MessageSquareIcon, MinusIcon, Pencil, Trash2Icon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -16,12 +10,10 @@ import {
 	MessageResponse,
 } from "@/components/ai-elements/message";
 import {
-	OpenIn,
-	OpenInChatGPT,
-	OpenInClaude,
-	OpenInContent,
-	OpenInCursor,
-	OpenInTrigger,
+	ChatGPTIcon,
+	ClaudeIcon,
+	openInChatGPT,
+	openInClaude,
 } from "@/components/ai-elements/open-in-chat";
 import {
 	PromptInput,
@@ -31,11 +23,6 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { SelectionCard } from "@/components/viewer/pdf/cards/selection-card";
 import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import { useImeGuard } from "@/hooks/use-ime-guard";
@@ -197,39 +184,17 @@ export function AskPopover({
 			onPointerLeave={onPointerLeave}
 			// Body only constrains flex; messages own their own scrollport.
 			bodyClassName="min-h-0 overflow-hidden p-0"
-			headerExtra={
-				<OpenIn query={openInQuery}>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<OpenInTrigger
-								aria-label={t("pdfAsk.openInChat")}
-								className={cn(
-									"inline-flex size-6 shrink-0 items-center justify-center rounded-md",
-									"text-muted-foreground transition-colors outline-none",
-									"focus-visible:ring-2 focus-visible:ring-ring/50",
-									"hover:bg-muted hover:text-foreground",
-								)}
-							>
-								<SquareArrowOutUpRightIcon className="size-3.5" />
-							</OpenInTrigger>
-						</TooltipTrigger>
-						<TooltipContent side="bottom">
-							{t("pdfAsk.openInChat")}
-						</TooltipContent>
-					</Tooltip>
-					{/* Portal sits outside the card: keep the hover-hide timer armed
-					    as if the pointer were still over the dialog. */}
-					<OpenInContent
-						onPointerEnter={onPointerEnter}
-						onPointerLeave={onPointerLeave}
-					>
-						<OpenInChatGPT />
-						<OpenInClaude />
-						<OpenInCursor />
-					</OpenInContent>
-				</OpenIn>
-			}
 			actions={[
+				{
+					label: t("pdfAsk.openInChatGPT"),
+					onClick: () => openInChatGPT(openInQuery),
+					icon: <ChatGPTIcon className="size-3.5" />,
+				},
+				{
+					label: t("pdfAsk.openInClaude"),
+					onClick: () => openInClaude(openInQuery),
+					icon: <ClaudeIcon className="size-3.5" />,
+				},
 				{
 					label: t("pdfAsk.delete"),
 					onClick: onDelete,

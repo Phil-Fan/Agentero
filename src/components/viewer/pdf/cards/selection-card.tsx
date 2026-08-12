@@ -195,11 +195,6 @@ type SelectionCardProps = {
 	icon: LucideIcon;
 	/** Header trailing icon buttons (close / hide / delete …). */
 	actions?: SelectionCardAction[];
-	/**
-	 * Custom header control rendered before `actions` (e.g. a dropdown menu).
-	 * Wrap it in a Tooltip for a consistent accessible affordance.
-	 */
-	headerExtra?: ReactNode;
 	/** Accessible name; defaults to title. */
 	ariaLabel?: string;
 	/** Announce body updates (e.g. streaming translation). */
@@ -233,7 +228,6 @@ export function SelectionCard({
 	title,
 	icon: Icon,
 	actions,
-	headerExtra,
 	ariaLabel,
 	ariaLive = "off",
 	onPointerEnter,
@@ -305,13 +299,12 @@ export function SelectionCard({
 				<span className="min-w-0 flex-1 truncate font-medium text-foreground text-sm">
 					{title}
 				</span>
-				{headerExtra || (actions && actions.length > 0) ? (
+				{actions && actions.length > 0 ? (
 					// disableHoverableContent: tooltip is portaled outside the card;
 					// moving into it would fire pointerleave and start the hide timer.
 					<TooltipProvider delayDuration={200} disableHoverableContent>
 						<div className="flex items-center gap-0.5">
-							{headerExtra}
-							{actions?.map((a) => (
+							{actions.map((a) => (
 								<Tooltip key={a.label}>
 									<TooltipTrigger asChild>
 										<button

@@ -74,7 +74,8 @@
 		"editAction": "Edit",
 		"editResend": "Resend",
 		"editCancel": "Cancel",
-		"openInChat": "Open in Chat"
+		"openInChatGPT": "Open in ChatGPT",
+		"openInClaude": "Open in Claude"
 	},
 	"pdfExplain": {
 		"selectRegion": "Add visual annotation",

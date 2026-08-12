@@ -74,7 +74,8 @@
 		"editAction": "编辑",
 		"editResend": "重新发送",
 		"editCancel": "取消",
-		"openInChat": "在外部 AI 中提问"
+		"openInChatGPT": "在 ChatGPT 中提问",
+		"openInClaude": "在 Claude 中提问"
 	},
 	"pdfExplain": {
 		"selectRegion": "添加视觉批注",
