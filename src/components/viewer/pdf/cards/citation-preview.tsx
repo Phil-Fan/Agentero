@@ -53,9 +53,16 @@ export function PdfCitationPreview({
 			onPointerEnter={onPointerEnter}
 			onPointerLeave={onPointerLeave}
 		>
-			<p className="font-medium text-[10px] uppercase tracking-wide text-muted-foreground">
-				{t("references.previewExtracted")}
-			</p>
+			<div className="flex items-baseline justify-between gap-2">
+				<p className="font-medium text-[10px] uppercase tracking-wide text-muted-foreground">
+					{t("references.previewExtracted")}
+				</p>
+				{matched?.rawKey ? (
+					<span className="shrink-0 truncate font-mono text-[10px] text-muted-foreground">
+						{matched.rawKey}
+					</span>
+				) : null}
+			</div>
 			<p className="mt-1 line-clamp-3 text-[13px] leading-snug text-foreground">
 				{previewText}
 			</p>
