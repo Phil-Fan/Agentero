@@ -15,10 +15,18 @@ export const LAYOUT_SIDECAR_FILE = "layout.json";
 /** Re-export for consumers that only import from `io`. */
 export { LAYOUT_INDEX_FILE } from "@/lib/pdf/layout/layout-index";
 
+/** Producer recorded in `source.mode` — which backend generated the regions. */
+export type LayoutSidecarMode = "embedpdf-layout" | "paddle-layout";
+
+const LAYOUT_SIDECAR_MODES: readonly LayoutSidecarMode[] = [
+	"embedpdf-layout",
+	"paddle-layout",
+];
+
 export type PdfLayoutSidecar = {
 	schemaVersion: number;
 	source: {
-		mode: "embedpdf-layout";
+		mode: LayoutSidecarMode;
 		generatedAt: string;
 	};
 	/** Raw text-enriched model regions, before caption/formula merge. */
@@ -120,7 +128,10 @@ export function layoutIndexPath(paperAbsPath: string): string {
 export function parseLayoutSidecar(raw: unknown): PdfLayoutSidecar | null {
 	if (!isObject(raw)) return null;
 	if (raw.schemaVersion !== LAYOUT_SIDECAR_SCHEMA_VERSION) return null;
-	if (!isObject(raw.source) || raw.source.mode !== "embedpdf-layout") {
+	if (
+		!isObject(raw.source) ||
+		!LAYOUT_SIDECAR_MODES.includes(raw.source.mode as LayoutSidecarMode)
+	) {
 		return null;
 	}
 	if (typeof raw.source.generatedAt !== "string") return null;
@@ -130,7 +141,7 @@ export function parseLayoutSidecar(raw: unknown): PdfLayoutSidecar | null {
 	return {
 		schemaVersion: LAYOUT_SIDECAR_SCHEMA_VERSION,
 		source: {
-			mode: "embedpdf-layout",
+			mode: raw.source.mode as LayoutSidecarMode,
 			generatedAt: raw.source.generatedAt,
 		},
 		regions: regions as PdfLayoutRegion[],
@@ -152,12 +163,13 @@ export async function readLayoutSidecar(
 export async function writeLayoutSidecar(
 	paperAbsPath: string | null | undefined,
 	regions: PdfLayoutRegion[],
+	mode: LayoutSidecarMode = "embedpdf-layout",
 ): Promise<void> {
 	if (!paperAbsPath) return;
 	const sidecar: PdfLayoutSidecar = {
 		schemaVersion: LAYOUT_SIDECAR_SCHEMA_VERSION,
 		source: {
-			mode: "embedpdf-layout",
+			mode,
 			generatedAt: new Date().toISOString(),
 		},
 		regions,

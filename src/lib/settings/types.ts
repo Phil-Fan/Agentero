@@ -2,6 +2,7 @@ import type {
 	PaperTreeLabelMode,
 	PaperTreeSortMode,
 } from "@/lib/paper/tree-modes";
+import type { LayoutSettings } from "@/lib/pdf/layout/settings";
 import type {
 	CommercialTranslateProviderId,
 	TranslateProviderConfig,
@@ -10,6 +11,12 @@ import type {
 	TranslateTargetLang,
 } from "@/lib/translate/types";
 
+export type {
+	LayoutBackend,
+	LayoutProviderConfig,
+	LayoutProviderId,
+	LayoutSettings,
+} from "@/lib/pdf/layout/settings";
 export type {
 	CommercialTranslateProviderId,
 	PaperTreeLabelMode,
@@ -191,6 +198,8 @@ export type AppSettings = {
 	pdfAsk: PdfAskSettings;
 	/** Application-level translation service (free MT + BYOA Agent). */
 	translate: TranslateSettings;
+	/** PDF layout-analysis backend (local ONNX or remote PP-StructureV3). */
+	layout: LayoutSettings;
 };
 
 /** PDF selection Ask (question popover) agent/model prefs. */

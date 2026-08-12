@@ -1,3 +1,4 @@
+import { DEFAULT_LAYOUT_SETTINGS } from "@/lib/pdf/layout/settings";
 import type { AppSettings, PdfAskSettings } from "@/lib/settings/types";
 import { DEFAULT_LIBRARY_COLUMNS } from "@/lib/settings/types";
 import { DEFAULT_TRANSLATE_SETTINGS } from "@/lib/translate/defaults";
@@ -64,6 +65,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	agentPersonalPrompt: "",
 	pdfAsk: { ...DEFAULT_PDF_ASK_SETTINGS },
 	translate: { ...DEFAULT_TRANSLATE_SETTINGS },
+	layout: { ...DEFAULT_LAYOUT_SETTINGS, providerConfigs: {} },
 };
 
 /** Snap an arbitrary scale value to the closest supported preset. */

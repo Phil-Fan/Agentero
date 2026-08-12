@@ -40,6 +40,30 @@ describe("layout sidecar", () => {
 		expect(sidecar?.regions[0]?.captionRole).toBe("figure_main");
 	});
 
+	it("accepts the paddle-layout source mode", () => {
+		const sidecar = parseLayoutSidecar({
+			schemaVersion: 2,
+			source: {
+				mode: "paddle-layout",
+				generatedAt: "2026-08-12T00:00:00Z",
+			},
+			regions: [
+				{
+					id: "paddle-0-0",
+					pageIndex: 0,
+					kind: "image",
+					label: "image",
+					score: 0.9,
+					readingOrder: 0,
+					rect: { x: 10, y: 20, w: 30, h: 40 },
+					bbox: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 },
+				},
+			],
+		});
+		expect(sidecar?.source.mode).toBe("paddle-layout");
+		expect(sidecar?.regions).toHaveLength(1);
+	});
+
 	it("rejects stale schema or malformed regions", () => {
 		expect(
 			parseLayoutSidecar({

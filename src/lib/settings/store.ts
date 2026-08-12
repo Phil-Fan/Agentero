@@ -6,6 +6,12 @@ import {
 	isPaperTreeSortMode,
 } from "@/lib/paper/tree-modes";
 import {
+	DEFAULT_LAYOUT_SETTINGS,
+	isLayoutBackend,
+	isLayoutProviderId,
+	type LayoutSettings,
+} from "@/lib/pdf/layout/settings";
+import {
 	clampEditorLineHeight,
 	DEFAULT_PDF_ASK_SETTINGS,
 	DEFAULT_SETTINGS,
@@ -46,6 +52,7 @@ let cache: AppSettings = {
 	...DEFAULT_SETTINGS,
 	libraryColumns: DEFAULT_LIBRARY_COLUMNS.map((c) => ({ ...c })),
 	translate: { ...DEFAULT_TRANSLATE_SETTINGS },
+	layout: { ...DEFAULT_SETTINGS.layout, providerConfigs: {} },
 	pdfAsk: { ...DEFAULT_PDF_ASK_SETTINGS },
 };
 let loaded = false;
@@ -59,6 +66,7 @@ function cloneSettings(s: AppSettings): AppSettings {
 		libraryColumns: s.libraryColumns.map((c) => ({ ...c })),
 		pdfAsk: { ...s.pdfAsk },
 		translate: { ...s.translate },
+		layout: { ...s.layout, providerConfigs: { ...s.layout.providerConfigs } },
 	};
 }
 
@@ -399,6 +407,7 @@ function normalizePartial(
 		(parsed as { pdfAsk?: Partial<PdfAskSettings> }).pdfAsk,
 	);
 	merged.translate = normalizeTranslateSettings(parsed.translate);
+	merged.layout = normalizeLayoutSettings(parsed.layout);
 	return merged;
 }
 
@@ -507,6 +516,39 @@ function normalizeTranslateProviderConfigs(
 			baseUrl: typeof cfg.baseUrl === "string" ? cfg.baseUrl.trim() : "",
 			region: typeof cfg.region === "string" ? cfg.region.trim() : "",
 			model: typeof cfg.model === "string" ? cfg.model.trim() : "",
+		};
+	}
+	return out;
+}
+
+function normalizeLayoutSettings(
+	raw: Partial<LayoutSettings> | undefined,
+): LayoutSettings {
+	const base: LayoutSettings = {
+		...DEFAULT_LAYOUT_SETTINGS,
+		providerConfigs: {},
+	};
+	if (!raw || typeof raw !== "object") return base;
+	if (isLayoutBackend(raw.backend)) {
+		base.backend = raw.backend;
+	}
+	base.providerConfigs = normalizeLayoutProviderConfigs(
+		(raw as { providerConfigs?: unknown }).providerConfigs,
+	);
+	return base;
+}
+
+function normalizeLayoutProviderConfigs(
+	raw: unknown,
+): LayoutSettings["providerConfigs"] {
+	const out: LayoutSettings["providerConfigs"] = {};
+	if (!raw || typeof raw !== "object") return out;
+	for (const [id, value] of Object.entries(raw)) {
+		if (!isLayoutProviderId(id)) continue;
+		if (!value || typeof value !== "object") continue;
+		const cfg = value as { apiKey?: unknown };
+		out[id] = {
+			apiKey: typeof cfg.apiKey === "string" ? cfg.apiKey.trim() : "",
 		};
 	}
 	return out;
