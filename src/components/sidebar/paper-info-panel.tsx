@@ -107,10 +107,10 @@ function CopyValue({
 				"block w-full cursor-pointer rounded-sm text-left",
 				"hover:bg-muted/60 hover:text-foreground",
 				"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-				className,
 			)}
 		>
-			{text}
+			{/* No `block` here: it sorts after line-clamp-* and would override display:-webkit-box. */}
+			<span className={cn("w-full", className)}>{text}</span>
 		</button>
 	);
 }
