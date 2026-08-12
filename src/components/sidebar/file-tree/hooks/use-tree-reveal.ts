@@ -4,6 +4,7 @@
  */
 import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import { type RefObject, useEffect, useMemo, useRef } from "react";
+import { scrollBehavior } from "@/lib/core/motion";
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
 import { useUiScale } from "@/lib/settings";
 import { isVirtualTreePath, pathKey } from "../tree-helpers";
@@ -96,7 +97,7 @@ export function useTreeReveal({
 			requestAnimationFrame(() => {
 				rowVirtualizer.scrollToIndex(idx, {
 					align: "center",
-					behavior: "smooth",
+					behavior: scrollBehavior(),
 				});
 			});
 		});

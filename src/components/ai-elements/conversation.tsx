@@ -7,19 +7,24 @@ import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 import { Button } from "@/components/ui/button";
+import { prefersReducedMotion } from "@/lib/core/motion";
 import { cn } from "@/lib/core/utils";
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>;
 
-export const Conversation = ({ className, ...props }: ConversationProps) => (
-	<StickToBottom
-		className={cn("relative flex-1 overflow-y-hidden", className)}
-		initial="smooth"
-		resize="smooth"
-		role="log"
-		{...props}
-	/>
-);
+export const Conversation = ({ className, ...props }: ConversationProps) => {
+	// use-stick-to-bottom animates in JS, out of reach of the reduced-motion CSS.
+	const autoscroll = prefersReducedMotion() ? "instant" : "smooth";
+	return (
+		<StickToBottom
+			className={cn("relative flex-1 overflow-y-hidden", className)}
+			initial={autoscroll}
+			resize={autoscroll}
+			role="log"
+			{...props}
+		/>
+	);
+};
 
 export type ConversationContentProps = ComponentProps<
 	typeof StickToBottom.Content

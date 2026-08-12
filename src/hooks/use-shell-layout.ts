@@ -6,6 +6,7 @@
 
 import { type RefObject, useEffect, useMemo, useRef } from "react";
 import { usePanelRef } from "react-resizable-panels";
+import { prefersReducedMotion } from "@/lib/core/motion";
 import {
 	registerLayoutController,
 	setRightSidebarOpenState,
@@ -17,10 +18,6 @@ import { tabHasNotesSplit, tabNotesEligible } from "@/lib/workspace/tabs";
 
 export const SIDEBAR_DEFAULT_PX = 200;
 export const RIGHT_SIDEBAR_DEFAULT_PX = 320;
-
-function prefersReducedMotion(): boolean {
-	return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
 
 export type ShellLayout = {
 	sidebarPanelRef: ReturnType<typeof usePanelRef>;

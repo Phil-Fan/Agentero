@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/context-menu";
 import { useLibraryStore } from "@/hooks/use-app-stores";
 import i18n from "@/i18n";
+import { scrollBehavior } from "@/lib/core/motion";
 import { errorMessage, notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
@@ -233,7 +234,7 @@ export function MarkdownEditor({
 					);
 		if (!target) return;
 		target.dataset.navTarget = "true";
-		target.scrollIntoView({ behavior: "smooth", block: "center" });
+		target.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
 		const timeout = window.setTimeout(() => {
 			delete target.dataset.navTarget;
 		}, 1600);
