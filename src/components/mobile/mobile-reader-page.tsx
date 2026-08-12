@@ -1,6 +1,7 @@
 import { LoaderCircle } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { MobileReaderMode } from "@/components/mobile/types";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { bridgeRpc } from "@/lib/bridge/client";
@@ -19,7 +20,7 @@ export function MobileReaderPage({
 	mode,
 }: {
 	paper: PaperMetadata;
-	mode: "pdf" | "notes";
+	mode: MobileReaderMode;
 }) {
 	const { t } = useTranslation("mobile");
 	const [notes, setNotes] = useState("");
