@@ -757,6 +757,14 @@ export function PapersLibrary({
 		return copy;
 	}, [indexedRows, normalizedQuery, tagFilterSet, sortKey, sortDir]);
 
+	// Reorder cue: replay a quick fade when the user re-sorts or changes tag
+	// filters. Deliberately excludes the search query — per-keystroke remounts
+	// would flicker (high-frequency input, motion-15).
+	const reorderKey = useMemo(
+		() => `${sortKey}:${sortDir}:${tagFilter.join(",")}`,
+		[sortKey, sortDir, tagFilter],
+	);
+
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const uiScale = useUiScale();
 	const rowVirtualizer = useVirtualizer({
@@ -1019,7 +1027,7 @@ export function PapersLibrary({
 						))}
 					</colgroup>
 					{tableHeader}
-					<tbody>
+					<tbody key={reorderKey} className="animate-in fade-in-0 duration-150">
 						{!rows.length ? (
 							<tr>
 								<td colSpan={visibleColumns.length} className="p-0">
