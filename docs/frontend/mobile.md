@@ -301,6 +301,26 @@ iPad 后续可回到双栏（Library + 阅读/Agent 分屏）。
 - 一切写操作与 Agent 需在线；离线时置灰并提示「电脑离线」；
 - 不做离线写回队列（单写者原则，避免冲突语义）。
 
+### 7.6 前端组件结构
+
+移动壳位于 `src/components/mobile/`，入口 `mobile-app.tsx` 是薄容器：持有 tab 路由、配对门禁与壳布局，业务逻辑全部下沉到 hooks 与页面组件。
+
+| 模块 | 职责 |
+|---|---|
+| `mobile-app.tsx` | 根容器：tab/侧栏/阅读器状态、header 装配、配对门禁 |
+| `mobile-pairing.tsx` | 配对首屏：扫码（zxing）、粘贴配对链接、进度 toast、待确认验证码 |
+| `mobile-agent-page.tsx` | Agent 聊天页 + 历史会话/权限弹窗 |
+| `mobile-library-page.tsx` / `mobile-reader-page.tsx` | 论文列表 / PDF+NOTES 阅读页 |
+| `mobile-header.tsx` / `mobile-header-actions.tsx` / `mobile-nav.tsx` / `mobile-sidebar.tsx` / `mobile-gestures.tsx` | header 壳、header 动作区（阅读模式切换、Agent 后端切换）、导航、侧栏、手势 |
+| `hooks/use-bridge-status.ts` | bridge 状态订阅、启动恢复、回前台重连 |
+| `hooks/use-pair-offer-links.ts` | `agentero://pair` deep-link 配对入口 |
+| `hooks/use-mobile-papers.ts` | 论文列表拉取与轮询 |
+| `hooks/use-mobile-agents.ts` | Agent 列表合并（注册列表 + catalog 扫描）与默认选择 |
+| `hooks/use-mobile-agent-chat.ts` | 聊天状态机：事件订阅、时间线恢复、发送与权限应答 |
+| `agent-sources.ts` / `chat-lines.ts` / `types.ts` | 纯逻辑（可单测）与 bridge agent 协议类型 |
+
+约定：历史会话弹窗的开关由根容器经 props 下传（header 按钮与聊天页共享）；切换 Agent 后端时根容器清空会话 id，聊天页经 `key` 重挂载。纯逻辑模块的回归网在 `test/mobile-*.test.ts`。
+
 ---
 
 ## 8. Agent 使用（核心场景）
