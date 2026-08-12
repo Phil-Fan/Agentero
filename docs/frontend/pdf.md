@@ -127,7 +127,20 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 
 要点：先文字角色再联图；图题须整框在 figure bbox 内；图无 title 丢弃；默认置信度 30%；Paper PDF 的初步解析结果缓存到 `{paper}/source/layout.json`，后续 merge/filter 可重复计算。全文翻译缓存独立写入 `{paper}/source/layout-translate.json`，按 provider / 语言 / region 原文校验后复用。
 
-**单击视觉批注：** hover 插图 / 表 / 算法 / 无符号表公式的命中框时，框右上角显示「单击进行批注」提示；单击裁剪该区域并打开 `VisualAnnotationEditor`（与手动框选相同；不自动发送 Agent），草稿卡保持打开直到手动关闭。框选模式或已有草稿卡时命中框不挂载。
+**单击视觉批注：** hover 插图 / 表 / 算法 / 无符号表公式的命中框时，框上出现 primary 描边（即将裁剪的确切 bbox）与右上角「单击进行批注」提示；单击裁剪该区域并打开 `VisualAnnotationEditor`（与手动框选相同；不自动发送 Agent），草稿卡保持打开直到手动关闭。框选模式或已有草稿卡时命中框不挂载。
+
+交互细节（均有对应实现约束）：
+
+| 项 | 行为 | 原因 |
+|---|---|---|
+| 拖拽容差 | pointerdown 到 click 位移 > 6px 视为拖拽，不裁剪（`LAYOUT_REGION_CLICK_MOVE_TOLERANCE_PX`） | 浏览器只要 down/up 落在同一元素就派发 `click`，起手在图区内的选字或平移会误触发 |
+| 键盘 | 命中框在 Tab 序列内，Enter / Space 裁剪；`MouseEvent.detail === 0` 直接放行容差判定 | 键盘激活没有指针位移可测 |
+| 焦点 | 描边与提示同时响应 `group-hover` 与 `group-focus-visible` | 半透明 UA 焦点环压在不可预测的页面内容上不可靠 |
+| 提示阈值 | 区域实际尺寸小于 `LAYOUT_HINT_MIN_REGION_W/H_PX`（120×28）时不画 chip，并配 `max-w` + `truncate` 兜底 | chip 是固定字号标签，容器随缩放变化，小区域下会溢出压住邻近内容 |
+| 光标 | 图 / 表 / 算法用 `cursor-crosshair`，公式图例用 `cursor-help` | pointer 光标留给会跳转的引用链接 |
+| 裁剪中 | `visualCropRegion` 在页上画描边 + spinner（`role="status"`） | PDFium `renderPageRect` 是异步的，否则单击后到卡片出现之间毫无反馈 |
+
+公式图例命中框没有单击动作，因此 `onFocus` / `onBlur` 承担键盘可达性（聚焦即走同一 dwell 逻辑）。
 
 **Hover 公式解析：** 当论文目录存在 `Annotation.md`（由 `equation-annotation` Skill 生成的符号词典）且解析到符号表时，hover **有编号公式** 不打开视觉批注，改为弹出「公式解析」卡片：展示符号 / 含义 / 通俗理解对照（符号列 KaTeX 渲染）。卡片可打开 `Annotation.md`。
 
