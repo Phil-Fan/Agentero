@@ -1,5 +1,6 @@
 /**
- * Bundled CLI install status and PATH shim management (Settings → About).
+ * CLI install status and PATH shim management (Settings → About).
+ * Install may use a local/dev binary or download the same app version from GitHub Releases.
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -10,6 +11,12 @@ export type CliInstallStatus = {
 	appVersion: string;
 	bundledVersion: string | null;
 	bundledPath: string | null;
+	/** `bundled` | `managed` | `dev` when a binary is resolved */
+	source: string | null;
+	cliVersion: string | null;
+	downloadUrl: string | null;
+	releasePageUrl: string;
+	canInstall: boolean;
 	installed: boolean;
 	installPath: string | null;
 	shimCurrent: boolean;
@@ -37,7 +44,7 @@ export function installCliCommand(): Promise<CliInstallResult> {
 
 export function uninstallCliCommand(): Promise<CliInstallResult> {
 	return invokeApi<CliInstallResult>("cli_uninstall_command", undefined, {
-		fallback: "Failed to uninstall CLI command",
+		fallback: "Failed to remove CLI command",
 	});
 }
 

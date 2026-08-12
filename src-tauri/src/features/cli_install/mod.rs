@@ -1,13 +1,21 @@
-//! Bundled headless CLI discovery, PATH install, and uninstall.
+//! Headless CLI discovery, optional GitHub download, PATH install, and uninstall.
 //!
-//! The desktop package may ship `agentero-cli` next to the GUI binary (Tauri
-//! `externalBin`). Settings offers an explicit install into a user bin dir
-//! without editing shell rc files.
+//! Desktop packages intentionally do **not** ship a multi-MB CLI binary (#285).
+//! Settings → About installs the **same app version** CLI from GitHub Releases
+//! (or uses a local/dev runnable binary when present). PATH entry is a user-bin
+//! shim; shell rc files are never edited.
 //!
 //! Dev note: the cargo bin is named `agentero-cli` so it never collides with
 //! the GUI binary `agentero` in `target/{debug,release}/`.
 
+mod download;
+
 use crate::core::error::AppError;
+use crate::core::install_dirs::{ABS_BIN_DIRS, HOME_BIN_DIRS};
+use download::{
+    download_and_extract, host_triple, managed_binary_name, normalize_version,
+    release_download_url, release_tag_page_url, versions_equal,
+};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -36,15 +44,25 @@ const MIN_CLI_BYTES: u64 = 1;
 pub struct CliInstallStatus {
     /// App package version (from Cargo / Tauri).
     pub app_version: String,
-    /// Version reported by the bundled CLI binary, if present.
+    /// Version reported by the resolved CLI binary, if present.
     pub bundled_version: Option<String>,
-    /// Absolute path to the bundled CLI binary inside the App.
+    /// Absolute path to a runnable CLI (bundled, managed cache, or dev), if any.
     pub bundled_path: Option<String>,
+    /// Where the binary came from: `bundled` | `managed` | `dev`.
+    pub source: Option<String>,
+    /// Version reported by the CLI we would / did install (alias clarity for UI).
+    pub cli_version: Option<String>,
+    /// Expected GitHub Release asset URL for this app version + host triple.
+    pub download_url: Option<String>,
+    /// Tag page for manual download / troubleshooting.
+    pub release_page_url: String,
+    /// Host can install (local binary available or download supported on this OS).
+    pub can_install: bool,
     /// Whether a user-level shim/link we manage is installed.
     pub installed: bool,
     /// Where the managed shim lives.
     pub install_path: Option<String>,
-    /// Whether the shim still points at (or is) the current bundled binary.
+    /// Shim points at our CLI and CLI version matches the app.
     pub shim_current: bool,
     /// Preferred install directory for new installs.
     pub preferred_bin_dir: String,
@@ -59,6 +77,13 @@ pub struct CliInstallStatus {
 pub struct CliInstallResult {
     pub status: CliInstallStatus,
     pub action: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedCli {
+    path: PathBuf,
+    source: &'static str,
+    version: Option<String>,
 }
 
 fn app_version() -> String {
@@ -78,37 +103,69 @@ fn is_runnable_cli(path: &Path) -> bool {
     is_plausible_cli_file(path) && read_cli_version(path).is_some()
 }
 
-/// Locate a real, version-reporting bundled CLI (never empty stubs).
+/// Directory for the downloaded/managed CLI binary (outside the App bundle).
+pub(crate) fn managed_cli_dir() -> PathBuf {
+    if let Some(base) = dirs::data_local_dir() {
+        return base.join("Agentero").join("cli");
+    }
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".local")
+        .join("share")
+        .join("Agentero")
+        .join("cli")
+}
+
+pub(crate) fn managed_cli_binary() -> PathBuf {
+    managed_cli_dir().join(managed_binary_name())
+}
+
+/// Locate a real, version-reporting CLI next to the app / in the workspace (never stubs).
 pub fn resolve_bundled_cli<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
+    resolve_local_cli(app).map(|r| r.path)
+}
+
+pub(crate) fn resolve_local_cli<R: Runtime>(app: &AppHandle<R>) -> Option<ResolvedCli> {
+    // 1) Managed download cache (product path after Install).
+    let managed = managed_cli_binary();
+    if is_runnable_cli(&managed) {
+        let version = read_cli_version(&managed);
+        return Some(ResolvedCli {
+            path: managed.canonicalize().unwrap_or(managed),
+            source: "managed",
+            version,
+        });
+    }
+
+    // 2) App bundle / resource / dev target discovery.
+    let mut candidates: Vec<(PathBuf, &'static str)> = Vec::new();
 
     // `executable_dir` is desktop-only (PathResolver). Mobile never ships the CLI.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Ok(exe_dir) = app.path().executable_dir() {
-        candidates.push(exe_dir.join(BUNDLED_CLI_NAME));
-        candidates.push(exe_dir.join("binaries").join(BUNDLED_CLI_NAME));
+        candidates.push((exe_dir.join(BUNDLED_CLI_NAME), "bundled"));
+        candidates.push((exe_dir.join("binaries").join(BUNDLED_CLI_NAME), "bundled"));
     }
     if let Ok(res) = app.path().resource_dir() {
-        candidates.push(res.join(BUNDLED_CLI_NAME));
-        candidates.push(res.join("binaries").join(BUNDLED_CLI_NAME));
+        candidates.push((res.join(BUNDLED_CLI_NAME), "bundled"));
+        candidates.push((res.join("binaries").join(BUNDLED_CLI_NAME), "bundled"));
         if let Some(parent) = res.parent() {
-            candidates.push(parent.join("MacOS").join(BUNDLED_CLI_NAME));
+            candidates.push((parent.join("MacOS").join(BUNDLED_CLI_NAME), "bundled"));
         }
     }
 
     // Runtime discovery from the running GUI binary (dev + release).
-    // `CARGO_MANIFEST_DIR` is only set at compile time, not when the app runs.
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            candidates.push(dir.join(BUNDLED_CLI_NAME));
-            // target/debug/agentero (GUI) → sibling agentero-cli
-            candidates.push(dir.join(BUNDLED_CLI_NAME));
-            // Walk up looking for workspace target/{debug,release}/agentero-cli
+            candidates.push((dir.join(BUNDLED_CLI_NAME), "dev"));
             for ancestor in dir.ancestors().take(6) {
-                candidates.push(ancestor.join("target/debug").join(BUNDLED_CLI_NAME));
-                candidates.push(ancestor.join("target/release").join(BUNDLED_CLI_NAME));
+                candidates.push((ancestor.join("target/debug").join(BUNDLED_CLI_NAME), "dev"));
+                candidates.push((
+                    ancestor.join("target/release").join(BUNDLED_CLI_NAME),
+                    "dev",
+                ));
                 if ancestor.ends_with("debug") || ancestor.ends_with("release") {
-                    candidates.push(ancestor.join(BUNDLED_CLI_NAME));
+                    candidates.push((ancestor.join(BUNDLED_CLI_NAME), "dev"));
                 }
             }
         }
@@ -123,17 +180,21 @@ pub fn resolve_bundled_cli<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
                     let name = entry.file_name();
                     let s = name.to_string_lossy();
                     if s.starts_with("agentero-cli-") {
-                        candidates.push(entry.path());
+                        candidates.push((entry.path(), "dev"));
                     }
                 }
             }
         }
     }
 
-    // First candidate that reports a version (never empty stubs).
-    for path in candidates {
+    for (path, source) in candidates {
         if is_runnable_cli(&path) {
-            return path.canonicalize().ok().or(Some(path));
+            let version = read_cli_version(&path);
+            return Some(ResolvedCli {
+                path: path.canonicalize().unwrap_or(path),
+                source,
+                version,
+            });
         }
     }
     None
@@ -207,30 +268,30 @@ fn is_on_path(dir: &Path) -> bool {
     })
 }
 
-/// Whether `shim` is a managed Agentero CLI entry pointing at `bundled` (or same file).
-fn shim_points_to(shim: &Path, bundled: Option<&Path>) -> bool {
+/// Whether `shim` is a managed Agentero CLI entry pointing at `target` (or same file).
+fn shim_points_to(shim: &Path, target: Option<&Path>) -> bool {
     if !shim.exists() {
         return false;
     }
-    let Some(bundled) = bundled else {
+    let Some(target) = target else {
         return is_agentero_shim(shim);
     };
     #[cfg(unix)]
     {
-        if let Ok(target) = fs::read_link(shim) {
-            let resolved = if target.is_absolute() {
-                target
+        if let Ok(link) = fs::read_link(shim) {
+            let resolved = if link.is_absolute() {
+                link
             } else {
-                shim.parent().unwrap_or_else(|| Path::new(".")).join(target)
+                shim.parent().unwrap_or_else(|| Path::new(".")).join(link)
             };
             let a = resolved.canonicalize().unwrap_or(resolved);
-            let b = bundled
+            let b = target
                 .canonicalize()
-                .unwrap_or_else(|_| bundled.to_path_buf());
+                .unwrap_or_else(|_| target.to_path_buf());
             return a == b;
         }
     }
-    if let (Ok(a), Ok(b)) = (shim.canonicalize(), bundled.canonicalize()) {
+    if let (Ok(a), Ok(b)) = (shim.canonicalize(), target.canonicalize()) {
         if a == b {
             return true;
         }
@@ -243,34 +304,65 @@ fn is_agentero_shim(shim: &Path) -> bool {
     {
         if let Ok(target) = fs::read_link(shim) {
             let s = target.to_string_lossy();
-            return s.contains("agentero-cli") || s.contains("Agentero") || s.ends_with("agentero");
+            return s.contains("agentero-cli")
+                || s.contains("Agentero")
+                || s.ends_with("agentero")
+                || s.contains("/cli/agentero");
         }
     }
     #[cfg(windows)]
     {
         if let Ok(text) = fs::read_to_string(shim) {
-            return text.contains("agentero-cli") || text.contains("Agentero");
+            return text.contains("agentero-cli")
+                || text.contains("Agentero")
+                || text.contains("agentero.exe");
         }
     }
     false
 }
 
+fn download_supported() -> bool {
+    host_triple().is_some()
+}
+
 pub fn collect_status<R: Runtime>(app: &AppHandle<R>) -> CliInstallStatus {
-    let bundled = resolve_bundled_cli(app);
-    let bundled_version = bundled.as_ref().and_then(|p| read_cli_version(p));
+    let app_ver = app_version();
+    let local = resolve_local_cli(app);
+    let cli_version = local.as_ref().and_then(|r| r.version.clone());
+    let source = local.as_ref().map(|r| r.source.to_string());
+    let cli_path = local.as_ref().map(|r| r.path.clone());
     let shim = managed_shim_path();
     let installed =
-        shim.exists() && (is_agentero_shim(&shim) || shim_points_to(&shim, bundled.as_deref()));
-    let shim_current = installed && shim_points_to(&shim, bundled.as_deref());
+        shim.exists() && (is_agentero_shim(&shim) || shim_points_to(&shim, cli_path.as_deref()));
+    let version_matches = cli_version
+        .as_deref()
+        .map(|v| versions_equal(v, &app_ver))
+        .unwrap_or(false);
+    let shim_current = installed && shim_points_to(&shim, cli_path.as_deref()) && version_matches;
     let bin_dir = preferred_bin_dir();
     let preferred_bin_on_path = is_on_path(&bin_dir);
+    let can_install = local.is_some() || download_supported();
+    let download_url = host_triple().map(|t| release_download_url(&app_ver, t));
+    let release_page_url = release_tag_page_url(&app_ver);
 
     let mut message = None;
-    if bundled.is_none() {
+    if !can_install {
         message = Some(
-            "Bundled CLI not found. In dev: run `pnpm cli:bundle` (or `cargo build -p agentero-cli`), then reinstall from Settings."
-                .into(),
+            "CLI install is not available on this platform (no matching Release triple).".into(),
         );
+    } else if local.is_none() {
+        message = Some(format!(
+            "Install downloads CLI v{} from GitHub Releases into {} and links `{}`.",
+            normalize_version(&app_ver),
+            managed_cli_dir().display(),
+            SHIM_NAME
+        ));
+    } else if installed && !version_matches {
+        message = Some(format!(
+            "Installed CLI {} does not match app {}. Reinstall to update.",
+            cli_version.as_deref().unwrap_or("?"),
+            app_ver
+        ));
     } else if installed && !preferred_bin_on_path {
         message = Some(format!(
             "CLI installed at {} but that directory is not on PATH. Add it to your shell PATH (do not edit rc from Agentero).",
@@ -278,7 +370,8 @@ pub fn collect_status<R: Runtime>(app: &AppHandle<R>) -> CliInstallStatus {
         ));
     } else if !installed {
         message = Some(format!(
-            "Install places `agentero` in {}{}",
+            "Install places `{}` in {}{}",
+            SHIM_NAME,
             bin_dir.display(),
             if preferred_bin_on_path {
                 "."
@@ -289,9 +382,14 @@ pub fn collect_status<R: Runtime>(app: &AppHandle<R>) -> CliInstallStatus {
     }
 
     CliInstallStatus {
-        app_version: app_version(),
-        bundled_version,
-        bundled_path: bundled.map(|p| p.to_string_lossy().into_owned()),
+        app_version: app_ver,
+        bundled_version: cli_version.clone(),
+        bundled_path: cli_path.map(|p| p.to_string_lossy().into_owned()),
+        source,
+        cli_version,
+        download_url,
+        release_page_url,
+        can_install,
         installed,
         install_path: if installed {
             Some(shim.to_string_lossy().into_owned())
@@ -305,17 +403,17 @@ pub fn collect_status<R: Runtime>(app: &AppHandle<R>) -> CliInstallStatus {
     }
 }
 
-pub(crate) fn install_shim(bundled: &Path, shim: &Path) -> Result<(), AppError> {
-    if !is_plausible_cli_file(bundled) {
+pub(crate) fn install_shim(binary: &Path, shim: &Path) -> Result<(), AppError> {
+    if !is_plausible_cli_file(binary) {
         return Err(AppError::message(format!(
-            "bundled CLI is missing or empty: {}",
-            bundled.display()
+            "CLI binary is missing or empty: {}",
+            binary.display()
         )));
     }
-    if read_cli_version(bundled).is_none() {
+    if read_cli_version(binary).is_none() {
         return Err(AppError::message(format!(
-            "bundled CLI does not run (`--version` failed): {}. Rebuild with `pnpm cli:bundle`.",
-            bundled.display()
+            "CLI binary does not run (`--version` failed): {}",
+            binary.display()
         )));
     }
     if let Some(parent) = shim.parent() {
@@ -323,7 +421,7 @@ pub(crate) fn install_shim(bundled: &Path, shim: &Path) -> Result<(), AppError> 
     }
     // Never clobber a user-owned binary/symlink that we did not create.
     if shim.exists() {
-        if !is_agentero_shim(shim) && !shim_points_to(shim, Some(bundled)) {
+        if !is_agentero_shim(shim) && !shim_points_to(shim, Some(binary)) {
             return Err(AppError::message(format!(
                 "refusing to overwrite {}: not an Agentero-managed CLI entry",
                 shim.display()
@@ -333,22 +431,22 @@ pub(crate) fn install_shim(bundled: &Path, shim: &Path) -> Result<(), AppError> 
     }
     #[cfg(unix)]
     {
-        std::os::unix::fs::symlink(bundled, shim).map_err(|e| {
+        std::os::unix::fs::symlink(binary, shim).map_err(|e| {
             AppError::message(format!(
                 "failed to create symlink {} → {}: {e}",
                 shim.display(),
-                bundled.display()
+                binary.display()
             ))
         })?;
         #[allow(clippy::permissions_set_readonly_false)]
         {
             use std::os::unix::fs::PermissionsExt;
-            if let Ok(meta) = fs::metadata(bundled) {
+            if let Ok(meta) = fs::metadata(binary) {
                 let mut perms = meta.permissions();
                 let mode = perms.mode();
                 if mode & 0o111 == 0 {
                     perms.set_mode(mode | 0o755);
-                    let _ = fs::set_permissions(bundled, perms);
+                    let _ = fs::set_permissions(binary, perms);
                 }
             }
         }
@@ -358,25 +456,25 @@ pub(crate) fn install_shim(bundled: &Path, shim: &Path) -> Result<(), AppError> 
     {
         let body = format!(
             "@echo off\r\n\"{}\" %*\r\n",
-            bundled.display().to_string().replace('"', "")
+            binary.display().to_string().replace('"', "")
         );
         fs::write(shim, body)?;
         Ok(())
     }
     #[cfg(not(any(unix, windows)))]
     {
-        let _ = (bundled, shim);
+        let _ = (binary, shim);
         Err(AppError::message(
             "CLI install not supported on this platform",
         ))
     }
 }
 
-pub(crate) fn uninstall_shim(shim: &Path, bundled: Option<&Path>) -> Result<bool, AppError> {
+pub(crate) fn uninstall_shim(shim: &Path, binary: Option<&Path>) -> Result<bool, AppError> {
     if !shim.exists() {
         return Ok(false);
     }
-    if !shim_points_to(shim, bundled) && !is_agentero_shim(shim) {
+    if !shim_points_to(shim, binary) && !is_agentero_shim(shim) {
         return Err(AppError::message(format!(
             "refusing to remove {}: not an Agentero-managed shim",
             shim.display()
@@ -384,6 +482,69 @@ pub(crate) fn uninstall_shim(shim: &Path, bundled: Option<&Path>) -> Result<bool
     }
     fs::remove_file(shim)?;
     Ok(true)
+}
+
+/// Ensure a same-version CLI binary is available (local or download), return its path.
+pub(crate) async fn ensure_cli_binary<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<(PathBuf, &'static str), AppError> {
+    let app_ver = app_version();
+
+    // Prefer a local runnable that already matches the app version.
+    if let Some(local) = resolve_local_cli(app) {
+        if local
+            .version
+            .as_deref()
+            .map(|v| versions_equal(v, &app_ver))
+            .unwrap_or(false)
+        {
+            return Ok((local.path, "install"));
+        }
+    }
+
+    // Download (or re-download) into the managed cache.
+    if !download_supported() {
+        // Fall back: if we only have a mismatched local binary, still allow shim install
+        // so devs without a published release can use `pnpm cli:bundle`.
+        if let Some(local) = resolve_local_cli(app) {
+            return Ok((local.path, "install"));
+        }
+        return Err(AppError::message(
+            "CLI download is not supported on this platform and no local CLI was found. In dev run `pnpm cli:bundle`.",
+        ));
+    }
+
+    let dest = managed_cli_binary();
+    download_and_extract(&app_ver, &dest).await?;
+    if !is_runnable_cli(&dest) {
+        let _ = fs::remove_file(&dest);
+        return Err(AppError::message(format!(
+            "downloaded CLI does not run (`--version` failed): {}",
+            dest.display()
+        )));
+    }
+    let got = read_cli_version(&dest).unwrap_or_default();
+    if !versions_equal(&got, &app_ver) {
+        return Err(AppError::message(format!(
+            "downloaded CLI version {got} does not match app {app_ver}"
+        )));
+    }
+    Ok((dest, "download-install"))
+}
+
+/// Optional helper: list user bin candidates (for diagnostics).
+#[allow(dead_code)]
+pub fn user_bin_candidates() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Some(home) = dirs::home_dir() {
+        for rel in HOME_BIN_DIRS {
+            out.push(home.join(rel));
+        }
+    }
+    for abs in ABS_BIN_DIRS {
+        out.push(PathBuf::from(abs));
+    }
+    out
 }
 
 #[cfg(test)]

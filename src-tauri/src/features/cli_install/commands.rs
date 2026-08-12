@@ -1,8 +1,8 @@
-use crate::core::error::{map_err, ApiResult, AppError};
+use crate::core::error::{map_err, ApiResult};
 
 use super::{
-    collect_status, install_shim, managed_shim_path, resolve_bundled_cli, uninstall_shim,
-    CliInstallResult, CliInstallStatus,
+    collect_status, ensure_cli_binary, install_shim, managed_cli_binary, managed_cli_dir,
+    managed_shim_path, resolve_local_cli, uninstall_shim, CliInstallResult, CliInstallStatus,
 };
 use tauri::{AppHandle, Runtime};
 
@@ -12,17 +12,13 @@ pub fn cli_install_status<R: Runtime>(app: AppHandle<R>) -> ApiResult<CliInstall
 }
 
 #[tauri::command]
-pub fn cli_install_command<R: Runtime>(app: AppHandle<R>) -> ApiResult<CliInstallResult> {
-    let bundled = match resolve_bundled_cli(&app) {
-        Some(p) => p,
-        None => {
-            return map_err(AppError::message(
-                "Bundled CLI not found. In dev run `pnpm cli:bundle`, then try Install again. Release builds include the CLI.",
-            ));
-        }
+pub async fn cli_install_command<R: Runtime>(app: AppHandle<R>) -> ApiResult<CliInstallResult> {
+    let (binary, action) = match ensure_cli_binary(&app).await {
+        Ok(v) => v,
+        Err(e) => return map_err(e),
     };
     let shim = managed_shim_path();
-    if let Err(e) = install_shim(&bundled, &shim) {
+    if let Err(e) = install_shim(&binary, &shim) {
         return map_err(e);
     }
     let mut status = collect_status(&app);
@@ -36,17 +32,24 @@ pub fn cli_install_command<R: Runtime>(app: AppHandle<R>) -> ApiResult<CliInstal
     }
     ApiResult::ok(CliInstallResult {
         status,
-        action: "install".into(),
+        action: action.into(),
     })
 }
 
 #[tauri::command]
 pub fn cli_uninstall_command<R: Runtime>(app: AppHandle<R>) -> ApiResult<CliInstallResult> {
-    let bundled = resolve_bundled_cli(&app);
+    let local = resolve_local_cli(&app);
+    let binary = local.as_ref().map(|r| r.path.as_path());
     let shim = managed_shim_path();
-    match uninstall_shim(&shim, bundled.as_deref()) {
+    match uninstall_shim(&shim, binary) {
         Ok(_) => {}
         Err(e) => return map_err(e),
+    }
+    // Drop download cache only (never delete dev target/ or App bundle binaries).
+    let managed = managed_cli_binary();
+    if managed.is_file() {
+        let _ = std::fs::remove_file(&managed);
+        let _ = std::fs::remove_dir(managed_cli_dir());
     }
     let mut status = collect_status(&app);
     status.message = Some("Removed the Agentero-managed CLI shim.".into());

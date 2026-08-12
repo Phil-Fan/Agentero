@@ -37,6 +37,8 @@ CLI 的 `<rust-host>` 来自发布 runner 上 `rustc -vV` 的 `host` 字段，�
 
 CLI 压缩包内部统一包含名为 `agentero`（Windows 为 `agentero.exe`）的可执行文件；外部归档名使用 `agentero-cli-` 前缀，避免与桌面安装包混淆。
 
+桌面安装包 **不** 嵌入真实 CLI（[#285](https://github.com/poco-ai/Agentero/issues/285)）：`beforeBuildCommand` 仅 seed `externalBin` stub。用户从 **设置 → 关于 → 安装 CLI** 下载与 App 同版本的上述归档（Host 校验 sibling `.sha256`）。独立 CLI 归档仍须随 Release 上传，供 headless 与应用内安装共用。
+
 ### Linux 支持边界
 
 - CI：`ubuntu-22.04` / `ubuntu-24.04-arm`，依赖 `libwebkit2gtk-4.1-dev`。

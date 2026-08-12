@@ -20,7 +20,8 @@
 - [x] CLI + 设置：聚合 Doctor 与论文 `NOTES.md` aliases 安全修复（[#198](https://github.com/poco-ai/Agentero/issues/198)）
 - [ ] CLI：`graph` / shell completions（只读 `wiki check` 与 Doctor 已实现）
 - [ ] CLI：`export papers-md`（随 Host 导出）
-- [x] 桌面安装包内置同版本 `agentero` CLI；`agentero open <PATH>` / `agentero <PATH>` 打开本地 Vault；设置内安装 PATH shim（[#165](https://github.com/poco-ai/Agentero/issues/165)，设计：[../backend/cli.md](../backend/cli.md)）
+- [x] `agentero open <PATH>` / `agentero <PATH>` 打开本地 Vault；设置内安装 PATH shim（[#165](https://github.com/poco-ai/Agentero/issues/165)，设计：[../backend/cli.md](../backend/cli.md)）
+- [x] 桌面安装包不内嵌 CLI；About 从 GitHub Release 下载同版本 CLI（[#285](https://github.com/poco-ai/Agentero/issues/285)）
 - [x] CLI `paper move`：目标目录自动创建、Catalog 同步、冲突与越界集成测试（[#166](https://github.com/poco-ai/Agentero/issues/166)，设计：[../backend/cli.md](../backend/cli.md)）
 - [x] CLI：侧栏版面索引 `layout list|get` + `mark add --region`（figure/table/algorithm/formula；`source/layout-index.json`）（[#170](https://github.com/poco-ai/Agentero/issues/170) 区域路径）
 - [ ] CLI / Agent：正文句子高亮 / 翻译 mark（pending hydrate）+ Skill 全量（[#170](https://github.com/poco-ai/Agentero/issues/170)，设计：[mark-cli-roadmap.md](mark-cli-roadmap.md)、[mark-locate-lazy.md](mark-locate-lazy.md)、[mark-locate-eager.md](mark-locate-eager.md)）

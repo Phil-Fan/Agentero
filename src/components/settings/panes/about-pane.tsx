@@ -1,7 +1,9 @@
 import { getVersion } from "@tauri-apps/api/app";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Download, LoaderCircle, RefreshCw, Terminal } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { CompactCodeBlock } from "@/components/ai-elements/code-block";
 import {
 	PageTitle,
 	SettingsGroup,
@@ -15,7 +17,7 @@ import {
 	uninstallCliCommand,
 } from "@/lib/cli/api";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
-import { isTauri } from "@/lib/core/tauri";
+import { isMacOS, isTauri } from "@/lib/core/tauri";
 import {
 	checkForUpdate,
 	getUpdateSnapshot,
@@ -24,6 +26,10 @@ import {
 	type UpdateSnapshot,
 } from "@/lib/update";
 
+/** Same as README / homebrew-agentero Formula (headless CLI, not the desktop cask). */
+const CLI_BREW_INSTALL_COMMAND =
+	"brew tap poco-ai/agentero && brew install agentero";
+
 export function AboutPane() {
 	const { t } = useTranslation("settings");
 	const [version, setVersion] = useState<string>();
@@ -31,6 +37,7 @@ export function AboutPane() {
 	const [cli, setCli] = useState<CliInstallStatus | null>(null);
 	const [cliBusy, setCliBusy] = useState(false);
 	const [cliLoading, setCliLoading] = useState(false);
+	const isMac = useMemo(() => isMacOS(), []);
 
 	const refreshCli = useCallback(async () => {
 		if (!isTauri()) return;
@@ -74,7 +81,11 @@ export function AboutPane() {
 			.then(async (res) => {
 				setCli(res.status);
 				await refreshCli();
-				notifySuccess(t("about.cli.installSuccess"));
+				notifySuccess(
+					res.action === "download-install"
+						? t("about.cli.downloadInstallSuccess")
+						: t("about.cli.installSuccess"),
+				);
 			})
 			.catch(() => notifyError(t("about.cli.installFailed")))
 			.finally(() => setCliBusy(false));
@@ -89,6 +100,13 @@ export function AboutPane() {
 			})
 			.catch(() => notifyError(t("about.cli.uninstallFailed")))
 			.finally(() => setCliBusy(false));
+	};
+	const onOpenCliRelease = () => {
+		const url = cli?.releasePageUrl;
+		if (!url) return;
+		void openUrl(url).catch(() =>
+			notifyError(t("about.cli.openReleaseFailed")),
+		);
 	};
 
 	const description = (() => {
@@ -129,13 +147,27 @@ export function AboutPane() {
 		if (!cli) {
 			return cliLoading ? "…" : t("about.cli.statusFailed");
 		}
-		if (!cli.bundledPath) {
-			return t("about.cli.notBundled");
+		if (cli.message?.trim()) {
+			return cli.message;
 		}
-		return t("about.cli.description");
+		if (cli.installed && !cli.shimCurrent) {
+			return t("about.cli.versionMismatch", {
+				cli: cli.cliVersion ?? "?",
+				app: cli.appVersion,
+			});
+		}
+		if (cli.installed) {
+			return t("about.cli.description");
+		}
+		return t("about.cli.downloadHint", { version: cli.appVersion });
 	})();
 
-	const canInstallCli = Boolean(cli?.bundledPath) && !cliBusy;
+	const needsCliUpdate = Boolean(
+		cli?.installed && !cli.shimCurrent && cli.canInstall,
+	);
+	const canInstallCli = Boolean(cli?.canInstall) && !cliBusy;
+	const showInstall = !cli?.installed || needsCliUpdate;
+	const showBrewCliHint = isMac && showInstall && Boolean(cli);
 
 	return (
 		<>
@@ -215,7 +247,8 @@ export function AboutPane() {
 									) : null}
 									{t("about.cli.uninstall")}
 								</Button>
-							) : (
+							) : null}
+							{showInstall ? (
 								<Button
 									size="sm"
 									disabled={!canInstallCli || cliLoading}
@@ -226,12 +259,42 @@ export function AboutPane() {
 											data-icon="inline-start"
 											className="animate-spin"
 										/>
-									) : null}
-									{t("about.cli.install")}
+									) : (
+										<Download data-icon="inline-start" />
+									)}
+									{needsCliUpdate
+										? t("about.cli.update")
+										: t("about.cli.install")}
 								</Button>
-							)}
+							) : null}
+							{!cli?.canInstall && cli?.releasePageUrl ? (
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={cliLoading}
+									onClick={onOpenCliRelease}
+								>
+									{t("about.cli.openRelease")}
+								</Button>
+							) : null}
 						</div>
 					</SettingsRow>
+					{showBrewCliHint ? (
+						<div className="border-t px-3.5 py-3">
+							<p className="mb-2 text-muted-foreground text-xs leading-relaxed">
+								{t("about.cli.brewHint")}
+							</p>
+							<CompactCodeBlock
+								code={CLI_BREW_INSTALL_COMMAND}
+								language="shell"
+								copyButtonProps={{
+									"aria-label": t("about.cli.brewCopy"),
+									onCopy: () => notifySuccess(t("about.cli.brewCopied")),
+									onError: () => notifyError(t("about.cli.brewCopyFailed")),
+								}}
+							/>
+						</div>
+					) : null}
 				</SettingsGroup>
 			) : null}
 		</>

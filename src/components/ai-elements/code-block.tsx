@@ -250,10 +250,12 @@ const CodeBlockBody = memo(
 	({
 		tokenized,
 		showLineNumbers,
+		compact = false,
 		className,
 	}: {
 		tokenized: TokenizedCode;
 		showLineNumbers: boolean;
+		compact?: boolean;
 		className?: string;
 	}) => {
 		const preStyle = useMemo(
@@ -272,7 +274,8 @@ const CodeBlockBody = memo(
 		return (
 			<pre
 				className={cn(
-					"dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)] m-0 p-4 text-sm",
+					"dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)] m-0",
+					compact ? "px-3 py-2 text-xs" : "p-4 text-sm",
 					className,
 				)}
 				style={preStyle}
@@ -298,6 +301,7 @@ const CodeBlockBody = memo(
 	(prevProps, nextProps) =>
 		prevProps.tokenized === nextProps.tokenized &&
 		prevProps.showLineNumbers === nextProps.showLineNumbers &&
+		prevProps.compact === nextProps.compact &&
 		prevProps.className === nextProps.className,
 );
 
@@ -377,10 +381,12 @@ export const CodeBlockContent = ({
 	code,
 	language,
 	showLineNumbers = false,
+	compact = false,
 }: {
 	code: string;
 	language: BundledLanguage;
 	showLineNumbers?: boolean;
+	compact?: boolean;
 }) => {
 	// Memoized raw tokens for immediate display
 	const rawTokens = useMemo(() => createRawTokens(code), [code]);
@@ -421,8 +427,12 @@ export const CodeBlockContent = ({
 	const tokenized = asyncTokens ?? syncTokens;
 
 	return (
-		<div className="relative overflow-auto">
-			<CodeBlockBody showLineNumbers={showLineNumbers} tokenized={tokenized} />
+		<div className={cn("relative overflow-auto", compact && "min-w-0 flex-1")}>
+			<CodeBlockBody
+				showLineNumbers={showLineNumbers}
+				tokenized={tokenized}
+				compact={compact}
+			/>
 		</div>
 	);
 };
@@ -500,6 +510,41 @@ export const CodeBlockCopyButton = ({
 		>
 			{children ?? <Icon size={14} />}
 		</Button>
+	);
+};
+
+/** Headerless code block: highlighted code + copy control on the right. */
+export type CompactCodeBlockProps = Omit<
+	HTMLAttributes<HTMLDivElement>,
+	"children"
+> & {
+	code: string;
+	language: BundledLanguage;
+	copyButtonProps?: Omit<CodeBlockCopyButtonProps, "children">;
+};
+
+export const CompactCodeBlock = ({
+	code,
+	language,
+	className,
+	copyButtonProps,
+	...props
+}: CompactCodeBlockProps) => {
+	const contextValue = useMemo(() => ({ code }), [code]);
+
+	return (
+		<CodeBlockContext.Provider value={contextValue}>
+			<CodeBlockContainer
+				className={cn("flex items-stretch", className)}
+				language={language}
+				{...props}
+			>
+				<CodeBlockContent code={code} language={language} compact />
+				<div className="flex shrink-0 items-center border-l bg-muted/30 px-0.5">
+					<CodeBlockCopyButton variant="ghost" {...copyButtonProps} />
+				</div>
+			</CodeBlockContainer>
+		</CodeBlockContext.Provider>
 	);
 };
 

@@ -441,13 +441,23 @@
 			"label": "Command-line tools",
 			"description": "Headless Vault / Catalog for scripts and external agents",
 			"notBundled": "CLI is not bundled in this build",
+			"downloadHint": "Installs CLI v{{version}} (~12MB once from GitHub Releases)",
+			"versionMismatch": "CLI {{cli}} ≠ app {{app}}; reinstall to match",
 			"install": "Install",
+			"update": "Update",
 			"uninstall": "Remove",
+			"openRelease": "Open release",
+			"brewHint": "Or install with Homebrew (Apple Silicon Mac):",
+			"brewCopy": "Copy command",
+			"brewCopied": "Homebrew command copied",
+			"brewCopyFailed": "Could not copy the command",
 			"installSuccess": "CLI command installed",
+			"downloadInstallSuccess": "CLI downloaded and installed",
 			"uninstallSuccess": "CLI command removed",
 			"installFailed": "Could not install CLI command",
 			"uninstallFailed": "Could not remove CLI command",
-			"statusFailed": "Could not read CLI status"
+			"statusFailed": "Could not read CLI status",
+			"openReleaseFailed": "Could not open the release page"
 		}
 	}
 }
