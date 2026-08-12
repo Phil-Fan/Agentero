@@ -184,6 +184,23 @@ fn stream_from_update(update: &SessionUpdate) -> Option<(String, AgentStreamKind
     }
 }
 
+/// `pi-acp` forwards pi's CLI startup banner (`pi v0.84.1` followed by a
+/// Context / Skills / Extensions inventory) as a plain agent message right after
+/// `session/new`, so it would otherwise render ahead of the actual answer.
+fn is_pi_startup_banner(text: &str) -> bool {
+    let mut lines = text.trim_start().lines();
+    let Some(version) = lines.next().and_then(|l| l.trim().strip_prefix("pi v")) else {
+        return false;
+    };
+    if !version.starts_with(|c: char| c.is_ascii_digit()) {
+        return false;
+    }
+    lines
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .is_some_and(|line| line == "---" || line.starts_with("## "))
+}
+
 fn tool_status_str(s: ToolCallStatus) -> &'static str {
     match s {
         ToolCallStatus::Pending => "pending",
@@ -1317,6 +1334,7 @@ pub async fn run_once(
     let app_for_notif = app.clone();
     let session_for_notif = session_id.clone();
     let agent_id_for_notif = desc.id.clone();
+    let pi_for_notif = matches!(desc.template, AgentTemplate::Pi);
     // session/load (and some resume paths) replay history as SessionNotification.
     // Until we open the gate, drop stream/tool/plan so turn N does not re-paint
     // turn N-1 into the new streaming bubble (Grok multi-turn).
@@ -1356,26 +1374,34 @@ pub async fn run_once(
                     return Ok(());
                 }
                 if let Some((chunk, kind)) = stream_from_update(&notification.update) {
-                    match kind {
-                        AgentStreamKind::Message => {
-                            if let Ok(mut buf) = content_for_notif.lock() {
-                                buf.push_str(&chunk);
+                    let drop_banner = pi_for_notif
+                        && matches!(kind, AgentStreamKind::Message)
+                        && is_pi_startup_banner(&chunk)
+                        && content_for_notif
+                            .lock()
+                            .is_ok_and(|buffer| buffer.is_empty());
+                    if !drop_banner {
+                        match kind {
+                            AgentStreamKind::Message => {
+                                if let Ok(mut buf) = content_for_notif.lock() {
+                                    buf.push_str(&chunk);
+                                }
+                            }
+                            AgentStreamKind::Thought => {
+                                if let Ok(mut buf) = thought_for_notif.lock() {
+                                    buf.push_str(&chunk);
+                                }
                             }
                         }
-                        AgentStreamKind::Thought => {
-                            if let Ok(mut buf) = thought_for_notif.lock() {
-                                buf.push_str(&chunk);
-                            }
-                        }
+                        let _ = app_for_notif.emit(
+                            "agent:stream",
+                            AgentStreamEvent {
+                                session_id: session_for_notif.clone(),
+                                chunk,
+                                kind,
+                            },
+                        );
                     }
-                    let _ = app_for_notif.emit(
-                        "agent:stream",
-                        AgentStreamEvent {
-                            session_id: session_for_notif.clone(),
-                            chunk,
-                            kind,
-                        },
-                    );
                 }
                 emit_rich_session_update(
                     &app_for_notif,
@@ -2519,6 +2545,35 @@ mod cancelled_payload_tests {
             Some("provider-session")
         );
         assert_eq!(payload.content, "partial answer");
+    }
+}
+
+#[cfg(test)]
+mod pi_startup_banner_tests {
+    use super::is_pi_startup_banner;
+
+    #[test]
+    fn matches_pi_acp_startup_banner() {
+        let banner = "pi v0.84.1\n---\n\n## Context\n- /vault/AGENTS.md\n\n\
+                      ## Skills\n- /home/me/.agents/skills/paper-reader/SKILL.md\n";
+        assert!(is_pi_startup_banner(banner));
+    }
+
+    #[test]
+    fn matches_banner_without_version_separator() {
+        assert!(is_pi_startup_banner(
+            "pi v1.0.0\n\n## Extensions\n- npm:pi-ext\n"
+        ));
+    }
+
+    #[test]
+    fn rejects_normal_answers() {
+        assert!(!is_pi_startup_banner(""));
+        assert!(!is_pi_startup_banner("Hello, here is the summary."));
+        assert!(!is_pi_startup_banner(
+            "pi v0.84.1 is the installed version."
+        ));
+        assert!(!is_pi_startup_banner("pi version\n---\n"));
     }
 }
 

@@ -10,6 +10,10 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
 - Pi：无原生 ACP，走社区适配器 `pi-acp`（内部 spawn `pi --mode rpc`）；detect 用 host `pi`、
   ACP 入口用 `pi-acp`。pi 的 skill 以 `/skill:<name>` 暴露，故 Agentero 不发 `/<name>`
   mention，只注入 `SKILL.md` 正文。
+- Pi 启动横幅：`pi-acp` 在 `session/new` 后把 pi 的启动信息（`pi vX.Y.Z` +
+  `## Context` / `## Skills` / `## Extensions` 清单）当作普通 agent message 推送。Host
+  在本轮首个 message chunk 上识别该横幅并丢弃，不写入内容缓冲、不发 `agent:stream`，
+  避免它出现在回答之前。
 - Gemini：spawn 时注入 `NO_BROWSER=true`（用户显式配置则不覆盖），避免未登录时
   `new_session` 反复拉起浏览器 OAuth；登录须在终端完成（BYOA）。
 - 设置页会将 ACP 探测中的认证错误（如 `invalid_grant` / `failed to authenticate`）
