@@ -130,15 +130,24 @@ export function SelectionMenu({
 				{HIGHLIGHT_COLORS.map((c) => (
 					<Tooltip key={c}>
 						<TooltipTrigger asChild>
+							{/*
+							 * 16px dot, 24px hit area (WCAG 2.5.8): the target is padded
+							 * out rather than the dot enlarged.
+							 */}
 							<button
 								type="button"
 								aria-label={colorLabel(c)}
-								className={cn(
-									"mx-0.5 size-4 shrink-0 rounded-full ring-1 ring-black/15 transition hover:scale-110 dark:ring-white/25",
-									swatchColorClass(c),
-								)}
+								className="group inline-flex size-6 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 								onClick={() => onHighlight(c)}
-							/>
+							>
+								<span
+									className={cn(
+										"size-4 rounded-full ring-1 ring-black/15 transition-transform group-hover:scale-110 dark:ring-white/25",
+										swatchColorClass(c),
+									)}
+									aria-hidden
+								/>
+							</button>
 						</TooltipTrigger>
 						<TooltipContent side="top">{colorLabel(c)}</TooltipContent>
 					</Tooltip>
