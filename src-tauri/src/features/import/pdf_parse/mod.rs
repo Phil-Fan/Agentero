@@ -544,7 +544,7 @@ async fn run_liteparse_markdown(
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn pdf_parse_task_is_cancelled(task_id: Option<&str>) -> bool {
-    task_id.is_some_and(crate::features::agent::background_tasks::is_cancelled)
+    task_id.is_some_and(crate::features::import::is_background_task_cancelled)
 }
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]

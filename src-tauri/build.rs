@@ -3,7 +3,9 @@ use std::fs;
 use std::path::PathBuf;
 
 fn main() {
-    tauri_build::build();
+    if env::var_os("CARGO_FEATURE_DESKTOP").is_some() {
+        tauri_build::build();
+    }
     forward_posthog_key();
     generate_onboarding_templates();
 }

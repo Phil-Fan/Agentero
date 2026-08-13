@@ -8,6 +8,7 @@ use super::{identifier_kind_column, identifier_kind_str, SkippedImport};
 
 pub(crate) enum SkillBatchMode {
     Collect,
+    #[cfg_attr(not(feature = "desktop"), allow(dead_code))]
     RejectRemote,
 }
 

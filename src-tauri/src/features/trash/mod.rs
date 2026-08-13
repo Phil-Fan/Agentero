@@ -455,4 +455,5 @@ mod tests {
 }
 
 /// Tauri command shells for this feature.
+#[cfg(feature = "desktop")]
 pub mod commands;

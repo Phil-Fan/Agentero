@@ -5,6 +5,7 @@
 //!
 //! Assembly lives in [`app`]; domain logic in [`features`].
 
+#[cfg(feature = "desktop")]
 mod app;
 /// Cross-cutting foundations (error, fs, paths, logging helpers).
 pub mod core;
@@ -14,4 +15,5 @@ pub mod core;
 /// it must **not** use `features::agent` (BYOA is desktop-only).
 pub mod features;
 
+#[cfg(feature = "desktop")]
 pub use app::run;

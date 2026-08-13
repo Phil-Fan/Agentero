@@ -2,6 +2,8 @@
 //!
 //! Flow: always try PDF → arXiv also tries e-print TeX → caller may liteparse when no TeX.
 
+#[cfg(not(feature = "desktop"))]
+use super::AppHandle;
 use crate::core::error::AppError;
 use crate::features::catalog::{probe_paper_caps, CapsCache};
 use flate2::read::GzDecoder;
@@ -11,6 +13,7 @@ use std::io::{Cursor, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 use tar::Archive;
+#[cfg(feature = "desktop")]
 use tauri::{AppHandle, Emitter};
 
 // Browser-like UA: several non-arXiv publishers (PLOS, IEEE, Springer, …)
@@ -28,6 +31,7 @@ pub struct AssetDownloadResult {
     pub messages: Vec<String>,
 }
 
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AssetDownloadProgress {
@@ -52,21 +56,26 @@ pub struct AssetProgressContext<'a> {
 impl AssetProgressContext<'_> {
     /// Emit a phase transition that has no meaningful byte-level progress.
     pub fn emit_phase(&self, phase: &str) {
-        let (Some(app), Some(task_id)) = (self.app, self.task_id) else {
-            return;
-        };
-        let _ = app.emit(
-            "background-task:progress",
-            AssetDownloadProgress {
-                task_id: task_id.to_string(),
-                phase: phase.to_string(),
-                downloaded_bytes: 0,
-                total_bytes: None,
-                progress: None,
-                current_count: None,
-                total_count: None,
-            },
-        );
+        #[cfg(not(feature = "desktop"))]
+        let _ = phase;
+        #[cfg(feature = "desktop")]
+        {
+            let (Some(app), Some(task_id)) = (self.app, self.task_id) else {
+                return;
+            };
+            let _ = app.emit(
+                "background-task:progress",
+                AssetDownloadProgress {
+                    task_id: task_id.to_string(),
+                    phase: phase.to_string(),
+                    downloaded_bytes: 0,
+                    total_bytes: None,
+                    progress: None,
+                    current_count: None,
+                    total_count: None,
+                },
+            );
+        }
     }
 }
 
@@ -727,7 +736,9 @@ pub(crate) async fn http_get_bytes_with_progress(
     if !res.status().is_success() {
         return Err(AppError::message(format!("download HTTP {}", res.status())));
     }
+    #[cfg(feature = "desktop")]
     let total_bytes = res.content_length();
+    #[cfg(feature = "desktop")]
     let mut downloaded_bytes = 0_u64;
     let mut bytes = Vec::new();
     while let Some(chunk) = res
@@ -736,12 +747,16 @@ pub(crate) async fn http_get_bytes_with_progress(
         .map_err(|e| AppError::message(format!("download body: {e}")))?
     {
         if let Some(task_id) = task_id {
-            if crate::features::agent::background_tasks::is_cancelled(task_id) {
+            if crate::features::import::is_background_task_cancelled(task_id) {
                 return Err(AppError::message("background task cancelled"));
             }
         }
-        downloaded_bytes += chunk.len() as u64;
+        #[cfg(feature = "desktop")]
+        {
+            downloaded_bytes += chunk.len() as u64;
+        }
         bytes.extend_from_slice(&chunk);
+        #[cfg(feature = "desktop")]
         if let (Some(app), Some(task_id)) = (app, task_id) {
             let progress = total_bytes.map(|total| {
                 ((downloaded_bytes.saturating_mul(100) / total.max(1)).min(100)) as u8
@@ -759,6 +774,8 @@ pub(crate) async fn http_get_bytes_with_progress(
                 },
             );
         }
+        #[cfg(not(feature = "desktop"))]
+        let _ = (app, phase);
     }
     Ok(bytes)
 }

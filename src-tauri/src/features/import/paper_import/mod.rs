@@ -208,6 +208,7 @@ pub async fn paper_commit(
     };
 
     if assets.pdf && !assets.tex && !assets.paper_md {
+        #[cfg(feature = "desktop")]
         crate::features::jobs::spawn_parse_body_after_assets(parse_app, vault, &path_rel, false);
     }
 

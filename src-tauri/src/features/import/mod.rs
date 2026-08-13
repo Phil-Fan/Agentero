@@ -3,9 +3,11 @@
 //! @see docs/backend/identifier-lookup.md
 //! @see docs/backend/paper-import-pipeline.md
 
+#[cfg(feature = "desktop")]
 pub mod commands;
 pub mod paper_import;
 pub mod pdf_parse;
+#[cfg(feature = "desktop")]
 pub mod zotero_commands;
 
 mod assets;
@@ -13,6 +15,7 @@ pub(crate) mod batch;
 pub(crate) mod map;
 pub(crate) mod parse;
 mod skill_import;
+#[cfg(feature = "desktop")]
 pub(crate) mod zotero_db;
 pub(crate) mod zotero_io;
 
@@ -26,6 +29,7 @@ pub use skill_import::{
     discard_skill_discovery, discover_skill_source, install_discovered_skills, SkillCandidate,
     SkillDiscovery, SkillImportResult,
 };
+#[cfg(feature = "desktop")]
 pub use zotero_db::{
     migrate_zotero, scan_zotero, MigrateProgress, ZoteroMigrateArgs, ZoteroMigrateResult,
     ZoteroScan, ZoteroScanArgs,
@@ -40,6 +44,7 @@ use crate::features::catalog::{
     papers::{self, PaperRecord},
     CapsCache,
 };
+#[cfg(feature = "desktop")]
 use crate::features::import::assets::AssetDownloadProgress;
 use futures_util::StreamExt;
 use map::local_pdf_meta;
@@ -50,10 +55,14 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::Emitter;
+#[cfg(feature = "desktop")]
+use tauri::{AppHandle, Emitter};
+#[cfg(not(feature = "desktop"))]
+pub struct AppHandle;
 use tokio::sync::Mutex;
 
 /// Public helper for remote PDF import staging.
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
 pub(crate) fn local_pdf_meta_for_import(id: String, title: String) -> PaperMeta {
     local_pdf_meta(id, title)
 }
@@ -73,10 +82,20 @@ pub const ZOTERO_INTERNAL_TAG_PREFIX: &str = "@zotero:";
 pub const PAPER_ASSET_TIMEOUT: Duration = Duration::from_secs(3 * 60);
 
 pub(crate) fn check_task_not_cancelled(task_id: Option<&str>) -> Result<(), AppError> {
-    if task_id.is_some_and(crate::features::agent::background_tasks::is_cancelled) {
+    if task_id.is_some_and(is_background_task_cancelled) {
         return Err(AppError::message("background task cancelled"));
     }
     Ok(())
+}
+
+#[cfg(feature = "desktop")]
+pub(crate) fn is_background_task_cancelled(task_id: &str) -> bool {
+    crate::features::agent::background_tasks::is_cancelled(task_id)
+}
+
+#[cfg(not(feature = "desktop"))]
+pub(crate) fn is_background_task_cancelled(_task_id: &str) -> bool {
+    false
 }
 
 #[derive(Debug, Deserialize)]
@@ -232,7 +251,7 @@ pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImport
 
 pub async fn import_by_identifier_with_progress(
     args: LookupImportArgs,
-    app: Option<&tauri::AppHandle>,
+    app: Option<&AppHandle>,
     cache: Option<&CapsCache>,
 ) -> Result<LookupImportResult, AppError> {
     use crate::features::import::paper_import::{
@@ -304,7 +323,7 @@ pub async fn import_by_identifier_with_progress(
 /// a single background task for the whole batch.
 pub async fn import_by_identifier_batch(
     args: LookupImportBatchArgs,
-    app: Option<&tauri::AppHandle>,
+    app: Option<&AppHandle>,
     cache: Option<&CapsCache>,
 ) -> Result<LookupImportBatchResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
@@ -404,27 +423,32 @@ pub async fn import_by_identifier_batch(
 }
 
 fn emit_batch_progress(
-    app: Option<&tauri::AppHandle>,
+    app: Option<&AppHandle>,
     task_id: Option<&str>,
     current: usize,
     total: usize,
 ) {
-    let (Some(app), Some(task_id)) = (app, task_id) else {
-        return;
-    };
-    let progress = ((current as f64 / total.max(1) as f64) * 100.0).round() as u8;
-    let _ = app.emit(
-        "background-task:progress",
-        AssetDownloadProgress {
-            task_id: task_id.to_string(),
-            phase: "import".to_string(),
-            downloaded_bytes: 0,
-            total_bytes: None,
-            progress: Some(progress),
-            current_count: Some(current),
-            total_count: Some(total),
-        },
-    );
+    #[cfg(not(feature = "desktop"))]
+    let _ = (app, task_id, current, total);
+    #[cfg(feature = "desktop")]
+    {
+        let (Some(app), Some(task_id)) = (app, task_id) else {
+            return;
+        };
+        let progress = ((current as f64 / total.max(1) as f64) * 100.0).round() as u8;
+        let _ = app.emit(
+            "background-task:progress",
+            AssetDownloadProgress {
+                task_id: task_id.to_string(),
+                phase: "import".to_string(),
+                downloaded_bytes: 0,
+                total_bytes: None,
+                progress: Some(progress),
+                current_count: Some(current),
+                total_count: Some(total),
+            },
+        );
+    }
 }
 
 pub(crate) fn identifier_kind_str(kind: IdentifierKind) -> String {
@@ -460,7 +484,7 @@ pub async fn download_paper_assets(
 
 pub async fn download_paper_assets_with_progress(
     args: PaperDownloadAssetsArgs,
-    app: Option<&tauri::AppHandle>,
+    app: Option<&AppHandle>,
     cache: Option<&CapsCache>,
 ) -> Result<AssetDownloadResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
@@ -525,6 +549,7 @@ pub async fn download_paper_assets_with_progress(
     }
 
     if result.pdf && !result.tex && !result.paper_md {
+        #[cfg(feature = "desktop")]
         crate::features::jobs::spawn_parse_body_after_assets(app, &vault, &path_rel, false);
     }
 
@@ -585,7 +610,7 @@ pub fn stage_import_file(args: StageImportFileArgs) -> Result<StageImportFileRes
 /// Each PDF becomes `{parent}/{slug}/{slug}.pdf`.
 pub async fn import_local_pdfs(
     args: ImportLocalPdfArgs,
-    app: Option<&tauri::AppHandle>,
+    app: Option<&AppHandle>,
     cache: Option<&CapsCache>,
 ) -> Result<ImportLocalPdfResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
@@ -1025,6 +1050,7 @@ pub(crate) fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecor
 /// Catalog still stores the original `abstract_text`.
 ///
 /// Annotations live in `{paper}/marks/*.json` at runtime (not part of the shell).
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
 pub(crate) async fn write_paper_shell(paper_dir: &Path, meta: &PaperMeta) -> Result<(), AppError> {
     write_paper_shell_opts(paper_dir, meta, true).await
 }

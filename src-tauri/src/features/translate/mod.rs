@@ -924,4 +924,5 @@ mod tests {
     }
 }
 
+#[cfg(feature = "desktop")]
 pub mod commands;

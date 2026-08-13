@@ -281,6 +281,7 @@ pub(crate) fn should_auto_upgrade_bundled_skill(existing: &[u8], bundled: &str) 
 }
 
 /// True when the bundled template carries a managed `version` (may upgrade).
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
 pub(crate) fn bundled_skill_may_upgrade(bundled: &str) -> bool {
     parse_skill_frontmatter_version(bundled).is_some()
 }
@@ -752,5 +753,6 @@ mod tests {
 }
 
 /// Tauri command shells for this feature.
+#[cfg(feature = "desktop")]
 pub mod commands;
 pub mod tree;

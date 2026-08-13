@@ -15,10 +15,13 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+#[cfg(feature = "desktop")]
 use tauri::{AppHandle, Emitter, Manager, Runtime};
+#[cfg(feature = "desktop")]
 use tauri_plugin_fs::FsExt;
 use url::Url;
 
+#[cfg(feature = "desktop")]
 pub mod commands;
 
 pub const EVENT_VAULT_OPEN_REQUEST: &str = "vault:open-request";
@@ -121,6 +124,7 @@ pub fn validate_open_dir(path: &Path) -> Result<PathBuf, AppError> {
 }
 
 /// Validate local directory, allow fs scope, store pending, emit + focus window.
+#[cfg(feature = "desktop")]
 pub fn handle_open_path<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<String, AppError> {
     let canonical = validate_open_dir(path)?;
     let path_str = canonical.to_string_lossy().to_string();
@@ -152,6 +156,7 @@ pub fn handle_open_path<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<S
 }
 
 /// Handle one or more deep-link URLs; non-open URLs are ignored with a warning.
+#[cfg(feature = "desktop")]
 pub fn handle_deep_link_urls<R: Runtime>(app: &AppHandle<R>, urls: &[String]) {
     for raw in urls {
         if raw.contains("://pair") || raw.contains(":pair") {
@@ -184,6 +189,7 @@ pub fn handle_deep_link_urls<R: Runtime>(app: &AppHandle<R>, urls: &[String]) {
 }
 
 /// Scan CLI argv for `agentero://` URLs (second instance / Windows / Linux).
+#[cfg(feature = "desktop")]
 pub fn handle_argv_urls<R: Runtime>(app: &AppHandle<R>, argv: &[String]) {
     let urls: Vec<String> = argv
         .iter()
@@ -195,6 +201,7 @@ pub fn handle_argv_urls<R: Runtime>(app: &AppHandle<R>, argv: &[String]) {
     }
 }
 
+#[cfg(feature = "desktop")]
 fn focus_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.show();
@@ -218,6 +225,7 @@ fn focus_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+#[cfg(feature = "desktop")]
 fn trunc(s: &str) -> String {
     const MAX: usize = 200;
     if s.len() <= MAX {
@@ -292,6 +300,7 @@ pub fn take_cli_open_request_file() -> Option<PathBuf> {
 }
 
 /// Poll the CLI open-request file and forward into the normal open pipeline.
+#[cfg(feature = "desktop")]
 pub fn spawn_cli_open_request_watcher<R: Runtime>(app: AppHandle<R>) {
     tauri::async_runtime::spawn(async move {
         let mut last_handled: Option<String> = None;

@@ -207,6 +207,7 @@ async fn import_one_item(
 }
 
 /// Fetch Zotero-shaped items from Translator `/import` (used by local + remote vault import).
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
 pub(crate) async fn translator_import_items(
     content: &str,
     translator_base_url: Option<&str>,

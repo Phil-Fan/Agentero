@@ -1,3 +1,5 @@
+#[cfg(not(feature = "desktop"))]
+use super::AppHandle;
 use crate::core::error::AppError;
 use crate::features::import::assets::{extract_tar_safe, http_get_bytes_with_progress};
 use crate::features::import::parse::SkillSource;
@@ -7,6 +9,7 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+#[cfg(feature = "desktop")]
 use tauri::AppHandle;
 use walkdir::WalkDir;
 

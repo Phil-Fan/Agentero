@@ -14,22 +14,43 @@ edition = "2021"
 name = "agentero_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = ["desktop"]
+desktop = [
+  "dep:agent-client-protocol",
+  "dep:axum",
+  "dep:tauri",
+  "dep:tauri-plugin-deep-link",
+  "dep:tauri-plugin-dialog",
+  "dep:tauri-plugin-fs",
+  "dep:tauri-plugin-log",
+  "dep:tauri-plugin-opener",
+  "dep:tauri-plugin-shell",
+  "dep:tauri-plugin-store",
+  "dep:tauri-plugin-updater",
+  "dep:tauri-plugin-process",
+  "dep:tauri-plugin-single-instance",
+  "dep:tauri-specta",
+  "dep:specta-typescript",
+  "dep:posthog-rs",
+]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
-tauri-plugin-opener = "2"
+tauri = { version = "2", features = [], optional = true }
+tauri-plugin-opener = { version = "2", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-plugin-fs = "2.5.1"
-tauri-plugin-shell = "2.3.5"
-tauri-plugin-store = "2.4.3"
-tauri-plugin-dialog = "2.7.1"
-tauri-plugin-deep-link = "2.4.9"
-agent-client-protocol = { version = "1.2.0", features = ["unstable_elicitation"] }
+tauri-plugin-fs = { version = "2.5.1", optional = true }
+tauri-plugin-shell = { version = "2.3.5", optional = true }
+tauri-plugin-store = { version = "2.4.3", optional = true }
+tauri-plugin-dialog = { version = "2.7.1", optional = true }
+tauri-plugin-deep-link = { version = "2.4.9", optional = true }
+agent-client-protocol = { version = "1.2.0", features = ["unstable_elicitation"], optional = true }
 tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "macros", "time", "process", "io-util", "net"] }
-axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"], optional = true }
 uuid = { version = "1", features = ["v4", "serde"] }
 dirs = "6"
 thiserror = "2"
@@ -44,7 +65,7 @@ htmd = "0.5.4"
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 notify-debouncer-full = "0.3"
 log = "0.4"
-tauri-plugin-log = "2.9.0"
+tauri-plugin-log = { version = "2.9.0", optional = true }
 async-trait = "0.1.91"
 sha2 = "0.11.0"
 hex = "0.4.3"
@@ -60,19 +81,19 @@ ed25519-dalek = "2"
 futures-util = "0.3.33"
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
-tauri-specta = { version = "2.0.0-rc.25", features = ["derive", "typescript"] }
+tauri-specta = { version = "2.0.0-rc.25", features = ["derive", "typescript"], optional = true }
 specta = { version = "2.0.0-rc.22", features = ["derive"] }
-specta-typescript = "0.0.12"
+specta-typescript = { version = "0.0.12", optional = true }
 fontdb = "0.23"
 
 # Updates and process relaunch are desktop-only. Mobile distribution is owned by
 # its app stores, not the in-app updater.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-tauri-plugin-updater = "2"
-tauri-plugin-process = "2"
-tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-updater = { version = "2", optional = true }
+tauri-plugin-process = { version = "2", optional = true }
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"], optional = true }
 # Blocking client: telemetry flush happens in the synchronous RunEvent::Exit callback.
-posthog-rs = { version = "0.23", default-features = false }
+posthog-rs = { version = "0.23", default-features = false, optional = true }
 
 # LiteParse relies on a desktop PDFium binary. Mobile (iOS/Android) uses the
 # paired desktop Host for PDF parsing instead of packaging PDFium in the app.

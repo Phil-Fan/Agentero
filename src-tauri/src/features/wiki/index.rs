@@ -216,6 +216,7 @@ pub struct WikiIndex {
 }
 
 impl WikiIndex {
+    #[cfg_attr(not(feature = "desktop"), allow(dead_code))]
     pub(crate) fn document(&self, path: &str) -> Option<&WikiDocument> {
         self.documents.iter().find(|document| document.path == path)
     }

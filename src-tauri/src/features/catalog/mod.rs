@@ -13,6 +13,7 @@ pub use caps::{
 };
 pub use schema::{catalog_db_path, ensure_catalog, schema_version, SCHEMA_VERSION};
 
+#[cfg(feature = "desktop")]
 pub mod commands;
 
 use crate::core::error::AppError;

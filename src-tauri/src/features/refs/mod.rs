@@ -8,6 +8,7 @@
 
 pub mod bbl;
 pub mod bib;
+#[cfg(feature = "desktop")]
 pub mod commands;
 pub mod latex;
 pub mod online;
@@ -20,6 +21,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
+#[cfg(feature = "desktop")]
 use tauri::Manager;
 use tokio::sync::{Mutex, Notify};
 
@@ -244,7 +246,7 @@ async fn run_parse_refs_singleflight(
 
     if should_run {
         let worker_waiter = waiter.clone();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             let shared_result = parse_paper_refs_prepared(prepared, online_enabled)
                 .await
                 .map_err(|e| e.to_string());
@@ -336,6 +338,7 @@ async fn parse_paper_refs_prepared(
 
 /// Fire-and-forget refs parse after an import/download finished.
 /// Online reference lookup is always on; all failures are logged, never surfaced.
+#[cfg(feature = "desktop")]
 pub fn spawn_parse_after_import(app: Option<&tauri::AppHandle>, vault: &Path, path_rel: &str) {
     let vault = vault.to_path_buf();
     let path_rel = path_rel.to_string();
@@ -366,7 +369,27 @@ pub fn spawn_parse_after_import(app: Option<&tauri::AppHandle>, vault: &Path, pa
         return;
     }
 
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
+        match parse_paper_refs(&vault, &path_rel, true, false).await {
+            Ok(s) => log::info!(
+                "op=paper_refs_parse status=ok path={path_rel} mode={} count={}",
+                s.source.mode,
+                s.citations.len()
+            ),
+            Err(e) => log::warn!("op=paper_refs_parse status=err path={path_rel} error={e}"),
+        }
+    });
+}
+
+#[cfg(not(feature = "desktop"))]
+pub fn spawn_parse_after_import(
+    _app: Option<&crate::features::import::AppHandle>,
+    vault: &Path,
+    path_rel: &str,
+) {
+    let vault = vault.to_path_buf();
+    let path_rel = path_rel.to_string();
+    tokio::spawn(async move {
         match parse_paper_refs(&vault, &path_rel, true, false).await {
             Ok(s) => log::info!(
                 "op=paper_refs_parse status=ok path={path_rel} mode={} count={}",

@@ -1,5 +1,6 @@
 //! Read-only Vault diagnostics and conservative paper-alias / wikilink repair.
 
+#[cfg(feature = "desktop")]
 pub mod commands;
 pub mod visual_marks_repair;
 pub mod wikilink_repair;
