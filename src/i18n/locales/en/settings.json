@@ -55,14 +55,14 @@
 	"general": {
 		"title": "General",
 		"paperTreeLabelMode": {
-			"label": "Paper labels in file tree",
+			"label": "Paper names in file tree",
 			"title-author": "Title · Author",
 			"title": "Title",
 			"author-year-title": "Author (year) · Title",
 			"folder": "Folder name"
 		},
 		"paperTreeSortMode": {
-			"label": "Sort papers in file tree",
+			"label": "Paper sort order in file tree",
 			"folder": "Display name A–Z",
 			"title": "Title A–Z",
 			"author": "Author A–Z",
@@ -76,7 +76,7 @@
 			"always": "Always when safe"
 		},
 		"batchImportConcurrency": {
-			"label": "Import concurrency",
+			"label": "Background task concurrency",
 			"value": "{{value}} simultaneous"
 		},
 		"networkProxy": {
@@ -127,11 +127,8 @@
 		"fonts": {
 			"section": "Fonts",
 			"interface": "Interface font",
-			"interfaceHint": "App chrome: sidebars, toolbars, and settings.",
 			"text": "Text font",
-			"textHint": "Markdown and notes body text.",
-			"mono": "Monospace font",
-			"monoHint": "Code blocks, frontmatter, and mono UI."
+			"mono": "Code font"
 		},
 		"markdownEditor": {
 			"section": "Markdown editor"
@@ -166,12 +163,8 @@
 		},
 		"userAgent": {
 			"section": "Relay compatibility",
-			"sectionHint": "Optional. Injects User-Agent when the agent starts, for relays that check the client.",
 			"label": "User-Agent",
 			"placeholder": "codex-cli/0.50.0",
-			"presets": "Presets",
-			"presetsAria": "User-Agent presets",
-			"presetOff": "Off (default agent UA)",
 			"providerIdsLabel": "Codex provider ids",
 			"providerIdsPlaceholder": "my_proxy, openai"
 		},
@@ -300,7 +293,7 @@
 			"label": "Auto-translate PDF selection"
 		},
 		"providerConfig": {
-			"section": "Commercial APIs",
+			"section": "API Services",
 			"confirm": "Confirm",
 			"openDocs": "Open provider website",
 			"notConfigured": "Not configured",
@@ -434,9 +427,7 @@
 	"about": {
 		"title": "About",
 		"version": "Version {{version}}",
-		"tagline": "Local-first research vault for people and agents.",
 		"update": {
-			"label": "Updates",
 			"idle": "Check for the latest Agentero release",
 			"unsupported": "Updates are available in installed desktop builds",
 			"checking": "Checking for updates...",

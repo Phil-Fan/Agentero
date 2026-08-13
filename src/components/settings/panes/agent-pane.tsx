@@ -1,7 +1,6 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
 	ArrowUpCircle,
-	Check,
 	ChevronDown,
 	Loader2,
 	Plus,
@@ -40,12 +39,6 @@ import {
 import type { SettingsHostContext } from "@/components/settings/types";
 import { useProbingKeys } from "@/components/settings/use-probing-keys";
 import { Button } from "@/components/ui/button";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -189,14 +182,6 @@ export function AgentPane({
 			}
 		},
 		[userAgentDraft, userAgentProviderDraft],
-	);
-
-	const applyUserAgentPreset = useCallback(
-		(value: string) => {
-			setUserAgentDraft(value);
-			void commitUserAgent({ userAgent: value });
-		},
-		[commitUserAgent],
 	);
 
 	/**
@@ -979,68 +964,42 @@ export function AgentPane({
 			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
 				{t("agent.userAgent.section")}
 			</p>
-			<p className="mb-2 px-0.5 text-muted-foreground text-xs leading-relaxed">
-				{t("agent.userAgent.sectionHint")}
-			</p>
 			<SettingsGroup>
 				<SettingsRow
 					label={t("agent.userAgent.label")}
 					htmlFor="agent-user-agent"
 				>
 					<div className="flex min-w-0 flex-col items-end gap-1.5">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									className="h-8 shrink-0 gap-1 px-2 text-xs"
-									disabled={!isTauri()}
-									aria-label={t("agent.userAgent.presetsAria")}
-								>
-									{t("agent.userAgent.presets")}
-									<ChevronDown className="size-3 opacity-70" aria-hidden />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="min-w-[14rem]">
-								{USER_AGENT_PRESETS.map((preset) => {
-									const selected =
-										userAgentDraft.trim() === preset.value.trim();
-									const label =
-										preset.id === "off"
-											? t("agent.userAgent.presetOff")
-											: preset.value;
-									return (
-										<DropdownMenuItem
-											key={preset.id}
-											className="gap-2 font-mono text-xs"
-											onSelect={() => applyUserAgentPreset(preset.value)}
-										>
-											<span className="flex-1 truncate">{label}</span>
-											{selected ? (
-												<Check className="size-3.5 shrink-0" aria-hidden />
-											) : null}
-										</DropdownMenuItem>
-									);
-								})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Input
-							id="agent-user-agent"
-							value={userAgentDraft}
-							onChange={(e) => setUserAgentDraft(e.target.value)}
-							onBlur={() => void commitUserAgent()}
-							onKeyDown={(e) => {
-								if (e.key === "Enter") {
-									e.currentTarget.blur();
-								}
-							}}
-							placeholder={t("agent.userAgent.placeholder")}
-							spellCheck={false}
-							autoComplete="off"
-							disabled={!isTauri()}
-							className="h-8 w-44 text-xs sm:w-52"
-						/>
+						<div className="relative">
+							<Input
+								id="agent-user-agent"
+								list="agent-user-agent-presets"
+								value={userAgentDraft}
+								onChange={(e) => setUserAgentDraft(e.target.value)}
+								onBlur={() => void commitUserAgent()}
+								onKeyDown={(e) => {
+									if (e.key === "Enter") {
+										e.currentTarget.blur();
+									}
+								}}
+								placeholder={t("agent.userAgent.placeholder")}
+								spellCheck={false}
+								autoComplete="off"
+								disabled={!isTauri()}
+								className="h-8 w-44 pr-7 text-xs sm:w-52"
+							/>
+							<ChevronDown
+								className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+								aria-hidden
+							/>
+						</div>
+						<datalist id="agent-user-agent-presets">
+							{USER_AGENT_PRESETS.filter((preset) => preset.value).map(
+								(preset) => (
+									<option key={preset.id} value={preset.value} />
+								),
+							)}
+						</datalist>
 					</div>
 				</SettingsRow>
 				<SettingsRow

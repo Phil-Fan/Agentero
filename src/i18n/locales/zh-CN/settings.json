@@ -55,14 +55,14 @@
 	"general": {
 		"title": "通用",
 		"paperTreeLabelMode": {
-			"label": "文件树论文显示",
+			"label": "文件树论文名称",
 			"title-author": "标题 · 作者",
 			"title": "标题",
 			"author-year-title": "作者 (年份) · 标题",
 			"folder": "文件夹名"
 		},
 		"paperTreeSortMode": {
-			"label": "文件树论文排序",
+			"label": "文件树论文排序方式",
 			"folder": "显示名称 A–Z",
 			"title": "标题 A–Z",
 			"author": "作者 A–Z",
@@ -76,7 +76,7 @@
 			"always": "始终（安全时）"
 		},
 		"batchImportConcurrency": {
-			"label": "导入并发数",
+			"label": "后台任务并发数",
 			"value": "同时 {{value}} 个"
 		},
 		"networkProxy": {
@@ -127,11 +127,8 @@
 		"fonts": {
 			"section": "字体",
 			"interface": "界面字体",
-			"interfaceHint": "侧栏、工具栏、设置等应用界面。",
 			"text": "正文字体",
-			"textHint": "Markdown 与笔记正文。",
-			"mono": "等宽字体",
-			"monoHint": "代码块、Frontmatter 与等宽 UI。"
+			"mono": "代码字体"
 		},
 		"markdownEditor": {
 			"section": "Markdown编辑器"
@@ -166,12 +163,8 @@
 		},
 		"userAgent": {
 			"section": "中转站兼容",
-			"sectionHint": "可选。启动 Agent 时注入 User-Agent，用于部分中转的客户端校验。",
 			"label": "User-Agent",
 			"placeholder": "codex-cli/0.50.0",
-			"presets": "预设",
-			"presetsAria": "User-Agent 预设",
-			"presetOff": "关闭（使用 Agent 默认 UA）",
 			"providerIdsLabel": "Codex Provider id",
 			"providerIdsPlaceholder": "my_proxy, openai"
 		},
@@ -300,7 +293,7 @@
 			"label": "PDF 划词后自动翻译"
 		},
 		"providerConfig": {
-			"section": "商用 API",
+			"section": "API 服务",
 			"confirm": "确定",
 			"openDocs": "打开服务商网站",
 			"notConfigured": "未配置",
@@ -434,9 +427,7 @@
 	"about": {
 		"title": "关于",
 		"version": "版本 {{version}}",
-		"tagline": "面向人与 Agent 的本地优先科研知识库。",
 		"update": {
-			"label": "更新",
 			"idle": "检查 Agentero 是否有新版本",
 			"unsupported": "已安装的桌面应用可使用自动更新",
 			"checking": "正在检查更新...",

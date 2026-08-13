@@ -3,6 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Download, LoaderCircle, RefreshCw, Terminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import agenteroAppIcon from "@/assets/agentero-app-icon.svg";
 import { CompactCodeBlock } from "@/components/ai-elements/code-block";
 import {
 	PageTitle,
@@ -109,40 +110,6 @@ export function AboutPane() {
 		);
 	};
 
-	const description = (() => {
-		switch (update.phase) {
-			case "unsupported":
-				return t("about.update.unsupported");
-			case "checking":
-				return t("about.update.checking");
-			case "up-to-date":
-				return t("about.update.upToDate");
-			case "available":
-				return t("about.update.available", {
-					version: update.availableVersion,
-				});
-			case "downloading":
-				return update.totalBytes && update.downloadedBytes !== undefined
-					? t("about.update.downloadingProgress", {
-							progress: Math.min(
-								100,
-								Math.round((update.downloadedBytes / update.totalBytes) * 100),
-							),
-						})
-					: t("about.update.downloading");
-			case "installing":
-				return t("about.update.installing");
-			case "error":
-				return t(
-					update.errorOperation === "install"
-						? "about.update.installFailed"
-						: "about.update.checkFailed",
-				);
-			default:
-				return t("about.update.idle");
-		}
-	})();
-
 	const cliDescription = (() => {
 		if (!cli) {
 			return cliLoading ? "…" : t("about.cli.statusFailed");
@@ -156,7 +123,10 @@ export function AboutPane() {
 				app: cli.appVersion,
 			});
 		}
-		return t("about.cli.description");
+		if (cli.installed) {
+			return t("about.cli.description");
+		}
+		return undefined;
 	})();
 
 	const needsCliUpdate = Boolean(
@@ -164,50 +134,55 @@ export function AboutPane() {
 	);
 	const canInstallCli = Boolean(cli?.canInstall) && !cliBusy;
 	const showInstall = !cli?.installed || needsCliUpdate;
-	const showBrewCliHint = isMac && showInstall && Boolean(cli);
+	const showBrewCliHint = isMac && showInstall && Boolean(cli?.brewAvailable);
 
 	return (
 		<>
 			<PageTitle title={t("about.title")} />
 			<SettingsGroup>
-				<div className="space-y-1 px-3.5 py-4 text-center">
-					<p className="font-semibold text-base tracking-tight">Agentero</p>
-					{version && (
-						<p className="text-muted-foreground text-sm">
-							{t("about.version", { version })}
-						</p>
-					)}
-					<p className="pt-2 text-muted-foreground text-xs leading-relaxed">
-						{t("about.tagline")}
-					</p>
-				</div>
-			</SettingsGroup>
-			<SettingsGroup>
-				<SettingsRow label={t("about.update.label")} description={description}>
-					{update.phase === "available" ? (
-						<Button size="sm" onClick={onInstall}>
-							<Download data-icon="inline-start" />
-							{t("about.update.downloadInstall")}
-						</Button>
-					) : update.phase === "unsupported" ? null : (
-						<Button
-							variant="outline"
-							size="sm"
-							disabled={checking || installing}
-							onClick={onCheck}
-						>
-							{checking || installing ? (
-								<LoaderCircle
-									data-icon="inline-start"
-									className="animate-spin"
-								/>
-							) : (
-								<RefreshCw data-icon="inline-start" />
+				<div className="flex items-center justify-between gap-4 px-3.5 py-4">
+					<div className="flex min-w-0 items-center gap-3">
+						<img
+							src={agenteroAppIcon}
+							alt=""
+							aria-hidden
+							className="size-10 shrink-0 rounded-lg"
+						/>
+						<div className="min-w-0 space-y-0.5">
+							<p className="font-semibold text-base tracking-tight">Agentero</p>
+							{version && (
+								<p className="text-muted-foreground text-sm">
+									{t("about.version", { version })}
+								</p>
 							)}
-							{t("about.update.check")}
-						</Button>
-					)}
-				</SettingsRow>
+						</div>
+					</div>
+					<div className="flex shrink-0 items-center">
+						{update.phase === "available" ? (
+							<Button size="sm" onClick={onInstall}>
+								<Download data-icon="inline-start" />
+								{t("about.update.downloadInstall")}
+							</Button>
+						) : update.phase === "unsupported" ? null : (
+							<Button
+								variant="outline"
+								size="sm"
+								disabled={checking || installing}
+								onClick={onCheck}
+							>
+								{checking || installing ? (
+									<LoaderCircle
+										data-icon="inline-start"
+										className="animate-spin"
+									/>
+								) : (
+									<RefreshCw data-icon="inline-start" />
+								)}
+								{t("about.update.check")}
+							</Button>
+						)}
+					</div>
+				</div>
 				{update.phase === "available" && update.notes?.trim() ? (
 					<div className="border-t px-3.5 py-2.5 text-muted-foreground text-xs leading-relaxed whitespace-pre-wrap">
 						{update.notes.trim()}

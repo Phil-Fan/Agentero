@@ -13,8 +13,8 @@ mod download;
 use crate::core::error::AppError;
 use crate::core::install_dirs::{ABS_BIN_DIRS, HOME_BIN_DIRS};
 use download::{
-    download_and_extract, host_triple, managed_binary_name, normalize_version,
-    release_download_url, release_tag_page_url, versions_equal,
+    download_and_extract, host_triple, managed_binary_name, release_download_url,
+    release_tag_page_url, versions_equal,
 };
 use serde::Serialize;
 use std::fs;
@@ -68,6 +68,8 @@ pub struct CliInstallStatus {
     pub preferred_bin_dir: String,
     /// Whether the preferred bin dir is currently on PATH.
     pub preferred_bin_on_path: bool,
+    /// Whether a `brew` executable is available (PATH or standard Homebrew roots).
+    pub brew_available: bool,
     /// Human-readable note (e.g. PATH hint).
     pub message: Option<String>,
 }
@@ -259,6 +261,18 @@ fn path_env_dirs() -> Vec<PathBuf> {
     dirs
 }
 
+/// Detect a usable `brew` executable (PATH dirs or standard Homebrew roots).
+fn brew_available() -> bool {
+    let name = if cfg!(windows) { "brew.exe" } else { "brew" };
+    let mut candidates: Vec<PathBuf> = path_env_dirs()
+        .into_iter()
+        .map(|dir| dir.join(name))
+        .collect();
+    candidates.push(PathBuf::from("/opt/homebrew/bin/brew"));
+    candidates.push(PathBuf::from("/usr/local/bin/brew"));
+    candidates.iter().any(|p| is_plausible_cli_file(p))
+}
+
 fn is_on_path(dir: &Path) -> bool {
     let dir_canon = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
     path_env_dirs().iter().any(|p| {
@@ -350,13 +364,6 @@ pub fn collect_status<R: Runtime>(app: &AppHandle<R>) -> CliInstallStatus {
         message = Some(
             "CLI install is not available on this platform (no matching Release triple).".into(),
         );
-    } else if local.is_none() {
-        message = Some(format!(
-            "Install downloads CLI v{} from GitHub Releases into {} and links `{}`.",
-            normalize_version(&app_ver),
-            managed_cli_dir().display(),
-            SHIM_NAME
-        ));
     } else if installed && !version_matches {
         message = Some(format!(
             "Installed CLI {} does not match app {}. Reinstall to update.",
@@ -388,6 +395,7 @@ pub fn collect_status<R: Runtime>(app: &AppHandle<R>) -> CliInstallStatus {
         shim_current,
         preferred_bin_dir: bin_dir.to_string_lossy().into_owned(),
         preferred_bin_on_path,
+        brew_available: brew_available(),
         message,
     }
 }

@@ -22,6 +22,8 @@ export type CliInstallStatus = {
 	shimCurrent: boolean;
 	preferredBinDir: string;
 	preferredBinOnPath: boolean;
+	/** `brew` executable detected (PATH or standard Homebrew roots) */
+	brewAvailable: boolean;
 	message: string | null;
 };
 

@@ -304,7 +304,6 @@ function AppearancePaneInner({
 			<SettingsGroup>
 				<SettingsRow
 					label={t("appearance.fonts.interface")}
-					description={t("appearance.fonts.interfaceHint")}
 					htmlFor={interfaceFontId}
 				>
 					<FontFamilyPicker
@@ -314,11 +313,7 @@ function AppearancePaneInner({
 						onChange={(v) => patch({ interfaceFontFamily: v })}
 					/>
 				</SettingsRow>
-				<SettingsRow
-					label={t("appearance.fonts.text")}
-					description={t("appearance.fonts.textHint")}
-					htmlFor={textFontId}
-				>
+				<SettingsRow label={t("appearance.fonts.text")} htmlFor={textFontId}>
 					<FontFamilyPicker
 						id={textFontId}
 						fontRole="text"
@@ -326,11 +321,7 @@ function AppearancePaneInner({
 						onChange={(v) => patch({ textFontFamily: v })}
 					/>
 				</SettingsRow>
-				<SettingsRow
-					label={t("appearance.fonts.mono")}
-					description={t("appearance.fonts.monoHint")}
-					htmlFor={monoFontId}
-				>
+				<SettingsRow label={t("appearance.fonts.mono")} htmlFor={monoFontId}>
 					<FontFamilyPicker
 						id={monoFontId}
 						fontRole="mono"
