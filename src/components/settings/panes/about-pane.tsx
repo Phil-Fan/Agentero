@@ -28,7 +28,7 @@ import {
 
 /** Same as README / homebrew-agentero Formula (headless CLI, not the desktop cask). */
 const CLI_BREW_INSTALL_COMMAND =
-	"brew tap poco-ai/agentero && brew install agentero";
+	"brew tap poco-ai/agentero\nbrew install agentero";
 
 export function AboutPane() {
 	const { t } = useTranslation("settings");
@@ -156,10 +156,7 @@ export function AboutPane() {
 				app: cli.appVersion,
 			});
 		}
-		if (cli.installed) {
-			return t("about.cli.description");
-		}
-		return t("about.cli.downloadHint", { version: cli.appVersion });
+		return t("about.cli.description");
 	})();
 
 	const needsCliUpdate = Boolean(
@@ -287,6 +284,8 @@ export function AboutPane() {
 							<CompactCodeBlock
 								code={CLI_BREW_INSTALL_COMMAND}
 								language="shell"
+								wrap
+								className="[&_pre]:opacity-75"
 								copyButtonProps={{
 									"aria-label": t("about.cli.brewCopy"),
 									onCopy: () => notifySuccess(t("about.cli.brewCopied")),

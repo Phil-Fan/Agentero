@@ -7,7 +7,6 @@ import {
 	SettingsRow,
 } from "@/components/settings/settings-layout";
 import type { SettingsHostContext } from "@/components/settings/types";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -149,7 +148,6 @@ export function GeneralPane({
 				<NetworkProxyRow
 					htmlFor="network-proxy-enabled"
 					label={t("general.networkProxy.label")}
-					description={t("general.networkProxy.description")}
 					proxyUrl={proxyUrlDraft}
 					proxyEnabled={settings.networkProxyEnabled}
 					onProxyUrlChange={setProxyUrlDraft}
@@ -165,7 +163,6 @@ export function GeneralPane({
 				/>
 			</SettingsGroup>
 			<ConnectorSettingsBlock settings={settings} patch={patch} />
-			<RemoteCacheSettingsBlock />
 			<ExportSettingsBlock settings={settings} patch={patch} />
 			<PrivacySettingsBlock settings={settings} patch={patch} />
 		</>
@@ -224,52 +221,6 @@ function ExportSettingsBlock({
 						checked={settings.exportWatermarkEnabled}
 						onCheckedChange={(v) => patch({ exportWatermarkEnabled: v })}
 					/>
-				</SettingsRow>
-			</SettingsGroup>
-		</div>
-	);
-}
-
-function RemoteCacheSettingsBlock() {
-	const { t } = useTranslation("settings");
-	const [busy, setBusy] = useState(false);
-
-	const onClear = async () => {
-		if (!isTauri() || busy) return;
-		setBusy(true);
-		try {
-			const { remoteCacheClear } = await import(
-				"@/lib/vault/remote/remote-vault"
-			);
-			await remoteCacheClear();
-		} catch (e) {
-			notifyError(
-				e instanceof Error ? e.message : t("general.remoteCache.clearFailed"),
-			);
-		} finally {
-			setBusy(false);
-		}
-	};
-
-	return (
-		<div className="mt-4">
-			<p className="mb-2 px-0.5 font-medium text-[13px]">
-				{t("general.remoteCache.section")}
-			</p>
-			<SettingsGroup>
-				<SettingsRow label={t("general.remoteCache.label")}>
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						className="h-8"
-						disabled={busy || !isTauri()}
-						onClick={() => void onClear()}
-					>
-						{busy
-							? t("general.remoteCache.clearing")
-							: t("general.remoteCache.clear")}
-					</Button>
 				</SettingsRow>
 			</SettingsGroup>
 		</div>

@@ -987,23 +987,7 @@ export function AgentPane({
 					label={t("agent.userAgent.label")}
 					htmlFor="agent-user-agent"
 				>
-					<div className="flex min-w-0 items-center gap-1.5">
-						<Input
-							id="agent-user-agent"
-							value={userAgentDraft}
-							onChange={(e) => setUserAgentDraft(e.target.value)}
-							onBlur={() => void commitUserAgent()}
-							onKeyDown={(e) => {
-								if (e.key === "Enter") {
-									e.currentTarget.blur();
-								}
-							}}
-							placeholder={t("agent.userAgent.placeholder")}
-							spellCheck={false}
-							autoComplete="off"
-							disabled={!isTauri()}
-							className="h-8 w-44 text-xs sm:w-52"
-						/>
+					<div className="flex min-w-0 flex-col items-end gap-1.5">
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
 								<Button
@@ -1041,6 +1025,22 @@ export function AgentPane({
 								})}
 							</DropdownMenuContent>
 						</DropdownMenu>
+						<Input
+							id="agent-user-agent"
+							value={userAgentDraft}
+							onChange={(e) => setUserAgentDraft(e.target.value)}
+							onBlur={() => void commitUserAgent()}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") {
+									e.currentTarget.blur();
+								}
+							}}
+							placeholder={t("agent.userAgent.placeholder")}
+							spellCheck={false}
+							autoComplete="off"
+							disabled={!isTauri()}
+							className="h-8 w-44 text-xs sm:w-52"
+						/>
 					</div>
 				</SettingsRow>
 				<SettingsRow

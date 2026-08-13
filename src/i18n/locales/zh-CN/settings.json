@@ -21,7 +21,11 @@
 		"hostName": {
 			"label": "电脑名称"
 		},
-		"status": { "label": "Relay 状态", "online": "在线", "offline": "离线" },
+		"status": {
+			"label": "Relay 状态",
+			"online": "在线",
+			"offline": "离线"
+		},
 		"start": "开启远程访问",
 		"stop": "关闭远程访问",
 		"qrAlt": "配对二维码",
@@ -31,10 +35,22 @@
 		"copyLink": "复制配对链接",
 		"copied": "已复制配对链接",
 		"copyFailed": "无法复制配对链接",
-		"request": { "title": "配对 {{device}}", "code": "确认码：{{code}}" },
+		"request": {
+			"title": "配对 {{device}}",
+			"code": "确认码：{{code}}"
+		},
 		"approve": "允许",
 		"deny": "拒绝",
-		"devices": { "empty": "尚未配对设备", "revoke": "撤销 {{device}}" }
+		"devices": {
+			"revoke": "撤销 {{device}}"
+		},
+		"cache": {
+			"section": "远程 Vault 缓存",
+			"label": "PDF 预览缓存",
+			"clear": "清除远程缓存",
+			"clearing": "清除中…",
+			"clearFailed": "清除远程缓存失败"
+		}
 	},
 	"general": {
 		"title": "通用",
@@ -64,21 +80,13 @@
 			"value": "同时 {{value}} 个"
 		},
 		"networkProxy": {
-			"label": "网络代理",
-			"description": "用于 Host 请求和 Agent 对话。"
+			"label": "网络代理"
 		},
 		"connector": {
 			"label": "兼容 Zotero Connector",
 			"hint": "请先退出本地Zotero",
 			"portLabel": "Connector 端口",
 			"invalidPort": "端口必须在 1 到 65535 之间。"
-		},
-		"remoteCache": {
-			"section": "远程 Vault 缓存",
-			"label": "PDF 预览缓存",
-			"clear": "清除远程缓存",
-			"clearing": "清除中…",
-			"clearFailed": "清除远程缓存失败"
 		},
 		"export": {
 			"section": "笔记导出",
@@ -329,24 +337,18 @@
 		"title": "版面解析",
 		"backend": {
 			"label": "解析方式",
-			"description": "检测 PDF 版面（图、表、公式等区域）所使用的引擎。",
-			"local": "本地推理（PP-DocLayoutV3，ONNX）",
-			"paddle": "Paddle API（PP-StructureV3，异步）"
+			"local": "本地推理",
+			"paddle": "Paddle API"
 		},
-		"privacy": "选择 Paddle API 时，整份 PDF 将上传到 AI Studio OCR 服务，以后台任务方式异步解析并轮询进度。",
 		"providerConfig": {
 			"section": "Paddle API",
-			"paddle": "Paddle（PP-StructureV3）",
+			"paddle": "PP-StructureV3",
 			"confirm": "确定",
-			"test": "测试连接",
 			"openDocs": "打开服务商网站",
 			"notConfigured": "未配置",
 			"apiKey": {
 				"label": "API Key",
 				"placeholder": "AI Studio PaddleOCR 访问令牌"
-			},
-			"endpoint": {
-				"label": "端点"
 			},
 			"probeIdle": "尚未检测",
 			"probeOk": "可用",
@@ -458,7 +460,6 @@
 			"label": "命令行工具",
 			"description": "无界面操作 Vault / Catalog，供脚本与外部 Agent 使用",
 			"notBundled": "当前构建未内置 CLI",
-			"downloadHint": "将安装与应用同版本的 CLI v{{version}}（首次约 12MB，从 GitHub Releases 下载）",
 			"versionMismatch": "CLI {{cli}} 与应用 {{app}} 不一致，请重新安装以对齐",
 			"install": "安装",
 			"update": "更新",

@@ -41,7 +41,16 @@
 		},
 		"approve": "Approve",
 		"deny": "Deny",
-		"devices": { "empty": "No paired devices", "revoke": "Revoke {{device}}" }
+		"devices": {
+			"revoke": "Revoke {{device}}"
+		},
+		"cache": {
+			"section": "Remote vault cache",
+			"label": "PDF preview cache",
+			"clear": "Clear remote cache",
+			"clearing": "Clearing…",
+			"clearFailed": "Failed to clear remote cache"
+		}
 	},
 	"general": {
 		"title": "General",
@@ -71,21 +80,13 @@
 			"value": "{{value}} simultaneous"
 		},
 		"networkProxy": {
-			"label": "Network proxy",
-			"description": "Used for Host requests and Agent conversations."
+			"label": "Network proxy"
 		},
 		"connector": {
 			"label": "Zotero Connector compatibility",
 			"hint": "Quit local Zotero first",
 			"portLabel": "Connector port",
 			"invalidPort": "Port must be between 1 and 65535."
-		},
-		"remoteCache": {
-			"section": "Remote vault cache",
-			"label": "PDF preview cache",
-			"clear": "Clear remote cache",
-			"clearing": "Clearing…",
-			"clearFailed": "Failed to clear remote cache"
 		},
 		"export": {
 			"section": "Note export",
@@ -336,24 +337,18 @@
 		"title": "Layout Analysis",
 		"backend": {
 			"label": "Analysis engine",
-			"description": "How PDF page layout (figures, tables, formulas) is detected.",
-			"local": "On-device (PP-DocLayoutV3, ONNX)",
-			"paddle": "Paddle API (PP-StructureV3, async)"
+			"local": "On-device",
+			"paddle": "Paddle API"
 		},
-		"privacy": "The Paddle backend uploads the whole PDF to the AI Studio OCR service and polls an async job until it finishes.",
 		"providerConfig": {
 			"section": "Paddle API",
-			"paddle": "Paddle (PP-StructureV3)",
+			"paddle": "PP-StructureV3",
 			"confirm": "Confirm",
-			"test": "Test connection",
 			"openDocs": "Open provider website",
 			"notConfigured": "Not configured",
 			"apiKey": {
 				"label": "API key",
 				"placeholder": "AI Studio PaddleOCR access token"
-			},
-			"endpoint": {
-				"label": "Endpoint"
 			},
 			"probeIdle": "Not checked yet",
 			"probeOk": "Available",
@@ -465,7 +460,6 @@
 			"label": "Command-line tools",
 			"description": "Headless Vault / Catalog for scripts and external agents",
 			"notBundled": "CLI is not bundled in this build",
-			"downloadHint": "Installs CLI v{{version}} (~12MB once from GitHub Releases)",
 			"versionMismatch": "CLI {{cli}} ≠ app {{app}}; reinstall to match",
 			"install": "Install",
 			"update": "Update",

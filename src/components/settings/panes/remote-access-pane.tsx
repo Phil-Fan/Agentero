@@ -33,7 +33,10 @@ import {
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { notifyError } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
-import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
+import {
+	isRemoteVaultHandle,
+	remoteCacheClear,
+} from "@/lib/vault/remote/remote-vault";
 
 const DEFAULT_RELAY = "relay.philfan.cn";
 
@@ -275,42 +278,80 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 							))}
 						</SettingsGroup>
 					) : null}
-					{status?.enabled ? (
+					{status?.enabled && devices.length > 0 ? (
 						<SettingsGroup>
-							{devices.length === 0 ? (
-								<p className="px-3.5 py-3 text-muted-foreground text-xs">
-									{t("remoteAccess.devices.empty")}
-								</p>
-							) : (
-								devices.map((device) => (
-									<div
-										key={device.deviceId}
-										className="flex items-center justify-between gap-3 border-b px-3.5 py-2.5 last:border-b-0"
-									>
-										<div className="min-w-0">
-											<p className="truncate text-sm">{device.name}</p>
-											<p className="truncate text-muted-foreground text-xs">
-												{device.deviceId}
-											</p>
-										</div>
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon-sm"
-											aria-label={t("remoteAccess.devices.revoke", {
-												device: device.name,
-											})}
-											onClick={() => void revoke(device.deviceId)}
-										>
-											<Trash2 className="size-3.5" />
-										</Button>
+							{devices.map((device) => (
+								<div
+									key={device.deviceId}
+									className="flex items-center justify-between gap-3 border-b px-3.5 py-2.5 last:border-b-0"
+								>
+									<div className="min-w-0">
+										<p className="truncate text-sm">{device.name}</p>
+										<p className="truncate text-muted-foreground text-xs">
+											{device.deviceId}
+										</p>
 									</div>
-								))
-							)}
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-sm"
+										aria-label={t("remoteAccess.devices.revoke", {
+											device: device.name,
+										})}
+										onClick={() => void revoke(device.deviceId)}
+									>
+										<Trash2 className="size-3.5" />
+									</Button>
+								</div>
+							))}
 						</SettingsGroup>
 					) : null}
 				</>
 			)}
+			<RemoteCacheSettingsBlock />
 		</>
+	);
+}
+
+function RemoteCacheSettingsBlock() {
+	const { t } = useTranslation("settings");
+	const [busy, setBusy] = useState(false);
+
+	const onClear = async () => {
+		if (!isTauri() || busy) return;
+		setBusy(true);
+		try {
+			await remoteCacheClear();
+		} catch (e) {
+			notifyError(
+				e instanceof Error ? e.message : t("remoteAccess.cache.clearFailed"),
+			);
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div className="mt-4">
+			<p className="mb-2 px-0.5 font-medium text-[13px]">
+				{t("remoteAccess.cache.section")}
+			</p>
+			<SettingsGroup>
+				<SettingsRow label={t("remoteAccess.cache.label")}>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="h-8"
+						disabled={busy || !isTauri()}
+						onClick={() => void onClear()}
+					>
+						{busy
+							? t("remoteAccess.cache.clearing")
+							: t("remoteAccess.cache.clear")}
+					</Button>
+				</SettingsRow>
+			</SettingsGroup>
+		</div>
 	);
 }

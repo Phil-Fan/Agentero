@@ -382,11 +382,13 @@ export const CodeBlockContent = ({
 	language,
 	showLineNumbers = false,
 	compact = false,
+	wrap = false,
 }: {
 	code: string;
 	language: BundledLanguage;
 	showLineNumbers?: boolean;
 	compact?: boolean;
+	wrap?: boolean;
 }) => {
 	// Memoized raw tokens for immediate display
 	const rawTokens = useMemo(() => createRawTokens(code), [code]);
@@ -427,11 +429,18 @@ export const CodeBlockContent = ({
 	const tokenized = asyncTokens ?? syncTokens;
 
 	return (
-		<div className={cn("relative overflow-auto", compact && "min-w-0 flex-1")}>
+		<div
+			className={cn(
+				wrap ? "overflow-hidden" : "overflow-auto",
+				compact && "min-w-0 flex-1",
+				"relative",
+			)}
+		>
 			<CodeBlockBody
 				showLineNumbers={showLineNumbers}
 				tokenized={tokenized}
 				compact={compact}
+				className={wrap ? "whitespace-pre-wrap break-words" : undefined}
 			/>
 		</div>
 	);
@@ -520,6 +529,7 @@ export type CompactCodeBlockProps = Omit<
 > & {
 	code: string;
 	language: BundledLanguage;
+	wrap?: boolean;
 	copyButtonProps?: Omit<CodeBlockCopyButtonProps, "children">;
 };
 
@@ -527,6 +537,7 @@ export const CompactCodeBlock = ({
 	code,
 	language,
 	className,
+	wrap,
 	copyButtonProps,
 	...props
 }: CompactCodeBlockProps) => {
@@ -539,7 +550,7 @@ export const CompactCodeBlock = ({
 				language={language}
 				{...props}
 			>
-				<CodeBlockContent code={code} language={language} compact />
+				<CodeBlockContent code={code} language={language} compact wrap={wrap} />
 				<div className="flex shrink-0 items-center border-l bg-muted/30 px-0.5">
 					<CodeBlockCopyButton variant="ghost" {...copyButtonProps} />
 				</div>

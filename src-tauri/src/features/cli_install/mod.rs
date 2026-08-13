@@ -368,17 +368,6 @@ pub fn collect_status<R: Runtime>(app: &AppHandle<R>) -> CliInstallStatus {
             "CLI installed at {} but that directory is not on PATH. Add it to your shell PATH (do not edit rc from Agentero).",
             bin_dir.display()
         ));
-    } else if !installed {
-        message = Some(format!(
-            "Install places `{}` in {}{}",
-            SHIM_NAME,
-            bin_dir.display(),
-            if preferred_bin_on_path {
-                "."
-            } else {
-                " (then ensure that directory is on PATH)."
-            }
-        ));
     }
 
     CliInstallStatus {
