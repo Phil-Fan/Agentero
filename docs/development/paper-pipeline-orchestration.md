@@ -305,6 +305,8 @@ Rust      --job:changed {jobId, paperPath, kind, state, progress}--> 所有窗�
 
 队列语义、幂等、重试、优先级、取消**全在一处**；渲染进程退化为纯 executor。附带收益：多窗口不会各跑一份（现状 `layoutAnalysisStore.ui` 是全局单例，`store.ts:16`，多 tab 进度互串）。
 
+`job:offer` 的 payload 是平铺的 `{jobId, kind, vaultPath, paperPath, force}`（注意 `job:changed` 包了一层 `{job}`），且发出去就不管：渲染进程重载、或 offer 早于 listener 挂上，这一份就丢了，而 Rust 还在等它的 `job_report`（`LayoutAnalyze` 15min），cap=1 的车道同时被占死。因此 listener 挂上后 `job_list` 一次，把仍是 `running` 的可执行 kind 重新认领；executor 抛错时由 dispatch 兜底上报 `failed`，让 Rust 立刻释放额度而不是等超时。
+
 `job:changed` 事件（节流 100ms 批量发）**直接干掉 `use-pdf-layout-run.ts:285-380` 的 1.5s × 15min 轮询**。
 
 #### 重启丢失 in-flight job —— 不需要处理

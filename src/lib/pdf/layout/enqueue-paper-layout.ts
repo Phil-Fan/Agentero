@@ -41,9 +41,18 @@ async function runLayoutAnalyzeExecutor(offer: JobOfferPayload): Promise<void> {
 		: offer.vaultPath;
 	const paperLabel =
 		offer.paperPath?.split("/").filter(Boolean).pop() || paperAbsPath;
+	const documentId = `headless-layout-${offer.jobId}`;
 
 	const abortController = new AbortController();
 	let cancelledUnlisten: UnlistenFn | null = null;
+
+	const report = (args: Parameters<typeof jobReport>[0]) =>
+		jobReport(args).catch((error) => {
+			logger.warn("layout analyze job report failed", {
+				jobId: offer.jobId,
+				error: error instanceof Error ? error.message : String(error),
+			});
+		});
 
 	try {
 		cancelledUnlisten = await listen<{ job: { id: string; state: JobState } }>(
@@ -57,9 +66,10 @@ async function runLayoutAnalyzeExecutor(offer: JobOfferPayload): Promise<void> {
 		);
 
 		const unsub = layoutAnalysisStore.subscribe((state) => {
-			const { ui } = state;
+			const { ui, activeDocumentId } = state;
+			if (activeDocumentId !== documentId) return;
 			if (ui.stage !== "running" || typeof ui.progress !== "number") return;
-			void jobReport({
+			void report({
 				jobId: offer.jobId,
 				progress: ui.progress,
 				phase: ui.message?.trim() || i18n.t("viewer:figures.analyzing"),
@@ -71,9 +81,10 @@ async function runLayoutAnalyzeExecutor(offer: JobOfferPayload): Promise<void> {
 			await analyzePaperLayoutHeadless({
 				paperAbsPath,
 				paperLabel,
+				documentId,
 				signal: abortController.signal,
 			});
-			await jobReport({
+			await report({
 				jobId: offer.jobId,
 				progress: 100,
 				phase: "completed",
@@ -84,7 +95,7 @@ async function runLayoutAnalyzeExecutor(offer: JobOfferPayload): Promise<void> {
 			const state = message.toLowerCase().includes("cancel")
 				? "cancelled"
 				: "failed";
-			await jobReport({
+			await report({
 				jobId: offer.jobId,
 				state,
 				error: state === "failed" ? message : undefined,

@@ -22,7 +22,9 @@ import {
 	readLayoutSidecar,
 	writeLayoutIndexFromRaw,
 } from "@/lib/pdf/layout/io";
+import type { LayoutTaskLike } from "@/lib/pdf/layout/run-analysis";
 import { runDocumentLayoutAnalysis } from "@/lib/pdf/layout/run-analysis";
+import { clearLayoutDocumentResult } from "@/lib/pdf/layout/store";
 
 function taskToPromise<T>(task: {
 	wait: (ok: (v: T) => void, err: (e: unknown) => void) => void;
@@ -110,6 +112,8 @@ export async function analyzePaperLayoutHeadless(opts: {
 	paperAbsPath: string;
 	/** Label shown in the background-task toast instead of "Analyzing layout…". */
 	paperLabel?: string;
+	/** Caller-owned EmbedPDF document id, so progress can be attributed to this run. */
+	documentId?: string;
 	signal?: AbortSignal;
 }): Promise<HeadlessLayoutResult> {
 	const paperAbsPath = opts.paperAbsPath.replace(/[/\\]+$/, "");
@@ -141,7 +145,8 @@ export async function analyzePaperLayoutHeadless(opts: {
 	if (opts.signal?.aborted) throw new Error("cancelled");
 
 	const engine = await getHeadlessPdfEngine();
-	const documentId = `headless-layout-${Date.now().toString(36)}`;
+	const documentId =
+		opts.documentId ?? `headless-layout-${Date.now().toString(36)}`;
 	const registry = new PluginRegistry(engine);
 	registry.registerPlugin(DocumentManagerPluginPackage, {});
 	registry.registerPlugin(RenderPluginPackage);
@@ -187,11 +192,19 @@ export async function analyzePaperLayoutHeadless(opts: {
 		const scope = layoutCap.forDocument(documentId);
 		const summary = await new Promise<string>((resolve, reject) => {
 			let settled = false;
+			let layoutTask: LayoutTaskLike | null = null;
 			const finish = (fn: () => void) => {
 				if (settled) return;
 				settled = true;
+				opts.signal?.removeEventListener("abort", onAbort);
 				fn();
 			};
+			function onAbort() {
+				layoutTask?.abort({ type: "no-document", message: "cancelled" });
+				layoutTask = null;
+				finish(() => reject(new Error("cancelled")));
+			}
+			opts.signal?.addEventListener("abort", onAbort);
 			void runDocumentLayoutAnalysis(scope, documentId, {
 				paperAbsPath,
 				paperLabel: opts.paperLabel,
@@ -211,9 +224,12 @@ export async function analyzePaperLayoutHeadless(opts: {
 				},
 			})
 				.then((task) => {
+					layoutTask = task;
 					// Cache path: onDone already fired before null return.
 					if (task == null && !settled) {
 						finish(() => resolve("cached"));
+					} else if (task && opts.signal?.aborted) {
+						onAbort();
 					}
 				})
 				.catch((e) =>
@@ -248,5 +264,6 @@ export async function analyzePaperLayoutHeadless(opts: {
 		} catch {
 			// ignore
 		}
+		clearLayoutDocumentResult(documentId);
 	}
 }

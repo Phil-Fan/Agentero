@@ -10,6 +10,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import i18n from "@/i18n";
 import {
 	type BackgroundTaskKind,
+	cancelBackgroundTask,
 	completeBackgroundTask,
 	failBackgroundTask,
 	registerBackgroundTaskCancellation,
@@ -48,6 +49,7 @@ export type JobKind =
 export type JobExecutor = (offer: JobOfferPayload) => Promise<void>;
 
 const executors = new Map<JobKind, JobExecutor>();
+const inFlightOffers = new Set<string>();
 let unlisten: UnlistenFn | null = null;
 
 export function registerJobExecutor(
@@ -57,26 +59,76 @@ export function registerJobExecutor(
 	executors.set(kind, executor);
 }
 
-export async function startJobCenterExecutorListener(): Promise<void> {
-	if (unlisten) return;
-	unlisten = await listen<{ job: JobOfferPayload }>("job:offer", (event) => {
-		const offer = event.payload.job;
-		const executor = executors.get(offer.kind);
-		if (!executor) {
-			logger.warn("no executor registered for job offer", {
-				kind: offer.kind,
-				jobId: offer.jobId,
-			});
-			return;
-		}
-		void executor(offer).catch((error) => {
+/**
+ * Run one offer, at most once per job id. A throwing executor is reported as
+ * `failed` so Rust frees the kind's concurrency slot now instead of waiting out
+ * its report timeout.
+ */
+function dispatchJobOffer(offer: JobOfferPayload): void {
+	const executor = executors.get(offer.kind);
+	if (!executor) {
+		logger.warn("no executor registered for job offer", {
+			kind: offer.kind,
+			jobId: offer.jobId,
+		});
+		return;
+	}
+	if (inFlightOffers.has(offer.jobId)) return;
+	inFlightOffers.add(offer.jobId);
+	void executor(offer)
+		.catch(async (error) => {
+			const message = error instanceof Error ? error.message : String(error);
 			logger.error("job executor failed", {
 				kind: offer.kind,
 				jobId: offer.jobId,
-				error: error instanceof Error ? error.message : String(error),
+				error: message,
 			});
+			await jobReport({
+				jobId: offer.jobId,
+				state: "failed",
+				error: message,
+			}).catch(() => undefined);
+		})
+		.finally(() => {
+			inFlightOffers.delete(offer.jobId);
 		});
+}
+
+/**
+ * Re-claim renderer-executed jobs Rust already moved to `running`: their
+ * `job:offer` was emitted while no listener was attached (first paint, webview
+ * reload), and Rust is still blocking on a report for them.
+ */
+async function claimRunningJobOffers(): Promise<void> {
+	try {
+		const jobs = await invokeApi<JobChangedSnapshot[]>(
+			"job_list",
+			{ args: {} },
+			{ fallback: "job list failed" },
+		);
+		for (const job of jobs ?? []) {
+			if (job.state !== "running" || !executors.has(job.kind)) continue;
+			dispatchJobOffer({
+				jobId: job.id,
+				kind: job.kind,
+				vaultPath: job.vaultPath,
+				paperPath: job.paperPath ?? null,
+				force: job.force ?? false,
+			});
+		}
+	} catch (error) {
+		logger.warn("claiming running job offers failed", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+	}
+}
+
+export async function startJobCenterExecutorListener(): Promise<void> {
+	if (unlisten) return;
+	unlisten = await listen<JobOfferPayload>("job:offer", (event) => {
+		dispatchJobOffer(event.payload);
 	});
+	await claimRunningJobOffers();
 }
 
 export function stopJobCenterExecutorListener(): void {
@@ -106,15 +158,17 @@ export async function jobReport(args: {
 	);
 }
 
-/** Snapshot shape of the `job:changed` event payload's `job` field. */
+/** Snapshot shape shared by the `job:changed` payload and `job_list`. */
 export type JobChangedSnapshot = {
 	id: string;
 	kind: JobKind;
 	state: JobState;
+	vaultPath: string;
 	paperPath?: string | null;
 	progress?: number | null;
 	phase?: string | null;
 	error?: string | null;
+	force?: boolean;
 };
 
 /**
@@ -206,7 +260,7 @@ function projectJobToBackgroundTask(job: JobChangedSnapshot): void {
 			releaseJobCancellation(job.id);
 			return;
 		case "cancelled":
-			updateBackgroundTask(job.id, { status: "cancelled" });
+			cancelBackgroundTask(job.id);
 			releaseJobCancellation(job.id);
 			return;
 	}
