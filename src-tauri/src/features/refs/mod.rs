@@ -354,8 +354,8 @@ pub fn spawn_parse_after_import(app: Option<&tauri::AppHandle>, vault: &Path, pa
                 .await;
             crate::features::jobs::emit_job_changed(&app, snapshot.clone());
             match center.try_start(&snapshot.id).await {
-                crate::features::jobs::StartOutcome::Started(..) => {
-                    center.run_parse_refs_job(app, snapshot.id).await;
+                crate::features::jobs::StartOutcome::Started(started) => {
+                    center.run_parse_refs_job(app, started).await;
                 }
                 crate::features::jobs::StartOutcome::Skipped(skipped) => {
                     crate::features::jobs::emit_job_changed(&app, skipped);

@@ -89,13 +89,7 @@ pub async fn job_parse_refs_enqueue(
     emit_job_changed(&app, snapshot.clone());
 
     match center.try_start(&snapshot.id).await {
-        StartOutcome::Started(..) => {
-            let job_id = snapshot.id.clone();
-            let runner = center.handle();
-            tauri::async_runtime::spawn(async move {
-                runner.run_parse_refs_job(app, job_id).await;
-            });
-        }
+        StartOutcome::Started(started) => center.spawn_runner(&app, started),
         StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
         StartOutcome::Waiting => {}
     }
@@ -125,13 +119,7 @@ pub async fn job_parse_body_enqueue(
     emit_job_changed(&app, snapshot.clone());
 
     match center.try_start(&snapshot.id).await {
-        StartOutcome::Started(..) => {
-            let job_id = snapshot.id.clone();
-            let runner = center.handle();
-            tauri::async_runtime::spawn(async move {
-                runner.run_parse_body_job(app, job_id).await;
-            });
-        }
+        StartOutcome::Started(started) => center.spawn_runner(&app, started),
         StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
         StartOutcome::Waiting => {}
     }
@@ -160,14 +148,7 @@ async fn enqueue_parse_body_backfill(
         .await;
     emit_job_changed(app, snapshot.clone());
     match center.try_start(&snapshot.id).await {
-        StartOutcome::Started(..) => {
-            let job_id = snapshot.id.clone();
-            let runner = center.handle();
-            let app2 = app.clone();
-            tauri::async_runtime::spawn(async move {
-                runner.run_parse_body_job(app2, job_id).await;
-            });
-        }
+        StartOutcome::Started(started) => center.spawn_runner(app, started),
         StartOutcome::Skipped(skipped) => emit_job_changed(app, skipped),
         StartOutcome::Waiting => {}
     }
@@ -186,14 +167,7 @@ async fn enqueue_parse_refs_backfill(
     let snapshot = center.enqueue_parse_refs(vault, path, lane, false).await;
     emit_job_changed(app, snapshot.clone());
     match center.try_start(&snapshot.id).await {
-        StartOutcome::Started(..) => {
-            let job_id = snapshot.id.clone();
-            let runner = center.handle();
-            let app2 = app.clone();
-            tauri::async_runtime::spawn(async move {
-                runner.run_parse_refs_job(app2, job_id).await;
-            });
-        }
+        StartOutcome::Started(started) => center.spawn_runner(app, started),
         StartOutcome::Skipped(skipped) => emit_job_changed(app, skipped),
         StartOutcome::Waiting => {}
     }
@@ -336,13 +310,7 @@ pub async fn job_layout_analyze_enqueue(
     emit_job_changed(&app, snapshot.clone());
 
     match center.try_start(&snapshot.id).await {
-        StartOutcome::Started(..) => {
-            let job_id = snapshot.id.clone();
-            let runner = center.handle();
-            tauri::async_runtime::spawn(async move {
-                runner.run_layout_analyze_job(app, job_id).await;
-            });
-        }
+        StartOutcome::Started(started) => center.spawn_runner(&app, started),
         StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
         StartOutcome::Waiting => {}
     }
@@ -377,13 +345,7 @@ pub async fn job_download_assets_enqueue(
     emit_job_changed(&app, snapshot.clone());
 
     match center.try_start(&snapshot.id).await {
-        StartOutcome::Started(..) => {
-            let job_id = snapshot.id.clone();
-            let runner = center.handle();
-            tauri::async_runtime::spawn(async move {
-                runner.run_download_assets_job(app, job_id).await;
-            });
-        }
+        StartOutcome::Started(started) => center.spawn_runner(&app, started),
         StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
         StartOutcome::Waiting => {}
     }

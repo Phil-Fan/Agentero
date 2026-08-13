@@ -81,6 +81,7 @@ pub struct JobSnapshot {
     pub progress: Option<f32>,
     pub phase: Option<String>,
     pub error: Option<String>,
+    pub force: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -89,12 +90,23 @@ pub struct JobChangedPayload {
     pub job: JobSnapshot,
 }
 
+/// Everything a runner needs to execute a job that `try_start` has already
+/// transitioned to `Running`. Runners must not re-mark the job themselves.
+#[derive(Debug)]
+pub struct StartedJob {
+    pub snapshot: JobSnapshot,
+    pub vault_path: PathBuf,
+    pub paper_path: String,
+    pub force: bool,
+    pub task_id: Option<String>,
+}
+
 /// Outcome of `JobCenter::try_start`: whether a `Queued` job could actually
 /// transition to `Running` given its `depends_on`/`dep_policy`.
 #[derive(Debug)]
 pub enum StartOutcome {
-    /// Dependencies satisfied; caller should spawn the matching `run_*_job`.
-    Started(JobSnapshot, PathBuf, String, bool, Option<String>),
+    /// Dependencies satisfied; caller should spawn the matching runner.
+    Started(StartedJob),
     /// Dependencies not yet settled; the job stays `Queued` until woken.
     Waiting,
     /// Dependencies settled but unsatisfiable under `DepPolicy::AllSucceeded`;
@@ -136,6 +148,7 @@ impl Job {
             progress: self.progress,
             phase: self.phase.clone(),
             error: self.error.clone(),
+            force: self.force,
         }
     }
 }
@@ -262,10 +275,7 @@ fn deps_readiness(inner: &JobCenterInner, job: &Job) -> DepsReadiness {
     }
 }
 
-fn mark_running_locked(
-    inner: &mut JobCenterInner,
-    id: &JobId,
-) -> Option<(JobSnapshot, PathBuf, String, bool, Option<String>)> {
+fn mark_running_locked(inner: &mut JobCenterInner, id: &JobId) -> Option<StartedJob> {
     let job = inner.jobs.get_mut(id)?;
     if job.state != JobState::Queued {
         return None;
@@ -282,7 +292,13 @@ fn mark_running_locked(
     let kind = job.kind;
     inner.lanes.remove(id);
     *inner.running_by_kind.entry(kind).or_insert(0) += 1;
-    Some((snapshot, vault_path, paper_path, force, task_id))
+    Some(StartedJob {
+        snapshot,
+        vault_path,
+        paper_path,
+        force,
+        task_id,
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -615,9 +631,7 @@ impl JobCenter {
                     return StartOutcome::Waiting;
                 }
                 match mark_running_locked(&mut inner, &id) {
-                    Some((snapshot, vault, path, force, task_id)) => {
-                        StartOutcome::Started(snapshot, vault, path, force, task_id)
-                    }
+                    Some(started) => StartOutcome::Started(started),
                     None => StartOutcome::Waiting,
                 }
             }
@@ -627,7 +641,7 @@ impl JobCenter {
     /// Re-evaluate every `Queued` job whose `depends_on` includes `finished_id`,
     /// now that it has settled. Callers spawn the returned `Started` jobs and
     /// emit `job:changed` for `Skipped` ones; `Waiting` entries are left queued.
-    async fn wake_dependents(&self, finished_id: &str) -> Vec<(JobKind, StartOutcome)> {
+    async fn wake_dependents(&self, finished_id: &str) -> Vec<StartOutcome> {
         let finished = JobId(finished_id.to_string());
         let candidate_ids: Vec<JobId> = {
             let inner = self.inner.lock().await;
@@ -640,12 +654,7 @@ impl JobCenter {
         };
         let mut outcomes = Vec::with_capacity(candidate_ids.len());
         for id in candidate_ids {
-            let kind = {
-                let inner = self.inner.lock().await;
-                inner.jobs.get(&id).map(|job| job.kind)
-            };
-            let Some(kind) = kind else { continue };
-            outcomes.push((kind, self.try_start(&id.0).await));
+            outcomes.push(self.try_start(&id.0).await);
         }
         outcomes
     }
@@ -656,13 +665,17 @@ impl JobCenter {
     pub fn run_parse_refs_job(
         self,
         app: tauri::AppHandle,
-        job_id: String,
+        started: StartedJob,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
         Box::pin(async move {
-            let started = self.mark_running(&job_id).await;
-            let Some((snapshot, vault, path, force, _)) = started else {
-                return;
-            };
+            let StartedJob {
+                snapshot,
+                vault_path: vault,
+                paper_path: path,
+                force,
+                ..
+            } = started;
+            let job_id = snapshot.id.clone();
             emit_job_changed(&app, snapshot);
 
             let result = crate::features::refs::parse_paper_refs(&vault, &path, true, force).await;
@@ -700,13 +713,17 @@ impl JobCenter {
     pub fn run_parse_body_job(
         self,
         app: tauri::AppHandle,
-        job_id: String,
+        started: StartedJob,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
         Box::pin(async move {
-            let started = self.mark_running(&job_id).await;
-            let Some((snapshot, vault, path, force, task_id)) = started else {
-                return;
-            };
+            let StartedJob {
+                snapshot,
+                vault_path: vault,
+                paper_path: path,
+                force,
+                task_id,
+            } = started;
+            let job_id = snapshot.id.clone();
             emit_job_changed(&app, snapshot);
 
             let task_id = task_id.unwrap_or_else(|| job_id.clone());
@@ -771,13 +788,17 @@ impl JobCenter {
     pub fn run_layout_analyze_job(
         self,
         app: tauri::AppHandle,
-        job_id: String,
+        started: StartedJob,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
         Box::pin(async move {
-            let started = self.mark_running(&job_id).await;
-            let Some((snapshot, vault_path, paper_path, force, _)) = started else {
-                return;
-            };
+            let StartedJob {
+                snapshot,
+                vault_path,
+                paper_path,
+                force,
+                ..
+            } = started;
+            let job_id = snapshot.id.clone();
             emit_job_changed(&app, snapshot);
 
             let offer = JobOfferPayload {
@@ -837,13 +858,17 @@ impl JobCenter {
     pub fn run_download_assets_job(
         self,
         app: tauri::AppHandle,
-        job_id: String,
+        started: StartedJob,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
         Box::pin(async move {
-            let started = self.mark_running(&job_id).await;
-            let Some((snapshot, vault, path, _force, task_id)) = started else {
-                return;
-            };
+            let StartedJob {
+                snapshot,
+                vault_path: vault,
+                paper_path: path,
+                task_id,
+                ..
+            } = started;
+            let job_id = snapshot.id.clone();
             emit_job_changed(&app, snapshot);
 
             let task_id = task_id.unwrap_or_else(|| job_id.clone());
@@ -870,26 +895,16 @@ impl JobCenter {
                             .enqueue_parse_body(&vault, &path, JobLane::Normal, false, None)
                             .await;
                         emit_job_changed(&app, snap.clone());
-                        if let StartOutcome::Started(..) = self.try_start(&snap.id).await {
-                            let runner = self.handle();
-                            let app2 = app.clone();
-                            let dep_id = snap.id.clone();
-                            tauri::async_runtime::spawn(async move {
-                                runner.run_parse_body_job(app2, dep_id).await;
-                            });
+                        if let StartOutcome::Started(started) = self.try_start(&snap.id).await {
+                            self.spawn_runner(&app, started);
                         }
                     }
                     let lsnap = self
                         .enqueue_layout_analyze(&vault, &path, JobLane::Normal, false)
                         .await;
                     emit_job_changed(&app, lsnap.clone());
-                    if let StartOutcome::Started(..) = self.try_start(&lsnap.id).await {
-                        let runner = self.handle();
-                        let app2 = app.clone();
-                        let dep_id = lsnap.id.clone();
-                        tauri::async_runtime::spawn(async move {
-                            runner.run_layout_analyze_job(app2, dep_id).await;
-                        });
+                    if let StartOutcome::Started(started) = self.try_start(&lsnap.id).await {
+                        self.spawn_runner(&app, started);
                     }
                     self.finish(
                         &job_id,
@@ -918,30 +933,27 @@ impl JobCenter {
         })
     }
 
+    /// Spawn the runner for a job `try_start` just moved to `Running`.
+    pub fn spawn_runner(&self, app: &tauri::AppHandle, started: StartedJob) {
+        let center = self.handle();
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            match started.snapshot.kind {
+                JobKind::ParseRefs => center.run_parse_refs_job(app, started).await,
+                JobKind::ParseBody => center.run_parse_body_job(app, started).await,
+                JobKind::LayoutAnalyze => center.run_layout_analyze_job(app, started).await,
+                JobKind::DownloadAssets => center.run_download_assets_job(app, started).await,
+                _ => {}
+            }
+        });
+    }
+
     /// Wake `Queued` jobs depending on `finished_id` and spawn any that became
     /// runnable; emits `job:changed` for jobs that transitioned to `Skipped`.
     async fn wake_and_spawn_dependents(&self, app: &tauri::AppHandle, finished_id: &str) {
-        for (kind, outcome) in self.wake_dependents(finished_id).await {
+        for outcome in self.wake_dependents(finished_id).await {
             match outcome {
-                StartOutcome::Started(snapshot, ..) => {
-                    let dep_id = snapshot.id.clone();
-                    emit_job_changed(app, snapshot);
-                    let app2 = app.clone();
-                    let center2 = self.handle();
-                    tauri::async_runtime::spawn(async move {
-                        match kind {
-                            JobKind::ParseRefs => center2.run_parse_refs_job(app2, dep_id).await,
-                            JobKind::ParseBody => center2.run_parse_body_job(app2, dep_id).await,
-                            JobKind::LayoutAnalyze => {
-                                center2.run_layout_analyze_job(app2, dep_id).await
-                            }
-                            JobKind::DownloadAssets => {
-                                center2.run_download_assets_job(app2, dep_id).await
-                            }
-                            _ => {}
-                        }
-                    });
-                }
+                StartOutcome::Started(started) => self.spawn_runner(app, started),
                 StartOutcome::Skipped(snapshot) => emit_job_changed(app, snapshot),
                 StartOutcome::Waiting => {}
             }
@@ -973,50 +985,23 @@ impl JobCenter {
                         if deps_readiness(&inner, job) != DepsReadiness::Ready {
                             continue;
                         }
-                        found = Some((kind, id.clone()));
+                        found = Some(id.clone());
                         break 'outer;
                     }
                 }
                 found
             };
-            let Some((kind, id)) = candidate else {
+            let Some(id) = candidate else {
                 return;
             };
             match self.try_start(&id.0).await {
-                StartOutcome::Started(snapshot, ..) => {
-                    let job_id = snapshot.id.clone();
-                    emit_job_changed(app, snapshot);
-                    let app2 = app.clone();
-                    let center2 = self.handle();
-                    tauri::async_runtime::spawn(async move {
-                        match kind {
-                            JobKind::ParseRefs => center2.run_parse_refs_job(app2, job_id).await,
-                            JobKind::ParseBody => center2.run_parse_body_job(app2, job_id).await,
-                            JobKind::LayoutAnalyze => {
-                                center2.run_layout_analyze_job(app2, job_id).await
-                            }
-                            JobKind::DownloadAssets => {
-                                center2.run_download_assets_job(app2, job_id).await
-                            }
-                            _ => {}
-                        }
-                    });
-                }
+                StartOutcome::Started(started) => self.spawn_runner(app, started),
                 StartOutcome::Skipped(snapshot) => emit_job_changed(app, snapshot),
                 // Slot filled between the scan and try_start, or not startable;
                 // stop draining and let the next finish re-try.
                 StartOutcome::Waiting => return,
             }
         }
-    }
-
-    async fn mark_running(
-        &self,
-        job_id: &str,
-    ) -> Option<(JobSnapshot, PathBuf, String, bool, Option<String>)> {
-        let mut inner = self.inner.lock().await;
-        let id = JobId(job_id.to_string());
-        mark_running_locked(&mut inner, &id)
     }
 
     async fn finish(
@@ -1223,8 +1208,8 @@ pub fn spawn_parse_body_after_assets(
             .await;
         emit_job_changed(&app, snapshot.clone());
         match center.try_start(&snapshot.id).await {
-            StartOutcome::Started(..) => {
-                center.run_parse_body_job(app, snapshot.id).await;
+            StartOutcome::Started(started) => {
+                center.run_parse_body_job(app, started).await;
             }
             StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
             StartOutcome::Waiting => {}
@@ -1509,9 +1494,11 @@ mod tests {
         let woken = center.wake_dependents(&dep.0).await;
 
         assert_eq!(woken.len(), 1);
-        assert_eq!(woken[0].0, JobKind::ParseBody);
-        match &woken[0].1 {
-            StartOutcome::Started(snapshot, ..) => assert_eq!(snapshot.id, dependent.0),
+        match &woken[0] {
+            StartOutcome::Started(started) => {
+                assert_eq!(started.snapshot.kind, JobKind::ParseBody);
+                assert_eq!(started.snapshot.id, dependent.0);
+            }
             other => panic!("expected Started, got {other:?}"),
         }
         assert_eq!(
@@ -1549,7 +1536,7 @@ mod tests {
         let woken = center.wake_dependents(&dep.0).await;
 
         assert_eq!(woken.len(), 1);
-        match &woken[0].1 {
+        match &woken[0] {
             StartOutcome::Skipped(snapshot) => assert_eq!(snapshot.state, JobState::Skipped),
             other => panic!("expected Skipped, got {other:?}"),
         }
