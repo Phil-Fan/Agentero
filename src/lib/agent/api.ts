@@ -16,6 +16,7 @@ export type AgentTemplate =
 	| "grok-build"
 	| "pi"
 	| "dsh"
+	| "kimi-code"
 	| "custom";
 
 export type CatalogAcpStatus = "missing" | "not-probed" | "ready" | "failed";
@@ -809,7 +810,7 @@ export function saveModelCatalog(
 
 export function isAgentAuthFailure(error?: string | null): boolean {
 	if (!error) return false;
-	return /invalid_grant|failed to authenticate|authentication failed|not authenticated|login required|unauthenticated/i.test(
+	return /invalid_grant|failed to authenticate|authentication failed|not authenticated|login required|unauthenticated|authentication required|authrequired|not logged in/i.test(
 		error,
 	);
 }

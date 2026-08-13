@@ -13,6 +13,7 @@ describe("agentLogoKeyForTemplate", () => {
 		expect(agentLogoKeyForTemplate("grok-build")).toBe("grok-build");
 		expect(agentLogoKeyForTemplate("pi")).toBe("pi");
 		expect(agentLogoKeyForTemplate("dsh")).toBe("dsh");
+		expect(agentLogoKeyForTemplate("kimi-code")).toBe("kimi-code");
 	});
 
 	it("falls back to the custom logo for unknown or empty templates", () => {

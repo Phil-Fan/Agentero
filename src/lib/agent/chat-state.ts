@@ -330,6 +330,7 @@ function catalogTemplateFromId(templateId: string): AgentTemplate | undefined {
 		case "grok-build":
 		case "pi":
 		case "dsh":
+		case "kimi-code":
 		case "custom":
 			return templateId;
 		default:

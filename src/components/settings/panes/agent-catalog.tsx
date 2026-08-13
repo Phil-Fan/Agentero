@@ -111,6 +111,7 @@ function catalogTemplateFromId(templateId: string): AgentTemplate {
 		case "grok-build":
 		case "pi":
 		case "dsh":
+		case "kimi-code":
 			return templateId;
 		default:
 			return "custom";

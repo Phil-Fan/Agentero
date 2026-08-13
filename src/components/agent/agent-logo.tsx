@@ -21,6 +21,7 @@ export type AgentLogoKey =
 	| "grok-build"
 	| "pi"
 	| "dsh"
+	| "kimi-code"
 	| "custom";
 
 export function agentLogoKeyForTemplate(
@@ -37,6 +38,7 @@ export function agentLogoKeyForTemplate(
 		case "grok-build":
 		case "pi":
 		case "dsh":
+		case "kimi-code":
 			return template;
 		default:
 			return "custom";
@@ -122,6 +124,12 @@ export function AgentLogo({
 			return (
 				<span className={cn(shellClass, "text-[#4D6BFE]")} aria-hidden>
 					<SiDeepseek className={iconClass} />
+				</span>
+			);
+		case "kimi-code":
+			return (
+				<span className={shellClass} aria-hidden>
+					<KimiMark className={iconClass} />
 				</span>
 			);
 		case "qodercli":
@@ -211,6 +219,24 @@ function PiMark(props: ComponentProps<"svg">) {
 			<title>Pi</title>
 			<path d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z" />
 			<path d="M517.36 400H634.72V634.72H517.36Z" />
+		</svg>
+	);
+}
+
+/** Kimi logo: near-black rounded square, white geometric "k", blue dot (#1783FF). */
+function KimiMark(props: ComponentProps<"svg">) {
+	return (
+		<svg viewBox="0 0 24 24" fill="none" aria-hidden {...props}>
+			<title>Kimi Code</title>
+			<rect x="1" y="1" width="22" height="22" rx="5.5" fill="#0A0A0A" />
+			<path
+				d="M7.6 5.9V18.1M9.9 10.7L15 6.3M9.9 13.9L16.2 18.1"
+				stroke="#FFFFFF"
+				strokeWidth="2.5"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+			<circle cx="16.9" cy="5.1" r="1.7" fill="#1783FF" />
 		</svg>
 	);
 }
