@@ -7,7 +7,7 @@
  */
 
 import { FolderOpen } from "lucide-react";
-import { useEffect } from "react";
+import { Fragment, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { OnboardingRoot } from "@/components/onboarding/onboarding-root";
 import { AppDialogs } from "@/components/shell/app-dialogs";
@@ -382,39 +382,43 @@ export default function App() {
 						orientation="horizontal"
 						className="h-full min-h-0 flex-1 overflow-hidden"
 					>
-						<ResizablePanel
-							id="sidebar"
-							panelRef={sidebarPanelRef}
-							defaultSize={SIDEBAR_DEFAULT_PX}
-							minSize={160}
-							maxSize="30%"
-							collapsible
-							collapsedSize={0}
-							// Keep pixel width when the right rail or Notes column toggles.
-							groupResizeBehavior="preserve-pixel-size"
-							className="min-h-0 overflow-hidden"
-							onResize={(size) => {
-								// Programmatic collapse/expand transition in flight.
-								if (animatingRailRef.current === "left") return;
-								// Only mark collapsed after a real collapse, never mid-drag.
-								if (size.inPixels <= 1) setSidebarCollapsedState(true);
-								else if (size.inPixels >= 80) {
-									setSidebarCollapsedState(false);
-									leftWidthPxRef.current = size.inPixels;
-								}
-							}}
-						>
-							<aside
-								ref={sidebarAsideRef}
-								className="flex h-full min-h-0 flex-col overflow-hidden bg-muted/20"
-							>
-								<VaultSidebar />
-							</aside>
-						</ResizablePanel>
+						{vaultPath ? (
+							<Fragment>
+								<ResizablePanel
+									id="sidebar"
+									panelRef={sidebarPanelRef}
+									defaultSize={SIDEBAR_DEFAULT_PX}
+									minSize={160}
+									maxSize="30%"
+									collapsible
+									collapsedSize={0}
+									// Keep pixel width when the right rail or Notes column toggles.
+									groupResizeBehavior="preserve-pixel-size"
+									className="min-h-0 overflow-hidden"
+									onResize={(size) => {
+										// Programmatic collapse/expand transition in flight.
+										if (animatingRailRef.current === "left") return;
+										// Only mark collapsed after a real collapse, never mid-drag.
+										if (size.inPixels <= 1) setSidebarCollapsedState(true);
+										else if (size.inPixels >= 80) {
+											setSidebarCollapsedState(false);
+											leftWidthPxRef.current = size.inPixels;
+										}
+									}}
+								>
+									<aside
+										ref={sidebarAsideRef}
+										className="flex h-full min-h-0 flex-col overflow-hidden bg-muted/20"
+									>
+										<VaultSidebar />
+									</aside>
+								</ResizablePanel>
 
-						{sidebarCollapsed ? null : (
-							<ResizableHandle onPointerDown={cancelRailAnimation} />
-						)}
+								{sidebarCollapsed ? null : (
+									<ResizableHandle onPointerDown={cancelRailAnimation} />
+								)}
+							</Fragment>
+						) : null}
 
 						<ResizablePanel
 							id="source"
