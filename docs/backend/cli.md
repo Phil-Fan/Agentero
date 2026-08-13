@@ -57,7 +57,8 @@ Mark id 是 nanoid，字母表含 `-`，约 1/64 的 id 以 `-` 开头。`mark g
 正文句子高亮 / `translate` 命令见规划 [#170](https://github.com/poco-ai/Agentero/issues/170) 与 [mark-cli-roadmap.md](../development/mark-cli-roadmap.md)。
 
 ```bash
-# 首次/干净树：tauri-build 需要 externalBin 占位，否则 build-script 失败
+# CLI 以 `default-features = false` 依赖 `agentero_lib`，headless 构建不走 tauri-build，无需 externalBin 占位。
+# 但桌面 `pnpm tauri dev` / `pnpm tauri build` 仍要求 src-tauri/binaries 存在，首次/干净树需先占位：
 pnpm cli:bundle:stub   # 或 pnpm cli:bundle
 cargo build -p agentero-cli
 cargo run -p agentero-cli -- vault which --json
