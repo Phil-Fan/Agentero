@@ -279,6 +279,36 @@ impl AgentRegistry {
         Ok(())
     }
 
+    /// Remove the registry entry for a catalog template, matched by the same
+    /// predicate as `scan_catalog` (template id, or command+args for entries
+    /// created before canonical ids). Returns whether anything was removed.
+    pub fn remove_catalog_template(&self, template_id: &str) -> Result<bool, AppError> {
+        let Some(info) = template_info(template_id) else {
+            return Ok(false);
+        };
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| AppError::message("agent registry lock poisoned"))?;
+        let before = guard.agents.len();
+        guard.agents.retain(|a| {
+            !(a.template.as_str() == template_id
+                || (a.command == info.command && a.args == info.args))
+        });
+        if guard.agents.len() == before {
+            return Ok(false);
+        }
+        if guard
+            .default_id
+            .as_deref()
+            .is_some_and(|d| !guard.agents.iter().any(|a| a.id == d))
+        {
+            guard.default_id = guard.agents.first().map(|a| a.id.clone());
+        }
+        persist(&self.path, &guard)?;
+        Ok(true)
+    }
+
     pub fn discover(&self, id: Option<&str>) -> Result<Vec<AgentDescriptor>, AppError> {
         let mut guard = self
             .inner

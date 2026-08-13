@@ -51,6 +51,25 @@ pub fn dsh_launcher_dir() -> std::path::PathBuf {
     }
 }
 
+/// Default install directory of the official Kimi Code installer (single
+/// binary, written into the shell rc). Used for uninstall cleanup.
+pub fn kimi_launcher_dir() -> std::path::PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        let base = std::env::var_os("USERPROFILE")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("C:\\"));
+        base.join(".kimi-code")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let home = std::env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_default();
+        home.join(".kimi-code")
+    }
+}
+
 /// Home-level npm root shim: if the user has `~/package.json`, npm walks up
 /// from the launcher dir and lands packages in `~/node_modules` (off PATH).
 pub fn dsh_home_entrypoint() -> Option<std::path::PathBuf> {

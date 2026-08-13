@@ -1,4 +1,4 @@
-//! Silent install / update for catalog Agent CLIs.
+//! Silent install / update / uninstall for catalog Agent CLIs.
 //!
 //! Ported from CC Switch's tool-lifecycle patterns (official installer first,
 //! npm fallback; login-shell PATH for GUI apps; no `curl | bash` pipes).
@@ -8,10 +8,11 @@
 use crate::features::agent::discover::path_entries;
 use crate::features::agent::discover::resolve_command;
 use crate::features::agent::templates::{
-    dsh_entrypoint_exists, dsh_launcher_dir, template_info, CLAUDE_ACP_INSTALL_COMMAND,
-    PI_ACP_INSTALL_COMMAND, PI_HOST_INSTALL_COMMAND,
+    dsh_entrypoint_exists, dsh_launcher_dir, kimi_launcher_dir, template_info,
+    CLAUDE_ACP_INSTALL_COMMAND, PI_ACP_INSTALL_COMMAND, PI_HOST_INSTALL_COMMAND,
 };
 use serde::Serialize;
+use std::fs;
 use std::io::{self, Read};
 use std::process::{Command, Output, Stdio};
 use std::sync::{Mutex, MutexGuard, OnceLock, TryLockError};
@@ -22,7 +23,7 @@ use std::{
 use tauri::{AppHandle, Emitter};
 
 #[cfg(target_os = "windows")]
-use std::fs::{self, OpenOptions};
+use std::fs::OpenOptions;
 #[cfg(target_os = "windows")]
 use std::io::Write;
 #[cfg(target_os = "windows")]
@@ -179,7 +180,12 @@ fn run_dsh_lifecycle(
     if matches!(action, ToolLifecycleAction::Install) && reachable {
         return Ok(());
     }
-    run_tool_lifecycle_silently(&dsh_npm_install_command(), app, task_id)
+    run_tool_lifecycle_silently(
+        &dsh_npm_install_command(),
+        app,
+        task_id,
+        "agent-lifecycle-install",
+    )
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -227,6 +233,7 @@ const KIMI_INSTALL_WINDOWS_SCRIPT: &str = "irm https://code.kimi.com/kimi-code/i
 pub enum ToolLifecycleAction {
     Install,
     Update,
+    Uninstall,
 }
 
 impl ToolLifecycleAction {
@@ -234,6 +241,7 @@ impl ToolLifecycleAction {
         match value {
             "install" => Ok(Self::Install),
             "update" => Ok(Self::Update),
+            "uninstall" => Ok(Self::Uninstall),
             _ => Err(format!("unsupported tool action: {value}")),
         }
     }
@@ -243,8 +251,122 @@ pub fn supports_lifecycle(template_id: &str) -> bool {
     LIFECYCLE_TEMPLATES.contains(&template_id)
 }
 
-/// Build and run install/update for a catalog template. Host decides host-vs-adapter
-/// scope from current PATH state (not from free-form UI strings).
+/// What a silent uninstall would remove for a catalog template.
+///
+/// `npm_commands` are complete `npm uninstall` invocations (including the
+/// `--prefix` mirroring install); `dirs` are Agentero-managed directories.
+/// `None` means the template has no managed uninstall (e.g. hermes installs
+/// via an official script we cannot reverse).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UninstallInfo {
+    pub npm_commands: Vec<String>,
+    pub dirs: Vec<String>,
+}
+
+pub fn uninstall_info(template_id: &str) -> Option<UninstallInfo> {
+    #[cfg(target_os = "windows")]
+    let claude_acp = "npm uninstall -g @agentclientprotocol/claude-agent-acp".to_string();
+    #[cfg(not(target_os = "windows"))]
+    let claude_acp =
+        "npm uninstall -g @agentclientprotocol/claude-agent-acp --prefix \"$HOME/.local\""
+            .to_string();
+    #[cfg(target_os = "windows")]
+    let pi_acp = "npm uninstall -g pi-acp".to_string();
+    #[cfg(not(target_os = "windows"))]
+    let pi_acp = "npm uninstall -g pi-acp --prefix \"$HOME/.local\"".to_string();
+
+    let npm_commands = match template_id {
+        "opencode" => vec!["npm uninstall -g opencode-ai".to_string()],
+        "openclaw" => vec!["npm uninstall -g openclaw".to_string()],
+        "claude-acp" => vec![
+            "npm uninstall -g @anthropic-ai/claude-code".to_string(),
+            claude_acp,
+        ],
+        "codex-acp" => vec![
+            "npm uninstall -g @openai/codex".to_string(),
+            "npm uninstall -g @agentclientprotocol/codex-acp".to_string(),
+        ],
+        "gemini" => vec!["npm uninstall -g @google/gemini-cli".to_string()],
+        "pi" => vec![
+            "npm uninstall -g @earendil-works/pi-coding-agent".to_string(),
+            pi_acp,
+        ],
+        "grok-build" => vec!["npm uninstall -g @xai-official/grok".to_string()],
+        "dsh" => Vec::new(),
+        "kimi-code" => vec!["npm uninstall -g @moonshot-ai/kimi-code".to_string()],
+        // hermes: official-script-only install, nothing we can reverse.
+        _ => return None,
+    };
+    let dirs = match template_id {
+        "dsh" => vec![dsh_launcher_dir().display().to_string()],
+        "kimi-code" => vec![kimi_launcher_dir().display().to_string()],
+        _ => Vec::new(),
+    };
+    Some(UninstallInfo { npm_commands, dirs })
+}
+
+/// Chain best-effort uninstall commands: each failure is non-fatal (idempotent
+/// uninstall, packages may be absent or root-owned). Unix `|| true`; Windows
+/// `|| echo skip` (cmd has no `true`, and `exit /b 0` would abort the bat).
+fn best_effort_chain(cmds: &[String]) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        cmds.iter()
+            .map(|c| format!("{c} || echo skip"))
+            .collect::<Vec<_>>()
+            .join("\r\n")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        cmds.iter()
+            .map(|c| format!("{c} || true"))
+            .collect::<Vec<_>>()
+            .join("; ")
+    }
+}
+
+fn remove_managed_dir(dir: &std::path::Path) -> Result<(), String> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    fs::remove_dir_all(dir).map_err(|e| format!("failed to remove {}: {e}", dir.display()))
+}
+
+/// Uninstall path: npm uninstall chains plus managed directory removal.
+/// Must bypass `run_dsh_lifecycle` — its `prepare_dsh_launcher` recreates the
+/// launcher dir.
+fn run_template_uninstall(
+    template_id: &str,
+    app: Option<&AppHandle>,
+    task_id: Option<&str>,
+) -> Result<(), String> {
+    let Some(info) = uninstall_info(template_id) else {
+        return Ok(());
+    };
+    if template_id == "dsh" {
+        return remove_managed_dir(&dsh_launcher_dir());
+    }
+    if !info.npm_commands.is_empty() {
+        // A fully `|| true` chain would silently succeed when npm is missing.
+        if resolve_command("npm").is_none() {
+            return Err("npm is not available on PATH; cannot uninstall npm packages".to_string());
+        }
+        run_tool_lifecycle_silently(
+            &best_effort_chain(&info.npm_commands),
+            app,
+            task_id,
+            "agent-lifecycle-uninstall",
+        )?;
+    }
+    for dir in &info.dirs {
+        remove_managed_dir(std::path::Path::new(dir))?;
+    }
+    Ok(())
+}
+
+/// Build and run install/update/uninstall for a catalog template. Host decides
+/// host-vs-adapter scope from current PATH state (not from free-form UI strings).
 pub fn run_template_lifecycle(
     template_id: &str,
     action: ToolLifecycleAction,
@@ -259,6 +381,10 @@ pub fn run_template_lifecycle(
     }
     let info = template_info(template_id)
         .ok_or_else(|| format!("unknown catalog template: {template_id}"))?;
+
+    if matches!(action, ToolLifecycleAction::Uninstall) {
+        return run_template_uninstall(template_id, app, task_id);
+    }
 
     // dsh is a project-dir npm install (not on PATH): Rust writes cordis.yml
     // and the shell only runs the pinned `npm i` inside the launcher dir.
@@ -309,6 +435,10 @@ pub fn run_template_lifecycle(
             acp_present,
             needs_separate_adapter,
         )?,
+        // Diverted to `run_template_uninstall` above.
+        ToolLifecycleAction::Uninstall => {
+            unreachable!("uninstall handled before command selection")
+        }
     };
 
     if command.trim().is_empty() {
@@ -321,7 +451,7 @@ pub fn run_template_lifecycle(
         action,
         command.len()
     );
-    run_tool_lifecycle_silently(&command, app, task_id)
+    run_tool_lifecycle_silently(&command, app, task_id, "agent-lifecycle-install")
 }
 
 fn update_command(
@@ -626,10 +756,11 @@ fn run_tool_lifecycle_silently(
     command_line: &str,
     app: Option<&AppHandle>,
     task_id: Option<&str>,
+    phase: &str,
 ) -> Result<(), String> {
     let _guard = acquire_lifecycle_lock(app, task_id)?;
     check_lifecycle_cancelled(task_id)?;
-    emit_lifecycle_progress(app, task_id, "agent-lifecycle-install", Some(5));
+    emit_lifecycle_progress(app, task_id, phase, Some(5));
 
     #[cfg(not(target_os = "windows"))]
     {
@@ -640,7 +771,7 @@ fn run_tool_lifecycle_silently(
             let inherited = std::env::var("PATH").unwrap_or_default();
             cmd.env("PATH", merge_path_segments(&login_path, &inherited));
         }
-        let output = run_command_with_cancellation(cmd, app, task_id)
+        let output = run_command_with_cancellation(cmd, app, task_id, phase)
             .map_err(format_lifecycle_process_error)?;
         check_lifecycle_cancelled(task_id)?;
         finish_lifecycle_output(&output)
@@ -657,7 +788,7 @@ fn run_tool_lifecycle_silently(
             .arg(&bat_file)
             .env("PATH", merged_path)
             .creation_flags(CREATE_NO_WINDOW);
-        let output = run_command_with_cancellation(cmd, app, task_id);
+        let output = run_command_with_cancellation(cmd, app, task_id, phase);
         let _ = fs::remove_file(&bat_file);
         check_lifecycle_cancelled(task_id)?;
         finish_lifecycle_output(&output.map_err(format_lifecycle_process_error)?)
@@ -699,6 +830,7 @@ fn run_command_with_cancellation(
     mut command: Command,
     app: Option<&AppHandle>,
     task_id: Option<&str>,
+    phase: &str,
 ) -> io::Result<Output> {
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = command.spawn()?;
@@ -733,12 +865,7 @@ fn run_command_with_cancellation(
         }
         if last_emit.elapsed() >= Duration::from_millis(750) {
             let elapsed_secs = started_at.elapsed().as_secs().min(30) as u8;
-            emit_lifecycle_progress(
-                app,
-                task_id,
-                "agent-lifecycle-install",
-                Some((5 + elapsed_secs * 2).min(65)),
-            );
+            emit_lifecycle_progress(app, task_id, phase, Some((5 + elapsed_secs * 2).min(65)));
             last_emit = Instant::now();
         }
         thread::sleep(Duration::from_millis(100));
@@ -1022,5 +1149,100 @@ mod tests {
         assert!(bat.starts_with("@echo off\r\nchcp 65001 >nul\r\n"));
         assert!(bat.contains("call npm i -g foo\r\nif errorlevel 1 exit /b %errorlevel%"));
         assert!(bat.contains("powershell -NoProfile test\r\nif errorlevel 1 exit /b %errorlevel%"));
+    }
+
+    #[test]
+    fn parse_accepts_uninstall() {
+        assert!(matches!(
+            ToolLifecycleAction::parse("uninstall"),
+            Ok(ToolLifecycleAction::Uninstall)
+        ));
+        assert!(ToolLifecycleAction::parse("remove").is_err());
+    }
+
+    #[test]
+    fn uninstall_info_covers_lifecycle_templates() {
+        for id in LIFECYCLE_TEMPLATES {
+            if *id == "hermes" {
+                assert!(uninstall_info(id).is_none(), "{id}");
+                continue;
+            }
+            let info = uninstall_info(id).expect(id);
+            assert!(
+                !info.npm_commands.is_empty() || !info.dirs.is_empty(),
+                "{id}"
+            );
+            for cmd in &info.npm_commands {
+                assert!(!cmd.contains("@latest"), "{id}: {cmd}");
+            }
+        }
+        assert!(uninstall_info("qodercli").is_none());
+        assert!(uninstall_info("custom").is_none());
+    }
+
+    #[test]
+    fn uninstall_commands_mirror_install_packages() {
+        let opencode = uninstall_info("opencode").unwrap();
+        assert!(opencode.npm_commands[0].contains("opencode-ai"));
+        let codex = uninstall_info("codex-acp").unwrap();
+        assert!(codex
+            .npm_commands
+            .iter()
+            .any(|c| c.contains("@openai/codex")));
+        assert!(codex.npm_commands.iter().any(|c| c.contains("codex-acp")));
+        let claude = uninstall_info("claude-acp").unwrap();
+        assert!(claude
+            .npm_commands
+            .iter()
+            .any(|c| c.contains("@anthropic-ai/claude-code")));
+        assert!(uninstall_info("kimi-code")
+            .unwrap()
+            .npm_commands
+            .iter()
+            .any(|c| c.contains("@moonshot-ai/kimi-code")));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn uninstall_prefix_mirrors_install() {
+        let claude = uninstall_info("claude-acp").unwrap();
+        assert!(claude
+            .npm_commands
+            .iter()
+            .any(|c| c.contains("--prefix \"$HOME/.local\"")));
+        let pi = uninstall_info("pi").unwrap();
+        assert!(pi
+            .npm_commands
+            .iter()
+            .any(|c| c.contains("--prefix \"$HOME/.local\"")));
+    }
+
+    #[test]
+    fn uninstall_dirs_for_managed_installs() {
+        let dsh = uninstall_info("dsh").unwrap();
+        assert!(dsh.npm_commands.is_empty());
+        assert_eq!(dsh.dirs, vec![dsh_launcher_dir().display().to_string()]);
+        let kimi = uninstall_info("kimi-code").unwrap();
+        assert_eq!(kimi.dirs, vec![kimi_launcher_dir().display().to_string()]);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn best_effort_chain_windows_echo() {
+        let chain = best_effort_chain(&["npm uninstall -g a".to_string()]);
+        assert_eq!(chain, "npm uninstall -g a || echo skip");
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn best_effort_chain_unix_true() {
+        let chain = best_effort_chain(&[
+            "npm uninstall -g a".to_string(),
+            "npm uninstall -g b".to_string(),
+        ]);
+        assert_eq!(
+            chain,
+            "npm uninstall -g a || true; npm uninstall -g b || true"
+        );
     }
 }

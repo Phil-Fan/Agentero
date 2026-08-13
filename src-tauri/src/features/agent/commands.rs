@@ -205,17 +205,19 @@ pub async fn agent_probe(
     Ok(ApiResult::ok(result))
 }
 
-/// Silently install or update a catalog Agent CLI (and ACP adapter when needed).
+/// Silently install, update or uninstall a catalog Agent CLI (and ACP adapter
+/// when needed). Uninstall also removes the registry entry on success.
 ///
 /// Replaces the old terminal confirm-then-run helper. Platform scripts mirror
 /// CC Switch: official installer first, npm fallback; GUI apps inject the
 /// login-shell PATH on macOS/Linux. UI must not pass free-form shell — only known
-/// template ids and `install` | `update`.
+/// template ids and `install` | `update` | `uninstall`.
 ///
 /// Blocking work runs on a worker thread so the async runtime is not stalled.
 #[tauri::command]
 pub async fn agent_run_tool_lifecycle(
     app: AppHandle,
+    registry: State<'_, AgentRegistry>,
     template_id: String,
     action: String,
     task_id: Option<String>,
@@ -245,6 +247,13 @@ pub async fn agent_run_tool_lifecycle(
 
     match result {
         Ok(()) => {
+            // Uninstall removed binaries; drop the registry entry too so the
+            // row goes back to "not installed" (never leave a stale entry).
+            if matches!(action, ToolLifecycleAction::Uninstall) {
+                if let Err(e) = registry.remove_catalog_template(&template_id_for_log) {
+                    return Ok(map_err(e));
+                }
+            }
             log::info!(
                 target: "agentero::agent",
                 "tool_lifecycle ok template={template_id_for_log} action={action_label}"
@@ -265,6 +274,17 @@ pub async fn agent_run_tool_lifecycle(
 #[tauri::command]
 pub fn agent_tool_lifecycle_supported(template_id: String) -> ApiResult<bool> {
     ApiResult::ok(crate::features::agent::tool_lifecycle::supports_lifecycle(
+        &template_id,
+    ))
+}
+
+/// What a silent uninstall of this template would remove (npm commands and
+/// managed dirs); null when the template has no managed uninstall.
+#[tauri::command]
+pub fn agent_tool_uninstall_info(
+    template_id: String,
+) -> ApiResult<Option<crate::features::agent::tool_lifecycle::UninstallInfo>> {
+    ApiResult::ok(crate::features::agent::tool_lifecycle::uninstall_info(
         &template_id,
     ))
 }
