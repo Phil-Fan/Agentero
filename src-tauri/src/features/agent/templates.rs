@@ -238,6 +238,22 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
             install_command: None,
         },
         AgentTemplateInfo {
+            id: AgentTemplate::KimiCode.as_str().to_string(),
+            name: "Kimi Code".to_string(),
+            description:
+                "Moonshot Kimi Code CLI with native ACP (`kimi acp`). Log in once with `kimi` + `/login` (OAuth or Moonshot API key)."
+                    .to_string(),
+            command: "kimi".to_string(),
+            args: vec!["acp".to_string()],
+            detect_command: Some("kimi".to_string()),
+            install_hint:
+                "Official script (no Node required) or npm: `npm i -g @moonshot-ai/kimi-code` \
+                 (needs Node 22.19+). First launch: `kimi` → `/login`  ·  \
+                 https://moonshotai.github.io/kimi-code/en/"
+                    .to_string(),
+            install_command: None,
+        },
+        AgentTemplateInfo {
             id: AgentTemplate::Custom.as_str().to_string(),
             name: "Custom".to_string(),
             description: "Any ACP-compatible command + args.".to_string(),
@@ -270,6 +286,7 @@ pub fn template_from_id(id: &str) -> AgentTemplate {
         "grok-build" => AgentTemplate::GrokBuild,
         "pi" => AgentTemplate::Pi,
         "dsh" => AgentTemplate::Dsh,
+        "kimi-code" => AgentTemplate::KimiCode,
         _ => AgentTemplate::Custom,
     }
 }

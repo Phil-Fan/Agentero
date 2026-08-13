@@ -87,6 +87,7 @@ mod acp_live {
         assert!(ids.contains(&"grok-build"));
         assert!(ids.contains(&"pi"));
         assert!(ids.contains(&"dsh"));
+        assert!(ids.contains(&"kimi-code"));
         assert!(!ids.contains(&"custom"));
     }
 
@@ -132,6 +133,17 @@ mod acp_live {
         assert_eq!(hermes.command, "hermes");
         assert_eq!(hermes.args, vec!["acp".to_string()]);
         assert_eq!(hermes.detect_command.as_deref(), Some("hermes"));
+    }
+
+    #[test]
+    fn kimi_template_uses_native_acp() {
+        let kimi = catalog_templates()
+            .into_iter()
+            .find(|entry| entry.id == "kimi-code")
+            .expect("Kimi Code template");
+        assert_eq!(kimi.command, "kimi");
+        assert_eq!(kimi.args, vec!["acp".to_string()]);
+        assert_eq!(kimi.detect_command.as_deref(), Some("kimi"));
     }
 
     #[test]

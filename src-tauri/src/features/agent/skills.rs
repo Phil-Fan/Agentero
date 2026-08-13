@@ -38,6 +38,7 @@ pub fn skill_mention_style(template: &AgentTemplate) -> SkillMentionStyle {
         | AgentTemplate::QoderCli
         | AgentTemplate::GrokBuild
         | AgentTemplate::Dsh
+        | AgentTemplate::KimiCode
         | AgentTemplate::Custom => SkillMentionStyle::Slash,
     }
 }

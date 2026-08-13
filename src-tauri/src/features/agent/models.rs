@@ -27,6 +27,9 @@ pub enum AgentTemplate {
     /// npm-installed into a managed launcher directory (no repo checkout).
     /// Docs: https://github.com/deepseek-ai/deepseek-harness
     Dsh,
+    /// Moonshot Kimi Code CLI with native ACP (`kimi acp`).
+    /// Docs: https://moonshotai.github.io/kimi-code/en/
+    KimiCode,
     Custom,
 }
 
@@ -43,6 +46,7 @@ impl AgentTemplate {
             Self::GrokBuild => "grok-build",
             Self::Pi => "pi",
             Self::Dsh => "dsh",
+            Self::KimiCode => "kimi-code",
             Self::Custom => "custom",
         }
     }

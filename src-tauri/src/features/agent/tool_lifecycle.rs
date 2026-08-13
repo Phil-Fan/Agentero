@@ -51,6 +51,7 @@ pub const LIFECYCLE_TEMPLATES: &[&str] = &[
     "grok-build",
     "pi",
     "dsh",
+    "kimi-code",
 ];
 
 /// dsh ACP demo + plugin stack, published together on npm. Pinning the full set
@@ -205,11 +206,22 @@ const HERMES_INSTALL_UNIX: &str = "bash -c 'tmp=$(mktemp) && curl -fsSL https://
 #[cfg(not(target_os = "windows"))]
 const HERMES_UPDATE_UNIX: &str = "hermes update || bash -c 'tmp=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
 
+/// Kimi Code official installer (single binary, no Node needed). Same
+/// download-then-exec shape as the other official installers — never pipe
+/// curl into bash. Defaults to `~/.kimi-code` and writes it into the shell rc.
+#[cfg(not(target_os = "windows"))]
+const KIMI_INSTALL_UNIX: &str = "bash -c 'tmp=$(mktemp) && curl -fsSL https://code.kimi.com/kimi-code/install.sh -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
+
+/// npm fallback for Kimi Code (npm installs the same `kimi` binary).
+pub const KIMI_NPM_INSTALL_COMMAND: &str = "npm i -g @moonshot-ai/kimi-code@latest";
+
 #[cfg(target_os = "windows")]
 const GROK_INSTALL_WINDOWS_SCRIPT: &str = "irm https://x.ai/cli/install.ps1 | iex";
 #[cfg(target_os = "windows")]
 const HERMES_INSTALL_WINDOWS_SCRIPT: &str =
     "irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1 | iex";
+#[cfg(target_os = "windows")]
+const KIMI_INSTALL_WINDOWS_SCRIPT: &str = "irm https://code.kimi.com/kimi-code/install.ps1 | iex";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolLifecycleAction {
@@ -358,6 +370,10 @@ fn host_install_command(template_id: &str) -> Result<String, String> {
             "hermes" => Ok(hermes_install_windows_command()),
             "pi" => Ok(PI_HOST_INSTALL_COMMAND.to_string()),
             "dsh" => Ok(dsh_npm_install_command()),
+            "kimi-code" => Ok(chain_or(
+                &kimi_install_windows_command(),
+                KIMI_NPM_INSTALL_COMMAND,
+            )),
             "grok-build" => Ok(chain_or(
                 &grok_install_windows_command(),
                 "npm i -g @xai-official/grok@latest",
@@ -382,6 +398,7 @@ fn host_install_command(template_id: &str) -> Result<String, String> {
             "hermes" => Ok(HERMES_INSTALL_UNIX.to_string()),
             "pi" => Ok(PI_HOST_INSTALL_COMMAND.to_string()),
             "dsh" => Ok(dsh_npm_install_command()),
+            "kimi-code" => Ok(chain_or(KIMI_INSTALL_UNIX, KIMI_NPM_INSTALL_COMMAND)),
             "grok-build" => Ok(chain_or(
                 GROK_INSTALL_UNIX,
                 "npm i -g @xai-official/grok@latest",
@@ -422,6 +439,10 @@ fn host_update_command(template_id: &str) -> Result<String, String> {
             "npm i -g openclaw@latest",
         )),
         "pi" => Ok(chain_or("pi update --self", PI_HOST_INSTALL_COMMAND)),
+        // `kimi upgrade` is interactive (prints an update prompt and waits for a
+        // selection), so silent update re-runs the idempotent official installer
+        // (latest version) with the npm install as fallback.
+        "kimi-code" => Ok(host_install_command(template_id)?),
         "hermes" => {
             #[cfg(target_os = "windows")]
             {
@@ -515,6 +536,14 @@ fn hermes_install_windows_command() -> String {
     )
 }
 
+#[cfg(target_os = "windows")]
+fn kimi_install_windows_command() -> String {
+    format!(
+        "powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand {}",
+        powershell_encoded_command(KIMI_INSTALL_WINDOWS_SCRIPT)
+    )
+}
+
 /// Manual one-click install text for Settings (copyable). Matches backend install chains.
 pub fn manual_install_commands_text() -> String {
     #[cfg(target_os = "windows")]
@@ -540,6 +569,9 @@ npm i -g openclaw@latest
 # Grok Build
 {grok}
 # (or) npm i -g @xai-official/grok@latest
+# Kimi Code
+{kimi}
+# (or) npm i -g @moonshot-ai/kimi-code@latest
 # Dsh (DeepSeek Harness ACP demo — Agentero writes cordis.yml + runs this)
 {dsh}"#,
             claude_acp = CLAUDE_ACP_INSTALL_COMMAND,
@@ -547,6 +579,7 @@ npm i -g openclaw@latest
             pi_acp = PI_ACP_INSTALL_COMMAND,
             hermes = hermes_install_windows_command(),
             grok = grok_install_windows_command(),
+            kimi = kimi_install_windows_command(),
             dsh = dsh_npm_install_command(),
         )
     }
@@ -572,6 +605,8 @@ npm i -g openclaw@latest
 {hermes}
 # Grok Build
 {grok} || npm i -g @xai-official/grok@latest
+# Kimi Code
+{kimi} || npm i -g @moonshot-ai/kimi-code@latest
 # Dsh (DeepSeek Harness ACP demo — Agentero writes cordis.yml + runs this)
 {dsh}"#,
             claude_host = CLAUDE_INSTALL_UNIX,
@@ -581,6 +616,7 @@ npm i -g openclaw@latest
             pi_acp = PI_ACP_INSTALL_COMMAND,
             hermes = HERMES_INSTALL_UNIX,
             grok = GROK_INSTALL_UNIX,
+            kimi = KIMI_INSTALL_UNIX,
             dsh = dsh_npm_install_command(),
         )
     }
@@ -929,7 +965,24 @@ mod tests {
         assert!(text.contains("Hermes"));
         assert!(text.contains("Grok"));
         assert!(text.contains("Pi"));
+        assert!(text.contains("Kimi"));
         assert!(text.contains("Dsh"));
+    }
+
+    #[test]
+    fn kimi_install_prefers_official_script_with_npm_fallback() {
+        let cmd = host_install_command("kimi-code").expect("kimi install");
+        assert!(
+            cmd.contains("code.kimi.com/kimi-code"),
+            "kimi install must use the official script"
+        );
+        assert!(!cmd.contains("curl | bash"), "must not pipe curl to bash");
+        assert!(
+            cmd.contains("@moonshot-ai/kimi-code"),
+            "kimi install must fall back to npm"
+        );
+        let update = host_update_command("kimi-code").expect("kimi update");
+        assert_eq!(update, cmd, "kimi update re-runs the official installer");
     }
 
     #[test]

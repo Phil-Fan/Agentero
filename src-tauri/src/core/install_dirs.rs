@@ -13,6 +13,8 @@ pub const HOME_BIN_DIRS: &[&str] = &[
     ".npm-global/bin",
     ".cargo/bin",
     ".volta/bin",
+    // Kimi Code official installer (single binary, writes PATH into the shell rc).
+    ".kimi-code/bin",
     // fnm default-alias bins (data dir varies by platform; session
     // multishell dirs are ephemeral, skip them).
     "Library/Application Support/fnm/aliases/default/bin",
