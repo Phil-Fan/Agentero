@@ -1,6 +1,12 @@
 import { Terminal } from "lucide-react";
 import type { ComponentProps } from "react";
-import { SiClaude, SiGooglegemini, SiHermes, SiOpencode } from "react-icons/si";
+import {
+	SiClaude,
+	SiDeepseek,
+	SiGooglegemini,
+	SiHermes,
+	SiOpencode,
+} from "react-icons/si";
 import type { AgentTemplate } from "@/lib/agent";
 import { cn } from "@/lib/core/utils";
 
@@ -14,6 +20,7 @@ export type AgentLogoKey =
 	| "qodercli"
 	| "grok-build"
 	| "pi"
+	| "dsh"
 	| "custom";
 
 export function agentLogoKeyForTemplate(
@@ -29,6 +36,7 @@ export function agentLogoKeyForTemplate(
 		case "qodercli":
 		case "grok-build":
 		case "pi":
+		case "dsh":
 			return template;
 		default:
 			return "custom";
@@ -108,6 +116,12 @@ export function AgentLogo({
 					aria-hidden
 				>
 					<PiMark className={iconClass} />
+				</span>
+			);
+		case "dsh":
+			return (
+				<span className={cn(shellClass, "text-[#4D6BFE]")} aria-hidden>
+					<SiDeepseek className={iconClass} />
 				</span>
 			);
 		case "qodercli":

@@ -15,6 +15,7 @@ export type AgentTemplate =
 	| "qodercli"
 	| "grok-build"
 	| "pi"
+	| "dsh"
 	| "custom";
 
 export type CatalogAcpStatus = "missing" | "not-probed" | "ready" | "failed";

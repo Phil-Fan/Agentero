@@ -110,6 +110,7 @@ function catalogTemplateFromId(templateId: string): AgentTemplate {
 		case "qodercli":
 		case "grok-build":
 		case "pi":
+		case "dsh":
 			return templateId;
 		default:
 			return "custom";
