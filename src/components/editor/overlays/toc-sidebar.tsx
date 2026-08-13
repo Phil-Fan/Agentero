@@ -108,6 +108,9 @@ export function TocSidebar(props: TocSideBarProps) {
 			aria-label={i18n.t("editor:toc.label")}
 			className={cn(
 				"group/toc absolute top-1/4 right-2 z-20 w-12",
+				// Hover expands to w-64: wider than a narrow pane, so drop the strip
+				// there (the editor also reclaims its right gutter at that width).
+				"@max-2xs/editor:hidden",
 				"transition-[width] duration-200 ease-out hover:w-64 focus-within:w-64 motion-reduce:transition-none",
 			)}
 		>

@@ -81,16 +81,16 @@ export function EditorStatusBar({ filePath, vaultPath }: EditorStatusBarProps) {
 	return (
 		<div
 			className={cn(
-				"flex h-7 shrink-0 items-center justify-end gap-3",
+				"@container/statusbar flex h-7 shrink-0 items-center justify-end gap-3 overflow-hidden",
 				"border-t border-border/80 bg-background/95 px-3",
-				"text-xs text-muted-foreground tabular-nums select-none",
+				"whitespace-nowrap text-xs text-muted-foreground tabular-nums select-none",
 			)}
 			role="status"
 			aria-label={t("statusBar.label")}
 		>
 			<HoverCard openDelay={200} closeDelay={150}>
 				<HoverCardTrigger asChild>
-					<span className="inline-flex cursor-default items-center gap-1">
+					<span className="hidden cursor-default items-center gap-1 @min-[18rem]/statusbar:inline-flex">
 						<Link2 className="size-3" aria-hidden />
 						{t("statusBar.backlinks", { count: backlinks.length })}
 					</span>
@@ -152,9 +152,17 @@ export function EditorStatusBar({ filePath, vaultPath }: EditorStatusBarProps) {
 					</div>
 				</HoverCardContent>
 			</HoverCard>
-			<span className="h-3 w-px bg-border" aria-hidden />
-			<span>{t("statusBar.words", { count: words })}</span>
-			<span className="h-3 w-px bg-border" aria-hidden />
+			<span
+				className="hidden h-3 w-px bg-border @min-[18rem]/statusbar:block"
+				aria-hidden
+			/>
+			<span className="hidden @min-[11rem]/statusbar:inline">
+				{t("statusBar.words", { count: words })}
+			</span>
+			<span
+				className="hidden h-3 w-px bg-border @min-[11rem]/statusbar:block"
+				aria-hidden
+			/>
 			<span>{t("statusBar.characters", { count: chars })}</span>
 		</div>
 	);

@@ -609,7 +609,7 @@ export function MarkdownEditor({
 								}
 							/>
 						) : null}
-						<div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+						<div className="@container/editor relative flex min-h-0 min-w-0 flex-1 flex-col">
 							<div className="relative min-h-0 min-w-0 flex-1">
 								<ContextMenu onOpenChange={handleContextMenuOpenChange}>
 									<ContextMenuTrigger asChild>
@@ -644,7 +644,8 @@ export function MarkdownEditor({
 												readOnly={readOnly}
 												// `pr-16` reserves a right gutter for the collapsed
 												// TOC strip (`right-2 w-12`) so it never covers text.
-												className="min-h-full pl-6 pr-16 pt-4 pb-48"
+												// Narrow panes hide that strip, so the gutter goes too.
+												className="min-h-full pl-6 pr-16 pt-4 pb-48 @max-2xs/editor:pr-6"
 												style={editorTypographyStyle}
 											/>
 											{!readOnly ? (
