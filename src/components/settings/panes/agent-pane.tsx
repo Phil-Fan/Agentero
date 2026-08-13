@@ -39,6 +39,12 @@ import {
 import type { SettingsHostContext } from "@/components/settings/types";
 import { useProbingKeys } from "@/components/settings/use-probing-keys";
 import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -973,7 +979,6 @@ export function AgentPane({
 						<div className="relative">
 							<Input
 								id="agent-user-agent"
-								list="agent-user-agent-presets"
 								value={userAgentDraft}
 								onChange={(e) => setUserAgentDraft(e.target.value)}
 								onBlur={() => void commitUserAgent()}
@@ -988,18 +993,34 @@ export function AgentPane({
 								disabled={!isTauri()}
 								className="h-8 w-44 pr-7 text-xs sm:w-52"
 							/>
-							<ChevronDown
-								className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-								aria-hidden
-							/>
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-xs"
+										className="absolute top-1/2 right-1 size-6 -translate-y-1/2"
+										aria-label={t("agent.userAgent.presetsAria")}
+										title={t("agent.userAgent.presetsAria")}
+										disabled={!isTauri()}
+									>
+										<ChevronDown className="size-3.5" aria-hidden />
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end">
+									{USER_AGENT_PRESETS.map((preset) => (
+										<DropdownMenuItem
+											key={preset.id}
+											onSelect={() =>
+												void commitUserAgent({ userAgent: preset.value })
+											}
+										>
+											{preset.value || t("agent.userAgent.off")}
+										</DropdownMenuItem>
+									))}
+								</DropdownMenuContent>
+							</DropdownMenu>
 						</div>
-						<datalist id="agent-user-agent-presets">
-							{USER_AGENT_PRESETS.filter((preset) => preset.value).map(
-								(preset) => (
-									<option key={preset.id} value={preset.value} />
-								),
-							)}
-						</datalist>
 					</div>
 				</SettingsRow>
 				<SettingsRow

@@ -166,6 +166,8 @@
 			"section": "Relay compatibility",
 			"label": "User-Agent",
 			"placeholder": "codex-cli/0.50.0",
+			"presetsAria": "User-Agent presets",
+			"off": "Off",
 			"providerIdsLabel": "Codex provider ids",
 			"providerIdsPlaceholder": "my_proxy, openai"
 		},

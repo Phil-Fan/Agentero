@@ -166,6 +166,8 @@
 			"section": "中转站兼容",
 			"label": "User-Agent",
 			"placeholder": "codex-cli/0.50.0",
+			"presetsAria": "User-Agent 预设",
+			"off": "关闭",
 			"providerIdsLabel": "Codex Provider id",
 			"providerIdsPlaceholder": "my_proxy, openai"
 		},
