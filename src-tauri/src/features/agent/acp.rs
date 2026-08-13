@@ -1335,10 +1335,15 @@ pub async fn run_once(
     let session_for_notif = session_id.clone();
     let agent_id_for_notif = desc.id.clone();
     let pi_for_notif = matches!(desc.template, AgentTemplate::Pi);
+    // dsh keeps sessions in-process and never advertises resume/load, so a
+    // requested continue degrades to a fresh session — always stream live.
+    let dsh_fresh_sessions = matches!(desc.template, AgentTemplate::Dsh);
     // session/load (and some resume paths) replay history as SessionNotification.
     // Until we open the gate, drop stream/tool/plan so turn N does not re-paint
     // turn N-1 into the new streaming bubble (Grok multi-turn).
-    let live_stream = Arc::new(AtomicBool::new(resume_session_id.is_none()));
+    let live_stream = Arc::new(AtomicBool::new(
+        resume_session_id.is_none() || dsh_fresh_sessions,
+    ));
     let live_for_notif = live_stream.clone();
 
     let stop_reason: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
@@ -1510,6 +1515,28 @@ pub async fn run_once(
                     .is_some();
                 let can_load = init.agent_capabilities.load_session;
 
+                // dsh never advertises session/resume or session/load (sessions
+                // die with the process), so continue degrades to a fresh session
+                // instead of erroring out.
+                let resume_id = if let Some(rid) = &resume_id {
+                    if can_resume || can_load {
+                        resume_id
+                    } else if dsh_fresh_sessions {
+                        log::debug!(
+                            target: "agentero::agent",
+                            "dsh cannot resume {rid}: starting a fresh session"
+                        );
+                        None
+                    } else {
+                        return Err(acp_err(format!(
+                            "Agent does not support continuing session {rid} \
+                             (no session/resume or session/load capability)"
+                        )));
+                    }
+                } else {
+                    None
+                };
+
                 let (acp_session_id, mut config_options) = if let Some(ref rid) = resume_id {
                     if can_resume {
                         let resp = tokio::select! {
@@ -1538,7 +1565,8 @@ pub async fn run_once(
                             SessionId::new(rid.as_str()),
                             resp.config_options.unwrap_or_default(),
                         )
-                    } else if can_load {
+                    } else {
+                        // resume_id is Some only when can_resume || can_load.
                         // Grok and similar: continue across process restarts via
                         // session/load (requires mcpServers; schema defaults to []).
                         let resp = tokio::select! {
@@ -1570,11 +1598,6 @@ pub async fn run_once(
                             SessionId::new(rid.as_str()),
                             resp.config_options.unwrap_or_default(),
                         )
-                    } else {
-                        return Err(acp_err(format!(
-                            "Agent does not support continuing session {rid} \
-                             (no session/resume or session/load capability)"
-                        )));
                     }
                 } else {
                     let new_session = tokio::select! {

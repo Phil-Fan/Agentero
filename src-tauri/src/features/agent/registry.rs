@@ -4,7 +4,9 @@ use crate::features::agent::models::{
     default_agent_proxy_url, AgentDescriptor, AgentRegistryState, AgentTemplate, CatalogAcpStatus,
     CatalogEntry, CatalogScanResponse, ProbeResult, UpsertAgentRequest,
 };
-use crate::features::agent::templates::{catalog_templates, template_from_id, template_info};
+use crate::features::agent::templates::{
+    catalog_templates, dsh_entrypoint_exists, dsh_launcher_dir, template_from_id, template_info,
+};
 use crate::features::agent::tool_lifecycle;
 use std::collections::HashMap;
 use std::fs;
@@ -200,6 +202,12 @@ impl AgentRegistry {
             .filter(|t| t.id != "custom")
             .ok_or_else(|| AppError::message(format!("unknown catalog template: {template_id}")))?;
 
+        // dsh needs its launcher dir (cordis.yml / package.json) even when the
+        // server itself is already installed elsewhere (home npm root / PATH).
+        if template_id == "dsh" {
+            tool_lifecycle::prepare_dsh_launcher().map_err(AppError::message)?;
+        }
+
         let env = catalog_env(&info);
 
         // Prefer existing registration for this template. Built-in descriptors are owned by the
@@ -343,14 +351,27 @@ impl AgentRegistry {
 
         let mut entries = Vec::new();
         for info in catalog_templates() {
-            let detect = info
-                .detect_command
-                .as_deref()
-                .unwrap_or(info.command.as_str());
-            let detect_path = resolve_command(detect);
-            let binary_available = detect_path.is_some();
-            let acp_path = resolve_command(&info.command);
-            let acp_command_available = acp_path.is_some();
+            // dsh lives in a managed launcher dir (project npm install) or as a
+            // global `dsh-acp-demo` on PATH — "installed" means either entrypoint.
+            let (detect_path, binary_available, acp_command_available) = if info.id == "dsh" {
+                let local = dsh_entrypoint_exists();
+                let global = resolve_command("dsh-acp-demo");
+                let ready = local || global.is_some();
+                (
+                    global.or_else(|| ready.then(dsh_launcher_dir)),
+                    ready,
+                    ready,
+                )
+            } else {
+                let detect = info
+                    .detect_command
+                    .as_deref()
+                    .unwrap_or(info.command.as_str());
+                let detect_path = resolve_command(detect);
+                let binary_available = detect_path.is_some();
+                let acp_command_available = resolve_command(&info.command).is_some();
+                (detect_path, binary_available, acp_command_available)
+            };
 
             let registered = state.agents.iter().find(|a| {
                 a.template.as_str() == info.id || (a.command == info.command && a.args == info.args)
@@ -400,7 +421,12 @@ impl AgentRegistry {
                     (
                         CatalogAcpStatus::Missing,
                         None,
-                        Some(format!("command `{detect}` not found on PATH")),
+                        Some(format!(
+                            "command `{}` not found on PATH",
+                            info.detect_command
+                                .as_deref()
+                                .unwrap_or(info.command.as_str())
+                        )),
                         None,
                     )
                 };
@@ -668,7 +694,8 @@ fn apply_user_agent_to_agent(agent: &mut AgentDescriptor, user_agent: &str, prov
         | AgentTemplate::GrokBuild
         | AgentTemplate::OpenClaw
         | AgentTemplate::Pi
-        | AgentTemplate::Hermes => {}
+        | AgentTemplate::Hermes
+        | AgentTemplate::Dsh => {}
     }
 }
 

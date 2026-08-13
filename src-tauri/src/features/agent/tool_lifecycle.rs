@@ -8,7 +8,8 @@
 use crate::features::agent::discover::path_entries;
 use crate::features::agent::discover::resolve_command;
 use crate::features::agent::templates::{
-    template_info, CLAUDE_ACP_INSTALL_COMMAND, PI_ACP_INSTALL_COMMAND, PI_HOST_INSTALL_COMMAND,
+    dsh_entrypoint_exists, dsh_launcher_dir, template_info, CLAUDE_ACP_INSTALL_COMMAND,
+    PI_ACP_INSTALL_COMMAND, PI_HOST_INSTALL_COMMAND,
 };
 use serde::Serialize;
 use std::io::{self, Read};
@@ -49,7 +50,136 @@ pub const LIFECYCLE_TEMPLATES: &[&str] = &[
     "hermes",
     "grok-build",
     "pi",
+    "dsh",
 ];
+
+/// dsh ACP demo + plugin stack, published together on npm. Pinning the full set
+/// to one verified version keeps cordis.yml plugin loading in sync.
+pub const DSH_ACP_PACKAGES: &[&str] = &[
+    "@deepseek-ai/dsh-acp-demo@0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm-deepseek@0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox-local@0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox-policy@0.1.0-rc.6",
+    "@deepseek-ai/dsh-subprocess-local@0.1.0-rc.6",
+    "@deepseek-ai/dsh-bash-sandbox@0.1.0-rc.6",
+    "@deepseek-ai/dsh-user-approval@0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs-sandbox@0.1.0-rc.6",
+    "@deepseek-ai/dsh-tool-fs@0.1.0-rc.6",
+];
+
+/// Default dsh composition written into the launcher dir on first install
+/// (never overwrites an existing file). Mirrors the canonical spine of
+/// deepseek-harness `examples/acp-agent/cordis.yml`: DeepSeek adapter, sandboxed
+/// bash + fs tools, user approval, and the ACP demo app. DEEPSEEK_API_KEY is
+/// read from the launcher dir's `.env`; sessions persist under `./.sessions`.
+pub const DSH_ACP_CORDIS_YML: &str = r#"- id: llm-deepseek
+  name: '@deepseek-ai/dsh-llm-deepseek'
+  config:
+    thinking: enabled
+    reasoningEffort: max
+    models:
+      - id: deepseek-v4-flash
+      - id: deepseek-v4-pro
+- id: sandbox
+  name: '@deepseek-ai/dsh-sandbox-local'
+- id: sandbox-policy
+  name: '@deepseek-ai/dsh-sandbox-policy'
+  config:
+    mode: workspace-write
+- id: subprocess
+  name: '@deepseek-ai/dsh-subprocess-local'
+- id: bash
+  name: '@deepseek-ai/dsh-bash-sandbox'
+  config:
+    timeoutMs: 60000
+- id: approval
+  name: '@deepseek-ai/dsh-user-approval'
+  config:
+    policy: ask
+- id: fs-sandbox
+  name: '@deepseek-ai/dsh-fs-sandbox'
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+- id: acp-agent
+  name: '@deepseek-ai/dsh-acp-demo'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-pro
+    persistenceRoot: ./.sessions
+    persistenceCompression: zstd
+    workspaceContext:
+      maxBytes: 65536
+    persona: |
+      You are a coding assistant powered by the {{model}} model. Your working directory is {{cwd}}. Your bash tool runs under a file sandbox — a `[sandbox: file access denied …]` result is policy, not a command bug.
+
+      Verify your work by running the code or tests. Keep answers brief and factual.
+"#;
+
+/// npm install for the dsh stack into its launcher dir (npm i is idempotent,
+/// so install and update run the same command with pinned versions).
+pub fn dsh_npm_install_command() -> String {
+    let packages = DSH_ACP_PACKAGES.join(" ");
+    #[cfg(target_os = "windows")]
+    {
+        format!(
+            "cd /d \"%USERPROFILE%\\.agentero\\dsh-acp\"\r\nnpm i --no-audit --no-fund {packages}"
+        )
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        format!("cd \"$HOME/.agentero/dsh-acp\" && npm i --no-audit --no-fund {packages}")
+    }
+}
+
+/// Minimal project manifest for the launcher dir. Without it, npm walks up to
+/// a user's `~/package.json` and installs the dsh stack into `~/node_modules`.
+const DSH_ACP_PACKAGE_JSON: &str = r#"{
+  "name": "agentero-dsh-acp",
+  "private": true,
+  "version": "0.1.0-rc.6"
+}
+"#;
+
+/// Ensure the launcher dir, default cordis.yml and project manifest exist.
+/// Idempotent and non-destructive — never overwrites user-modified files.
+pub fn prepare_dsh_launcher() -> Result<(), String> {
+    let launcher = dsh_launcher_dir();
+    std::fs::create_dir_all(&launcher)
+        .map_err(|e| format!("failed to create dsh launcher dir: {e}"))?;
+    let config = launcher.join("cordis.yml");
+    if !config.exists() {
+        std::fs::write(&config, DSH_ACP_CORDIS_YML)
+            .map_err(|e| format!("failed to write dsh cordis.yml: {e}"))?;
+    }
+    let manifest = launcher.join("package.json");
+    if !manifest.exists() {
+        std::fs::write(&manifest, DSH_ACP_PACKAGE_JSON)
+            .map_err(|e| format!("failed to write dsh package.json: {e}"))?;
+    }
+    Ok(())
+}
+
+/// dsh lifecycle: prepare launcher dir + defaults, then `npm i` the pinned
+/// package stack. Install skips the download when dsh is already reachable
+/// (launcher, home npm root or PATH); update always refreshes the launcher copy.
+fn run_dsh_lifecycle(
+    action: ToolLifecycleAction,
+    app: Option<&AppHandle>,
+    task_id: Option<&str>,
+) -> Result<(), String> {
+    prepare_dsh_launcher()?;
+    let reachable = dsh_entrypoint_exists() || resolve_command("dsh-acp-demo").is_some();
+    log::info!(
+        target: "agentero::agent",
+        "dsh_lifecycle action={:?} launcher={} reachable={reachable}",
+        action,
+        dsh_launcher_dir().display()
+    );
+    if matches!(action, ToolLifecycleAction::Install) && reachable {
+        return Ok(());
+    }
+    run_tool_lifecycle_silently(&dsh_npm_install_command(), app, task_id)
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -117,6 +247,12 @@ pub fn run_template_lifecycle(
     }
     let info = template_info(template_id)
         .ok_or_else(|| format!("unknown catalog template: {template_id}"))?;
+
+    // dsh is a project-dir npm install (not on PATH): Rust writes cordis.yml
+    // and the shell only runs the pinned `npm i` inside the launcher dir.
+    if template_id == "dsh" {
+        return run_dsh_lifecycle(action, app, task_id);
+    }
 
     let detect = info
         .detect_command
@@ -221,6 +357,7 @@ fn host_install_command(template_id: &str) -> Result<String, String> {
             "openclaw" => Ok("npm i -g openclaw@latest".to_string()),
             "hermes" => Ok(hermes_install_windows_command()),
             "pi" => Ok(PI_HOST_INSTALL_COMMAND.to_string()),
+            "dsh" => Ok(dsh_npm_install_command()),
             "grok-build" => Ok(chain_or(
                 &grok_install_windows_command(),
                 "npm i -g @xai-official/grok@latest",
@@ -244,6 +381,7 @@ fn host_install_command(template_id: &str) -> Result<String, String> {
             "openclaw" => Ok("npm i -g openclaw@latest".to_string()),
             "hermes" => Ok(HERMES_INSTALL_UNIX.to_string()),
             "pi" => Ok(PI_HOST_INSTALL_COMMAND.to_string()),
+            "dsh" => Ok(dsh_npm_install_command()),
             "grok-build" => Ok(chain_or(
                 GROK_INSTALL_UNIX,
                 "npm i -g @xai-official/grok@latest",
@@ -401,12 +539,15 @@ npm i -g openclaw@latest
 {hermes}
 # Grok Build
 {grok}
-# (or) npm i -g @xai-official/grok@latest"#,
+# (or) npm i -g @xai-official/grok@latest
+# Dsh (DeepSeek Harness ACP demo — Agentero writes cordis.yml + runs this)
+{dsh}"#,
             claude_acp = CLAUDE_ACP_INSTALL_COMMAND,
             pi_host = PI_HOST_INSTALL_COMMAND,
             pi_acp = PI_ACP_INSTALL_COMMAND,
             hermes = hermes_install_windows_command(),
             grok = grok_install_windows_command(),
+            dsh = dsh_npm_install_command(),
         )
     }
     #[cfg(not(target_os = "windows"))]
@@ -430,7 +571,9 @@ npm i -g openclaw@latest
 # Hermes Agent
 {hermes}
 # Grok Build
-{grok} || npm i -g @xai-official/grok@latest"#,
+{grok} || npm i -g @xai-official/grok@latest
+# Dsh (DeepSeek Harness ACP demo — Agentero writes cordis.yml + runs this)
+{dsh}"#,
             claude_host = CLAUDE_INSTALL_UNIX,
             claude_acp = CLAUDE_ACP_INSTALL_COMMAND,
             opencode = OPENCODE_INSTALL_UNIX,
@@ -438,6 +581,7 @@ npm i -g openclaw@latest
             pi_acp = PI_ACP_INSTALL_COMMAND,
             hermes = HERMES_INSTALL_UNIX,
             grok = GROK_INSTALL_UNIX,
+            dsh = dsh_npm_install_command(),
         )
     }
 }
@@ -785,6 +929,16 @@ mod tests {
         assert!(text.contains("Hermes"));
         assert!(text.contains("Grok"));
         assert!(text.contains("Pi"));
+        assert!(text.contains("Dsh"));
+    }
+
+    #[test]
+    fn dsh_lifecycle_command_pins_packages() {
+        let cmd = host_install_command("dsh").expect("dsh install");
+        for pkg in DSH_ACP_PACKAGES {
+            assert!(cmd.contains(pkg), "missing {pkg}");
+        }
+        assert!(!cmd.contains("curl"));
     }
 
     #[test]

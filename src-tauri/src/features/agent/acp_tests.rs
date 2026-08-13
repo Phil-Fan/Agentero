@@ -86,6 +86,7 @@ mod acp_live {
         assert!(ids.contains(&"qodercli"));
         assert!(ids.contains(&"grok-build"));
         assert!(ids.contains(&"pi"));
+        assert!(ids.contains(&"dsh"));
         assert!(!ids.contains(&"custom"));
     }
 

@@ -23,6 +23,10 @@ pub enum AgentTemplate {
     /// Pi coding agent via the community `pi-acp` adapter (pi has no native ACP).
     /// Docs: https://pi.dev · https://github.com/svkozak/pi-acp
     Pi,
+    /// DeepSeek Harness automation ACP server (`@deepseek-ai/dsh-acp-demo`),
+    /// npm-installed into a managed launcher directory (no repo checkout).
+    /// Docs: https://github.com/deepseek-ai/deepseek-harness
+    Dsh,
     Custom,
 }
 
@@ -38,6 +42,7 @@ impl AgentTemplate {
             Self::QoderCli => "qodercli",
             Self::GrokBuild => "grok-build",
             Self::Pi => "pi",
+            Self::Dsh => "dsh",
             Self::Custom => "custom",
         }
     }
