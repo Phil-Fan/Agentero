@@ -6,7 +6,22 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
 
 - Crate：`agent-client-protocol`（及 Codex 的 npm ACP 适配器进程）。
 - 会话 `cwd` = 当前 Vault 根（远程则为远端 Vault 根）。
-- 统一接口：OpenCode、OpenClaw、Hermes、Gemini、Claude ACP、Codex ACP、Qoder、Grok、Pi、自定义 `command`/`args`/`env`。
+- 统一接口：OpenCode、OpenClaw、Hermes、Gemini、Claude ACP、Codex ACP、Qoder、Grok、Pi、Dsh（DeepSeek Harness）、自定义 `command`/`args`/`env`。
+- Dsh：ACP 服务端是 `@deepseek-ai/dsh-acp-demo`（npm 包），与依赖插件一起固定
+  `0.1.0-rc.6`。安装/启动三处入口，检测按序回退：
+  1. App 管理目录 `~/.agentero/dsh-acp/node_modules/.bin/dsh-acp-demo`（设置页「安装」按钮，
+     Rust 写入默认 `cordis.yml` + 最小 `package.json` 后执行 `npm i`；`package.json`
+     防止 npm 沿目录树向上找到用户 `~/package.json` 把包装进 `~/node_modules`）；
+  2. 用户 home npm 根 `~/node_modules/.bin/dsh-acp-demo`（手动 `npm i` 且 home 有
+     `package.json` 时）；
+  3. PATH 上的全局 `dsh-acp-demo`（`npm i -g`）。注意：`npm i -g @deepseek-ai/dsh`
+     是 umbrella CLI，**不带** ACP 服务端，不作为检测目标。
+  - 启动走 shell 包装（`bash -c` / `cmd /C`）`cd` 进 launcher 目录后 exec——ACP stdio
+    spawn 无 cwd 字段，而 `cordis.yml`、`.env`、session 持久化都相对该目录解析。
+  - 会话在进程内，进程退出即失效，且不声明 `session/resume` / `session/load`：
+    多轮续聊降级为**每轮新会话**（单发式），Host 不再报「不支持继续会话」。
+  - API Key：在 launcher 目录 `.env` 写 `DEEPSEEK_API_KEY`，或在注册项 env 中
+    export。缺少时 prompt 报 `no API key for provider route "deepseek-official"`。
 - Pi：无原生 ACP，走社区适配器 `pi-acp`（内部 spawn `pi --mode rpc`）；detect 用 host `pi`、
   ACP 入口用 `pi-acp`。pi 的 skill 以 `/skill:<name>` 暴露，故 Agentero 不发 `/<name>`
   mention，只注入 `SKILL.md` 正文。
