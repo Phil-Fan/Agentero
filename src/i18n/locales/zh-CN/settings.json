@@ -349,7 +349,6 @@
 			"confirm": "确定",
 			"openDocs": "打开服务商网站",
 			"openDocsLabel": "获取访问令牌",
-			"desc": "远程 PP-StructureV3 版面解析，使用 AI Studio PaddleOCR 访问令牌。",
 			"notConfigured": "未配置",
 			"apiKey": {
 				"label": "API Key",

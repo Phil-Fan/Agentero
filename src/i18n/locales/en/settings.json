@@ -349,7 +349,6 @@
 			"confirm": "Confirm",
 			"openDocs": "Open provider website",
 			"openDocsLabel": "Get an access token",
-			"desc": "Remote PP-StructureV3 layout analysis, configured with an AI Studio PaddleOCR access token.",
 			"notConfigured": "Not configured",
 			"apiKey": {
 				"label": "API key",

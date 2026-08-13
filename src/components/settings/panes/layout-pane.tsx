@@ -255,9 +255,6 @@ export function LayoutPane({
 							</Button>
 						</div>
 
-						<p className="text-muted-foreground text-xs leading-relaxed">
-							{t("layout.providerConfig.desc")}
-						</p>
 						<Button
 							type="button"
 							variant="link"
