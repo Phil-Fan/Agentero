@@ -6,7 +6,7 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
 
 - Crate：`agent-client-protocol`（及 Codex 的 npm ACP 适配器进程）。
 - 会话 `cwd` = 当前 Vault 根（远程则为远端 Vault 根）。
-- 统一接口：OpenCode、OpenClaw、Hermes、Gemini、Claude ACP、Codex ACP、Qoder、Grok、Pi、Dsh（DeepSeek Harness）、自定义 `command`/`args`/`env`。
+- 统一接口：OpenCode、OpenClaw、Hermes、Gemini、Claude ACP、Codex ACP、Qoder、Grok、Pi、Dsh（DeepSeek Harness）、Kimi Code、自定义 `command`/`args`/`env`。
 - Dsh：ACP 服务端是 `@deepseek-ai/dsh-acp-demo`（npm 包），与依赖插件一起固定
   `0.1.0-rc.6`。安装/启动三处入口，检测按序回退：
   1. App 管理目录 `~/.agentero/dsh-acp/node_modules/.bin/dsh-acp-demo`（设置页「安装」按钮，
@@ -26,6 +26,11 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
     凭据存储（`.credentials.yaml` 需在 `cordis.yml` 挂载 credentials provider，
     `~/.dsh/.env` 的 user-env 层只有官方 `dsh` CLI 的 `loadLayeredEnv` 加载），
     所以官方 CLI/Web UI 里配过的 key 对 ACP 服务不可见，须复制到 launcher `.env`。
+- Kimi Code：原生 ACP（`kimi acp`）。官方 installer（`code.kimi.com/kimi-code/install.sh`）
+  是单二进制、默认装入 `~/.kimi-code` 并写 PATH 进 shell rc；npm 包
+  `@moonshot-ai/kimi-code`（需 Node 22.19+）作回退。`kimi upgrade` 是交互式的，静默
+  `update` 重跑幂等的官方 installer。登录在终端完成（`kimi` → `/login`，OAuth 或
+  Moonshot API key），skill 走 slash mention。
 - Pi：无原生 ACP，走社区适配器 `pi-acp`（内部 spawn `pi --mode rpc`）；detect 用 host `pi`、
   ACP 入口用 `pi-acp`。pi 的 skill 以 `/skill:<name>` 暴露，故 Agentero 不发 `/<name>`
   mention，只注入 `SKILL.md` 正文。
@@ -35,7 +40,8 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
   避免它出现在回答之前。
 - Gemini：spawn 时注入 `NO_BROWSER=true`（用户显式配置则不覆盖），避免未登录时
   `new_session` 反复拉起浏览器 OAuth；登录须在终端完成（BYOA）。
-- 设置页会将 ACP 探测中的认证错误（如 `invalid_grant` / `failed to authenticate`）
+- 设置页会将 ACP 探测中的认证错误（如 `invalid_grant` / `failed to authenticate` /
+  `authentication required` / `not logged in`）
   显示为「未登录」，其他握手或进程错误仍显示为「ACP 失败」。
 - 后台熔断（`AgentWarmGate`）：`agent_warm` / `agent_list_sessions` 失败后进入
   120s 冷却，冷却期内直接返回上次错误、不再 spawn；成功或用户消息
