@@ -8,6 +8,7 @@ import {
 	Paintbrush,
 	SlidersHorizontal,
 	Stethoscope,
+	Wand2,
 	X,
 } from "lucide-react";
 import {
@@ -28,7 +29,10 @@ import type {
 } from "@/components/settings/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/core/utils";
+import { broadcastOnboardingRequest } from "@/lib/onboarding/api";
 import type { AppSettings } from "@/lib/settings";
+import { patchSettings } from "@/lib/settings/react-store";
+import { closeSettingsWindow } from "@/lib/shell/settings-window";
 import {
 	getRemoteSessionMeta,
 	isRemoteVaultHandle,
@@ -255,6 +259,24 @@ export function SettingsContent({
 						);
 					})}
 				</ul>
+
+				{/* Sidebar footer: replay the first-run setup wizard. */}
+				<div className="border-t px-2 py-2">
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="w-full"
+						onClick={() => {
+							patchSettings({ onboardingDone: false });
+							broadcastOnboardingRequest();
+							closeSettingsWindow();
+						}}
+					>
+						<Wand2 data-icon="inline-start" />
+						{t("nav.quickSetup")}
+					</Button>
+				</div>
 			</nav>
 
 			{/* Content */}

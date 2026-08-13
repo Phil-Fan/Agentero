@@ -13,7 +13,8 @@
 		"doctor": "Doctor",
 		"keyboard": "Keyboard",
 		"remote-access": "Remote access",
-		"about": "About"
+		"about": "About",
+		"quickSetup": "Quick setup wizard"
 	},
 	"remoteAccess": {
 		"title": "Remote access",
@@ -296,6 +297,7 @@
 			"section": "API Services",
 			"confirm": "Confirm",
 			"openDocs": "Open provider website",
+			"openDocsLabel": "Get an API key",
 			"notConfigured": "Not configured",
 			"apiKey": {
 				"label": "API key",
@@ -312,6 +314,12 @@
 				"label": "Model",
 				"placeholder": "Provider model id"
 			}
+		},
+		"providerDesc": {
+			"deepl": "DeepL neural machine translation, configured with an official API key.",
+			"azure": "Microsoft Translator, configured with an Azure subscription key.",
+			"googleCloud": "Google Cloud Translation API, configured with a service-account key.",
+			"openaiCompatible": "Any OpenAI-compatible translation endpoint (OpenAI, Moonshot, DeepSeek, …)."
 		},
 		"agentId": {
 			"label": "Agent",
@@ -338,10 +346,12 @@
 			"paddle": "PP-StructureV3",
 			"confirm": "Confirm",
 			"openDocs": "Open provider website",
+			"openDocsLabel": "Get an access token",
+			"desc": "Remote PP-StructureV3 layout analysis, configured with an AI Studio PaddleOCR access token.",
 			"notConfigured": "Not configured",
 			"apiKey": {
 				"label": "API key",
-				"placeholder": "AI Studio PaddleOCR access token"
+				"placeholder": "Enter your PP-StructureV3 access token"
 			},
 			"probeIdle": "Not checked yet",
 			"probeOk": "Available",
@@ -467,6 +477,11 @@
 			"uninstallFailed": "Could not remove CLI command",
 			"statusFailed": "Could not read CLI status",
 			"openReleaseFailed": "Could not open the release page"
+		},
+		"onboarding": {
+			"label": "First-run setup",
+			"description": "Replay the theme, agent and translation setup wizard in the main window",
+			"reopen": "Reopen setup wizard"
 		}
 	}
 }

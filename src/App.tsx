@@ -9,6 +9,7 @@
 import { FolderOpen } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { OnboardingRoot } from "@/components/onboarding/onboarding-root";
 import { AppDialogs } from "@/components/shell/app-dialogs";
 import { BackgroundTasksPanel } from "@/components/shell/background-tasks-panel";
 import { ErrorBoundary } from "@/components/shell/error-boundary";
@@ -470,6 +471,9 @@ export default function App() {
 				<AppDialogs />
 
 				<BackgroundTasksPanel />
+
+				{/* First-run setup wizard (Raycast-style full-window overlay). */}
+				<OnboardingRoot />
 			</div>
 		</WikiNavProvider>
 	);

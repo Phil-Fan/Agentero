@@ -38,21 +38,25 @@ export function agentLogoKeyForTemplate(
 export function AgentLogo({
 	template,
 	className,
+	iconClassName,
 }: {
 	template: AgentTemplate | string | null | undefined;
 	className?: string;
+	/** Override the inner icon size (default `size-3.5`). */
+	iconClassName?: string;
 }) {
 	const key = agentLogoKeyForTemplate(template);
 	const shellClass = cn(
 		"inline-flex size-5 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background text-foreground shadow-xs",
 		className,
 	);
+	const iconClass = cn("size-3.5", iconClassName);
 
 	switch (key) {
 		case "opencode":
 			return (
 				<span className={shellClass} aria-hidden>
-					<SiOpencode className="size-3.5" />
+					<SiOpencode className={iconClass} />
 				</span>
 			);
 		case "openclaw":
@@ -61,25 +65,25 @@ export function AgentLogo({
 					className={cn(shellClass, "text-red-600 dark:text-red-400")}
 					aria-hidden
 				>
-					<OpenClawMark className="size-3.5" />
+					<OpenClawMark className={iconClass} />
 				</span>
 			);
 		case "claude-acp":
 			return (
 				<span className={cn(shellClass, "text-[#D97757]")} aria-hidden>
-					<SiClaude className="size-3.5" />
+					<SiClaude className={iconClass} />
 				</span>
 			);
 		case "codex-acp":
 			return (
 				<span className={shellClass} aria-hidden>
-					<OpenAiMark className="size-3.5" />
+					<OpenAiMark className={iconClass} />
 				</span>
 			);
 		case "gemini":
 			return (
 				<span className={cn(shellClass, "text-[#1A73E8]")} aria-hidden>
-					<SiGooglegemini className="size-3.5" />
+					<SiGooglegemini className={iconClass} />
 				</span>
 			);
 		case "hermes":
@@ -88,13 +92,13 @@ export function AgentLogo({
 					className={cn(shellClass, "text-[#8B5E3C] dark:text-[#D3A47A]")}
 					aria-hidden
 				>
-					<SiHermes className="size-3.5" />
+					<SiHermes className={iconClass} />
 				</span>
 			);
 		case "grok-build":
 			return (
 				<span className={shellClass} aria-hidden>
-					<GrokMark className="size-3.5" />
+					<GrokMark className={iconClass} />
 				</span>
 			);
 		case "pi":
@@ -103,7 +107,7 @@ export function AgentLogo({
 					className={cn(shellClass, "text-violet-700 dark:text-violet-300")}
 					aria-hidden
 				>
-					<PiMark className="size-3.5" />
+					<PiMark className={iconClass} />
 				</span>
 			);
 		case "qodercli":
@@ -121,7 +125,7 @@ export function AgentLogo({
 		case "custom":
 			return (
 				<span className={cn(shellClass, "text-muted-foreground")} aria-hidden>
-					<Terminal className="size-3.5" />
+					<Terminal className={iconClass} />
 				</span>
 			);
 	}

@@ -336,6 +336,9 @@ function normalizePartial(
 	if (typeof parsed.telemetryEnabled !== "boolean") {
 		merged.telemetryEnabled = DEFAULT_SETTINGS.telemetryEnabled;
 	}
+	if (typeof parsed.onboardingDone !== "boolean") {
+		merged.onboardingDone = DEFAULT_SETTINGS.onboardingDone;
+	}
 	if (
 		!Number.isInteger(merged.batchImportConcurrency) ||
 		merged.batchImportConcurrency < 1 ||

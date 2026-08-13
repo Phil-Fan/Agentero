@@ -243,24 +243,6 @@ export function LayoutPane({
 								<span className="truncate font-medium text-sm">
 									{t("layout.providerConfig.paddle")}
 								</span>
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon-xs"
-											aria-label={t("layout.providerConfig.openDocs")}
-											onClick={() =>
-												openExternalUrl(LAYOUT_PROVIDER_DOCS_URLS.paddle)
-											}
-										>
-											<ExternalLink className="size-3" />
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent>
-										{t("layout.providerConfig.openDocs")}
-									</TooltipContent>
-								</Tooltip>
 							</div>
 							<Button
 								type="button"
@@ -272,6 +254,20 @@ export function LayoutPane({
 								{t("layout.providerConfig.confirm")}
 							</Button>
 						</div>
+
+						<p className="text-muted-foreground text-xs leading-relaxed">
+							{t("layout.providerConfig.desc")}
+						</p>
+						<Button
+							type="button"
+							variant="link"
+							size="xs"
+							className="-ml-1.5 mb-2 h-auto px-1.5 text-primary"
+							onClick={() => openExternalUrl(LAYOUT_PROVIDER_DOCS_URLS.paddle)}
+						>
+							<ExternalLink data-icon="inline-start" className="size-3" />
+							{t("layout.providerConfig.openDocsLabel")}
+						</Button>
 
 						<div className="flex items-center gap-2">
 							<Label

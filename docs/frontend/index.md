@@ -33,6 +33,7 @@ React 19 + TypeScript Webview UI。全局状态为按域 **zustand vanilla store
 | Sonner | 全局 Toast（`src/lib/core/notify.ts`） |
 | next-themes | System / Light / Dark |
 | tweakcn 预设 | `uiTheme` 运行时注入 CSS 变量 |
+| @stepperize/react | 新手引导多步流程状态机（`defineStepper`） |
 
 动效约定：`index.css` `:root` 定义 motion token（`--motion-duration-fast: 150ms` 浮层进出、`--motion-duration-normal: 200ms` 布局编排、`--motion-ease-out`）；组件类对应 100=微反馈 / 150=浮层 / 200=布局。全局 `prefers-reduced-motion` 兜底关闭所有动效（`animate-spin` 除外）。
 
@@ -89,6 +90,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | 功能 | 文档 |
 |---|---|
 | 工作台壳 | [shell.md](shell.md) |
+| 新手引导 | [onboarding.md](onboarding.md) |
 | Dockview 工作区 / 功能窗 / 文档弹窗 | [workspace.md](workspace.md) |
 | 文件树 | [vault-tree.md](vault-tree.md) |
 | 论文库 Library（含阅读热力条） | [library.md](library.md) |

@@ -8,6 +8,7 @@ import enApp from "./locales/en/app.json";
 import enCommon from "./locales/en/common.json";
 import enEditor from "./locales/en/editor.json";
 import enMobile from "./locales/en/mobile.json";
+import enOnboarding from "./locales/en/onboarding.json";
 import enSettings from "./locales/en/settings.json";
 import enShortcuts from "./locales/en/shortcuts.json";
 import enSidebar from "./locales/en/sidebar.json";
@@ -18,6 +19,7 @@ import zhApp from "./locales/zh-CN/app.json";
 import zhCommon from "./locales/zh-CN/common.json";
 import zhEditor from "./locales/zh-CN/editor.json";
 import zhMobile from "./locales/zh-CN/mobile.json";
+import zhOnboarding from "./locales/zh-CN/onboarding.json";
 import zhSettings from "./locales/zh-CN/settings.json";
 import zhShortcuts from "./locales/zh-CN/shortcuts.json";
 import zhSidebar from "./locales/zh-CN/sidebar.json";
@@ -40,6 +42,7 @@ export const resources = {
 		shortcuts: enShortcuts,
 		aiElements: enAiElements,
 		mobile: enMobile,
+		onboarding: enOnboarding,
 	},
 	"zh-CN": {
 		common: zhCommon,
@@ -52,6 +55,7 @@ export const resources = {
 		shortcuts: zhShortcuts,
 		aiElements: zhAiElements,
 		mobile: zhMobile,
+		onboarding: zhOnboarding,
 	},
 } as const;
 

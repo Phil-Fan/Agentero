@@ -37,7 +37,7 @@ export const LAYOUT_PADDLE_JOBS_URL =
 
 /** Docs / console pages for obtaining keys (settings UI external link). */
 export const LAYOUT_PROVIDER_DOCS_URLS: Record<LayoutProviderId, string> = {
-	paddle: "https://aistudio.baidu.com/paddleocr/task/new",
+	paddle: "https://aistudio.baidu.com/account/accessToken",
 };
 
 export function isLayoutBackend(value: unknown): value is LayoutBackend {

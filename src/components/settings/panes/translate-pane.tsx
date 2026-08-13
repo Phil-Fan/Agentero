@@ -494,25 +494,6 @@ export function TranslatePane({
 												`translate.provider.${id}` as "translate.provider.google",
 											)}
 										</p>
-										<Tooltip>
-											<TooltipTrigger asChild>
-												<Button
-													type="button"
-													variant="ghost"
-													size="icon-xs"
-													className="shrink-0 text-muted-foreground"
-													aria-label={t("translate.providerConfig.openDocs")}
-													onClick={() =>
-														openExternalUrl(COMMERCIAL_MT_DOCS_URLS[id])
-													}
-												>
-													<ExternalLink className="size-3" aria-hidden />
-												</Button>
-											</TooltipTrigger>
-											<TooltipContent>
-												{t("translate.providerConfig.openDocs")}
-											</TooltipContent>
-										</Tooltip>
 									</div>
 									<Button
 										type="button"
@@ -524,6 +505,22 @@ export function TranslatePane({
 										{t("translate.providerConfig.confirm")}
 									</Button>
 								</div>
+
+								<p className="text-muted-foreground text-xs leading-relaxed">
+									{t(
+										`translate.providerDesc.${id}` as "translate.providerDesc.deepl",
+									)}
+								</p>
+								<Button
+									type="button"
+									variant="link"
+									size="xs"
+									className="-ml-1.5 mb-2 h-auto px-1.5 text-primary"
+									onClick={() => openExternalUrl(COMMERCIAL_MT_DOCS_URLS[id])}
+								>
+									<ExternalLink data-icon="inline-start" className="size-3" />
+									{t("translate.providerConfig.openDocsLabel")}
+								</Button>
 
 								<div className="grid gap-1.5">
 									<div className="flex items-center gap-2">

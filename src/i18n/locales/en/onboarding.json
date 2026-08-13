@@ -1,0 +1,72 @@
+{
+	"title": "Welcome to Agentero",
+	"subtitle": "A local-first research workspace for papers, notes and agents.",
+	"steps": {
+		"welcome": "Welcome",
+		"theme": "Appearance",
+		"agent": "Agent",
+		"translate": "Translation",
+		"layout": "Layout parsing",
+		"vault": "Get started"
+	},
+	"welcome": {},
+	"theme": {
+		"title": "Choose your color theme",
+		"modeSystem": "System",
+		"modeLight": "Light",
+		"modeDark": "Dark",
+		"uiThemeSelect": "Select {{name}}"
+	},
+	"agent": {
+		"title": "Configure default Agent",
+		"rescan": "Rescan",
+		"scanning": "Scanning…",
+		"none": "No agents found. Install an ACP agent (e.g. opencode, claude-acp) and rescan.",
+		"setDefault": "Set as default",
+		"install": "Install",
+		"installFailed": "Could not install agent",
+		"default": "Default",
+		"probe": "Probe",
+		"ready": "Ready",
+		"missing": "Not installed",
+		"failed": "Probe failed",
+		"notProbed": "Not probed",
+		"scanFailed": "Failed to scan agents"
+	},
+	"translate": {
+		"title": "Configure translation service",
+		"configureOwn": "Bring your own API",
+		"useDefault": "Use system default",
+		"apiKeyPlaceholder": "API key",
+		"endpointPlaceholder": "Endpoint (optional)",
+		"openDocs": "Open provider website",
+		"test": "Test",
+		"probeIdle": "Not tested yet",
+		"probeProbing": "Testing…",
+		"probeOk": "Works",
+		"probeFail": "Check your key and try again"
+	},
+	"layout": {
+		"title": "Layout parsing",
+		"configureOwn": "Configure Paddle API (recommended)",
+		"useDefault": "Local on-device model",
+		"apiKeyPlaceholder": "Enter your PP-StructureV3 access token",
+		"openDocs": "Open provider website",
+		"test": "Test",
+		"probeIdle": "Not tested yet",
+		"probeProbing": "Testing…",
+		"probeOk": "Works",
+		"probeFail": "Check your key and try again"
+	},
+	"vault": {
+		"title": "Create your vault",
+		"create": "Create a vault",
+		"zotero": "Import from Zotero"
+	},
+	"actions": {
+		"start": "Start setup",
+		"next": "Next",
+		"back": "Back",
+		"finish": "Finish setup"
+	}
+}

@@ -136,6 +136,12 @@ export type AppSettings = {
 	 * Default **on**; takes effect from the next launch.
 	 */
 	telemetryEnabled: boolean;
+	/**
+	 * First-run setup wizard completed (welcome → theme → agent →
+	 * translate/layout → create vault / Zotero import). `false` shows the
+	 * onboarding overlay on the main window for fresh installs.
+	 */
+	onboardingDone: boolean;
 	// Appearance
 	theme: ThemePreference;
 	/**

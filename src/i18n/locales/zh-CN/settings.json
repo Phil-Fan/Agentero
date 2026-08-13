@@ -13,7 +13,8 @@
 		"doctor": "问题诊断",
 		"keyboard": "快捷键",
 		"remote-access": "远程访问",
-		"about": "关于"
+		"about": "关于",
+		"quickSetup": "快速配置向导"
 	},
 	"remoteAccess": {
 		"title": "远程访问",
@@ -296,6 +297,7 @@
 			"section": "API 服务",
 			"confirm": "确定",
 			"openDocs": "打开服务商网站",
+			"openDocsLabel": "获取 API Key",
 			"notConfigured": "未配置",
 			"apiKey": {
 				"label": "API Key",
@@ -312,6 +314,12 @@
 				"label": "模型",
 				"placeholder": "服务商模型 ID"
 			}
+		},
+		"providerDesc": {
+			"deepl": "DeepL 神经机器翻译，使用官方 API Key。",
+			"azure": "微软翻译，使用 Azure 订阅密钥。",
+			"googleCloud": "谷歌云翻译 API，使用服务账号密钥。",
+			"openaiCompatible": "任意兼容 OpenAI 的翻译接口（如 OpenAI、Moonshot、DeepSeek 等）。"
 		},
 		"agentId": {
 			"label": "Agent",
@@ -338,10 +346,12 @@
 			"paddle": "PP-StructureV3",
 			"confirm": "确定",
 			"openDocs": "打开服务商网站",
+			"openDocsLabel": "获取访问令牌",
+			"desc": "远程 PP-StructureV3 版面解析，使用 AI Studio PaddleOCR 访问令牌。",
 			"notConfigured": "未配置",
 			"apiKey": {
 				"label": "API Key",
-				"placeholder": "AI Studio PaddleOCR 访问令牌"
+				"placeholder": "填写 PP-StructureV3 访问令牌"
 			},
 			"probeIdle": "尚未检测",
 			"probeOk": "可用",
@@ -467,6 +477,11 @@
 			"uninstallFailed": "无法移除 CLI 命令",
 			"statusFailed": "无法读取 CLI 状态",
 			"openReleaseFailed": "无法打开发布页"
+		},
+		"onboarding": {
+			"label": "首次运行引导",
+			"description": "在主窗口重放主题、Agent 与翻译的设置向导",
+			"reopen": "重新打开引导向导"
 		}
 	}
 }
