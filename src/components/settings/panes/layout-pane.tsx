@@ -215,54 +215,65 @@ export function LayoutPane({
 						{t("layout.providerConfig.section")}
 					</h3>
 					<div className="rounded-lg border bg-card px-3 py-2.5">
-						<div className="flex min-w-0 items-center gap-1.5">
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<span
-										role="status"
-										aria-label={t(
+						<div className="mb-2 flex items-center justify-between gap-2">
+							<div className="flex min-w-0 items-center gap-1.5">
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<span
+											role="status"
+											aria-label={t(
+												probeStatusLabelKey(
+													status,
+												) as "layout.providerConfig.probeIdle",
+											)}
+											className={cn(
+												"inline-block size-1.5 shrink-0 rounded-full",
+												probeDotClass(status, configured),
+											)}
+										/>
+									</TooltipTrigger>
+									<TooltipContent>
+										{t(
 											probeStatusLabelKey(
 												status,
 											) as "layout.providerConfig.probeIdle",
 										)}
-										className={cn(
-											"inline-block size-1.5 shrink-0 rounded-full",
-											probeDotClass(status, configured),
-										)}
-									/>
-								</TooltipTrigger>
-								<TooltipContent>
-									{t(
-										probeStatusLabelKey(
-											status,
-										) as "layout.providerConfig.probeIdle",
-									)}
-								</TooltipContent>
-							</Tooltip>
-							<span className="truncate font-medium text-sm">
-								{t("layout.providerConfig.paddle")}
-							</span>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon-xs"
-										aria-label={t("layout.providerConfig.openDocs")}
-										onClick={() =>
-											openExternalUrl(LAYOUT_PROVIDER_DOCS_URLS.paddle)
-										}
-									>
-										<ExternalLink className="size-3" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>
-									{t("layout.providerConfig.openDocs")}
-								</TooltipContent>
-							</Tooltip>
+									</TooltipContent>
+								</Tooltip>
+								<span className="truncate font-medium text-sm">
+									{t("layout.providerConfig.paddle")}
+								</span>
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon-xs"
+											aria-label={t("layout.providerConfig.openDocs")}
+											onClick={() =>
+												openExternalUrl(LAYOUT_PROVIDER_DOCS_URLS.paddle)
+											}
+										>
+											<ExternalLink className="size-3" />
+										</Button>
+									</TooltipTrigger>
+									<TooltipContent>
+										{t("layout.providerConfig.openDocs")}
+									</TooltipContent>
+								</Tooltip>
+							</div>
+							<Button
+								type="button"
+								variant="outline"
+								size="xs"
+								disabled={status === "probing"}
+								onClick={() => void confirmProvider()}
+							>
+								{t("layout.providerConfig.confirm")}
+							</Button>
 						</div>
 
-						<div className="mt-2 flex items-center gap-2">
+						<div className="flex items-center gap-2">
 							<Label
 								htmlFor="layout-provider-paddle-api-key"
 								className="w-20 shrink-0 font-normal text-muted-foreground text-xs"
@@ -282,16 +293,6 @@ export function LayoutPane({
 								}
 								onFocus={(e) => e.target.select()}
 							/>
-							<Button
-								type="button"
-								variant="outline"
-								size="xs"
-								className="shrink-0"
-								disabled={status === "probing"}
-								onClick={() => void confirmProvider()}
-							>
-								{t("layout.providerConfig.confirm")}
-							</Button>
 						</div>
 					</div>
 				</div>
