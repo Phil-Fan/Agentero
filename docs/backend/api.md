@@ -1530,7 +1530,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 #### `agent:remove_agent`
 
-删除注册项（不卸载用户本机 CLI）。
+删除注册项（**不**卸载用户本机 CLI、不动 shell 配置）。设置页「卸载」按钮做彻底清理时走 `agent_run_tool_lifecycle` 的 `uninstall`（成功后会联动删除 catalog 注册项）；仅想移除注册项的 UI 场景仍用本命令。
 
 - **参数**：`{ id: string }`
 - **返回**：`{ ok: true; data: null }`
@@ -1553,17 +1553,18 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 #### `agent_run_tool_lifecycle`（已实现，[#225](https://github.com/poco-ai/Agentero/issues/225)）
 
-**静默**安装或升级 catalog Agent CLI（需要时一并装 ACP 适配器）。不弹终端、不写临时确认脚本；命令由 Host 按平台拼装，UI 不得传入任意 shell。
+**静默**安装、升级或卸载 catalog Agent CLI（需要时一并装/卸 ACP 适配器）。不弹终端、不写临时确认脚本；命令由 Host 按平台拼装，UI 不得传入任意 shell。
 
 > 已取代旧的 `agent_open_install_terminal`（打开系统终端、Enter 确认后再装）。远端仍用 `remote_agent_open_install_terminal`（SSH 确认安装）。
 
-- **参数**：`{ templateId: string, action: "install" | "update", taskId?: string }`
+- **参数**：`{ templateId: string, action: "install" | "update" | "uninstall", taskId?: string }`
   - 支持的 `templateId`：`opencode` · `openclaw` · `claude-acp` · `codex-acp` · `gemini` · `hermes` · `grok-build` · `pi` · `dsh` · `kimi-code`（不含 `qodercli` / `custom`）
   - `taskId` 来自设置页 Agent 行内安装进度条；用于匹配 Host progress tick 与接收协作取消信号。
 - **返回**：`{ ok: true; data: null }` 或错误（stderr/stdout 末尾若干行）
 - **行为**
   - `install`：未装 host 时走官方 installer（POSIX curl→临时文件再 bash，非 `curl|bash`）或 npm；Claude/Codex/Pi 在 host 已存在但 ACP 缺失时只装适配器；两者都缺则 host && adapter；Hermes 走官方 installer；OpenClaw 走 npm。Pi 无原生 ACP，ACP 入口是社区适配器 `pi-acp`（detect 用 host `pi`）；host 与 adapter 两层都走 npm，因为 `pi.dev/install.sh` 是交互式 TUI installer，不能静默执行。Dsh 是目录级 npm 项目安装：Host 先在 `~/.agentero/dsh-acp` 写入默认 `cordis.yml` 与最小 `package.json`（已存在则不覆盖），再 `npm i` 固定版本的 `dsh-acp-demo` + 插件栈；launcher、home npm 根或 PATH 已有入口时 `install` 跳过下载，`update` 仍刷新 launcher 副本。Kimi Code 优先官方 installer（`code.kimi.com`，单二进制装入 `~/.kimi-code`），失败回退 `npm i -g @moonshot-ai/kimi-code`。
   - `update`：优先 `tool update` / 官方链，失败再 npm；Codex 固定 npm（避免假成功）；OpenClaw 使用 `openclaw update --yes` 后 fallback npm；Pi 使用 `pi update --self` 后 fallback npm；Windows 上 OpenCode 不用交互式 `upgrade`。Kimi 的 `kimi upgrade` 是交互式，静默 update 直接重跑官方 installer（幂等）。
+  - `uninstall`：镜像安装矩阵做 best-effort 清理（先 `resolve_command("npm")` 预检，缺失即报错而非假成功）——npm 全局包逐个 `npm uninstall -g`（unix 上适配器带 `--prefix "$HOME/.local"`，与安装一致）；dsh 删除受管目录 `~/.agentero/dsh-acp`，kimi-code 在 npm 卸载后删除 `~/.kimi-code`（Windows 为 `%USERPROFILE%\.kimi-code`）；**不改 shell rc**（官方 installer 写入的 PATH 行保留）、不处理官方脚本/brew 安装的 CLI（无法可靠定位）。Hermes 无 npm 包/受管目录 → 仅移除注册项（不跑命令）。成功后同命令联动删除该模板的 catalog 注册项（`catalog-{templateId}`，或 command+args 匹配），避免二进制已删而注册项残留；phase 用 `agent-lifecycle-uninstall` 推送进度。
   - 本机 lifecycle 全局串行执行，避免多个 npm 全局安装/升级任务并发抢锁或互相覆盖临时脚本；设置页在对应 Agent 卡片内展示安装 / 扫描 / 探测阶段进度（#250）。
   - 安装子进程运行期间，Host 以 `agent-lifecycle:progress` 推送 `agent-lifecycle-*` phase tick，供设置页行内进度条消费，避免快捷下载脚本长时间停在无进度状态。
   - 若传入 `taskId`，等待 lifecycle 锁和执行安装子进程时会检查 `background_task_cancel`；取消是尽力而为，不回滚已完成的包管理器写入。
@@ -1600,6 +1601,20 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 - **参数**：无
 - **返回**：`{ ok: true; data: string }`
+
+#### `agent_tool_uninstall_info`（已实现）
+
+返回某模板「彻底卸载」将执行的清理项清单，供设置页确认对话框展示。无副作用的纯查询；与 `agent_run_tool_lifecycle` 的 `uninstall` 矩阵一致。
+
+- **参数**：`{ templateId: string }`
+- **返回**：`{ ok: true; data: UninstallInfo | null }`（`null` = 无可管理卸载，仅注册项移除，如 `hermes` / `qodercli` / `custom`）
+
+```ts
+interface UninstallInfo {
+  npmCommands: string[]; // 完整 `npm uninstall -g ...` 命令串（含 prefix）
+  dirs: string[]; // 将 remove_dir_all 的受管目录
+}
+```
 
 #### `agent:list_sessions`
 

@@ -25,6 +25,20 @@ Agentero 使用 **BYOA**（Bring Your Own Agent）：Agent 由你安装和登录
 
 若终端里能跑、应用内探测不到：图形应用的 PATH 可能与 shell 不同，请填写**绝对路径**。远程 Vault 时，Agent 装在**服务器**上，见 [打开远程 Vault](remote-vault.md)。
 
+## 卸载 Agent
+
+1. 打开 **Settings → Agent**，在已安装或已注册的 Agent 行点 **Trash** 按钮。
+2. 确认对话框展示该 Agent 的 logo 与将要执行的清理项：
+   - Agentero 静默安装的 npm 全局包（如 `opencode-ai`、`@anthropic-ai/claude-code` 等）逐个 `npm uninstall -g`；
+   - Agentero 管理的目录（dsh 的 `~/.agentero/dsh-acp`、Kimi Code 的 `~/.kimi-code`）整体删除。
+3. 确认后行内显示卸载进度，完成后注册项一并移除，行回到「未安装」状态。
+
+清理范围与保留项：
+
+- **不清理**：官方安装器或 Homebrew 安装的 CLI、shell 配置中官方 installer 写入的 PATH 行、Agent 会话历史。这些无法可靠定位或属于用户数据，均保留。
+- **仅移除注册项**：对没有可管理卸载路径的 Agent（如 Hermes、纯 PATH 探测到的 CLI），对话框会注明只删 Agentero 注册项，磁盘文件不动。
+- **自定义 Agent**：走同一确认对话框，但只移除注册项（自定义 Agent 的二进制由用户自管）。
+
 ## 使用 Skill
 
 Agentero 的 Skill 是放在 Vault `.agents/skills/<name>/` 下的 prompt 包，含 `SKILL.md` 与可选的 `scripts/`、`references/`、`assets/`。
