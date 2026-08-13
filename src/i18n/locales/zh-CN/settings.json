@@ -10,7 +10,7 @@
 		"agent": "Agent",
 		"translate": "翻译",
 		"layout": "版面解析",
-		"doctor": "知识库诊断",
+		"doctor": "问题诊断",
 		"keyboard": "快捷键",
 		"remote-access": "远程访问",
 		"about": "关于"
@@ -350,7 +350,7 @@
 		}
 	},
 	"doctor": {
-		"title": "知识库诊断",
+		"title": "问题诊断",
 		"refresh": "重新运行诊断",
 		"remoteUnavailable": "当前版本仅支持诊断本地 Vault。",
 		"openVault": "请打开本地 Vault 后运行诊断。",

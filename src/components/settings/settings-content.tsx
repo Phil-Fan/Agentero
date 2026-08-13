@@ -11,6 +11,7 @@ import {
 	X,
 } from "lucide-react";
 import {
+	Fragment,
 	lazy,
 	Suspense,
 	useCallback,
@@ -97,15 +98,16 @@ const AboutPane = lazy(() =>
 const NAV: {
 	id: SettingsSection;
 	icon: typeof Bot;
+	dividerBefore?: boolean;
 }[] = [
 	{ id: "general", icon: SlidersHorizontal },
 	{ id: "appearance", icon: Paintbrush },
-	{ id: "agent", icon: Bot },
+	{ id: "agent", icon: Bot, dividerBefore: true },
 	{ id: "translate", icon: Languages },
 	{ id: "layout", icon: LayoutTemplate },
-	{ id: "doctor", icon: Stethoscope },
-	{ id: "keyboard", icon: Keyboard },
 	{ id: "remote-access", icon: MonitorSmartphone },
+	{ id: "doctor", icon: Stethoscope, dividerBefore: true },
+	{ id: "keyboard", icon: Keyboard },
 	{ id: "about", icon: Info },
 ];
 
@@ -229,22 +231,27 @@ export function SettingsContent({
 						const Icon = item.icon;
 						const active = section === item.id;
 						return (
-							<li key={item.id}>
-								<button
-									type="button"
-									className={cn(
-										"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] outline-none transition-colors",
-										"hover:bg-black/5 dark:hover:bg-white/10",
-										active &&
-											"bg-primary text-primary-foreground hover:bg-primary dark:hover:bg-primary",
-									)}
-									aria-current={active ? "page" : undefined}
-									onClick={() => onSectionChange(item.id)}
-								>
-									<Icon className="size-3.5 shrink-0 opacity-90" />
-									<span className="truncate">{t(`nav.${item.id}`)}</span>
-								</button>
-							</li>
+							<Fragment key={item.id}>
+								{item.dividerBefore ? (
+									<li aria-hidden className="mx-1 my-1 border-t" />
+								) : null}
+								<li>
+									<button
+										type="button"
+										className={cn(
+											"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] outline-none transition-colors",
+											"hover:bg-black/5 dark:hover:bg-white/10",
+											active &&
+												"bg-primary text-primary-foreground hover:bg-primary dark:hover:bg-primary",
+										)}
+										aria-current={active ? "page" : undefined}
+										onClick={() => onSectionChange(item.id)}
+									>
+										<Icon className="size-3.5 shrink-0 opacity-90" />
+										<span className="truncate">{t(`nav.${item.id}`)}</span>
+									</button>
+								</li>
+							</Fragment>
 						);
 					})}
 				</ul>
