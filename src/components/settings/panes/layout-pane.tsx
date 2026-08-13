@@ -243,6 +243,18 @@ export function LayoutPane({
 								<span className="truncate font-medium text-sm">
 									{t("layout.providerConfig.paddle")}
 								</span>
+								<Button
+									type="button"
+									variant="link"
+									size="xs"
+									className="-ml-1.5 h-auto shrink-0 px-1.5 text-primary"
+									onClick={() =>
+										openExternalUrl(LAYOUT_PROVIDER_DOCS_URLS.paddle)
+									}
+								>
+									<ExternalLink data-icon="inline-start" className="size-3" />
+									{t("layout.providerConfig.openDocsLabel")}
+								</Button>
 							</div>
 							<Button
 								type="button"
@@ -254,17 +266,6 @@ export function LayoutPane({
 								{t("layout.providerConfig.confirm")}
 							</Button>
 						</div>
-
-						<Button
-							type="button"
-							variant="link"
-							size="xs"
-							className="-ml-1.5 mb-2 h-auto px-1.5 text-primary"
-							onClick={() => openExternalUrl(LAYOUT_PROVIDER_DOCS_URLS.paddle)}
-						>
-							<ExternalLink data-icon="inline-start" className="size-3" />
-							{t("layout.providerConfig.openDocsLabel")}
-						</Button>
 
 						<div className="flex items-center gap-2">
 							<Label
