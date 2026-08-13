@@ -12,7 +12,7 @@ use notify_debouncer_full::new_debouncer;
 use notify_debouncer_full::notify::event::{ModifyKind, RenameMode};
 use notify_debouncer_full::notify::{EventKind, RecursiveMode, Watcher};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, EventTarget};
+use tauri::{AppHandle, Emitter, EventTarget, Manager};
 
 /// Payload for the `vault:file-changed` event (consumed by the renderer).
 #[derive(Clone, Serialize)]
@@ -103,6 +103,7 @@ impl FsWatchController {
                     match rx.recv_timeout(Duration::from_millis(500)) {
                         Ok(Ok(events)) => {
                             for payload in payloads_from_events(events) {
+                                invalidate_caps_for_paths(&app, &watch_root, &payload.paths);
                                 let _ = app.emit_to(
                                     EventTarget::webview_window(label.clone()),
                                     "vault:file-changed",
@@ -141,6 +142,61 @@ impl FsWatchController {
 fn is_ignored(path: &str) -> bool {
     let p = path.replace('\\', "/");
     p.contains("/.agentero/") || p.contains("/.git/") || p.contains("/node_modules/")
+}
+
+/// Files whose presence decides `PaperCaps`: a PDF to parse, LaTeX source that
+/// supersedes liteparse, or an existing `PAPER.md`.
+fn is_caps_relevant(path: &str) -> bool {
+    let lower = path.replace('\\', "/").to_ascii_lowercase();
+    lower.ends_with("/paper.md")
+        || lower.ends_with(".pdf")
+        || lower.ends_with(".tex")
+        || lower.ends_with(".ltx")
+}
+
+/// Paper folders a changed file can belong to: its own folder, plus the one
+/// above it so `source/main.tex` and `source/paper.pdf` count for the paper.
+fn caps_paper_dirs(vault_root: &str, path: &str) -> Vec<String> {
+    let root = std::path::Path::new(vault_root);
+    let canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let file = std::path::Path::new(path);
+    let Ok(rel) = file
+        .strip_prefix(&canonical)
+        .or_else(|_| file.strip_prefix(root))
+    else {
+        return Vec::new();
+    };
+    let rel = rel.to_string_lossy().replace('\\', "/");
+    let mut dirs = Vec::new();
+    let mut current = rel.as_str();
+    for _ in 0..2 {
+        let Some((parent, _)) = current.rsplit_once('/') else {
+            break;
+        };
+        if parent.is_empty() {
+            break;
+        }
+        dirs.push(parent.to_string());
+        current = parent;
+    }
+    dirs
+}
+
+/// Drop cached `PaperCaps` for folders an external write touched, so the next
+/// reconcile probes real disk state instead of a snapshot from earlier in the
+/// session.
+fn invalidate_caps_for_paths(app: &AppHandle, vault_root: &str, paths: &[String]) {
+    let relevant: Vec<&String> = paths.iter().filter(|p| is_caps_relevant(p)).collect();
+    if relevant.is_empty() {
+        return;
+    }
+    let caps = app.state::<crate::features::catalog::CapsCache>();
+    let vault = std::path::Path::new(vault_root);
+    for path in relevant {
+        for dir in caps_paper_dirs(vault_root, path) {
+            caps.invalidate(vault, &dir);
+        }
+    }
 }
 
 /// Temp path used by Host `atomic_write` (wiki rename / heading rename).
@@ -259,6 +315,25 @@ mod tests {
         assert!(is_ignored(r"C:\vault\.agentero\catalog.sqlite"));
         assert!(is_ignored("/vault/.agentero/wiki-cache.json"));
         assert!(is_ignored("/vault/.git/index"));
+    }
+
+    #[test]
+    fn caps_invalidation_targets_paper_folders_of_capability_files() {
+        assert!(is_caps_relevant("/vault/papers/a/PAPER.md"));
+        assert!(is_caps_relevant("/vault/papers/a/source/main.TeX"));
+        assert!(is_caps_relevant("/vault/papers/a/a.pdf"));
+        assert!(!is_caps_relevant("/vault/papers/a/NOTES.md"));
+        assert!(!is_caps_relevant("/vault/papers/a/source/layout.json"));
+
+        assert_eq!(
+            caps_paper_dirs("/vault", "/vault/papers/a/source/main.tex"),
+            vec!["papers/a/source".to_string(), "papers/a".to_string()]
+        );
+        assert_eq!(
+            caps_paper_dirs("/vault", "/vault/papers/a/PAPER.md"),
+            vec!["papers/a".to_string(), "papers".to_string()]
+        );
+        assert!(caps_paper_dirs("/vault", "/elsewhere/a/PAPER.md").is_empty());
     }
 }
 
