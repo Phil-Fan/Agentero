@@ -22,6 +22,10 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
     多轮续聊降级为**每轮新会话**（单发式），Host 不再报「不支持继续会话」。
   - API Key：在 launcher 目录 `.env` 写 `DEEPSEEK_API_KEY`，或在注册项 env 中
     export。缺少时 prompt 报 `no API key for provider route "deepseek-official"`。
+    `dsh-acp-demo` 只读启动 cwd 的 `.env` + 启动环境：它**不读** `~/.dsh` 的
+    凭据存储（`.credentials.yaml` 需在 `cordis.yml` 挂载 credentials provider，
+    `~/.dsh/.env` 的 user-env 层只有官方 `dsh` CLI 的 `loadLayeredEnv` 加载），
+    所以官方 CLI/Web UI 里配过的 key 对 ACP 服务不可见，须复制到 launcher `.env`。
 - Pi：无原生 ACP，走社区适配器 `pi-acp`（内部 spawn `pi --mode rpc`）；detect 用 host `pi`、
   ACP 入口用 `pi-acp`。pi 的 skill 以 `/skill:<name>` 暴露，故 Agentero 不发 `/<name>`
   mention，只注入 `SKILL.md` 正文。
