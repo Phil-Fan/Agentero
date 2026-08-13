@@ -435,11 +435,12 @@ export async function probeCatalogAgent(
 	return invokeAgentApi("agent_probe_catalog", { templateId });
 }
 
-export type ToolLifecycleAction = "install" | "update";
+export type ToolLifecycleAction = "install" | "update" | "uninstall";
 
 /**
- * Silently install or update a catalog Agent CLI (and ACP adapter when needed).
- * Host only allows known templates — no free-form shell from the UI.
+ * Silently install, update or uninstall a catalog Agent CLI (and ACP adapter
+ * when needed). Host only allows known templates — no free-form shell from the
+ * UI. Uninstall also removes the registry entry on success.
  */
 export async function runToolLifecycle(
 	templateId: string,
@@ -451,6 +452,20 @@ export async function runToolLifecycle(
 		action,
 		taskId,
 	});
+}
+
+export type UninstallInfo = {
+	/** Complete `npm uninstall` commands (best-effort), mirroring install. */
+	npmCommands: string[];
+	/** Agentero-managed directories to delete (e.g. dsh launcher, kimi code). */
+	dirs: string[];
+};
+
+/** What a silent uninstall of this template would remove; null if unsupported. */
+export async function toolUninstallInfo(
+	templateId: string,
+): Promise<UninstallInfo | null> {
+	return invokeAgentApi("agent_tool_uninstall_info", { templateId });
 }
 
 /** Whether silent install/update is available for this catalog template. */

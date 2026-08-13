@@ -203,6 +203,12 @@
 		"lifecycleInstalling": "Running installer…",
 		"lifecycleScanning": "Scanning PATH…",
 		"lifecycleProbing": "Probing ACP…",
+		"lifecycleUninstalling": "Uninstalling…",
+		"uninstallAgent": "Uninstall",
+		"uninstallAgentAria": "Uninstall {{name}} agent",
+		"uninstallAgentTitle": "Uninstall agent",
+		"uninstallSuccess": "Uninstalled {{name}}",
+		"removeSuccess": "Removed {{name}}",
 		"badges": {
 			"default": "default",
 			"installed": "installed",
@@ -255,6 +261,14 @@
 			"name": "Name",
 			"command": "Command",
 			"args": "Args"
+		},
+		"uninstallDialog": {
+			"title": "Uninstall {{name}}?",
+			"lead": "Agentero will run the following uninstall steps:",
+			"dirsLabel": "Directories to delete",
+			"copyAria": "Copy to clipboard",
+			"registryOnly": "Only the Agentero registry entry will be removed; installed files stay on disk.",
+			"confirm": "Uninstall"
 		},
 		"remote": {
 			"banner": "Probing ACP agents on {{host}}. Binaries must be installed and logged in on the server (PATH / login shell).",

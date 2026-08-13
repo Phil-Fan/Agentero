@@ -203,6 +203,12 @@
 		"lifecycleInstalling": "正在运行安装器…",
 		"lifecycleScanning": "正在扫描 PATH…",
 		"lifecycleProbing": "正在探测 ACP…",
+		"lifecycleUninstalling": "正在卸载…",
+		"uninstallAgent": "卸载",
+		"uninstallAgentAria": "卸载 {{name}} Agent",
+		"uninstallAgentTitle": "卸载 Agent",
+		"uninstallSuccess": "已卸载 {{name}}",
+		"removeSuccess": "已移除 {{name}}",
 		"badges": {
 			"default": "默认",
 			"installed": "已安装",
@@ -255,6 +261,14 @@
 			"name": "名称",
 			"command": "命令",
 			"args": "参数"
+		},
+		"uninstallDialog": {
+			"title": "卸载 {{name}}？",
+			"lead": "Agentero 将执行以下卸载步骤：",
+			"dirsLabel": "要删除的目录",
+			"copyAria": "复制到剪贴板",
+			"registryOnly": "仅移除 Agentero 注册项，磁盘上的文件保留。",
+			"confirm": "卸载"
 		},
 		"remote": {
 			"banner": "正在探测 {{host}} 上的 ACP Agent。二进制需在服务器安装并完成登录（login shell PATH）。",

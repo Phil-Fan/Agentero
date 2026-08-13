@@ -3,6 +3,7 @@ import {
 	buildDefaultAgentChoices,
 	defaultAgentChoiceValue,
 	NO_DEFAULT_AGENT_CHOICE,
+	showUninstallAgent,
 } from "@/components/settings/panes/agent-catalog";
 import type {
 	AgentDescriptor,
@@ -108,5 +109,57 @@ describe("buildDefaultAgentChoices", () => {
 		const choices = buildDefaultAgentChoices(state);
 
 		expect(defaultAgentChoiceValue(state, choices)).toBe("catalog:codex-acp");
+	});
+});
+
+describe("showUninstallAgent", () => {
+	it("allows removal for a registry entry even without a binary", () => {
+		expect(
+			showUninstallAgent(
+				entry({
+					registeredId: "catalog-hermes",
+					binaryAvailable: false,
+					acpCommandAvailable: false,
+					canInstall: false,
+				}),
+			),
+		).toBe(true);
+	});
+
+	it("allows uninstall for an installed lifecycle template", () => {
+		expect(
+			showUninstallAgent(
+				entry({
+					registeredId: null,
+					canInstall: true,
+					binaryAvailable: true,
+				}),
+			),
+		).toBe(true);
+	});
+
+	it("rejects an unregistered template with no binary", () => {
+		expect(
+			showUninstallAgent(
+				entry({
+					registeredId: null,
+					canInstall: true,
+					binaryAvailable: false,
+				}),
+			),
+		).toBe(false);
+	});
+
+	it("rejects plain-PATH binaries we never installed (qodercli)", () => {
+		expect(
+			showUninstallAgent(
+				entry({
+					templateId: "qodercli",
+					registeredId: null,
+					canInstall: false,
+					binaryAvailable: true,
+				}),
+			),
+		).toBe(false);
 	});
 });

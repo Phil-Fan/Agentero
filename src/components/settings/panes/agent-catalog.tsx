@@ -87,6 +87,18 @@ export function showUpdateAgent(entry: CatalogEntry): boolean {
 	return Boolean(entry.canInstall) && entry.binaryAvailable;
 }
 
+/**
+ * Row can be uninstalled/removed: a registry entry always qualifies; otherwise
+ * an installed CLI of a lifecycle template (excludes plain-PATH templates like
+ * qodercli that we never installed).
+ */
+export function showUninstallAgent(entry: CatalogEntry): boolean {
+	return (
+		Boolean(entry.registeredId) ||
+		(Boolean(entry.canInstall) && entry.binaryAvailable)
+	);
+}
+
 export const NO_DEFAULT_AGENT_CHOICE = "__no_default_agent__";
 
 export type DefaultAgentChoice = {

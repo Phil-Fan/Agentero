@@ -29,8 +29,10 @@ import {
 	StatusBadge,
 	showInstallAcp,
 	showInstallAgent,
+	showUninstallAgent,
 	showUpdateAgent,
 } from "@/components/settings/panes/agent-catalog";
+import { AgentUninstallDialog } from "@/components/settings/panes/agent-uninstall-dialog";
 import {
 	PageTitle,
 	SettingsGroup,
@@ -73,6 +75,8 @@ import {
 	setAgentUserAgent,
 	setDefaultAgent,
 	type ToolLifecycleAction,
+	toolUninstallInfo,
+	type UninstallInfo,
 	USER_AGENT_PRESETS,
 	upsertAgent,
 } from "@/lib/agent";
@@ -97,6 +101,10 @@ type LifecycleProgressState = {
 	detail: string;
 };
 
+type UninstallTarget =
+	| { kind: "catalog"; entry: CatalogEntry; info: UninstallInfo | null }
+	| { kind: "custom"; id: string; name: string; template: AgentTemplate };
+
 export function AgentPane({
 	settings,
 	patch,
@@ -107,10 +115,10 @@ export function AgentPane({
 	const { t } = useTranslation(["settings", "agent", "common"]);
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [loading, setLoading] = useState(false);
-	/** Template ids currently running or queued for silent install (row-level spinner). */
-	const [installingIds, setInstallingIds] = useState<Set<string>>(
-		() => new Set(),
-	);
+	/** Template ids currently running or queued for silent install/update/uninstall, mapped to the action (row-level spinner). */
+	const [lifecycleBusyIds, setLifecycleBusyIds] = useState<
+		Map<string, ToolLifecycleAction>
+	>(() => new Map());
 	const [lifecycleProgress, setLifecycleProgress] = useState<
 		Record<string, LifecycleProgressState>
 	>({});
@@ -118,6 +126,10 @@ export function AgentPane({
 		null,
 	);
 	const [adding, setAdding] = useState(false);
+	/** Target of the uninstall/remove confirmation dialog. */
+	const [uninstallTarget, setUninstallTarget] =
+		useState<UninstallTarget | null>(null);
+	const [uninstallBusy, setUninstallBusy] = useState(false);
 	const [formName, setFormName] = useState(() => t("agent.form.defaultName"));
 	const [formCommand, setFormCommand] = useState("");
 	const [formArgs, setFormArgs] = useState("");
@@ -381,23 +393,23 @@ export function AgentPane({
 			if (phase === "agent-lifecycle-waiting") {
 				return t("agent.lifecycleWaiting");
 			}
-			if (phase === "agent-lifecycle-install") {
-				return t("agent.lifecycleInstalling");
+			if (phase === "agent-lifecycle-uninstall") {
+				return t("agent.lifecycleUninstalling");
 			}
 			return t("agent.lifecycleInstalling");
 		},
 		[t],
 	);
 
-	/** Silent install/update: Host scopes Agent vs ACP from PATH (no free-form shell). */
+	/** Silent install/update/uninstall: Host scopes Agent vs ACP from PATH (no free-form shell). */
 	const onToolLifecycle = async (
 		entry: CatalogEntry,
 		action: ToolLifecycleAction,
 	) => {
 		if (!isTauri()) return;
-		setInstallingIds((prev) => {
-			const next = new Set(prev);
-			next.add(entry.templateId);
+		setLifecycleBusyIds((prev) => {
+			const next = new Map(prev);
+			next.set(entry.templateId, action);
 			return next;
 		});
 		const taskId = `agent-lifecycle-${entry.templateId}-${Date.now().toString(36)}`;
@@ -405,7 +417,11 @@ export function AgentPane({
 		try {
 			patchLifecycleProgress(entry.templateId, {
 				progress: 5,
-				detail: t("agent.lifecycleInstalling"),
+				detail: t(
+					action === "uninstall"
+						? "agent.lifecycleUninstalling"
+						: "agent.lifecycleInstalling",
+				),
 			});
 			unlisten = await listen<LifecycleProgressEvent>(
 				"agent-lifecycle:progress",
@@ -432,7 +448,11 @@ export function AgentPane({
 			}
 			notifySuccess(
 				t(
-					action === "update" ? "agent.updateSuccess" : "agent.installSuccess",
+					action === "update"
+						? "agent.updateSuccess"
+						: action === "uninstall"
+							? "agent.uninstallSuccess"
+							: "agent.installSuccess",
 					{ name: entry.name },
 				),
 			);
@@ -441,24 +461,76 @@ export function AgentPane({
 		} finally {
 			unlisten?.();
 			clearLifecycleProgress(entry.templateId);
-			setInstallingIds((prev) => {
-				const next = new Set(prev);
+			setLifecycleBusyIds((prev) => {
+				const next = new Map(prev);
 				next.delete(entry.templateId);
 				return next;
 			});
 		}
 	};
 
-	const onRemove = async (id: string) => {
+	const openUninstallDialog = useCallback((target: UninstallTarget) => {
 		if (!isTauri()) return;
-		setLoading(true);
+		if (target.kind === "catalog") {
+			setUninstallTarget({ ...target, info: null });
+			void toolUninstallInfo(target.entry.templateId)
+				.then((info) => {
+					setUninstallTarget((prev) =>
+						prev?.kind === "catalog" &&
+						prev.entry.templateId === target.entry.templateId
+							? { ...prev, info }
+							: prev,
+					);
+				})
+				.catch((e) => {
+					notifyError(e instanceof Error ? e.message : String(e));
+					setUninstallTarget(null);
+				});
+			return;
+		}
+		setUninstallTarget(target);
+	}, []);
+
+	const onUninstallConfirm = async () => {
+		const target = uninstallTarget;
+		if (!target || !isTauri()) return;
+		if (target.kind === "catalog") {
+			const info = target.info;
+			const hasPayload =
+				info !== null && (info.npmCommands.length > 0 || info.dirs.length > 0);
+			if (hasPayload) {
+				// Full uninstall runs the lifecycle (binaries + registry entry).
+				const entry = target.entry;
+				setUninstallTarget(null);
+				await onToolLifecycle(entry, "uninstall");
+				return;
+			}
+			// Registry-only removal (e.g. hermes has no managed uninstall).
+			setUninstallBusy(true);
+			try {
+				if (target.entry.registeredId) {
+					await removeAgent(target.entry.registeredId);
+				}
+				await scanOnce();
+				notifySuccess(t("agent.removeSuccess", { name: target.entry.name }));
+			} catch (e) {
+				notifyError(e instanceof Error ? e.message : String(e));
+			} finally {
+				setUninstallBusy(false);
+				setUninstallTarget(null);
+			}
+			return;
+		}
+		setUninstallBusy(true);
 		try {
-			await removeAgent(id);
+			await removeAgent(target.id);
 			await scanOnce();
+			notifySuccess(t("agent.removeSuccess", { name: target.name }));
 		} catch (e) {
 			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
-			setLoading(false);
+			setUninstallBusy(false);
+			setUninstallTarget(null);
 		}
 	};
 
@@ -579,11 +651,14 @@ export function AgentPane({
 					const installAgent = showInstallAgent(entry);
 					const installAcp = showInstallAcp(entry);
 					const updateAgent = showUpdateAgent(entry);
-					// Install/ACP-only gaps gate “Use default”; Update can sit beside it.
+					const uninstallAgent = showUninstallAgent(entry);
+					// Install/ACP-only gaps gate “Use default”; Update/Uninstall can sit beside it.
 					const needsInstall = installAgent || installAcp;
-					const hasLifecycleAction = needsInstall || updateAgent;
+					const hasLifecycleAction =
+						needsInstall || updateAgent || uninstallAgent;
 					const notInstalled = !entry.binaryAvailable;
-					const rowInstalling = installingIds.has(entry.templateId);
+					const rowInstalling = lifecycleBusyIds.has(entry.templateId);
+					const rowBusyAction = lifecycleBusyIds.get(entry.templateId);
 					const rowLifecycle = lifecycleProgress[entry.templateId];
 					// Mid-probe or host-cleared not-probed while a batch is running.
 					const isProbing =
@@ -685,7 +760,7 @@ export function AgentPane({
 											disabled={rowInstalling || !isTauri()}
 											onClick={() => void onToolLifecycle(entry, "install")}
 										>
-											{rowInstalling ? (
+											{rowBusyAction === "install" ? (
 												<Loader2 className="size-3 animate-spin" />
 											) : (
 												<Terminal className="size-3" />
@@ -706,7 +781,7 @@ export function AgentPane({
 											disabled={rowInstalling || !isTauri()}
 											onClick={() => void onToolLifecycle(entry, "install")}
 										>
-											{rowInstalling ? (
+											{rowBusyAction === "install" ? (
 												<Loader2 className="size-3 animate-spin" />
 											) : (
 												<Terminal className="size-3" />
@@ -727,12 +802,44 @@ export function AgentPane({
 											disabled={rowInstalling || !isTauri()}
 											onClick={() => void onToolLifecycle(entry, "update")}
 										>
-											{rowInstalling ? (
+											{rowBusyAction === "update" ? (
 												<Loader2 className="size-3 animate-spin" />
 											) : (
 												<ArrowUpCircle className="size-3" />
 											)}
 											{t("agent.updateAgent")}
+										</Button>
+									) : null}
+									{uninstallAgent ? (
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon-xs"
+											className="size-7"
+											aria-label={t("agent.uninstallAgentAria", {
+												name: entry.name,
+											})}
+											title={t("agent.uninstallAgentTitle")}
+											disabled={rowInstalling || !isTauri()}
+											onClick={() =>
+												openUninstallDialog({
+													kind: "catalog",
+													entry,
+													info: null,
+												})
+											}
+										>
+											{rowBusyAction === "uninstall" ? (
+												<Loader2
+													className="size-3.5 animate-spin text-destructive"
+													aria-hidden
+												/>
+											) : (
+												<Trash2
+													className="size-3.5 text-destructive"
+													aria-hidden
+												/>
+											)}
 										</Button>
 									) : null}
 								</div>
@@ -815,9 +922,18 @@ export function AgentPane({
 									size="icon-xs"
 									className="size-7"
 									aria-label={t("common:remove")}
-									onClick={() => void onRemove(agent.id)}
+									title={t("common:remove")}
+									disabled={!isTauri()}
+									onClick={() =>
+										openUninstallDialog({
+											kind: "custom",
+											id: agent.id,
+											name: agent.name,
+											template: agent.template,
+										})
+									}
 								>
-									<Trash2 className="size-3.5" />
+									<Trash2 className="size-3.5 text-destructive" aria-hidden />
 								</Button>
 							</div>
 						</div>
@@ -1045,6 +1161,24 @@ export function AgentPane({
 					/>
 				</SettingsRow>
 			</SettingsGroup>
+
+			<AgentUninstallDialog
+				open={uninstallTarget !== null}
+				name={
+					uninstallTarget?.kind === "custom"
+						? uninstallTarget.name
+						: (uninstallTarget?.entry.name ?? "")
+				}
+				template={
+					uninstallTarget?.kind === "custom"
+						? uninstallTarget.template
+						: uninstallTarget?.entry.templateId
+				}
+				info={uninstallTarget?.kind === "catalog" ? uninstallTarget.info : null}
+				busy={uninstallBusy}
+				onConfirm={() => void onUninstallConfirm()}
+				onCancel={() => setUninstallTarget(null)}
+			/>
 		</>
 	);
 }
