@@ -47,6 +47,12 @@ pub fn run() {
         .register_asynchronous_uri_scheme_protocol("agentero-model", |_ctx, request, responder| {
             crate::features::layout_model::handle_model_uri(request, responder);
         })
+        .register_asynchronous_uri_scheme_protocol(
+            "agentero-coolpapers",
+            |_ctx, request, responder| {
+                crate::features::coolpapers::proxy::handle(request, responder);
+            },
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::new().build())

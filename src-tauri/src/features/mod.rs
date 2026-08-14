@@ -14,6 +14,8 @@ pub mod catalog;
 pub mod cli_install;
 #[cfg(feature = "desktop")]
 pub mod connector;
+#[cfg(feature = "desktop")]
+pub mod coolpapers;
 pub mod doctor;
 #[cfg(feature = "desktop")]
 pub mod export;
