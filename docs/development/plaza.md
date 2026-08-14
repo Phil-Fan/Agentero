@@ -9,8 +9,8 @@
 |---|---|---|
 | Q1 | 树位置 | **Library + Recycle Bin 下方、真实 Vault 根目录上方**（已实现） |
 | Q2 | Cool Papers 呈现 | **内嵌 iframe + Host 代理协议** `agentero-coolpapers://`（已实现；见 §3.2） |
-| Q3 | 入库 | **P0 不做入库**（不接魔棒 / `lookup_import`；后续迭代再开） |
-| Q4 | P0 范围 | **已交付：广场壳 + Cool Papers 完整浏览**；播客 / 推荐尚未实现 |
+| Q3 | 入库 | **已实现**：每行注入 `[入库]`，复用现成魔棒（见 §3.2.1） |
+| Q4 | P0 范围 | **已交付：广场壳 + Cool Papers 完整浏览 + 单条入库**；播客 / 推荐尚未实现 |
 
 **已实现落点（2026-08-14）**
 
@@ -18,6 +18,7 @@
 |---|---|
 | 来源注册表 | `src/lib/plaza/sources.ts`（新增来源 = 一条数组项） |
 | 中间栏 | `src/components/plaza/plaza-view.tsx`、`plaza-web-frame.tsx` |
+| 入库 | `src/lib/plaza/import.ts` |
 | 侧栏行 | `src/components/sidebar/file-tree/tree-rows.tsx`（`PlazaRow` / `PlazaSourceRow`） |
 | Tab kind | `src/lib/workspace/tabs/types.ts` 的 `"plaza"` + `doc-view.tsx` 分支 |
 | 站点代理 | `src-tauri/src/features/coolpapers/proxy.rs` |
@@ -36,7 +37,7 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 | 数据权威 | catalog + Vault 文件 | 外部站点 / 本地启发式；**P0 不写 Vault** |
 | 侧栏 | `agentero:library` | `agentero:plaza` + 子来源 |
 | 中间栏 | 论文库表格 | 来源专属发现 UI |
-| 典型动作 | 打开 / 标签 / 导出 | 浏览发现（入库后续再做） |
+| 典型动作 | 打开 / 标签 / 导出 | 浏览发现 + 单条入库 |
 
 来源：
 
@@ -108,7 +109,7 @@ i18n：`sidebar:plaza.*`。
 | 站内链接 | 在 iframe 内直接跳转 |
 | 站外链接 | 交给系统浏览器（arxiv.org 等一律拒绝被嵌套） |
 | 加载失败 | 代理返回 502 文案 |
-| 入库 | **P0 不做** |
+| 入库 | 每行 `[入库]`，见 §3.2.1 |
 
 **为什么要代理（`src-tauri/src/features/coolpapers/proxy.rs`）**
 
@@ -134,7 +135,29 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 - 与 PDF iframe 一样，拖拽期间置 `pointer-events: none`，否则 dockview 收不到 dragover。
 - 远程 Vault 会话下同样可用（广场不依赖 vault 文件 IO）。
 
-**后续（非 P0）**：从 URL 解析 arXiv id → 预览抽屉 / 批量入库；届时再增加 Agentero 侧列表层或桥接脚本（需合规评估）。
+### 3.2.1 入库（已实现）
+
+代理注入的桥接脚本给每行论文标题追加 `[入库]`，与站点自带的 `[PDF] [Copy] [Kimi] [REL]` 同排。点击后把 `{ id, url, title }` 交给面板，面板调用现成的 `lookupSubmit` → `lookup_import_batch`，结果再回传给该行显示 `[已入库]`。
+
+**关键点：喂给魔棒的是每行 `#N` 序号链接的 href**，也就是上游权威页面。四种分区形态一致：
+
+| 分区 | papers.cool id | `#N` href |
+|---|---|---|
+| arxiv | `2608.13558` | `arxiv.org/abs/2608.13558` |
+| AAAI | `36958@AAAI` | `ojs.aaai.org/…/article/view/36958` |
+| NeurIPS | `aVh9KRZdRk@OpenReview` | `openreview.net/forum?id=aVh9KRZdRk` |
+| ACL | `2026.acl-long.1@ACL` | `aclanthology.org/2026.acl-long.1/` |
+
+因此**零后端改动**：`extract_primary_identifier` 把任何 http(s) 串判为 `IdentifierKind::Url`，`translator_request` 再路由到 Translator 的 `/web`（arxiv.org 另有原生特判，归一到 abs 页）。这也是 venue 论文唯一可行的入库路径——它们既没有 arXiv id 也没有 DOI，`lookup_import_batch` 直接吃 id 是吃不下的。
+
+- **venue 行硬依赖 Translator**（arXiv 有原生兜底，venue 没有）。Translator 不可用时必须明确报错，不能静默失败。
+- 只做**单条入库**，不提供全选批量：`/web` 是逐条抓取出版商页面，批量既慢又容易被对方限流。
+- 注入的 `[入库]` **不带 href**，否则会被上面的跨源链接拦截器当成外链送去系统浏览器。
+- 行是滚动加载的（`loadMorePapers` 追加 `.panel.paper`），所以除首屏遍历外还挂了 `MutationObserver`。
+- `lookupSubmit` 内部是 fire-and-forget 后台任务，异常不会冒泡，因此入库按钮另设超时兜底，避免永远停在 `[入库中]`；重复点击安全（Host 按 arXiv id / DOI / 归一标题去重）。
+- 入库后**不自动打开论文**，否则会把正在连续浏览的用户拽出广场面板。
+
+**后续（非 P0）**：批量入库、预览抽屉。
 
 ### 3.3 播客（占位）
 
@@ -172,7 +195,7 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 | 模块 | 关系 |
 |---|---|
 | Library | 推荐 v0 只读 `paper_list` / 热力；不改 catalog schema |
-| 魔棒 / 入库 | **P0 不接**；P1 再复用 `lookup_import` |
+| 魔棒 / 入库 | **已复用** `lookup_import_batch`：喂上游 URL，见 §3.2.1 |
 | PDF\|NOTES | 推荐打开本地论文时走现有阅读布局 |
 | Agent | P0 不强制；P1 可做「解释为何推荐」 |
 | 命令面板 | P1：`Plaza: Cool Papers` 等 |
@@ -208,11 +231,11 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 
 ## 7. 明确不做（P0）
 
-- 广场 → Vault **入库**（含批量）。  
+- 广场 → Vault **批量入库**（单条已实现，见 §3.2.1）。  
 - 把 feed 写入 catalog。  
 - 播客播放器 / 订阅管理。  
 - 云端协同过滤或上传本地库。  
-- 在 WebView 内注入支付/登录 Agentero 账号。
+- 注入脚本只做导航上报与 `[入库]`；**不注入任何凭据 / API Key / 登录态**。
 
 ## 8. 实现落点（编码时）
 
@@ -244,3 +267,4 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 ---
 
 *修订：2026-07-25 — 采纳 WebView、不做入库、P0 含推荐 v0、树位置在 Library/Trash 下。*
+*修订：2026-08-14 — 改为代理协议嵌入；壳 + Cool Papers 浏览 + 单条入库已落地；推荐 / 播客未实现。*
