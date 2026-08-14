@@ -34,7 +34,7 @@ papers/rubric/
 
 - 保留 `NOTES.md` 对历史 NOTES-only 论文目录的兼容。
 - 若目录子树中包含论文后代，嵌套论文优先，当前目录保留为组织目录。
-- 跳过论文内部的 `source/`、`assets/`、`marks/`，避免它们的任意资源被误认为嵌套论文。
+- 跳过论文内部的 `source/`、`assets/`、`marks/`、`attachments/`，避免它们的任意资源被误认为嵌套论文。
 - 当 `paperFolders` 已经是非空列表时，文件路径归属以该列表为准；不再把未命中的组织级 `NOTES.md` 回退归属为论文。
 - Host 的 marker 仍用于 `source/` 懒加载，但不把这个遍历优化语义当作前端论文身份的唯一来源。
 

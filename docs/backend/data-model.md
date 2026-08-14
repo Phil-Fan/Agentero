@@ -36,8 +36,11 @@ papers/<id>/
 │   ├── layout.json         # PDF 版面 raw sidecar（可重建；merge/filter 可重复）
 │   └── layout-index.json   # 侧栏同构索引（CLI/Agent；post-merge figure/table/…）
 ├── PAPER.md          # 无 TeX 时 liteparse 正文
-└── assets/           # NOTES 内嵌图等
+├── assets/           # NOTES 内嵌图等
+└── attachments/      # 可选：用户支撑材料（supplement / 代码仓库等）
 ```
+
+`attachments/` **不**在入库时预建空目录。仅当其中有文件时，文件树论文行才显示 chevron，并把该目录的子项直接挂在论文下（桶本身不占一行）。`source/`、`marks/`、`assets/`、主 PDF、`NOTES.md`、`PAPER.md` 仍不进入树。
 
 `layout-index.json` 与侧栏 Figures 同源（merge + score/NMS 后），供 `agentero layout list` / `mark add --region` 使用；**可从** `layout.json` 重算，分析完成或缓存命中时由桌面写入。详见 [../frontend/pdf-layout-analysis.md](../frontend/pdf-layout-analysis.md)。
 

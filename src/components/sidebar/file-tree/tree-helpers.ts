@@ -1,6 +1,8 @@
 import {
 	isPaperDirectory,
 	isPapersRoot,
+	paperAttachmentChildren,
+	paperHasVisibleAttachments,
 	paperNeedsAssetDownload,
 } from "@/lib/paper";
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
@@ -41,7 +43,7 @@ export function pathKey(path: string): string {
  * Default open folders when a Vault is first opened:
  * expand `papers/` and its first-level children (org folders) so papers one
  * level down are visible. Deeper nesting, `notes/`, etc. stay collapsed.
- * Paper folders are never expanded (they render as leaves).
+ * Paper folders stay collapsed even when they have attachments.
  */
 export function collectDefaultExpanded(
 	nodes: FileNode[],
@@ -52,7 +54,7 @@ export function collectDefaultExpanded(
 		into.add(n.path);
 		for (const child of n.children ?? []) {
 			if (child.kind !== "directory") continue;
-			// Paper units are leaves — expanding them is a no-op for the UI.
+			// Paper units stay collapsed until the user opens attachments.
 			if (isPaperDirectory(child.path, child.children)) continue;
 			into.add(child.path);
 		}
@@ -73,6 +75,27 @@ export function collectPapersRootOnlyExpanded(
 		into.add(n.path);
 		return;
 	}
+}
+
+/**
+ * Children shown when a directory row is expanded.
+ * Papers surface `{paper}/attachments/*` only — never source/marks/NOTES.
+ */
+export function visibleTreeChildren(node: FileNode): FileNode[] {
+	if (node.kind !== "directory") return [];
+	if (isPaperDirectory(node.path, node.children)) {
+		return paperAttachmentChildren(node);
+	}
+	return node.children ?? [];
+}
+
+/** Directory that can show a chevron (org folder, or paper with attachments). */
+export function isTreeExpandableDirectory(node: FileNode): boolean {
+	if (node.kind !== "directory") return false;
+	if (isPaperDirectory(node.path, node.children)) {
+		return paperHasVisibleAttachments(node);
+	}
+	return true;
 }
 
 /** Parent directory paths of `target` (absolute), nearest-first excluded. Root-ward order. */

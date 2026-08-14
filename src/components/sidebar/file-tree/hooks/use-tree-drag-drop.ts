@@ -17,7 +17,7 @@ import {
 import { dataTransferTypes } from "@/lib/core/file-accept";
 import { notifyError } from "@/lib/core/notify";
 import { dirnameOf } from "@/lib/core/path";
-import { isPaperDirectory } from "@/lib/paper";
+import { isPaperAssetPath, isPaperDirectory } from "@/lib/paper";
 import {
 	dataTransferHasFiles,
 	resolveDroppedPdfPaths,
@@ -75,6 +75,7 @@ export function useTreeDragDrop({
 			const node = byPath.get(targetPath);
 			if (node?.kind !== "directory") return false;
 			if (isPaperDirectory(node.path, node.children)) return false;
+			if (isPaperAssetPath(targetPath)) return false;
 			const rel = relPathForNode(targetPath);
 			return rel === "papers" || rel.startsWith("papers/");
 		},

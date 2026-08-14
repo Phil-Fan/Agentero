@@ -18,6 +18,8 @@
 			"noPdf": "Missing PDF",
 			"noBody": "Missing TeX and PAPER.md (either is enough; TeX preferred)"
 		},
+		"expandAttachments": "Show attachments",
+		"collapseAttachments": "Hide attachments",
 		"readPaper": "Read paper and write notes",
 		"readDesktopOnly": "Paper reading requires the desktop app.",
 		"readFailed": "Failed to start paper reading.",

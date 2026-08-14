@@ -12,6 +12,7 @@ import { isTauri } from "@/lib/core/tauri";
 import {
 	detectPaperDirectory,
 	isPaperDirectory,
+	isUnderPaperAttachments,
 	paperDirFromPath,
 } from "@/lib/paper";
 import {
@@ -981,8 +982,17 @@ export function selectFileNode(node: FileNode): void {
 		openPaper(node.path);
 		return;
 	}
-	// Org / plain folders → in-place scope on the Library tab (no new tab).
 	if (node.kind === "directory") {
+		const paperAbs = paperDirFromPath(
+			node.path,
+			vaultStore.getState().paperFolders,
+		);
+		// Folders inside `{paper}/attachments/` are files, not Library scopes.
+		if (paperAbs && isUnderPaperAttachments(node.path, paperAbs)) {
+			setTreeSelectedPath(node.path);
+			return;
+		}
+		// Org / plain folders → in-place scope on the Library tab (no new tab).
 		openFolderLibrary(node.path);
 		return;
 	}

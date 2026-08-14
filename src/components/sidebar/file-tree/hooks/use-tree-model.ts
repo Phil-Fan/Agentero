@@ -5,14 +5,20 @@
 import { useCallback, useMemo } from "react";
 import {
 	isPaperDirectory,
+	isUnderPaperAttachments,
 	type PaperMetadata,
 	type PaperTreeLabelMode,
 	type PaperTreeSortMode,
+	paperAttachmentsNode,
 	sortFileTreeNodes,
 } from "@/lib/paper";
 import type { FileNode } from "@/lib/vault";
 import { toVaultRelative } from "@/lib/wiki";
-import { isVirtualTreePath, pathKey } from "../tree-helpers";
+import {
+	isVirtualTreePath,
+	pathKey,
+	visibleTreeChildren,
+} from "../tree-helpers";
 import type { FlatRow, TreeCreateDraft } from "../types";
 
 export type TreeIndex = {
@@ -25,7 +31,8 @@ export type TreeIndex = {
 	/**
 	 * Row to highlight / scroll to:
 	 * - virtual Library / Trash as-is;
-	 * - any path under a paper folder → that paper (papers are tree leaves);
+	 * - a surfaced attachment under `{paper}/attachments/` → that file/folder;
+	 * - any other path under a paper folder → that paper;
 	 * - otherwise the path itself if present, else nearest existing ancestor.
 	 */
 	treeSelectedPath: string | undefined;
@@ -95,37 +102,7 @@ export function useTreeIndex({
 
 	const treeSelectedPath = useMemo(() => {
 		if (!selectedPath) return undefined;
-		if (isVirtualTreePath(selectedPath)) return selectedPath;
-
-		// Prefer paper folder: children of papers are not listed in the tree.
-		let cursor = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "");
-		while (cursor) {
-			const node = byPathKey.get(pathKey(cursor));
-			if (
-				node &&
-				node.kind === "directory" &&
-				isPaperDirectory(node.path, node.children)
-			) {
-				return node.path;
-			}
-			const idx = cursor.lastIndexOf("/");
-			if (idx <= 0) break;
-			cursor = cursor.slice(0, idx);
-		}
-
-		const exact = byPathKey.get(pathKey(selectedPath));
-		if (exact) return exact.path;
-
-		// Deleted / not-yet-in-tree: nearest existing ancestor.
-		cursor = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "");
-		while (true) {
-			const idx = cursor.lastIndexOf("/");
-			if (idx <= 0) break;
-			cursor = cursor.slice(0, idx);
-			const node = byPathKey.get(pathKey(cursor));
-			if (node) return node.path;
-		}
-		return selectedPath;
+		return resolveTreeHighlightPath(selectedPath, byPathKey);
 	}, [selectedPath, byPathKey]);
 
 	return {
@@ -137,8 +114,60 @@ export function useTreeIndex({
 	};
 }
 
+/**
+ * Which tree row should highlight for `selectedPath`.
+ * Surfaced attachments keep their own row; other paper internals map to the paper.
+ */
+export function resolveTreeHighlightPath(
+	selectedPath: string,
+	byPathKey: ReadonlyMap<string, FileNode>,
+): string {
+	if (isVirtualTreePath(selectedPath)) return selectedPath;
+
+	let cursor = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "");
+	while (cursor) {
+		const node = byPathKey.get(pathKey(cursor));
+		if (
+			node &&
+			node.kind === "directory" &&
+			isPaperDirectory(node.path, node.children)
+		) {
+			if (isUnderPaperAttachments(selectedPath, node.path)) {
+				const exact = byPathKey.get(pathKey(selectedPath));
+				if (exact) return exact.path;
+				let up = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "");
+				while (true) {
+					const idx = up.lastIndexOf("/");
+					if (idx <= 0) break;
+					up = up.slice(0, idx);
+					if (!isUnderPaperAttachments(up, node.path)) break;
+					const found = byPathKey.get(pathKey(up));
+					if (found) return found.path;
+				}
+			}
+			return node.path;
+		}
+		const idx = cursor.lastIndexOf("/");
+		if (idx <= 0) break;
+		cursor = cursor.slice(0, idx);
+	}
+
+	const exact = byPathKey.get(pathKey(selectedPath));
+	if (exact) return exact.path;
+
+	cursor = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "");
+	while (true) {
+		const idx = cursor.lastIndexOf("/");
+		if (idx <= 0) break;
+		cursor = cursor.slice(0, idx);
+		const node = byPathKey.get(pathKey(cursor));
+		if (node) return node.path;
+	}
+	return selectedPath;
+}
+
 export type TreeRows = {
-	/** Visible, selectable rows in display order (paper folders are leaves). */
+	/** Visible, selectable rows in display order (papers expand only for attachments). */
 	selectableOrder: string[];
 	/** Flattened rows in display order (respects expand state + inline drafts). */
 	flatRows: FlatRow[];
@@ -160,13 +189,9 @@ export function useTreeRows({
 		const walk = (list: FileNode[]) => {
 			for (const n of list) {
 				out.push(n.path);
-				if (
-					n.kind === "directory" &&
-					!isPaperDirectory(n.path, n.children) &&
-					expanded.has(n.path) &&
-					n.children?.length
-				) {
-					walk(n.children);
+				if (n.kind === "directory" && expanded.has(n.path)) {
+					const kids = visibleTreeChildren(n);
+					if (kids.length) walk(kids);
 				}
 			}
 		};
@@ -198,20 +223,21 @@ export function useTreeRows({
 					node: n,
 					paperLeaf: paper,
 				});
-				if (n.kind === "directory" && draftAt(n.path)) {
+				const attachmentsDir = paper ? paperAttachmentsNode(n) : null;
+				const showDraft =
+					n.kind === "directory" &&
+					(draftAt(n.path) ||
+						Boolean(attachmentsDir && draftAt(attachmentsDir.path)));
+				if (showDraft) {
 					out.push({
 						key: `create-${n.path}`,
 						kind: "create",
 						depth: depth + 1,
 					});
 				}
-				if (
-					n.kind === "directory" &&
-					!paper &&
-					expanded.has(n.path) &&
-					n.children?.length
-				) {
-					walk(n.children, depth + 1);
+				if (n.kind === "directory" && expanded.has(n.path)) {
+					const kids = visibleTreeChildren(n);
+					if (kids.length) walk(kids, depth + 1);
 				}
 			}
 		};

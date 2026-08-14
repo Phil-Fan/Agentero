@@ -12,12 +12,13 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { isPaperDirectory } from "@/lib/paper";
+import { isPaperDirectory, isUnderPaperAttachments } from "@/lib/paper";
 import type { FileNode } from "@/lib/vault";
 import {
 	ancestorPaths,
 	collectDefaultExpanded,
 	collectPapersRootOnlyExpanded,
+	isTreeExpandableDirectory,
 	isVirtualTreePath,
 	pathKey,
 } from "../tree-helpers";
@@ -161,9 +162,9 @@ export function useTreeExpansion({
 					const node = byPathKey.get(pathKey(raw));
 					const path =
 						node?.path ?? raw.replace(/\\/g, "/").replace(/\/+$/, "");
-					const isExpandableDir =
-						node?.kind === "directory" &&
-						!isPaperDirectory(node.path, node.children);
+					const isExpandableDir = Boolean(
+						node && isTreeExpandableDirectory(node),
+					);
 
 					let folderToClose: string | null = null;
 					if (isExpandableDir && next.has(path)) {
@@ -175,10 +176,7 @@ export function useTreeExpansion({
 							const parent = parents[i];
 							if (!parent || !next.has(parent)) continue;
 							const parentNode = byPathKey.get(pathKey(parent));
-							if (
-								parentNode?.kind === "directory" &&
-								isPaperDirectory(parentNode.path, parentNode.children)
-							) {
+							if (parentNode && !isTreeExpandableDirectory(parentNode)) {
 								continue;
 							}
 							folderToClose = parentNode?.path ?? parent;
@@ -207,8 +205,13 @@ export function useTreeExpansion({
 				for (const parent of parents) {
 					const node = byPathKey.get(pathKey(parent));
 					if (node?.kind !== "directory") continue;
-					// Paper folders stay leaves — never expand them.
-					if (isPaperDirectory(node.path, node.children)) continue;
+					// Papers stay collapsed unless we are revealing an attachment.
+					if (
+						isPaperDirectory(node.path, node.children) &&
+						!isUnderPaperAttachments(target, node.path)
+					) {
+						continue;
+					}
 					if (!next.has(node.path)) {
 						next.add(node.path);
 						changed = true;

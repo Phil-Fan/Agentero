@@ -11,6 +11,7 @@ import {
 	type PaperMetadata,
 	type PaperTreeLabelMode,
 	paperAssetDownloadReasons,
+	paperHasVisibleAttachments,
 	paperNeedsRead,
 } from "@/lib/paper";
 import type { FileNode } from "@/lib/vault";
@@ -73,6 +74,8 @@ function PaperLeafRow({
 				actions.downloadingAll ||
 				Boolean(actions.readingPath)
 			}
+			expandable={paperHasVisibleAttachments(node)}
+			expanded={ctx.expanded.has(node.path)}
 			onDownload={showDownload ? () => actions.downloadPaper(node) : undefined}
 			onRead={showRead ? () => actions.readPaper(node) : undefined}
 		/>

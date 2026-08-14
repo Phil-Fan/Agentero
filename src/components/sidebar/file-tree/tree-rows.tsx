@@ -1,4 +1,5 @@
 import {
+	ChevronRight,
 	Download,
 	Library,
 	Loader2,
@@ -13,6 +14,7 @@ import {
 	FileTreeFolderRow,
 	FileTreeIcon,
 	FileTreeName,
+	useFileTree,
 } from "@/components/ai-elements/file-tree";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,6 +37,8 @@ type PaperTreeRowProps = {
 	isDownloading: boolean;
 	isReading: boolean;
 	rowBusy: boolean;
+	expandable: boolean;
+	expanded: boolean;
 	onDownload?: () => void;
 	onRead?: () => void;
 };
@@ -47,10 +51,16 @@ export function PaperTreeRow({
 	isDownloading,
 	isReading,
 	rowBusy,
+	expandable,
+	expanded,
 	onDownload,
 	onRead,
 }: PaperTreeRowProps) {
 	const { t } = useTranslation("sidebar");
+	const { togglePath } = useFileTree();
+	const expandLabel = expanded
+		? t("fileTree.collapseAttachments")
+		: t("fileTree.expandAttachments");
 	const showDownload = Boolean(onDownload) && downloadReasons.length > 0;
 	const showRead = Boolean(onRead) && !showDownload;
 	const reasonTip = downloadReasons.length
@@ -63,7 +73,39 @@ export function PaperTreeRow({
 			name={label}
 			className={cn(isCut && "opacity-50")}
 		>
-			<span className="size-4 shrink-0" />
+			{expandable ? (
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<button
+							type="button"
+							aria-expanded={expanded}
+							aria-label={expandLabel}
+							className={cn(
+								"flex size-5 shrink-0 items-center justify-center rounded-sm",
+								"text-muted-foreground hover:bg-muted/80",
+								"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+							)}
+							onClick={(e) => {
+								e.stopPropagation();
+								e.preventDefault();
+								togglePath(node.path);
+							}}
+							onPointerDown={(e) => e.stopPropagation()}
+							onKeyDown={(e) => e.stopPropagation()}
+						>
+							<ChevronRight
+								className={cn(
+									"size-4 transition-transform",
+									expanded && "rotate-90",
+								)}
+							/>
+						</button>
+					</TooltipTrigger>
+					<TooltipContent side="right">{expandLabel}</TooltipContent>
+				</Tooltip>
+			) : (
+				<span className="size-4 shrink-0" />
+			)}
 			<FileTreeIcon>
 				<ScrollText className="size-4 text-muted-foreground" />
 			</FileTreeIcon>

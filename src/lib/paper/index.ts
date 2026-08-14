@@ -7,6 +7,13 @@ export {
 	paperNeedsRead,
 } from "@/lib/paper/assets";
 export {
+	isPaperAttachmentsRoot,
+	isUnderPaperAttachments,
+	paperAttachmentChildren,
+	paperAttachmentsNode,
+	paperHasVisibleAttachments,
+} from "@/lib/paper/attachments";
+export {
 	collectPaperFoldersFromTree,
 	detectPaperDirectory,
 	directoryHasPaperMarkers,
@@ -30,9 +37,15 @@ export {
 	revokePdfViewerSource,
 } from "@/lib/paper/media";
 export {
+	attachmentsPathForPaper,
+	isPaperAssetPath,
+	isPaperAttachmentsDirName,
+	isPaperInternalDirName,
 	isPapersRoot,
 	isUnderPapers,
 	notesPathForPaper,
+	PAPER_ATTACHMENTS_DIR,
+	PAPER_INTERNAL_DIR_NAMES,
 } from "@/lib/paper/paths";
 export {
 	formatAuthorsShort,

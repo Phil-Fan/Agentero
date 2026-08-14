@@ -1,3 +1,5 @@
+import { isPaperAttachmentsDirName } from "@/lib/paper/paths";
+
 export const PAPER_FILE_MARKERS = ["NOTES.md", "PAPER.md"] as const;
 
 /** Direct-child directory names that mark a paper folder. */
@@ -22,10 +24,11 @@ type TreeWalkNode = {
 	}>;
 };
 
-/** Walk tree node names for a matching extension. */
+/** Walk tree node names for a matching extension. Skip `attachments/`. */
 function treeHasFileExt(node: TreeWalkNode, re: RegExp): boolean {
 	if (node.kind !== "directory" && re.test(node.name)) return true;
 	for (const child of node.children ?? []) {
+		if (isPaperAttachmentsDirName(child.name)) continue;
 		if (treeHasFileExt(child as TreeWalkNode, re)) return true;
 	}
 	return false;
@@ -39,6 +42,7 @@ export function paperHasLocalTex(node: TreeWalkNode): boolean {
 	// Lazy `source/` shells have no listed children; trust the on-disk flag.
 	if (node.hasTex === true) return true;
 	for (const child of node.children ?? []) {
+		if (isPaperAttachmentsDirName(child.name)) continue;
 		if (paperHasLocalTex(child as TreeWalkNode)) return true;
 	}
 	return node.kind !== "directory" && TEX_NAME_RE.test(node.name);
@@ -48,6 +52,7 @@ export function paperHasLocalTex(node: TreeWalkNode): boolean {
 export function paperHasLocalPaperMd(node: TreeWalkNode): boolean {
 	if (node.kind !== "directory" && PAPER_MD_RE.test(node.name)) return true;
 	for (const child of node.children ?? []) {
+		if (isPaperAttachmentsDirName(child.name)) continue;
 		if (paperHasLocalPaperMd(child as TreeWalkNode)) return true;
 	}
 	return false;

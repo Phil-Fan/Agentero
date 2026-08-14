@@ -1,5 +1,6 @@
 import { normalizePath } from "@/lib/core/path";
 import {
+	isPaperInternalDirName,
 	isPapersRoot,
 	isUnderPapers,
 	notesPathForPaper,
@@ -20,7 +21,9 @@ const PAPER_DIR_MARKERS = new Set(["source", "assets", "marks"]);
 function isDirectoryEntry(entry: NameKind): boolean {
 	const lower = entry.name.toLowerCase();
 	return (
-		entry.kind === "directory" || (!entry.kind && PAPER_DIR_MARKERS.has(lower))
+		entry.kind === "directory" ||
+		(!entry.kind &&
+			(PAPER_DIR_MARKERS.has(lower) || isPaperInternalDirName(lower)))
 	);
 }
 
@@ -33,7 +36,7 @@ function hasNestedPaperDirectory(children: NameKind[]): boolean {
 	return children.some((child) => {
 		if (!isDirectoryEntry(child)) return false;
 		const lower = child.name.toLowerCase();
-		if (PAPER_DIR_MARKERS.has(lower)) return false;
+		if (isPaperInternalDirName(lower)) return false;
 		if (child.children?.length && directoryHasPaperMarkers(child.children)) {
 			return true;
 		}
@@ -182,14 +185,14 @@ export function paperDirFromPath(
 
 	// …/source|assets|marks/… → paper is parent of that segment
 	const nestedAsset = norm.match(
-		/^(.*\/papers\/.+?)\/(source|assets|marks)(?:\/|$)/i,
+		/^(.*\/papers\/.+?)\/(source|assets|marks|attachments)(?:\/|$)/i,
 	);
 	if (nestedAsset?.[1]) {
 		return nestedAsset[1];
 	}
-	// Vault-relative without leading drive: papers/…/source|marks/…
+	// Vault-relative without leading drive: papers/…/source|marks|attachments/…
 	const nestedAssetRel = norm.match(
-		/^(papers\/.+?)\/(source|assets|marks)(?:\/|$)/i,
+		/^(papers\/.+?)\/(source|assets|marks|attachments)(?:\/|$)/i,
 	);
 	if (nestedAssetRel?.[1]) {
 		return nestedAssetRel[1];
