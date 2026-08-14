@@ -140,27 +140,39 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 
 ### 3.2.1 入库（已实现）
 
-代理注入的桥接脚本给每行论文标题追加 `[入库]`，与站点自带的 `[PDF] [Copy] [Kimi] [REL]` 同排。点击后把 `{ id, url, title }` 交给面板，面板调用现成的 `lookupSubmit` → `lookup_import_batch`，结果再回传给该行显示 `[已入库]`。
+代理注入的桥接脚本给每行论文标题追加 `[入库]`，与站点自带的 `[PDF] [Copy] [Kimi] [REL]` 同排。点击后把 `{ id, branch, url, title }` 交给面板，结果回传给该行显示 `[已入库]`。
 
-**关键点：喂给魔棒的是每行 `#N` 序号链接的 href**，也就是上游权威页面。四种分区形态一致：
+**分两条路，因为质量不对等：**
 
-| 分区 | papers.cool id | `#N` href |
+| 行类型 | 路线 | 理由 |
 |---|---|---|
-| arxiv | `2608.13558` | `arxiv.org/abs/2608.13558` |
-| AAAI | `36958@AAAI` | `ojs.aaai.org/…/article/view/36958` |
-| NeurIPS | `aVh9KRZdRk@OpenReview` | `openreview.net/forum?id=aVh9KRZdRk` |
-| ACL | `2026.acl-long.1@ACL` | `aclanthology.org/2026.acl-long.1/` |
+| arXiv | 现成魔棒，喂 `arxiv.org/abs/{id}` | 原生 arXiv 路径还能多拿 `arxiv_id` 与 LaTeX 源码 |
+| 其余（venue） | `paper_coolpapers_import`，读该行自己的 papers.cool 页面 | 不经 Translator；见下 |
 
-因此**零后端改动**：`extract_primary_identifier` 把任何 http(s) 串判为 `IdentifierKind::Url`，`translator_request` 再路由到 Translator 的 `/web`（arxiv.org 另有原生特判，归一到 abs 页）。这也是 venue 论文唯一可行的入库路径——它们既没有 arXiv id 也没有 DOI，`lookup_import_batch` 直接吃 id 是吃不下的。
+**为什么 venue 不走 Translator。** papers.cool 的论文页自带 Highwire `citation_*`（title / authors / abstract / publisher / date，**以及 `citation_pdf_url`**），实测覆盖它聚合的全部 11 种出版商形态。而把出版商 URL 送去 Translator：
 
-- **venue 行硬依赖 Translator**（arXiv 有原生兜底，venue 没有）。Translator 不可用时必须明确报错，不能静默失败。
-- 只做**单条入库**，不提供全选批量：`/web` 是逐条抓取出版商页面，批量既慢又容易被对方限流。
-- 注入的 `[入库]` **不带 href**，否则会被上面的跨源链接拦截器当成外链送去系统浏览器。
-- 行是滚动加载的（`loadMorePapers` 追加 `.panel.paper`），所以除首屏遍历外还挂了 `MutationObserver`。
-- `lookupSubmit` 内部是 fire-and-forget 后台任务，异常不会冒泡，因此入库按钮另设超时兜底，避免永远停在 `[入库中]`；重复点击安全（Host 按 arXiv id / DOI / 归一标题去重）。
-- 入库后**不自动打开论文**，否则会把正在连续浏览的用户拽出广场面板。
+- `openreview.net`（COLM / CoRL / ICLR / ICML / MLSYS / NeurIPS / UAI **共 7 个 venue**）抓到的是 Cloudflare 人机验证页，0 作者；
+- `ojs.aaai.org`（AAAI）HTTP 500；
+- `www.ecva.net`（ECCV）HTTP 300 多选；
+- `papers.miccai.org` / `www.ndss-symposium.org` 退化成 `webpage` / `blogPost`；
+- **且 11/11 都不返回 PDF 附件。**
 
-**后续（非 P0）**：批量入库、预览抽屉。
+也就是说 Translator 那条路「一半站点坏、还全都缺 PDF、又多一跳依赖用户自建服务」，唯一净胜的只有 DOI（当前不填）。详见 [#333](https://github.com/poco-ai/Agentero/issues/333)。
+
+**catalog id 用 papers.cool 原生 id**（如 `36962@AAAI`、`2026.acl-long.1@ACL`）。`allocate_paper_path` 不清洗 id、直接当目录名，`@` `.` 三平台合法。选它而非默认派生链是因为它全局唯一、去重精确；派生链的 `citekey_fallback`（`{姓}{年}{标题首词}`）会撞，而 `DedupePolicy::ByCatalogId` 撞了会**静默当重复吞掉**。代价是同一篇论文日后从 BibTeX / Zotero 进来 id 不同、会重复——已知取舍，原生 id 另存进 `source_url` 保留可追溯性。
+
+**其它约定**
+
+- 复用共享的 `paper_commit`：catalog 插入、NOTES.md 播种、PDF 下载、去重全部沿用，不新增管线。
+- `paper_type` 不是 Zotero itemType，取值只有 `arxiv` / `doi` / `html` / `other`；无 DOI 时为 `other`。
+- 元数据解析复用 `map_zotero_item`（先拼一个 Zotero 形状的值），避免第二套字段映射。
+- 注入的 `[入库]` **不带 href**，否则会被跨源链接拦截器当外链送去系统浏览器。
+- 行是滚动加载的（`loadMorePapers` 追加 `.panel.paper`），除首屏遍历外挂 `MutationObserver`。
+- 只做**单条入库**，不提供批量。
+- 入库后**不自动打开论文**，否则会把连续浏览的用户拽出面板。
+- PDF 没取到时提示「已导入（未取到 PDF）」，不谎报干净成功。
+
+**后续（非 P0）**：批量入库、预览抽屉；DOI 可按需回补（AAAI / IJCAI 的出版商页有 `citation_doi`，`/search` 按 DOI 的元数据质量最高）。
 
 ### 3.3 播客（占位）
 
