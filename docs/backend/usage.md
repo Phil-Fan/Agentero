@@ -113,6 +113,7 @@ PRIMARY KEY (day, vault, kind, paper_path, facet)
 | `refs.*` | `trigger` | — | — |
 | `zotero.*` | `direction` / `source` | 条数 | — |
 | `vault.open` / `onboarding.complete` | — | — | — |
+| `app.started` / `app.exited` | `app_version` | 退出时 `dur_ms` = 会话时长 | 设备级字段；无 Vault 路径。与 PostHog `app started` / `app exited` 同源 |
 
 内容载荷（划词原文、译文、批注正文、论文标题）**不入库**。
 
@@ -148,7 +149,8 @@ agentero usage clear --all -y    # 本机全部
 
 `track(kind, payload)` 是唯一入口。5s / 满 50 条 / 窗口 blur 刷新。同一 `(kind, path, mode)` 1s 去重。
 
-已接线：`paper.open` / `note.open` / `paper.focus|blur|session`、`asset.download`、`paper.import`、`skill.install`、`search.query`、`agent.run`、`paper.tag`、`paper.read`、`vault.open`、`onboarding.complete`。
+已接线：`paper.open` / `note.open` / `paper.focus|blur|session`、`asset.download`、`paper.import`、`skill.install`、`search.query`、`agent.run`、`paper.tag`、`paper.read`、`vault.open`、`onboarding.complete`。  
+`app.started` / `app.exited` 由 Host `Telemetry::start` / `shutdown` 写入，不走前端 `track()`。
 
 翻译、版面、批注等其余 kind 已登记，漏斗按 [`../development/usage-analytics.md`](../development/usage-analytics.md) 继续接。
 

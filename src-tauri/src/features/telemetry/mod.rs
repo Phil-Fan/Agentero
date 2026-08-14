@@ -119,10 +119,11 @@ fn timezone_offset() -> String {
 }
 
 struct Inner {
-    client: posthog_rs::Client,
+    client: Option<posthog_rs::Client>,
     distinct_id: String,
     session_id: String,
     started_at_ms: u64,
+    usage_enabled: bool,
 }
 
 /// Managed app state. `inner` is `None` until [`Telemetry::start`] decides
@@ -137,20 +138,20 @@ impl Telemetry {
         Self::default()
     }
 
-    /// Create the PostHog client (blocking variant) and capture `app started`.
+    /// Record local `app.started` (if usage tracking is on) and capture
+    /// PostHog `app started` when product analytics is enabled.
     /// Never fails the launch: every error is only logged.
     pub fn start(&self, settings: &AppSettings) {
-        if !enabled(settings) {
+        let usage_enabled = settings.usage_tracking_enabled;
+        let posthog_enabled = enabled(settings);
+        if !usage_enabled && !posthog_enabled {
             return;
         }
-        let Some(key) = posthog_key() else { return };
-        let client = posthog_rs::client(key);
+
         let distinct_id = install_id();
         let session_id = uuid::Uuid::new_v4().to_string();
         let device = collect_device_info();
-
-        let mut event = posthog_rs::Event::new("app started", distinct_id.as_str());
-        let props = json!({
+        let extra = json!({
             "app_version": APP_VERSION,
             "os_name": device.os_name,
             "os_version": device.os_version,
@@ -160,44 +161,97 @@ impl Telemetry {
             "timezone": timezone_offset(),
             "tauri_version": tauri::VERSION,
             "session_id": session_id,
-            "$set": {
-                "app_version": APP_VERSION,
-                "os_name": device.os_name,
-                "os_version": device.os_version,
-                "arch": device.arch,
-                "device_model": device.device_model,
-            },
-            "$set_once": {
-                "first_app_version": APP_VERSION,
-            },
         });
-        for (key, value) in props.as_object().expect("literal is an object") {
-            if let Err(e) = event.insert_prop(key.clone(), value.clone()) {
-                log::warn!(target: "agentero::op", "telemetry prop {key} failed: {e}");
-            }
+
+        if usage_enabled {
+            record_usage("app.started", None, extra.clone());
         }
-        client.capture(event);
-        log::info!(target: "agentero::op", "op start telemetry enabled=true");
+
+        let client = if posthog_enabled {
+            posthog_key().map(posthog_rs::client)
+        } else {
+            None
+        };
+        if let Some(ref client) = client {
+            let mut event = posthog_rs::Event::new("app started", distinct_id.as_str());
+            let mut props = extra;
+            if let Some(obj) = props.as_object_mut() {
+                obj.insert(
+                    "$set".into(),
+                    json!({
+                        "app_version": APP_VERSION,
+                        "os_name": device.os_name,
+                        "os_version": device.os_version,
+                        "arch": device.arch,
+                        "device_model": device.device_model,
+                    }),
+                );
+                obj.insert(
+                    "$set_once".into(),
+                    json!({ "first_app_version": APP_VERSION }),
+                );
+            }
+            for (key, value) in props.as_object().expect("literal is an object") {
+                if let Err(e) = event.insert_prop(key.clone(), value.clone()) {
+                    log::warn!(target: "agentero::op", "telemetry prop {key} failed: {e}");
+                }
+            }
+            client.capture(event);
+            log::info!(target: "agentero::op", "op start telemetry enabled=true");
+        }
 
         *self.inner.lock().unwrap() = Some(Inner {
             client,
             distinct_id,
             session_id,
             started_at_ms: now_ms(),
+            usage_enabled,
         });
     }
 
-    /// Capture `app exited` with the session duration, then flush pending
-    /// events. Called from the synchronous `RunEvent::Exit` callback.
+    /// Record local `app.exited`, then capture PostHog `app exited` and flush.
+    /// Called from the synchronous `RunEvent::Exit` callback.
     pub fn shutdown(&self) {
         let Some(inner) = self.inner.lock().unwrap().take() else {
             return;
         };
+        let duration_ms = now_ms().saturating_sub(inner.started_at_ms);
+        if inner.usage_enabled {
+            record_usage(
+                "app.exited",
+                Some(duration_ms as i64),
+                json!({
+                    "app_version": APP_VERSION,
+                    "session_id": inner.session_id,
+                }),
+            );
+        }
+        let Some(client) = inner.client else {
+            return;
+        };
         let mut event = posthog_rs::Event::new("app exited", inner.distinct_id.as_str());
         let _ = event.insert_prop("session_id", inner.session_id.clone());
-        let _ = event.insert_prop("session_duration_ms", now_ms() - inner.started_at_ms);
+        let _ = event.insert_prop("session_duration_ms", duration_ms);
         let _ = event.insert_prop("app_version", APP_VERSION);
-        inner.client.capture(event);
-        inner.client.flush();
+        client.capture(event);
+        client.flush();
+    }
+}
+
+fn record_usage(kind: &str, dur_ms: Option<i64>, extra: serde_json::Value) {
+    use crate::features::usage::{record_events, usage_db_path, UsageRecord};
+    if let Err(e) = record_events(
+        &usage_db_path(),
+        &[UsageRecord {
+            ts: None,
+            vault: None,
+            kind: kind.to_string(),
+            path: None,
+            mode: None,
+            dur_ms,
+            extra: Some(extra),
+        }],
+    ) {
+        log::warn!(target: "agentero::usage", "record {kind} failed: {e}");
     }
 }

@@ -36,6 +36,8 @@ Person 属性：`$set` → `app_version` / `os_name` / `os_version` / `arch` / `
 
 `session_id`、`session_duration_ms`、`app_version`。
 
+`app started` / `app exited` 与本机 [usage.md](usage.md) 同源：`Telemetry::start` / `shutdown` 在 `usageTrackingEnabled` 时写入 `app.started` / `app.exited`，在 `telemetryEnabled` 且 release + 有 key 时再发 PostHog。出站事件名保持空格形式，以免断历史。两个开关仍独立。
+
 ## 隐私边界
 
 - 不含 Vault 路径、文件名、论文标题、笔记内容、Agent 配置。

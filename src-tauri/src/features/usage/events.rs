@@ -420,6 +420,7 @@ fn project_extra(
         k if k.starts_with("mark.") => extra_str("type"),
         "paper.tag" => extra_str("op"),
         "paper.read" => extra_str("via").or_else(|| extra_str("isRead")),
+        "app.started" | "app.exited" => extra_str("app_version"),
         k if k.starts_with("refs.") => extra_str("trigger"),
         k if k.starts_with("zotero.") => extra_str("direction").or_else(|| extra_str("source")),
         _ => extra_str("facet"),
@@ -680,6 +681,41 @@ mod tests {
         assert!(rows
             .iter()
             .all(|r| r.paper_path.as_deref() == Some("papers/new")));
+        let _ = fs::remove_dir_all(db.parent().unwrap());
+    }
+
+    #[test]
+    fn records_app_lifecycle() {
+        let db = temp_db();
+        record_events(
+            &db,
+            &[UsageRecord {
+                ts: Some("2026-08-14T10:00:00.000Z".into()),
+                vault: None,
+                kind: "app.started".into(),
+                path: None,
+                mode: None,
+                dur_ms: None,
+                extra: Some(serde_json::json!({
+                    "app_version": "0.6.0",
+                    "os_name": "Mac OS",
+                    "session_id": "s1",
+                })),
+            }],
+        )
+        .unwrap();
+        let rows = list_events(
+            &db,
+            &ListFilter {
+                kind: Some("app.started".into()),
+                limit: 5,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].facet.as_deref(), Some("0.6.0"));
+        assert!(rows[0].path.is_none());
         let _ = fs::remove_dir_all(db.parent().unwrap());
     }
 

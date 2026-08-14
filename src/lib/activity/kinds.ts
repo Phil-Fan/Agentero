@@ -1,6 +1,8 @@
 /** Stable activity kinds. Host accepts `[a-z0-9._-]{1,64}`. */
 
 export const ACTIVITY_KINDS = [
+	"app.started",
+	"app.exited",
 	"paper.open",
 	"note.open",
 	"paper.focus",
