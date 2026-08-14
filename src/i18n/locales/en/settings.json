@@ -460,6 +460,7 @@
 	},
 	"about": {
 		"title": "About",
+		"starGithub": "Star us on GitHub",
 		"version": "Version {{version}}",
 		"update": {
 			"idle": "Check for the latest Agentero release",

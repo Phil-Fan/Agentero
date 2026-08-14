@@ -460,6 +460,7 @@
 	},
 	"about": {
 		"title": "关于",
+		"starGithub": "Star us on GitHub",
 		"version": "版本 {{version}}",
 		"update": {
 			"idle": "检查 Agentero 是否有新版本",

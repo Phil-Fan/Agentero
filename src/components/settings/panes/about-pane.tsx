@@ -1,6 +1,12 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Download, LoaderCircle, RefreshCw, Terminal } from "lucide-react";
+import {
+	Download,
+	LoaderCircle,
+	RefreshCw,
+	Star,
+	Terminal,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import agenteroAppIcon from "@/assets/agentero-app-icon.svg";
@@ -18,6 +24,7 @@ import {
 	uninstallCliCommand,
 } from "@/lib/cli/api";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
+import { openExternalUrl } from "@/lib/core/open-external";
 import { isMacOS, isTauri } from "@/lib/core/tauri";
 import {
 	checkForUpdate,
@@ -30,6 +37,8 @@ import {
 /** Same as README / homebrew-agentero Formula (headless CLI, not the desktop cask). */
 const CLI_BREW_INSTALL_COMMAND =
 	"brew tap poco-ai/agentero\nbrew install agentero";
+
+const GITHUB_REPO_URL = "https://github.com/poco-ai/Agentero";
 
 export function AboutPane() {
 	const { t } = useTranslation("settings");
@@ -138,7 +147,19 @@ export function AboutPane() {
 
 	return (
 		<>
-			<PageTitle title={t("about.title")} />
+			<PageTitle
+				title={t("about.title")}
+				actions={
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() => openExternalUrl(GITHUB_REPO_URL)}
+					>
+						<Star data-icon="inline-start" />
+						{t("about.starGithub")}
+					</Button>
+				}
+			/>
 			<SettingsGroup>
 				<div className="flex items-center justify-between gap-4 px-3.5 py-4">
 					<div className="flex min-w-0 items-center gap-3">
