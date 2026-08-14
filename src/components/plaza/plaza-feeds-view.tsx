@@ -27,11 +27,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
-	ResizableGroup,
-	ResizableHandle,
-	ResizablePanel,
-} from "@/components/ui/resizable";
-import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
@@ -42,7 +37,6 @@ import { cn } from "@/lib/core/utils";
 import {
 	ARXIV_FEED_CHIPS,
 	arxivFeedUrl,
-	type FeedFilter,
 	type FeedItem,
 	type FeedSub,
 	feedsAdd,
@@ -68,16 +62,24 @@ function formatHostError(message: string, t: TFunction<"sidebar">): string {
 
 function AddForm({
 	busy,
+	refreshing,
 	onAdd,
+	onRefresh,
+	showRefresh,
+	showChips,
 }: {
 	busy: boolean;
+	refreshing: boolean;
 	onAdd: (url: string) => void;
+	onRefresh: () => void;
+	showRefresh: boolean;
+	showChips: boolean;
 }) {
 	const { t } = useTranslation("sidebar");
 	const [url, setUrl] = useState("");
 	return (
 		<form
-			className="space-y-1.5"
+			className="space-y-2"
 			onSubmit={(event) => {
 				event.preventDefault();
 				const next = url.trim();
@@ -86,14 +88,14 @@ function AddForm({
 				setUrl("");
 			}}
 		>
-			<div className="flex gap-1">
+			<div className="flex items-center gap-1.5">
 				<Input
 					value={url}
 					onChange={(event) => setUrl(event.target.value)}
 					placeholder={t("plaza.feeds.urlPlaceholder")}
 					disabled={busy}
 					aria-label={t("plaza.feeds.urlPlaceholder")}
-					className="h-7 text-xs"
+					className="h-8 min-w-0 flex-1"
 				/>
 				<Tooltip>
 					<TooltipTrigger asChild>
@@ -108,21 +110,43 @@ function AddForm({
 					</TooltipTrigger>
 					<TooltipContent>{t("plaza.feeds.add")}</TooltipContent>
 				</Tooltip>
+				{showRefresh ? (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-sm"
+								disabled={refreshing}
+								aria-label={t("plaza.feeds.refresh")}
+								onClick={onRefresh}
+							>
+								<RefreshCw
+									className={cn("size-3.5", refreshing && "animate-spin")}
+									aria-hidden
+								/>
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>{t("plaza.feeds.refresh")}</TooltipContent>
+					</Tooltip>
+				) : null}
 			</div>
-			<div className="flex flex-wrap gap-1">
-				{ARXIV_FEED_CHIPS.map((cat) => (
-					<Button
-						key={cat}
-						type="button"
-						variant="outline"
-						size="xs"
-						disabled={busy}
-						onClick={() => setUrl(arxivFeedUrl(cat))}
-					>
-						{cat}
-					</Button>
-				))}
-			</div>
+			{showChips ? (
+				<div className="flex flex-wrap gap-1">
+					{ARXIV_FEED_CHIPS.map((cat) => (
+						<Button
+							key={cat}
+							type="button"
+							variant="outline"
+							size="xs"
+							disabled={busy}
+							onClick={() => onAdd(arxivFeedUrl(cat))}
+						>
+							{cat}
+						</Button>
+					))}
+				</div>
+			) : null}
 		</form>
 	);
 }
@@ -132,7 +156,6 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const [subs, setSubs] = useState<FeedSub[]>([]);
 	const [items, setItems] = useState<FeedItem[]>([]);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
-	const [filter, setFilter] = useState<FeedFilter>("all");
 	const [loading, setLoading] = useState(true);
 	const [busy, setBusy] = useState(false);
 	const [refreshing, setRefreshing] = useState(false);
@@ -141,11 +164,10 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const listRef = useRef<HTMLDivElement>(null);
 
 	const loadItems = useCallback(
-		async (subscriptionId: string | null, nextFilter: FeedFilter) => {
+		async (subscriptionId: string | null) => {
 			try {
 				const rows = await feedsItems({
 					subscriptionId: subscriptionId ?? undefined,
-					filter: nextFilter,
 				});
 				setItems(rows);
 			} catch (error) {
@@ -159,9 +181,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	);
 
 	const selectedIdRef = useRef(selectedId);
-	const filterRef = useRef(filter);
 	selectedIdRef.current = selectedId;
-	filterRef.current = filter;
 
 	useEffect(() => {
 		let cancelled = false;
@@ -196,7 +216,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 				const result = await feedsRefresh({ staleOnly: true });
 				if (cancelled) return;
 				setSubs(result.subscriptions);
-				await loadItems(selectedIdRef.current, filterRef.current);
+				await loadItems(selectedIdRef.current);
 			} catch {
 				/* stale refresh is best-effort */
 			}
@@ -218,7 +238,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 					prev.some((row) => row.id === sub.id) ? prev : [...prev, sub],
 				);
 				setSelectedId(sub.id);
-				await loadItems(sub.id, filter);
+				await loadItems(sub.id);
 			} catch (error) {
 				toastHostError(
 					error instanceof Error ? error.message : String(error),
@@ -228,7 +248,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 				setBusy(false);
 			}
 		},
-		[filter, loadItems, t],
+		[loadItems, t],
 	);
 
 	const onRefresh = useCallback(async () => {
@@ -238,13 +258,13 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 				id: selectedId ?? undefined,
 			});
 			setSubs(result.subscriptions);
-			await loadItems(selectedId, filter);
+			await loadItems(selectedId);
 		} catch (error) {
 			toastHostError(error instanceof Error ? error.message : String(error), t);
 		} finally {
 			setRefreshing(false);
 		}
-	}, [filter, loadItems, selectedId, t]);
+	}, [loadItems, selectedId, t]);
 
 	const onRemove = useCallback(
 		async (id: string) => {
@@ -253,9 +273,9 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 				setSubs((prev) => prev.filter((row) => row.id !== id));
 				if (selectedId === id) {
 					setSelectedId(null);
-					await loadItems(null, filter);
+					await loadItems(null);
 				} else {
-					await loadItems(selectedId, filter);
+					await loadItems(selectedId);
 				}
 			} catch (error) {
 				toastHostError(
@@ -264,7 +284,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 				);
 			}
 		},
-		[filter, loadItems, selectedId, t],
+		[loadItems, selectedId, t],
 	);
 
 	const onRename = useCallback(async () => {
@@ -294,24 +314,55 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		overscan: 8,
 	});
 
-	const filters: FeedFilter[] = ["all", "paper", "other"];
 	const selected = selectedId
 		? (subs.find((row) => row.id === selectedId) ?? null)
 		: null;
 	const emptyItems = !loading && items.length === 0;
+	const hasSubs = subs.length > 0;
 
 	return (
 		<div className={cn("flex h-full min-h-0 flex-col", className)}>
-			<ResizableGroup orientation="horizontal" className="min-h-0 flex-1">
-				<ResizablePanel defaultSize={22} minSize={16} maxSize={40}>
-					<div className="flex h-full min-h-0 flex-col gap-2 p-3">
-						<AddForm busy={busy} onAdd={(url) => void onAdd(url)} />
-						<div className="agentero-scroll min-h-0 flex-1 overflow-y-auto">
+			{hasSubs ? (
+				<div className="shrink-0 border-b px-4 py-3">
+					<AddForm
+						busy={busy}
+						refreshing={refreshing}
+						onAdd={(url) => void onAdd(url)}
+						onRefresh={() => void onRefresh()}
+						showRefresh
+						showChips={false}
+					/>
+				</div>
+			) : null}
+
+			{!hasSubs ? (
+				<div className="flex flex-1 flex-col items-center justify-center p-6">
+					<div className="w-full max-w-md space-y-3">
+						<p className="text-center font-medium text-sm">
+							{t("plaza.feeds.emptyTitle")}
+						</p>
+						<AddForm
+							busy={busy}
+							refreshing={false}
+							onAdd={(url) => void onAdd(url)}
+							onRefresh={() => undefined}
+							showRefresh={false}
+							showChips
+						/>
+						<p className="text-center text-muted-foreground text-xs leading-relaxed">
+							{t("plaza.feeds.emptyHint")}
+						</p>
+					</div>
+				</div>
+			) : (
+				<div className="flex min-h-0 min-w-0 flex-1">
+					<nav className="flex w-52 shrink-0 flex-col border-r">
+						<div className="agentero-scroll min-h-0 flex-1 overflow-y-auto p-2">
 							<button
 								type="button"
 								onClick={() => {
 									setSelectedId(null);
-									void loadItems(null, filter);
+									void loadItems(null);
 								}}
 								className={cn(
 									"flex w-full rounded-md px-2 py-1.5 text-left text-sm",
@@ -330,7 +381,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 											type="button"
 											onClick={() => {
 												setSelectedId(sub.id);
-												void loadItems(sub.id, filter);
+												void loadItems(sub.id);
 											}}
 											className={cn(
 												"mt-0.5 flex w-full flex-col rounded-md px-2 py-1.5 text-left",
@@ -370,7 +421,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 											onSelect={() =>
 												void feedsRefresh({ id: sub.id }).then((result) => {
 													setSubs(result.subscriptions);
-													void loadItems(selectedId, filter);
+													void loadItems(selectedId);
 												})
 											}
 										>
@@ -384,63 +435,13 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 								</ContextMenu>
 							))}
 						</div>
-					</div>
-				</ResizablePanel>
-				<ResizableHandle />
-				<ResizablePanel defaultSize={78} minSize={40}>
-					<div className="flex h-full min-h-0 flex-col">
-						<div className="flex items-center gap-1 border-b px-3 py-2">
-							{filters.map((key) => (
-								<Button
-									key={key}
-									type="button"
-									size="xs"
-									variant={filter === key ? "secondary" : "ghost"}
-									aria-pressed={filter === key}
-									onClick={() => {
-										setFilter(key);
-										void loadItems(selectedId, key);
-									}}
-								>
-									{t(`plaza.feeds.filter.${key}`)}
-								</Button>
-							))}
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon-sm"
-										className="ml-auto"
-										disabled={refreshing}
-										aria-label={t("plaza.feeds.refresh")}
-										onClick={() => void onRefresh()}
-									>
-										<RefreshCw
-											className={cn("size-3.5", refreshing && "animate-spin")}
-											aria-hidden
-										/>
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>{t("plaza.feeds.refresh")}</TooltipContent>
-							</Tooltip>
-						</div>
+					</nav>
+					<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 						{emptyItems ? (
-							<div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground text-sm">
-								{subs.length === 0 ? (
-									<>
-										<p>{t("plaza.feeds.emptyTitle")}</p>
-										<p className="max-w-sm text-xs leading-relaxed">
-											{t("plaza.feeds.emptyHint")}
-										</p>
-									</>
-								) : (
-									<p>
-										{selected?.lastError
-											? formatHostError(selected.lastError, t)
-											: t("plaza.feeds.emptyItems")}
-									</p>
-								)}
+							<div className="flex flex-1 items-center justify-center p-6 text-center text-muted-foreground text-sm">
+								{selected?.lastError
+									? formatHostError(selected.lastError, t)
+									: t("plaza.feeds.emptyItems")}
 							</div>
 						) : (
 							<div
@@ -480,8 +481,8 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 							</div>
 						)}
 					</div>
-				</ResizablePanel>
-			</ResizableGroup>
+				</div>
+			)}
 
 			<Dialog
 				open={renameTarget !== null}
