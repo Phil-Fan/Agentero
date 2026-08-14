@@ -135,6 +135,17 @@
 		"exportFailed": "Export failed",
 		"desktopOnly": "Import/export requires the desktop app."
 	},
+	"plaza": {
+		"plaza": "Plaza",
+		"plazaDescription": "Discover papers from external sources; imported papers appear in your library.",
+		"back": "Back",
+		"forward": "Forward",
+		"reload": "Reload",
+		"openInSystemBrowser": "Open in system browser",
+		"comingSoon": "Coming soon",
+		"comingSoonFor": "{{label}} is coming soon.",
+		"arxivDescription": "Browse daily arXiv updates and conference papers"
+	},
 	"connector": {
 		"saved": "Saved “{{title}}” from browser",
 		"deduped": "Already in library: “{{title}}”"

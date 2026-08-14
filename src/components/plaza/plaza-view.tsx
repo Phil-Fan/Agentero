@@ -6,6 +6,7 @@
  */
 
 import { ChevronRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PlazaWebFrame } from "@/components/plaza/plaza-web-frame";
 import { cn } from "@/lib/core/utils";
 import {
@@ -21,6 +22,7 @@ function SourceCard({
 	source: PlazaSource;
 	onOpen: (source: PlazaSource) => void;
 }) {
+	const { t } = useTranslation("sidebar");
 	const Icon = source.icon;
 	const available = Boolean(source.url);
 	return (
@@ -48,7 +50,7 @@ function SourceCard({
 					) : null}
 				</span>
 				<span className="mt-0.5 block text-muted-foreground text-xs leading-snug">
-					{available ? source.description : "即将推出"}
+					{available ? t(source.description) : t("plaza.comingSoon")}
 				</span>
 			</span>
 		</button>
@@ -64,6 +66,7 @@ export function PlazaView({
 	onOpenSource: (source: PlazaSource) => void;
 	className?: string;
 }) {
+	const { t } = useTranslation("sidebar");
 	const source = plazaSourceForPath(path);
 
 	if (source?.url) {
@@ -85,7 +88,7 @@ export function PlazaView({
 					className,
 				)}
 			>
-				{source.label} 即将推出。
+				{t("plaza.comingSoonFor", { label: source.label })}
 			</div>
 		);
 	}
@@ -94,9 +97,9 @@ export function PlazaView({
 		<div
 			className={cn("agentero-scroll h-full overflow-y-auto p-4", className)}
 		>
-			<h1 className="font-medium text-sm">广场</h1>
+			<h1 className="font-medium text-sm">{t("plaza.plaza")}</h1>
 			<p className="mt-1 text-muted-foreground text-xs">
-				从外部来源发现论文；入库后会出现在论文库中。
+				{t("plaza.plazaDescription")}
 			</p>
 			<div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
 				{PLAZA_SOURCES.map((item) => (

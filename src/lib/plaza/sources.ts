@@ -8,8 +8,10 @@
  * @see docs/development/plaza.md
  */
 
+import type { ParseKeys } from "i18next";
 import type { ComponentType, SVGProps } from "react";
 import { CoolPapersIcon } from "@/components/icons/cool-papers-icon";
+import i18n from "@/i18n";
 
 /** Virtual tree/tab path for the Plaza parent node. */
 export const PLAZA_VIRTUAL_PATH = "agentero:plaza";
@@ -19,8 +21,11 @@ export type PlazaSource = {
 	/** `agentero:plaza/<id>` — virtual, never a filesystem path. */
 	path: string;
 	label: string;
-	/** One line shown on the Plaza home card. */
-	description: string;
+	/**
+	 * Sidebar-namespace i18n key for the one line shown on the Plaza home card.
+	 * Stored as a key (translated at render) so it follows language switches.
+	 */
+	description: ParseKeys<"sidebar">;
 	/**
 	 * Canonical public site: used for "open in browser", and embedded directly
 	 * when there is no proxy. `null` renders a placeholder page, so a planned
@@ -53,7 +58,7 @@ export const PLAZA_SOURCES: readonly PlazaSource[] = [
 		id: "cool-papers",
 		path: sourcePath("cool-papers"),
 		label: "Cool Papers",
-		description: "浏览 arXiv 日更与会议论文流",
+		description: "plaza.arxivDescription",
 		url: "https://papers.cool/",
 		embedOrigin: () => schemeOrigin("agentero-coolpapers"),
 		icon: CoolPapersIcon,
@@ -82,5 +87,5 @@ export function plazaSourceForPath(
 
 /** Tab title for any Plaza path. */
 export function plazaTitleForPath(path: string): string {
-	return plazaSourceForPath(path)?.label ?? "广场";
+	return plazaSourceForPath(path)?.label ?? i18n.t("sidebar:plaza.plaza");
 }

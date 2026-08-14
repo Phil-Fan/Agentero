@@ -13,6 +13,7 @@
 
 import { ArrowLeft, ArrowRight, ExternalLink, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -66,6 +67,7 @@ export function PlazaWebFrame({
 	title: string;
 	className?: string;
 }) {
+	const { t } = useTranslation("sidebar");
 	const homePath = `${new URL(homeUrl).pathname || "/"}${new URL(homeUrl).search}`;
 	/** Visited paths and the cursor into them. Grown by proxy nav messages. */
 	const [nav, setNav] = useState<{ stack: string[]; index: number }>({
@@ -167,14 +169,14 @@ export function PlazaWebFrame({
 							type="button"
 							variant="ghost"
 							size="icon-xs"
-							aria-label="后退"
+							aria-label={t("plaza.back")}
 							disabled={!canGoBack}
 							onClick={() => jump(-1)}
 						>
 							<ArrowLeft className="size-3.5" />
 						</Button>
 					</TooltipTrigger>
-					<TooltipContent side="bottom">后退</TooltipContent>
+					<TooltipContent side="bottom">{t("plaza.back")}</TooltipContent>
 				</Tooltip>
 				<Tooltip>
 					<TooltipTrigger asChild>
@@ -182,14 +184,14 @@ export function PlazaWebFrame({
 							type="button"
 							variant="ghost"
 							size="icon-xs"
-							aria-label="前进"
+							aria-label={t("plaza.forward")}
 							disabled={!canGoForward}
 							onClick={() => jump(1)}
 						>
 							<ArrowRight className="size-3.5" />
 						</Button>
 					</TooltipTrigger>
-					<TooltipContent side="bottom">前进</TooltipContent>
+					<TooltipContent side="bottom">{t("plaza.forward")}</TooltipContent>
 				</Tooltip>
 				<Tooltip>
 					<TooltipTrigger asChild>
@@ -197,7 +199,7 @@ export function PlazaWebFrame({
 							type="button"
 							variant="ghost"
 							size="icon-xs"
-							aria-label="重新载入"
+							aria-label={t("plaza.reload")}
 							onClick={() =>
 								setFrame((f) => ({ path: currentPath, epoch: f.epoch + 1 }))
 							}
@@ -205,7 +207,7 @@ export function PlazaWebFrame({
 							<RotateCw className="size-3.5" />
 						</Button>
 					</TooltipTrigger>
-					<TooltipContent side="bottom">重新载入</TooltipContent>
+					<TooltipContent side="bottom">{t("plaza.reload")}</TooltipContent>
 				</Tooltip>
 				<span
 					className="ml-1 min-w-0 flex-1 truncate text-[11px] text-muted-foreground"
@@ -219,7 +221,7 @@ export function PlazaWebFrame({
 							type="button"
 							variant="ghost"
 							size="icon-xs"
-							aria-label="在系统浏览器打开"
+							aria-label={t("plaza.openInSystemBrowser")}
 							onClick={() =>
 								openExternalUrl(new URL(currentPath, homeUrl).href)
 							}
@@ -227,7 +229,9 @@ export function PlazaWebFrame({
 							<ExternalLink className="size-3.5" />
 						</Button>
 					</TooltipTrigger>
-					<TooltipContent side="bottom">在系统浏览器打开</TooltipContent>
+					<TooltipContent side="bottom">
+						{t("plaza.openInSystemBrowser")}
+					</TooltipContent>
 				</Tooltip>
 			</div>
 			<div className="relative min-h-0 flex-1">

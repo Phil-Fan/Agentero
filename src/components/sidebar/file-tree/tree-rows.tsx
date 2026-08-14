@@ -308,10 +308,11 @@ export function TrashRow() {
 
 /** 广场 parent row — collapsible, with the discovery sources as children. */
 export function PlazaRow({ expanded }: { expanded: boolean }) {
+	const { t } = useTranslation("sidebar");
 	return (
 		<FileTreeFile
 			path={PLAZA_VIRTUAL_PATH}
-			name="广场"
+			name={t("plaza.plaza")}
 			aria-expanded={expanded}
 		>
 			<ChevronRight
@@ -323,7 +324,9 @@ export function PlazaRow({ expanded }: { expanded: boolean }) {
 			<FileTreeIcon>
 				<Globe className="size-4 text-muted-foreground" />
 			</FileTreeIcon>
-			<FileTreeName className="min-w-0 flex-1 truncate">广场</FileTreeName>
+			<FileTreeName className="min-w-0 flex-1 truncate">
+				{t("plaza.plaza")}
+			</FileTreeName>
 		</FileTreeFile>
 	);
 }
