@@ -2224,6 +2224,19 @@ UI 入口见 `settings_window_open`：Settings 现为独立原生单例窗口，
 
 CLI 对照：`agentero usage which|timeline|summary|clear`（见 [cli.md](cli.md)）。前端入口：`src/lib/activity/`。
 
+### 3.10.4 广场订阅（XDG `feeds.sqlite`）
+
+用户 RSS / Atom / JSON Feed 订阅与条目缓存。**不写 catalog / Vault**。规格见 [../development/plaza-feeds.md](../development/plaza-feeds.md)。
+
+| Command | 说明 |
+|---|---|
+| `feeds_list` | 订阅列表 |
+| `feeds_add` | 添加（HTML 自动发现 + 首拉） |
+| `feeds_remove` / `feeds_rename` | 删除 / 改显示名 |
+| `feeds_refresh` | `{ id?, staleOnly? }` 拉源 |
+| `feeds_items` | 时间线；`filter`: all / paper / other |
+| `feeds_mark_imported` | 标记本机已入库 |
+
 ### 3.11 界面与本地化（UI / i18n）
 
 #### `set_locale`（已实现）

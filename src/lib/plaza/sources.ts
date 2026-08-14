@@ -9,7 +9,7 @@
  */
 
 import type { ParseKeys } from "i18next";
-import { Sparkles } from "lucide-react";
+import { Rss, Sparkles } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { CoolPapersIcon } from "@/components/icons/cool-papers-icon";
 import { ModelScopeIcon } from "@/components/icons/modelscope-icon";
@@ -34,7 +34,7 @@ export type PlazaSource = {
 	 */
 	url: string | null;
 	/** Native plaza panel (not an iframe). */
-	panel?: "skills";
+	panel?: "skills" | "feeds";
 	/**
 	 * Host proxy scheme origin used for embedding. A cross-origin frame cannot
 	 * retarget the site's `target="_blank"` links or report its navigations, so
@@ -85,6 +85,16 @@ export const PLAZA_SOURCES: readonly PlazaSource[] = [
 		panel: "skills",
 		icon: Sparkles,
 	},
+	{
+		id: "feeds",
+		path: sourcePath("feeds"),
+		label: "Feeds",
+		description: "plaza.feeds.description",
+		url: null,
+		embedOrigin: null,
+		panel: "feeds",
+		icon: Rss,
+	},
 ];
 
 /** True for the Plaza parent node and every source under this parent. */
@@ -108,13 +118,20 @@ export function plazaSourceForPath(
 }
 
 /** Tab title for any Plaza path. */
+export function plazaSourceLabel(source: PlazaSource): string {
+	switch (source.id) {
+		case "skills":
+			return i18n.t("sidebar:plaza.skills.title");
+		case "modelscope":
+			return i18n.t("sidebar:plaza.modelscope");
+		case "feeds":
+			return i18n.t("sidebar:plaza.feeds.label");
+		default:
+			return source.label;
+	}
+}
+
 export function plazaTitleForPath(path: string): string {
 	const source = plazaSourceForPath(path);
-	if (source?.id === "skills") {
-		return i18n.t("sidebar:plaza.skills.title");
-	}
-	if (source?.id === "modelscope") {
-		return i18n.t("sidebar:plaza.modelscope");
-	}
-	return source?.label ?? i18n.t("sidebar:plaza.plaza");
+	return source ? plazaSourceLabel(source) : i18n.t("sidebar:plaza.plaza");
 }

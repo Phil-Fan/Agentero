@@ -19,6 +19,7 @@ pub mod coolpapers;
 pub mod doctor;
 #[cfg(feature = "desktop")]
 pub mod export;
+pub mod feeds;
 pub mod import;
 #[cfg(feature = "desktop")]
 pub mod jobs;

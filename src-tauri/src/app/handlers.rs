@@ -102,6 +102,13 @@ macro_rules! common_commands {
             crate::features::usage::commands::usage_list,
             crate::features::usage::commands::usage_summary,
             crate::features::usage::commands::usage_clear,
+            crate::features::feeds::commands::feeds_list,
+            crate::features::feeds::commands::feeds_add,
+            crate::features::feeds::commands::feeds_remove,
+            crate::features::feeds::commands::feeds_rename,
+            crate::features::feeds::commands::feeds_refresh,
+            crate::features::feeds::commands::feeds_items,
+            crate::features::feeds::commands::feeds_mark_imported,
             crate::app::menu::set_locale,
             $($extra),*
         ]

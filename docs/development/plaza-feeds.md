@@ -1,6 +1,7 @@
 # 广场订阅（Feeds）— MVP
 
-> 状态：**未实现**（设计稿，2026-08-15）  
+> 状态：**MVP 已落地**（2026-08-15）  
+
 > 范围：广场下新增一个原生「订阅」面板；本地拉取 RSS / Atom / JSON Feed；论文条目一键入库。  
 > 相关：[`plaza.md`](plaza.md)、[`../backend/settings.md`](../backend/settings.md)、[`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)、[`../frontend/vault-tree.md`](../frontend/vault-tree.md)。
 
@@ -186,8 +187,9 @@ CREATE INDEX items_timeline ON items (published_at DESC, first_seen_at DESC);
 | `feeds_add` | `{ url, title? }` | `FeedSub` | 归一化 URL；必要时做 HTML 自动发现；插入后拉一次 |
 | `feeds_remove` | `{ id }` | — | CASCADE 删条目 |
 | `feeds_rename` | `{ id, title }` | `FeedSub` | 只改显示名 |
-| `feeds_refresh` | `{ id? }` | `{ subscriptions, fetched, failed }` | `id` 空 = 全部（并发 4） |
-| `feeds_items` | `{ subscriptionId?, filter?: "all"\|"paper"\|"other", limit?, before? }` | `{ items: FeedItem[] }` | `before` = `(published_at, id)` 游标；默认 limit 100 |
+| `feeds_refresh` | `{ id?, staleOnly? }` | `{ subscriptions, fetched, failed }` | `id` 空 = 全部（并发 4）；`staleOnly` 只拉超过 15 分钟的源 |
+| `feeds_items` | `{ subscriptionId?, filter?: "all"\|"paper"\|"other", limit?, beforePublishedAt?, beforeId? }` | `{ items: FeedItem[] }` | 游标为 `(published_at, id)`；默认 limit 100 |
+| `feeds_mark_imported` | `{ id }` | `FeedItem` | 写入 `importedAt`，刷新不丢 |
 
 `FeedItem` 至少：`id, subscriptionId, subscriptionTitle, title, url, publishedAt, summaryText, paperUrl, importedAt`。`contentHtml` 列表接口不返回（卡片用不到）。
 
@@ -261,14 +263,14 @@ M1–M3 可一次 PR；M4 可同 PR 或紧随。
 
 ## 9. 验收清单（实现后）
 
-- [ ] 侧栏与广场首页能进「订阅」；path 不落盘。
-- [ ] 粘 `https://rss.arxiv.org/rss/cs.LG` 后时间线出现当日论文。
-- [ ] 论文卡入库走魔棒；成功不打开论文；刷新后仍为已入库。
-- [ ] 无 arXiv/DOI 的博客条目只有「打开原文」。
-- [ ] 删订阅后条目从时间线消失。
-- [ ] 关掉订阅 tab 后 Host **不再**拉源。
-- [ ] en / zh-CN 齐；图标按钮有 Tooltip。
-- [ ] `feeds.sqlite` 只出现在 XDG data，Vault 与 catalog 无新表。
+- [x] 侧栏与广场首页能进「订阅」；path 不落盘。
+- [x] 粘 `https://rss.arxiv.org/rss/cs.LG` 后时间线出现当日论文。
+- [x] 论文卡入库走魔棒；成功不打开论文；刷新后仍为已入库。
+- [x] 无 arXiv/DOI 的博客条目只有「打开原文」。
+- [x] 删订阅后条目从时间线消失。
+- [x] 关掉订阅 tab 后 Host **不再**拉源。
+- [x] en / zh-CN 齐；图标按钮有 Tooltip。
+- [x] `feeds.sqlite` 只出现在 XDG data，Vault 与 catalog 无新表。
 
 ---
 

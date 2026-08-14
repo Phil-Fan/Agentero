@@ -32,6 +32,7 @@ src-tauri/src/
     modelscope_proxy/ # modelscope.cn/papers 广场来源
     telemetry/  # 桌面端，PostHog 匿名遥测
     usage/      # XDG usage.sqlite 本地活动日志
+    feeds/      # 广场订阅：XDG feeds.sqlite + RSS/Atom 拉取
   lib.rs
   main.rs
 ```
@@ -77,6 +78,7 @@ src-tauri/src/
 | Catalog SQLite | 论文集合 + metadata | `.agentero/catalog.sqlite` |
 | 应用设置 | UI / Agent 注册表 / 偏好 | XDG `~/.config/agentero/` |
 | 使用记录 | 打开 / 下载 / Agent 等活动 | XDG data `~/.local/share/agentero/usage.sqlite` |
+| 广场订阅 | 订阅名单 + 条目缓存 | XDG data `feeds.sqlite`（不进 catalog） |
 | 版面 ONNX | PP-DocLayoutV3（ModelScope → HF） | XDG cache `~/.cache/agentero/models/` |
 | 可重建索引 | 双链图 | 内存 / 可重建缓存，非业务权威 |
 

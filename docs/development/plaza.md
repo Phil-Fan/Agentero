@@ -2,7 +2,7 @@
 
 > 范围：侧栏虚拟节点 **广场** 及其子来源（Cool Papers / ModelScope 论文 / Skill 推荐 / 订阅 / 播客 / 论文推荐）；中间栏发现流。  
 > 相关：[`../frontend/vault-tree.md`](../frontend/vault-tree.md)、[`../backend/paper-import.md`](../backend/paper-import.md)、[`../backend/index.md`](../backend/index.md)。  
-> 订阅 MVP（未实现）：[`plaza-feeds.md`](plaza-feeds.md)。
+> 订阅 MVP（已落地）：[`plaza-feeds.md`](plaza-feeds.md)。
 
 ## 0. 产品结论（2026-07-25，2026-08-14 修订）
 
@@ -13,7 +13,7 @@
 | Q3 | 入库 | **已实现**：每行注入 `[入库]`，复用现成魔棒（见 §3.2.1） |
 | Q4 | P0 范围 | **已交付：广场壳 + Cool Papers 浏览入库 + Skill 推荐**；播客 / 论文推荐尚未实现 |
 | Q5 | ModelScope 论文 | **已实现**：同一代理模式，但站点是 SPA，另有取舍（见 §3.5） |
-| Q6 | 订阅 | **未实现**：广场下单一原生节点，本地 RSS/Atom；见 [`plaza-feeds.md`](plaza-feeds.md) |
+| Q6 | 订阅 | **已落地**：广场下单一原生节点，本地 RSS/Atom；见 [`plaza-feeds.md`](plaza-feeds.md) |
 
 **已实现落点（2026-08-14）**
 
@@ -49,7 +49,7 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 1. **Cool Papers**（[papers.cool](https://papers.cool/)）— P0：内嵌站点浏览。  
 2. **ModelScope 论文**（[modelscope.cn/papers](https://modelscope.cn/papers)）— 内嵌站点浏览；魔搭每日读论文带中文摘要与评分。  
 3. **Skill 推荐** — 原生面板：按论文阅读 / 写作 / 绘图 / 复现 / 投稿精选 GitHub Skill 仓库；点卡片走魔棒 Skill 导入。  
-4. **订阅** — 未实现：用户自己的 RSS / Atom / JSON Feed；论文条目入库。规格见 [`plaza-feeds.md`](plaza-feeds.md)。  
+4. **订阅** — 用户自己的 RSS / Atom / JSON Feed；论文条目入库。见 [`plaza-feeds.md`](plaza-feeds.md)。  
 5. **播客** — 占位，后续。  
 6. **论文推荐** — P0 v0：基于本地库的轻量推荐列表（无云端上传）。
 
@@ -63,7 +63,7 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 │   ├── ✨ Cool Papers         agentero:plaza/cool-papers
 │   ├── ✨ ModelScope 论文      agentero:plaza/modelscope
 │   ├── ✨ Skill 推荐           agentero:plaza/skills
-│   ├── 📡 订阅                 agentero:plaza/feeds         ← 未实现，见 plaza-feeds.md
+│   ├── 📡 订阅                 agentero:plaza/feeds
 │   ├── 🎙️ 播客                 agentero:plaza/podcasts      ← 占位
 │   └── 🧭 推荐                 agentero:plaza/recommend
 ├── papers/
@@ -301,7 +301,7 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 
 - 广场 → Vault **批量入库**（单条已实现，见 §3.2.1）。  
 - 把 feed 写入 catalog（订阅条目缓存走 XDG，见 [`plaza-feeds.md`](plaza-feeds.md)）。  
-- 播客播放器。订阅管理按 [`plaza-feeds.md`](plaza-feeds.md) 另做，不进本篇 P0。  
+- 播客播放器。订阅管理见 [`plaza-feeds.md`](plaza-feeds.md)，不进本篇原 P0。  
 - 云端协同过滤或上传本地库。  
 - 注入脚本只做导航上报与 `[入库]`；**不注入任何凭据 / API Key / 登录态**。
 
@@ -339,4 +339,5 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 *修订：2026-07-25 — 采纳 WebView、不做入库、P0 含推荐 v0、树位置在 Library/Trash 下。*
 *修订：2026-08-14 — 改为代理协议嵌入；壳 + Cool Papers 浏览 + 单条入库已落地；推荐 / 播客未实现。*
 *修订：2026-08-15 — 新增 ModelScope 论文来源；请求管道抽到 `site_proxy.rs` 并转发 method + body。*  
-*修订：2026-08-15 — 订阅列为广场来源，规格拆到 [`plaza-feeds.md`](plaza-feeds.md)。*
+*修订：2026-08-15 — 订阅列为广场来源，规格拆到 [`plaza-feeds.md`](plaza-feeds.md)。*  
+*修订：2026-08-15 — 订阅 MVP 落地（XDG `feeds.sqlite` + 原生双栏 + 论文入库）。*

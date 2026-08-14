@@ -27,7 +27,11 @@ import {
 import { contextPathIcon } from "@/lib/agent/context-path-icon";
 import { cn } from "@/lib/core/utils";
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
-import { PLAZA_VIRTUAL_PATH, type PlazaSource } from "@/lib/plaza";
+import {
+	PLAZA_VIRTUAL_PATH,
+	type PlazaSource,
+	plazaSourceLabel,
+} from "@/lib/plaza";
 import type { FileNode } from "@/lib/vault";
 import { DOWNLOAD_REASON_KEYS } from "./tree-helpers";
 
@@ -332,14 +336,8 @@ export function PlazaRow({ expanded }: { expanded: boolean }) {
 }
 
 export function PlazaSourceRow({ source }: { source: PlazaSource }) {
-	const { t } = useTranslation("sidebar");
 	const Icon = source.icon;
-	const label =
-		source.id === "skills"
-			? t("plaza.skills.title")
-			: source.id === "modelscope"
-				? t("plaza.modelscope")
-				: source.label;
+	const label = plazaSourceLabel(source);
 	return (
 		<FileTreeFile path={source.path} name={label}>
 			<span className="size-4 shrink-0" />

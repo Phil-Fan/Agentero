@@ -11,5 +11,6 @@ export {
 	PLAZA_VIRTUAL_PATH,
 	type PlazaSource,
 	plazaSourceForPath,
+	plazaSourceLabel,
 	plazaTitleForPath,
 } from "@/lib/plaza/sources";

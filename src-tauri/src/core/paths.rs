@@ -5,7 +5,7 @@
 //! |------|-----|----------------|----------|
 //! | config | `$XDG_CONFIG_HOME` | `~/.config` | `agentero/settings.json`, `agents.json` |
 //! | cache | `$XDG_CACHE_HOME` | `~/.cache` | remote work mirrors, PDF blobs |
-//! | data | `$XDG_DATA_HOME` | `~/.local/share` | `usage.sqlite` (device-local activity) |
+//! | data | `$XDG_DATA_HOME` | `~/.local/share` | `usage.sqlite` (device-local activity), `feeds.sqlite` |
 //! | state | `$XDG_STATE_HOME` | `~/.local/state` | reserved |
 //!
 //! On Windows and iOS, when XDG env vars are unset, falls back to the platform
@@ -78,6 +78,11 @@ pub fn agentero_data_dir() -> PathBuf {
 /// Device-local activity log: `…/agentero/usage.sqlite`.
 pub fn usage_db_path() -> PathBuf {
     agentero_data_dir().join("usage.sqlite")
+}
+
+/// Plaza feed subscriptions + item cache: `…/agentero/feeds.sqlite`.
+pub fn feeds_db_path() -> PathBuf {
+    agentero_data_dir().join("feeds.sqlite")
 }
 
 /// ONNX / other large assets: `$XDG_CACHE_HOME/agentero/models`.
@@ -197,6 +202,13 @@ mod tests {
     fn usage_db_under_data_dir() {
         let p = usage_db_path();
         assert_eq!(p.file_name().and_then(|s| s.to_str()), Some("usage.sqlite"));
+        assert_eq!(p.parent(), Some(agentero_data_dir().as_path()));
+    }
+
+    #[test]
+    fn feeds_db_under_data_dir() {
+        let p = feeds_db_path();
+        assert_eq!(p.file_name().and_then(|s| s.to_str()), Some("feeds.sqlite"));
         assert_eq!(p.parent(), Some(agentero_data_dir().as_path()));
     }
 }

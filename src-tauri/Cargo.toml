@@ -67,6 +67,7 @@ dirs = "6"
 thiserror = "2"
 which = "7"
 rusqlite = { version = "0.32", features = ["bundled"] }
+feed-rs = "2.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "socks", "multipart"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 flate2 = "1.1.9"
