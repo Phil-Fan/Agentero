@@ -79,6 +79,13 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 - **返回** `WarmResult`：`{ agentId, ok, models?, usageUsed?, usageSize?, error? }`
 
+### 2.5 执行线程约定（重 IO command 必须 async）
+
+- 同步 `#[tauri::command]` 在主线程内执行；Windows 主线程即 UI 消息泵，重 IO 同步 command 执行期间整窗冻结。
+- **重 IO command（扫盘、SQLite、全库索引、字体/大文件读取等）必须写成 `async fn`**，阻塞体统一用 `core::blocking::run_blocking`（内部 `tauri::async_runtime::spawn_blocking`）移出调用线程；对外返回 JSON 结构不变，前端 invoke 透明。
+- 使用 `State<'_, T>` 的 async command 受 Tauri 限制必须返回 `Result`（惯例 `Result<ApiResult<T>, String>`，恒为 `Ok(...)`）。`std::sync::Mutex` guard 不能跨 `await`：把「拿锁 + 干活」整体放进 `run_blocking` 闭包，State 先 clone 出可 `Send + 'static` 的 Arc 句柄（如 `WikiIndexState::handle()`、`CapsCache`、`ExternalRenameRepairStore`）。
+- 已按此约定改造：`vault_*`（create/ensure/tree_build/tree_children）、`wiki_*` 全部、`graph_*`、`vault_search`、`paper_*`（catalog）、`usage_*`/`activity_record_events`、`zotero_sync`/`zotero_scan`、`doctor_*`（除纯内存的 `doctor_set_dirty_paths`）、`list_system_fonts`（另有进程级缓存）、`export_system_cjk_font`、`paper_stage_import_file`、`paper_refs_list`/`paper_refs_graph`、`connector_set_enabled`/`connector_set_port`（bind 改真 async，不再 `block_on`）。
+
 ## 3. Host 层 Tauri invoke API
 
 ### 3.1 Vault 与窗口

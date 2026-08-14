@@ -54,56 +54,62 @@ pub async fn paper_refs_parse(
 
 /// Read the existing reference sidecar; `None` when it has not been parsed yet.
 #[tauri::command]
-pub fn paper_refs_list(args: PaperRefsListArgs) -> ApiResult<Option<super::CiteSidecar>> {
-    let op = OpTimer::start_with(
-        "paper_refs_list",
-        format!("path={}", trunc(&args.path, 120)),
-    );
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        let err = AppError::message("vault path is not a directory");
-        op.finish_err(&err);
-        return map_err(err);
-    }
-    let rel = match crate::core::fs::sanitize_vault_rel(&args.path) {
-        Ok(rel) => rel,
-        Err(_) => {
-            let err = AppError::message("invalid paper path");
+pub async fn paper_refs_list(args: PaperRefsListArgs) -> ApiResult<Option<super::CiteSidecar>> {
+    crate::core::blocking::run_blocking(move || {
+        let op = OpTimer::start_with(
+            "paper_refs_list",
+            format!("path={}", trunc(&args.path, 120)),
+        );
+        let vault = PathBuf::from(args.vault_path.trim());
+        if !vault.is_dir() {
+            let err = AppError::message("vault path is not a directory");
             op.finish_err(&err);
             return map_err(err);
         }
-    };
-    let sidecar_path = vault.join(rel).join("source").join(super::SIDECAR_FILE);
-    op.finish_result(Ok(super::read_sidecar(&sidecar_path)))
+        let rel = match crate::core::fs::sanitize_vault_rel(&args.path) {
+            Ok(rel) => rel,
+            Err(_) => {
+                let err = AppError::message("invalid paper path");
+                op.finish_err(&err);
+                return map_err(err);
+            }
+        };
+        let sidecar_path = vault.join(rel).join("source").join(super::SIDECAR_FILE);
+        op.finish_result(Ok(super::read_sidecar(&sidecar_path)))
+    })
+    .await
 }
 
 /// Citation relationship graph from existing reference sidecars + catalog matches.
 #[tauri::command]
-pub fn paper_refs_graph(args: PaperRefsGraphArgs) -> ApiResult<super::CiteGraphResponse> {
-    let center_hint = args
-        .center
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or("-");
-    let op = OpTimer::start_with(
-        "paper_refs_graph",
-        format!(
-            "center={} depth={}",
-            trunc(center_hint, 120),
-            args.depth.unwrap_or(1)
-        ),
-    );
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        let err = AppError::message("vault path is not a directory");
-        op.finish_err(&err);
-        return map_err(err);
-    }
-    let center = args
-        .center
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
-    op.finish_result(super::build_citation_graph(&vault, center, args.depth))
+pub async fn paper_refs_graph(args: PaperRefsGraphArgs) -> ApiResult<super::CiteGraphResponse> {
+    crate::core::blocking::run_blocking(move || {
+        let center_hint = args
+            .center
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("-");
+        let op = OpTimer::start_with(
+            "paper_refs_graph",
+            format!(
+                "center={} depth={}",
+                trunc(center_hint, 120),
+                args.depth.unwrap_or(1)
+            ),
+        );
+        let vault = PathBuf::from(args.vault_path.trim());
+        if !vault.is_dir() {
+            let err = AppError::message("vault path is not a directory");
+            op.finish_err(&err);
+            return map_err(err);
+        }
+        let center = args
+            .center
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        op.finish_result(super::build_citation_graph(&vault, center, args.depth))
+    })
+    .await
 }

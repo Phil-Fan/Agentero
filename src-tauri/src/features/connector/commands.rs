@@ -20,14 +20,15 @@ pub struct ConnectorSetEnabledArgs {
 }
 
 #[tauri::command]
-pub fn connector_set_enabled(
+pub async fn connector_set_enabled(
     ctrl: State<'_, Arc<ConnectorController>>,
     args: ConnectorSetEnabledArgs,
-) -> ApiResult<ConnectorStatus> {
+) -> Result<ApiResult<ConnectorStatus>, String> {
     use crate::core::log_util::OpTimer;
 
     let op = OpTimer::start_with("connector_set_enabled", format!("enabled={}", args.enabled));
-    let status = ctrl.set_enabled(args.enabled);
+    let ctrl = Arc::clone(&ctrl);
+    let status = ctrl.set_enabled(args.enabled).await;
     if let Some(err) = status.last_error.as_deref() {
         if !err.is_empty() && args.enabled {
             op.finish_err_msg("connector", err);
@@ -43,7 +44,7 @@ pub fn connector_set_enabled(
             status.listening, status.port
         ));
     }
-    ApiResult::ok(status)
+    Ok(ApiResult::ok(status))
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,9 +86,10 @@ pub struct ConnectorSetPortArgs {
 }
 
 #[tauri::command]
-pub fn connector_set_port(
+pub async fn connector_set_port(
     ctrl: State<'_, Arc<ConnectorController>>,
     args: ConnectorSetPortArgs,
-) -> ApiResult<ConnectorStatus> {
-    ApiResult::ok(ctrl.set_port(args.port))
+) -> Result<ApiResult<ConnectorStatus>, String> {
+    let ctrl = Arc::clone(&ctrl);
+    Ok(ApiResult::ok(ctrl.set_port(args.port).await))
 }

@@ -203,7 +203,7 @@ impl ConnectorController {
 
     /// Change the loopback port. If the server is enabled, restart it so the
     /// status cannot claim a port that is not actually bound.
-    pub fn set_port(self: &Arc<Self>, port: u16) -> ConnectorStatus {
+    pub async fn set_port(self: &Arc<Self>, port: u16) -> ConnectorStatus {
         if port == 0 {
             if let Ok(mut g) = self.inner.lock() {
                 g.last_error = Some("Connector port must be between 1 and 65535".into());
@@ -219,7 +219,7 @@ impl ConnectorController {
             g.last_error = None;
         }
         if enabled {
-            if let Err(e) = self.start_server() {
+            if let Err(e) = self.start_server().await {
                 if let Ok(mut g) = self.inner.lock() {
                     g.last_error = Some(e.to_string());
                     g.listening = false;
@@ -250,7 +250,10 @@ impl ConnectorController {
     }
 
     /// Enable or disable the HTTP server. Idempotent.
-    pub fn set_enabled(self: &Arc<Self>, enabled: bool) -> ConnectorStatus {
+    ///
+    /// Async: binding the listener is awaited on the runtime instead of
+    /// `block_on`, so command handlers never stall their calling thread.
+    pub async fn set_enabled(self: &Arc<Self>, enabled: bool) -> ConnectorStatus {
         if !enabled {
             self.stop_server();
             if let Ok(mut g) = self.inner.lock() {
@@ -270,7 +273,7 @@ impl ConnectorController {
             }
         }
 
-        match self.start_server() {
+        match self.start_server().await {
             Ok(()) => {}
             Err(e) => {
                 if let Ok(mut g) = self.inner.lock() {
@@ -301,7 +304,7 @@ impl ConnectorController {
         }
     }
 
-    fn start_server(self: &Arc<Self>) -> Result<(), AppError> {
+    async fn start_server(self: &Arc<Self>) -> Result<(), AppError> {
         let port = {
             let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
             g.port
@@ -313,17 +316,18 @@ impl ConnectorController {
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let ctrl = Arc::clone(self);
 
-        // Bind on the current runtime so EADDRINUSE fails before we claim success.
-        let listener = tauri::async_runtime::block_on(async {
-            tokio::net::TcpListener::bind(std::net::SocketAddr::from(([127, 0, 0, 1], port))).await
-        })
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::AddrInUse {
-                AppError::message("请先退出本地Zotero".to_string())
-            } else {
-                AppError::message(format!("Failed to bind 127.0.0.1:{port}: {e}"))
-            }
-        })?;
+        // Await the bind so EADDRINUSE fails before we claim success — without
+        // `block_on`, which would stall the calling thread.
+        let listener =
+            tokio::net::TcpListener::bind(std::net::SocketAddr::from(([127, 0, 0, 1], port)))
+                .await
+                .map_err(|e| {
+                    if e.kind() == std::io::ErrorKind::AddrInUse {
+                        AppError::message("请先退出本地Zotero".to_string())
+                    } else {
+                        AppError::message(format!("Failed to bind 127.0.0.1:{port}: {e}"))
+                    }
+                })?;
 
         {
             let mut g = self.inner.lock().unwrap_or_else(|e| e.into_inner());

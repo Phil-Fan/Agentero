@@ -17,27 +17,44 @@ pub fn settings_get(store: State<'_, AppSettingsStore>) -> ApiResult<SettingsGet
 }
 
 /// Return unique system font family names (sorted). Empty on mobile / failure.
+///
+/// Scanning system fonts is slow (disk walk on Windows), so it runs in
+/// `run_blocking` and the result is cached for the process lifetime — the
+/// installed-font set does not change while the app is running.
 #[tauri::command]
-pub fn list_system_fonts() -> ApiResult<Vec<String>> {
+pub async fn list_system_fonts() -> ApiResult<Vec<String>> {
     #[cfg(any(target_os = "ios", target_os = "android"))]
     {
-        return ApiResult::ok(Vec::new());
+        ApiResult::ok(Vec::new())
     }
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
-        use std::collections::BTreeSet;
-        let mut db = fontdb::Database::new();
-        db.load_system_fonts();
-        let mut names = BTreeSet::new();
-        for face in db.faces() {
-            for (family, _) in &face.families {
-                let t = family.trim();
-                if !t.is_empty() {
-                    names.insert(t.to_string());
-                }
-            }
+        use crate::core::blocking::run_blocking;
+        use std::sync::OnceLock;
+
+        static FONTS: OnceLock<Vec<String>> = OnceLock::new();
+        if let Some(names) = FONTS.get() {
+            return ApiResult::ok(names.clone());
         }
-        ApiResult::ok(names.into_iter().collect())
+        run_blocking(move || {
+            let names = FONTS.get_or_init(|| {
+                use std::collections::BTreeSet;
+                let mut db = fontdb::Database::new();
+                db.load_system_fonts();
+                let mut names = BTreeSet::new();
+                for face in db.faces() {
+                    for (family, _) in &face.families {
+                        let t = family.trim();
+                        if !t.is_empty() {
+                            names.insert(t.to_string());
+                        }
+                    }
+                }
+                names.into_iter().collect()
+            });
+            ApiResult::ok(names.clone())
+        })
+        .await
     }
 }
 
@@ -59,7 +76,14 @@ pub fn settings_set(
     match store.set(settings) {
         Ok(s) => {
             let _ = agents.set_proxy(s.network_proxy_enabled, s.network_proxy_url.clone());
-            let _ = connector.set_port(s.connector_port);
+            // `set_port` is async (it may rebind the listener); the result was
+            // always discarded here and the controller emits its own status
+            // event, so run it on the runtime instead of blocking this handler.
+            let ctrl = Arc::clone(&connector);
+            let port = s.connector_port;
+            tauri::async_runtime::spawn(async move {
+                let _ = ctrl.set_port(port).await;
+            });
             // Keep every window's settings cache fresh (settings window, main windows).
             let _ = app.emit("settings:changed", &s);
             ApiResult::ok(s)

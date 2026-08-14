@@ -1,5 +1,10 @@
 //! Paper metadata commands — catalog.sqlite is authoritative.
+//!
+//! All heavy-IO commands here are async and run their SQLite/filesystem work
+//! inside `run_blocking`, keeping the main thread (Windows UI message pump)
+//! free.
 
+use crate::core::blocking::run_blocking;
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::core::fs::sanitize_vault_rel;
 use crate::features::catalog::papers::{self, PaperRecord};
@@ -26,31 +31,34 @@ pub struct PaperGetArgs {
 
 /// Get one paper's metadata from catalog.sqlite.
 #[tauri::command]
-pub fn paper_get(args: PaperGetArgs) -> ApiResult<PaperRecord> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return map_err(AppError::message("vault path is not a directory"));
-    }
+pub async fn paper_get(args: PaperGetArgs) -> ApiResult<PaperRecord> {
+    run_blocking(move || {
+        let vault = PathBuf::from(args.vault_path.trim());
+        if !vault.is_dir() {
+            return map_err(AppError::message("vault path is not a directory"));
+        }
 
-    let result = if let Some(path) = args
-        .path
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        let path = path.trim_matches('/').replace('\\', "/");
-        papers::get_by_path(&vault, &path)
-    } else if let Some(id) = args.id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        papers::get_by_id(&vault, id)
-    } else {
-        return map_err(AppError::message("path or id is required"));
-    };
+        let result = if let Some(path) = args
+            .path
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            let path = path.trim_matches('/').replace('\\', "/");
+            papers::get_by_path(&vault, &path)
+        } else if let Some(id) = args.id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            papers::get_by_id(&vault, id)
+        } else {
+            return map_err(AppError::message("path or id is required"));
+        };
 
-    match result {
-        Ok(Some(row)) => ApiResult::ok(row),
-        Ok(None) => map_err(AppError::message("paper not found in catalog")),
-        Err(e) => map_err(e),
-    }
+        match result {
+            Ok(Some(row)) => ApiResult::ok(row),
+            Ok(None) => map_err(AppError::message("paper not found in catalog")),
+            Err(e) => map_err(e),
+        }
+    })
+    .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -76,15 +84,19 @@ pub struct PaperOpenBundle {
 
 /// Bundle local paper-open data for the renderer's focus path.
 #[tauri::command]
-pub fn paper_open_bundle(
+pub async fn paper_open_bundle(
     args: PaperOpenBundleArgs,
     cache: State<'_, CapsCache>,
-) -> ApiResult<PaperOpenBundle> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    match paper_open_bundle_inner(&vault, &args.path, Some(&cache)) {
-        Ok(bundle) => ApiResult::ok(bundle),
-        Err(e) => map_err(e),
-    }
+) -> Result<ApiResult<PaperOpenBundle>, String> {
+    let cache = cache.inner().clone();
+    Ok(run_blocking(move || {
+        let vault = PathBuf::from(args.vault_path.trim());
+        match paper_open_bundle_inner(&vault, &args.path, Some(&cache)) {
+            Ok(bundle) => ApiResult::ok(bundle),
+            Err(e) => map_err(e),
+        }
+    })
+    .await)
 }
 
 fn paper_open_bundle_inner(
@@ -136,15 +148,18 @@ pub struct PaperListArgs {
 /// Returns one row per logical paper `id` so the Library never shows duplicate
 /// entries when the same paper was imported under multiple paths (#248).
 #[tauri::command]
-pub fn paper_list(args: PaperListArgs) -> ApiResult<Vec<PaperRecord>> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return map_err(AppError::message("vault path is not a directory"));
-    }
-    match papers::list_all_unique_by_id(&vault) {
-        Ok(rows) => ApiResult::ok(rows),
-        Err(e) => map_err(e),
-    }
+pub async fn paper_list(args: PaperListArgs) -> ApiResult<Vec<PaperRecord>> {
+    run_blocking(move || {
+        let vault = PathBuf::from(args.vault_path.trim());
+        if !vault.is_dir() {
+            return map_err(AppError::message("vault path is not a directory"));
+        }
+        match papers::list_all_unique_by_id(&vault) {
+            Ok(rows) => ApiResult::ok(rows),
+            Err(e) => map_err(e),
+        }
+    })
+    .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -158,19 +173,22 @@ pub struct PaperSetIsReadArgs {
 
 /// Update catalog `is_read` after paper-reader workflow completes (or reset).
 #[tauri::command]
-pub fn paper_set_is_read(args: PaperSetIsReadArgs) -> ApiResult<PaperRecord> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return map_err(AppError::message("vault path is not a directory"));
-    }
-    let path = args.path.trim().trim_matches('/').replace('\\', "/");
-    if path.is_empty() {
-        return map_err(AppError::message("path is required"));
-    }
-    match papers::set_is_read(&vault, &path, args.is_read) {
-        Ok(row) => ApiResult::ok(row),
-        Err(e) => map_err(e),
-    }
+pub async fn paper_set_is_read(args: PaperSetIsReadArgs) -> ApiResult<PaperRecord> {
+    run_blocking(move || {
+        let vault = PathBuf::from(args.vault_path.trim());
+        if !vault.is_dir() {
+            return map_err(AppError::message("vault path is not a directory"));
+        }
+        let path = args.path.trim().trim_matches('/').replace('\\', "/");
+        if path.is_empty() {
+            return map_err(AppError::message("path is required"));
+        }
+        match papers::set_is_read(&vault, &path, args.is_read) {
+            Ok(row) => ApiResult::ok(row),
+            Err(e) => map_err(e),
+        }
+    })
+    .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -199,18 +217,22 @@ pub struct PaperMoveResult {
 /// Move an item into another `papers/` folder on disk and rewrite matching
 /// catalog path prefixes. Never overwrites an existing target.
 #[tauri::command]
-pub fn paper_move(
+pub async fn paper_move(
     args: PaperMoveArgs,
     index: State<'_, WikiIndexState>,
-) -> ApiResult<PaperMoveResult> {
-    let mut guard = match index.inner.lock() {
-        Ok(guard) => guard,
-        Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
-    };
-    match move_inner(args, &mut guard) {
-        Ok(r) => ApiResult::ok(r),
-        Err(e) => map_err(e),
-    }
+) -> Result<ApiResult<PaperMoveResult>, String> {
+    let index = index.handle();
+    Ok(run_blocking(move || {
+        let mut guard = match index.lock() {
+            Ok(guard) => guard,
+            Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
+        };
+        match move_inner(args, &mut guard) {
+            Ok(r) => ApiResult::ok(r),
+            Err(e) => map_err(e),
+        }
+    })
+    .await)
 }
 
 fn move_inner(
@@ -394,19 +416,22 @@ pub struct PaperSetTagsArgs {
 
 /// Replace catalog tags for a paper (syncs metadata.json projection).
 #[tauri::command]
-pub fn paper_set_tags(args: PaperSetTagsArgs) -> ApiResult<PaperRecord> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return map_err(AppError::message("vault path is not a directory"));
-    }
-    let path = args.path.trim().trim_matches('/').replace('\\', "/");
-    if path.is_empty() {
-        return map_err(AppError::message("path is required"));
-    }
-    match papers::set_tags(&vault, &path, &args.tags) {
-        Ok(row) => ApiResult::ok(row),
-        Err(e) => map_err(e),
-    }
+pub async fn paper_set_tags(args: PaperSetTagsArgs) -> ApiResult<PaperRecord> {
+    run_blocking(move || {
+        let vault = PathBuf::from(args.vault_path.trim());
+        if !vault.is_dir() {
+            return map_err(AppError::message("vault path is not a directory"));
+        }
+        let path = args.path.trim().trim_matches('/').replace('\\', "/");
+        if path.is_empty() {
+            return map_err(AppError::message("path is required"));
+        }
+        match papers::set_tags(&vault, &path, &args.tags) {
+            Ok(row) => ApiResult::ok(row),
+            Err(e) => map_err(e),
+        }
+    })
+    .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -425,26 +450,29 @@ pub struct PaperRescanResult {
 /// Rebuild catalog rows from `papers/` metadata.json — recovers papers that are
 /// on disk but missing from the catalog (added externally, or a lost row).
 #[tauri::command]
-pub fn paper_rescan(args: PaperRescanArgs) -> ApiResult<PaperRescanResult> {
-    use crate::core::log_util::OpTimer;
+pub async fn paper_rescan(args: PaperRescanArgs) -> ApiResult<PaperRescanResult> {
+    run_blocking(move || {
+        use crate::core::log_util::OpTimer;
 
-    let vault = PathBuf::from(args.vault_path.trim());
-    let op = OpTimer::start("paper_rescan");
-    if !vault.is_dir() {
-        let err = AppError::message("vault path is not a directory");
-        op.finish_err(&err);
-        return map_err(err);
-    }
-    match papers::rebuild_from_disk(&vault) {
-        Ok(count) => {
-            op.finish_ok_extra(format!("count={count}"));
-            ApiResult::ok(PaperRescanResult { count })
+        let vault = PathBuf::from(args.vault_path.trim());
+        let op = OpTimer::start("paper_rescan");
+        if !vault.is_dir() {
+            let err = AppError::message("vault path is not a directory");
+            op.finish_err(&err);
+            return map_err(err);
         }
-        Err(e) => {
-            op.finish_err(&e);
-            map_err(e)
+        match papers::rebuild_from_disk(&vault) {
+            Ok(count) => {
+                op.finish_ok_extra(format!("count={count}"));
+                ApiResult::ok(PaperRescanResult { count })
+            }
+            Err(e) => {
+                op.finish_err(&e);
+                map_err(e)
+            }
         }
-    }
+    })
+    .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -455,17 +483,20 @@ pub struct PaperPageCountsArgs {
 
 /// Cached PDF page counts keyed by vault-relative paper path.
 #[tauri::command]
-pub fn paper_page_counts(
+pub async fn paper_page_counts(
     args: PaperPageCountsArgs,
 ) -> ApiResult<std::collections::HashMap<String, i64>> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return map_err(AppError::message("vault path is not a directory"));
-    }
-    match papers::list_page_counts(&vault) {
-        Ok(counts) => ApiResult::ok(counts),
-        Err(e) => map_err(e),
-    }
+    run_blocking(move || {
+        let vault = PathBuf::from(args.vault_path.trim());
+        if !vault.is_dir() {
+            return map_err(AppError::message("vault path is not a directory"));
+        }
+        match papers::list_page_counts(&vault) {
+            Ok(counts) => ApiResult::ok(counts),
+            Err(e) => map_err(e),
+        }
+    })
+    .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -478,19 +509,22 @@ pub struct PaperSetPageCountsArgs {
 
 /// Persist newly discovered PDF page counts (heatmap page-count cache).
 #[tauri::command]
-pub fn paper_set_page_counts(args: PaperSetPageCountsArgs) -> ApiResult<()> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return map_err(AppError::message("vault path is not a directory"));
-    }
-    let counts: Vec<(String, i64)> = args
-        .counts
-        .into_iter()
-        .map(|(path, count)| (path.trim().trim_matches('/').replace('\\', "/"), count))
-        .filter(|(path, count)| !path.is_empty() && *count > 0)
-        .collect();
-    match papers::set_page_counts(&vault, &counts) {
-        Ok(()) => ApiResult::ok(()),
-        Err(e) => map_err(e),
-    }
+pub async fn paper_set_page_counts(args: PaperSetPageCountsArgs) -> ApiResult<()> {
+    run_blocking(move || {
+        let vault = PathBuf::from(args.vault_path.trim());
+        if !vault.is_dir() {
+            return map_err(AppError::message("vault path is not a directory"));
+        }
+        let counts: Vec<(String, i64)> = args
+            .counts
+            .into_iter()
+            .map(|(path, count)| (path.trim().trim_matches('/').replace('\\', "/"), count))
+            .filter(|(path, count)| !path.is_empty() && *count > 0)
+            .collect();
+        match papers::set_page_counts(&vault, &counts) {
+            Ok(()) => ApiResult::ok(()),
+            Err(e) => map_err(e),
+        }
+    })
+    .await
 }

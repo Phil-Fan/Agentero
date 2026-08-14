@@ -16,7 +16,7 @@ use crate::features::wiki::resolve::{normalize_rel, resolve_occurrence};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 const IGNORE_NAMES: &[&str] = &[
     ".git",
@@ -844,15 +844,24 @@ impl WikiIndex {
 }
 
 /// Thread-safe index managed by Tauri.
+///
+/// The index sits behind an `Arc` so async commands can clone the handle and
+/// move it into `spawn_blocking` closures (lock + heavy work off the main
+/// thread). The global-Mutex semantics are unchanged.
 pub struct WikiIndexState {
-    pub inner: Mutex<WikiIndex>,
+    pub inner: Arc<Mutex<WikiIndex>>,
 }
 
 impl WikiIndexState {
     pub fn new() -> Self {
         Self {
-            inner: Mutex::new(WikiIndex::default()),
+            inner: Arc::new(Mutex::new(WikiIndex::default())),
         }
+    }
+
+    /// Cloneable handle for moving into blocking closures.
+    pub fn handle(&self) -> Arc<Mutex<WikiIndex>> {
+        Arc::clone(&self.inner)
     }
 }
 

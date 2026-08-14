@@ -5,11 +5,16 @@ use super::{
     DuplicateRepairResult, VisualMarkRepairChange, VisualMarkRepairResult, WikilinkRepairChange,
     WikilinkRepairPlan, WikilinkRepairResult,
 };
+use crate::core::blocking::run_blocking;
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::features::wiki::WikiIndexState;
 use serde::Deserialize;
 use std::path::PathBuf;
 use tauri::State;
+
+// Heavy commands (full-vault diagnosis / repairs) are async and run inside
+// `run_blocking` so the main thread (Windows UI message pump) never blocks.
+// `doctor_set_dirty_paths` stays sync: it only touches an in-memory map.
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,15 +78,18 @@ pub fn doctor_set_dirty_paths(
 }
 
 #[tauri::command]
-pub fn doctor_check(args: DoctorCheckArgs) -> ApiResult<DoctorReport> {
-    let vault = PathBuf::from(&args.vault_path);
-    if !vault.is_dir() {
-        return map_err(AppError::message("vault path is not a directory"));
-    }
-    match diagnose(&vault) {
-        Ok(report) => ApiResult::ok(report),
-        Err(error) => map_err(error),
-    }
+pub async fn doctor_check(args: DoctorCheckArgs) -> ApiResult<DoctorReport> {
+    run_blocking(move || {
+        let vault = PathBuf::from(&args.vault_path);
+        if !vault.is_dir() {
+            return map_err(AppError::message("vault path is not a directory"));
+        }
+        match diagnose(&vault) {
+            Ok(report) => ApiResult::ok(report),
+            Err(error) => map_err(error),
+        }
+    })
+    .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -91,81 +99,95 @@ pub struct DoctorFixCatalogDuplicatesArgs {
 }
 
 #[tauri::command]
-pub fn doctor_fix_catalog_duplicates(
+pub async fn doctor_fix_catalog_duplicates(
     args: DoctorFixCatalogDuplicatesArgs,
 ) -> ApiResult<DuplicateRepairResult> {
-    let vault = PathBuf::from(&args.vault_path);
-    if !vault.is_dir() {
-        return map_err(AppError::message("vault path is not a directory"));
-    }
-    match apply_catalog_duplicate_repairs(&vault) {
-        Ok(result) => ApiResult::ok(result),
-        Err(error) => map_err(error),
-    }
+    run_blocking(move || {
+        let vault = PathBuf::from(&args.vault_path);
+        if !vault.is_dir() {
+            return map_err(AppError::message("vault path is not a directory"));
+        }
+        match apply_catalog_duplicate_repairs(&vault) {
+            Ok(result) => ApiResult::ok(result),
+            Err(error) => map_err(error),
+        }
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn doctor_ignore_aliases(args: DoctorIgnoreAliasesArgs) -> ApiResult<DoctorVaultState> {
-    let vault = PathBuf::from(&args.vault_path);
-    match set_ignored_alias_paths(&vault, &args.paths, args.ignore) {
-        Ok(state) => ApiResult::ok(state),
-        Err(error) => map_err(error),
-    }
+pub async fn doctor_ignore_aliases(args: DoctorIgnoreAliasesArgs) -> ApiResult<DoctorVaultState> {
+    run_blocking(move || {
+        let vault = PathBuf::from(&args.vault_path);
+        match set_ignored_alias_paths(&vault, &args.paths, args.ignore) {
+            Ok(state) => ApiResult::ok(state),
+            Err(error) => map_err(error),
+        }
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn doctor_apply_aliases(
+pub async fn doctor_apply_aliases(
     args: DoctorApplyAliasesArgs,
     index: State<'_, WikiIndexState>,
     dirty_state: State<'_, DoctorDirtyPathsState>,
-) -> ApiResult<AliasRepairResult> {
-    let vault = PathBuf::from(&args.vault_path);
+) -> Result<ApiResult<AliasRepairResult>, String> {
+    // The dirty-path snapshot is an in-memory read; take it before spawning.
     let mut dirty_paths = match dirty_state.get(&args.vault_path) {
         Ok(paths) => paths,
         Err(error) => {
-            return map_err(AppError::message(format!(
+            return Ok(map_err(AppError::message(format!(
                 "doctor dirty paths lock: {error}"
-            )))
+            ))))
         }
     };
-    dirty_paths.extend(args.dirty_paths);
-    match apply_alias_repairs(&vault, &args.changes, &dirty_paths) {
-        Ok(result) => {
-            if !result.updated_paths.is_empty() {
-                let mut guard = match index.inner.lock() {
-                    Ok(guard) => guard,
-                    Err(error) => {
-                        return map_err(AppError::message(format!("wiki index lock: {error}")))
+    let index = index.handle();
+    Ok(run_blocking(move || {
+        let vault = PathBuf::from(&args.vault_path);
+        dirty_paths.extend(args.dirty_paths);
+        match apply_alias_repairs(&vault, &args.changes, &dirty_paths) {
+            Ok(result) => {
+                if !result.updated_paths.is_empty() {
+                    let mut guard = match index.lock() {
+                        Ok(guard) => guard,
+                        Err(error) => {
+                            return map_err(AppError::message(format!("wiki index lock: {error}")))
+                        }
+                    };
+                    if let Err(error) = guard.rebuild(&args.vault_path) {
+                        return map_err(AppError::message(format!(
+                            "aliases updated but Wiki index rebuild failed: {error}"
+                        )));
                     }
-                };
-                if let Err(error) = guard.rebuild(&args.vault_path) {
-                    return map_err(AppError::message(format!(
-                        "aliases updated but Wiki index rebuild failed: {error}"
-                    )));
                 }
+                ApiResult::ok(result)
             }
-            ApiResult::ok(result)
+            Err(error) => ApiResult::err_with_details(
+                AppError::message(error.to_string()),
+                serde_json::to_value(&error).unwrap_or_default(),
+            ),
         }
-        Err(error) => ApiResult::err_with_details(
-            AppError::message(error.to_string()),
-            serde_json::to_value(&error).unwrap_or_default(),
-        ),
-    }
+    })
+    .await)
 }
 
 #[tauri::command]
-pub fn doctor_plan_wikilinks(args: DoctorPlanWikilinksArgs) -> ApiResult<WikilinkRepairPlan> {
-    let vault = PathBuf::from(&args.vault_path);
-    if !vault.is_dir() {
-        return map_err(AppError::message("vault path is not a directory"));
-    }
-    match plan_wikilink_repairs(&vault) {
-        Ok(plan) => ApiResult::ok(plan),
-        Err(error) => ApiResult::err_with_details(
-            AppError::message(error.to_string()),
-            serde_json::to_value(&error).unwrap_or_default(),
-        ),
-    }
+pub async fn doctor_plan_wikilinks(args: DoctorPlanWikilinksArgs) -> ApiResult<WikilinkRepairPlan> {
+    run_blocking(move || {
+        let vault = PathBuf::from(&args.vault_path);
+        if !vault.is_dir() {
+            return map_err(AppError::message("vault path is not a directory"));
+        }
+        match plan_wikilink_repairs(&vault) {
+            Ok(plan) => ApiResult::ok(plan),
+            Err(error) => ApiResult::err_with_details(
+                AppError::message(error.to_string()),
+                serde_json::to_value(&error).unwrap_or_default(),
+            ),
+        }
+    })
+    .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -178,62 +200,69 @@ pub struct DoctorApplyVisualMarksArgs {
 }
 
 #[tauri::command]
-pub fn doctor_apply_visual_marks(
+pub async fn doctor_apply_visual_marks(
     args: DoctorApplyVisualMarksArgs,
     dirty_state: State<'_, DoctorDirtyPathsState>,
-) -> ApiResult<VisualMarkRepairResult> {
-    let vault = PathBuf::from(&args.vault_path);
+) -> Result<ApiResult<VisualMarkRepairResult>, String> {
     let mut dirty_paths = match dirty_state.get(&args.vault_path) {
         Ok(paths) => paths,
         Err(error) => {
-            return map_err(AppError::message(format!(
+            return Ok(map_err(AppError::message(format!(
                 "doctor dirty paths lock: {error}"
-            )))
+            ))))
         }
     };
-    dirty_paths.extend(args.dirty_paths);
-    match apply_visual_mark_repairs(&vault, &args.changes, &dirty_paths) {
-        Ok(result) => ApiResult::ok(result),
-        Err(error) => map_err(error),
-    }
+    Ok(run_blocking(move || {
+        let vault = PathBuf::from(&args.vault_path);
+        dirty_paths.extend(args.dirty_paths);
+        match apply_visual_mark_repairs(&vault, &args.changes, &dirty_paths) {
+            Ok(result) => ApiResult::ok(result),
+            Err(error) => map_err(error),
+        }
+    })
+    .await)
 }
 
 #[tauri::command]
-pub fn doctor_apply_wikilinks(
+pub async fn doctor_apply_wikilinks(
     args: DoctorApplyWikilinksArgs,
     index: State<'_, WikiIndexState>,
     dirty_state: State<'_, DoctorDirtyPathsState>,
-) -> ApiResult<WikilinkRepairResult> {
-    let vault = PathBuf::from(&args.vault_path);
+) -> Result<ApiResult<WikilinkRepairResult>, String> {
     let mut dirty_paths = match dirty_state.get(&args.vault_path) {
         Ok(paths) => paths,
         Err(error) => {
-            return map_err(AppError::message(format!(
+            return Ok(map_err(AppError::message(format!(
                 "doctor dirty paths lock: {error}"
-            )))
+            ))))
         }
     };
-    dirty_paths.extend(args.dirty_paths);
-    match apply_wikilink_repairs(&vault, &args.changes, &dirty_paths) {
-        Ok(result) => {
-            if !result.updated_paths.is_empty() {
-                let mut guard = match index.inner.lock() {
-                    Ok(guard) => guard,
-                    Err(error) => {
-                        return map_err(AppError::message(format!("wiki index lock: {error}")))
+    let index = index.handle();
+    Ok(run_blocking(move || {
+        let vault = PathBuf::from(&args.vault_path);
+        dirty_paths.extend(args.dirty_paths);
+        match apply_wikilink_repairs(&vault, &args.changes, &dirty_paths) {
+            Ok(result) => {
+                if !result.updated_paths.is_empty() {
+                    let mut guard = match index.lock() {
+                        Ok(guard) => guard,
+                        Err(error) => {
+                            return map_err(AppError::message(format!("wiki index lock: {error}")))
+                        }
+                    };
+                    if let Err(error) = guard.rebuild(&args.vault_path) {
+                        return map_err(AppError::message(format!(
+                            "wikilinks updated but Wiki index rebuild failed: {error}"
+                        )));
                     }
-                };
-                if let Err(error) = guard.rebuild(&args.vault_path) {
-                    return map_err(AppError::message(format!(
-                        "wikilinks updated but Wiki index rebuild failed: {error}"
-                    )));
                 }
+                ApiResult::ok(result)
             }
-            ApiResult::ok(result)
+            Err(error) => ApiResult::err_with_details(
+                AppError::message(error.to_string()),
+                serde_json::to_value(&error).unwrap_or_default(),
+            ),
         }
-        Err(error) => ApiResult::err_with_details(
-            AppError::message(error.to_string()),
-            serde_json::to_value(&error).unwrap_or_default(),
-        ),
-    }
+    })
+    .await)
 }

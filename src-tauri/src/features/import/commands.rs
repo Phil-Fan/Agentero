@@ -226,10 +226,15 @@ async fn parse_remote_body(
 
 /// Stage a path-less OS drop (File bytes as base64) into `~/.agentero/import-tmp/`.
 #[tauri::command]
-pub fn paper_stage_import_file(args: StageImportFileArgs) -> ApiResult<StageImportFileResult> {
-    let name = trunc(&args.file_name, 80);
-    let op = OpTimer::start_with("paper_stage_import_file", format!("name={name}"));
-    op.finish_result(super::stage_import_file(args))
+pub async fn paper_stage_import_file(
+    args: StageImportFileArgs,
+) -> ApiResult<StageImportFileResult> {
+    crate::core::blocking::run_blocking(move || {
+        let name = trunc(&args.file_name, 80);
+        let op = OpTimer::start_with("paper_stage_import_file", format!("name={name}"));
+        op.finish_result(super::stage_import_file(args))
+    })
+    .await
 }
 
 /// Export catalog papers via Translator `POST /export` (Zotero JSON array → BibTeX/RIS/…).

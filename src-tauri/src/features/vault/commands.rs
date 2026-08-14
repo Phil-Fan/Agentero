@@ -1,3 +1,4 @@
+use crate::core::blocking::run_blocking;
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::core::log_util::{trunc, OpTimer};
 use crate::features::catalog::papers as catalog_papers;
@@ -25,16 +26,19 @@ fn vault_path_arg(path: &str) -> Result<std::path::PathBuf, AppError> {
 
 /// Create / scaffold a Agentero vault at the given absolute path.
 #[tauri::command]
-pub fn vault_create(path: String, locale: Option<String>) -> ApiResult<CreateVaultResult> {
-    let op = OpTimer::start_with("vault_create", format!("path={}", trunc(&path, 200)));
-    let locale = vault::resolve_vault_locale(locale.as_deref().unwrap_or(""));
-    match vault_path_arg(&path) {
-        Ok(p) => op.finish_result(vault::create_vault(&p, locale)),
-        Err(err) => {
-            op.finish_err(&err);
-            map_err(err)
+pub async fn vault_create(path: String, locale: Option<String>) -> ApiResult<CreateVaultResult> {
+    run_blocking(move || {
+        let op = OpTimer::start_with("vault_create", format!("path={}", trunc(&path, 200)));
+        let locale = vault::resolve_vault_locale(locale.as_deref().unwrap_or(""));
+        match vault_path_arg(&path) {
+            Ok(p) => op.finish_result(vault::create_vault(&p, locale)),
+            Err(err) => {
+                op.finish_err(&err);
+                map_err(err)
+            }
         }
-    }
+    })
+    .await
 }
 
 /// Ensure scaffold, seed missing bundled content, and safely update untouched
@@ -44,16 +48,19 @@ pub fn vault_create(path: String, locale: Option<String>) -> ApiResult<CreateVau
 /// content without requiring the user to re-run Create Vault. User-customized
 /// files are never overwritten.
 #[tauri::command]
-pub fn vault_ensure(path: String, locale: Option<String>) -> ApiResult<CreateVaultResult> {
-    let op = OpTimer::start_with("vault_ensure", format!("path={}", trunc(&path, 200)));
-    let locale = vault::resolve_vault_locale(locale.as_deref().unwrap_or(""));
-    match vault_path_arg(&path) {
-        Ok(p) => op.finish_result(vault::ensure_vault(&p, locale)),
-        Err(err) => {
-            op.finish_err(&err);
-            map_err(err)
+pub async fn vault_ensure(path: String, locale: Option<String>) -> ApiResult<CreateVaultResult> {
+    run_blocking(move || {
+        let op = OpTimer::start_with("vault_ensure", format!("path={}", trunc(&path, 200)));
+        let locale = vault::resolve_vault_locale(locale.as_deref().unwrap_or(""));
+        match vault_path_arg(&path) {
+            Ok(p) => op.finish_result(vault::ensure_vault(&p, locale)),
+            Err(err) => {
+                op.finish_err(&err);
+                map_err(err)
+            }
         }
-    }
+    })
+    .await
 }
 
 /// Extend the fs-plugin scope so the renderer can read/write this vault dir.
@@ -88,48 +95,57 @@ pub fn vault_allow_fs_scope<R: Runtime>(app: AppHandle<R>, path: String) -> ApiR
 
 /// Build the whole vault file tree in one pass (single IPC).
 #[tauri::command]
-pub fn vault_tree_build(vault_path: String) -> ApiResult<Vec<VaultTreeNode>> {
-    let op = OpTimer::start_with(
-        "vault_tree_build",
-        format!("vault={}", trunc(&vault_path, 200)),
-    );
-    let root = match vault_path_arg(&vault_path) {
-        Ok(root) if root.is_dir() => root,
-        Ok(_) => {
-            let err = AppError::message("vault path is not a directory");
-            op.finish_err(&err);
-            return map_err(err);
-        }
-        Err(err) => {
-            op.finish_err(&err);
-            return map_err(err);
-        }
-    };
-    op.finish_result(Ok(tree::build_tree(&root)))
+pub async fn vault_tree_build(vault_path: String) -> ApiResult<Vec<VaultTreeNode>> {
+    run_blocking(move || {
+        let op = OpTimer::start_with(
+            "vault_tree_build",
+            format!("vault={}", trunc(&vault_path, 200)),
+        );
+        let root = match vault_path_arg(&vault_path) {
+            Ok(root) if root.is_dir() => root,
+            Ok(_) => {
+                let err = AppError::message("vault path is not a directory");
+                op.finish_err(&err);
+                return map_err(err);
+            }
+            Err(err) => {
+                op.finish_err(&err);
+                return map_err(err);
+            }
+        };
+        op.finish_result(Ok(tree::build_tree(&root)))
+    })
+    .await
 }
 
 /// List one directory's children (lazy expand / targeted tree refresh).
 #[tauri::command]
-pub fn vault_tree_children(vault_path: String, dir_path: String) -> ApiResult<Vec<VaultTreeNode>> {
-    let op = OpTimer::start_with(
-        "vault_tree_children",
-        format!("dir={}", trunc(&dir_path, 200)),
-    );
-    let root = match vault_path_arg(&vault_path) {
-        Ok(root) => root,
-        Err(err) => {
-            op.finish_err(&err);
-            return map_err(err);
-        }
-    };
-    let dir = match vault_path_arg(&dir_path) {
-        Ok(dir) => dir,
-        Err(err) => {
-            op.finish_err(&err);
-            return map_err(err);
-        }
-    };
-    op.finish_result(tree::list_children(&root, &dir))
+pub async fn vault_tree_children(
+    vault_path: String,
+    dir_path: String,
+) -> ApiResult<Vec<VaultTreeNode>> {
+    run_blocking(move || {
+        let op = OpTimer::start_with(
+            "vault_tree_children",
+            format!("dir={}", trunc(&dir_path, 200)),
+        );
+        let root = match vault_path_arg(&vault_path) {
+            Ok(root) => root,
+            Err(err) => {
+                op.finish_err(&err);
+                return map_err(err);
+            }
+        };
+        let dir = match vault_path_arg(&dir_path) {
+            Ok(dir) => dir,
+            Err(err) => {
+                op.finish_err(&err);
+                return map_err(err);
+            }
+        };
+        op.finish_result(tree::list_children(&root, &dir))
+    })
+    .await
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -169,128 +185,147 @@ pub struct WikiApplyExternalRenameArgs {
 
 /// Move or rename one local Vault path while updating resolved internal links.
 #[tauri::command]
-pub fn wiki_move(
+pub async fn wiki_move(
     args: WikiMoveArgs,
     index: State<'_, WikiIndexState>,
-) -> ApiResult<WikiRenameResult> {
-    let vault = match vault_path_arg(&args.vault_path) {
-        Ok(vault) if vault.is_dir() => vault,
-        Ok(_) => return map_err(AppError::message("vault path is not a directory")),
-        Err(error) => return map_err(error),
-    };
-    let mut guard = match index.inner.lock() {
-        Ok(guard) => guard,
-        Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
-    };
-    match run_local_rename_transaction(
-        &vault,
-        &mut guard,
-        &args.from_rel,
-        &args.to_rel,
-        &args.dirty_paths,
-        || {
-            catalog_papers::move_under_path(&vault, &args.from_rel, &args.to_rel)
-                .map(|_| ())
-                .map_err(|error| error.to_string())
-        },
-    ) {
-        Ok(result) => {
-            crate::features::usage::events::rename_path_best_effort(
-                args.vault_path.trim(),
-                &args.from_rel,
-                &args.to_rel,
-            );
-            ApiResult::ok(result)
+) -> Result<ApiResult<WikiRenameResult>, String> {
+    let index = index.handle();
+    Ok(run_blocking(move || {
+        let vault = match vault_path_arg(&args.vault_path) {
+            Ok(vault) if vault.is_dir() => vault,
+            Ok(_) => return map_err(AppError::message("vault path is not a directory")),
+            Err(error) => return map_err(error),
+        };
+        let mut guard = match index.lock() {
+            Ok(guard) => guard,
+            Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
+        };
+        match run_local_rename_transaction(
+            &vault,
+            &mut guard,
+            &args.from_rel,
+            &args.to_rel,
+            &args.dirty_paths,
+            || {
+                catalog_papers::move_under_path(&vault, &args.from_rel, &args.to_rel)
+                    .map(|_| ())
+                    .map_err(|error| error.to_string())
+            },
+        ) {
+            Ok(result) => {
+                crate::features::usage::events::rename_path_best_effort(
+                    args.vault_path.trim(),
+                    &args.from_rel,
+                    &args.to_rel,
+                );
+                ApiResult::ok(result)
+            }
+            Err(error) => map_err(AppError::message(error.to_string())),
         }
-        Err(error) => map_err(AppError::message(error.to_string())),
-    }
+    })
+    .await)
 }
 
 /// Preserve a pre-rename semantic plan for an externally observed local rename.
 /// This is intentionally a read-only preflight: the caller must explicitly apply
 /// it, or opt into the `always` policy in the renderer.
 #[tauri::command]
-pub fn wiki_external_rename_preview(
+pub async fn wiki_external_rename_preview(
     args: WikiExternalRenamePreviewArgs,
     index: State<'_, WikiIndexState>,
     repairs: State<'_, ExternalRenameRepairStore>,
-) -> ApiResult<WikiExternalRenamePreview> {
-    let vault = match vault_path_arg(&args.vault_path) {
-        Ok(vault) if vault.is_dir() => vault,
-        Ok(_) => return map_err(AppError::message("vault path is not a directory")),
-        Err(error) => return map_err(error),
-    };
-    let guard = match index.inner.lock() {
-        Ok(guard) => guard,
-        Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
-    };
-    let transaction = match WikiRenameTransaction::plan_external_repair(
-        &vault,
-        &guard,
-        &args.from_rel,
-        &args.to_rel,
-    ) {
-        Ok(transaction) => transaction,
-        Err(error) => return map_err(AppError::message(error.to_string())),
-    };
-    if let Err(error) = transaction.reject_dirty_paths(&args.dirty_paths) {
-        return map_err(AppError::message(error.to_string()));
-    }
-    let affected_sources = transaction.updated_sources();
-    let skipped = transaction.skipped().to_vec();
-    let from = transaction.from().to_string();
-    let to = transaction.moved_path().to_string();
-    drop(guard);
-    match repairs.insert(transaction) {
-        Ok(candidate_id) => ApiResult::ok(WikiExternalRenamePreview {
-            candidate_id,
-            from,
-            to,
-            affected_sources,
-            skipped,
-        }),
-        Err(error) => map_err(AppError::message(error.to_string())),
-    }
+) -> Result<ApiResult<WikiExternalRenamePreview>, String> {
+    let index = index.handle();
+    let repairs = repairs.inner().clone();
+    Ok(run_blocking(move || {
+        let vault = match vault_path_arg(&args.vault_path) {
+            Ok(vault) if vault.is_dir() => vault,
+            Ok(_) => return map_err(AppError::message("vault path is not a directory")),
+            Err(error) => return map_err(error),
+        };
+        let guard = match index.lock() {
+            Ok(guard) => guard,
+            Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
+        };
+        let transaction = match WikiRenameTransaction::plan_external_repair(
+            &vault,
+            &guard,
+            &args.from_rel,
+            &args.to_rel,
+        ) {
+            Ok(transaction) => transaction,
+            Err(error) => return map_err(AppError::message(error.to_string())),
+        };
+        if let Err(error) = transaction.reject_dirty_paths(&args.dirty_paths) {
+            return map_err(AppError::message(error.to_string()));
+        }
+        let affected_sources = transaction.updated_sources();
+        let skipped = transaction.skipped().to_vec();
+        let from = transaction.from().to_string();
+        let to = transaction.moved_path().to_string();
+        drop(guard);
+        match repairs.insert(transaction) {
+            Ok(candidate_id) => ApiResult::ok(WikiExternalRenamePreview {
+                candidate_id,
+                from,
+                to,
+                affected_sources,
+                skipped,
+            }),
+            Err(error) => map_err(AppError::message(error.to_string())),
+        }
+    })
+    .await)
 }
 
 /// Apply one previously previewed external rename repair. The Host rechecks the
 /// candidate's source hashes and current dirty paths before touching Markdown.
 #[tauri::command]
-pub fn wiki_apply_external_rename_repair(
+pub async fn wiki_apply_external_rename_repair(
     args: WikiApplyExternalRenameArgs,
     index: State<'_, WikiIndexState>,
     repairs: State<'_, ExternalRenameRepairStore>,
-) -> ApiResult<WikiRenameResult> {
-    let vault = match vault_path_arg(&args.vault_path) {
-        Ok(vault) if vault.is_dir() => vault,
-        Ok(_) => return map_err(AppError::message("vault path is not a directory")),
-        Err(error) => return map_err(error),
-    };
-    let transaction = match repairs.get(&args.candidate_id) {
-        Ok(transaction) => transaction,
-        Err(error) => return map_err(AppError::message(error.to_string())),
-    };
-    let mut guard = match index.inner.lock() {
-        Ok(guard) => guard,
-        Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
-    };
-    match run_prepared_external_rename_repair(&vault, &mut guard, &transaction, &args.dirty_paths) {
-        Ok(result) => {
-            repairs.remove(&args.candidate_id);
-            ApiResult::ok(result)
-        }
-        Err(error) => {
-            if error.code != WikiRenameErrorCode::UnsavedEdits {
+) -> Result<ApiResult<WikiRenameResult>, String> {
+    let index = index.handle();
+    let repairs = repairs.inner().clone();
+    Ok(run_blocking(move || {
+        let vault = match vault_path_arg(&args.vault_path) {
+            Ok(vault) if vault.is_dir() => vault,
+            Ok(_) => return map_err(AppError::message("vault path is not a directory")),
+            Err(error) => return map_err(error),
+        };
+        let transaction = match repairs.get(&args.candidate_id) {
+            Ok(transaction) => transaction,
+            Err(error) => return map_err(AppError::message(error.to_string())),
+        };
+        let mut guard = match index.lock() {
+            Ok(guard) => guard,
+            Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
+        };
+        match run_prepared_external_rename_repair(
+            &vault,
+            &mut guard,
+            &transaction,
+            &args.dirty_paths,
+        ) {
+            Ok(result) => {
                 repairs.remove(&args.candidate_id);
+                ApiResult::ok(result)
             }
-            ApiResult::err_with_details(
-                AppError::message(error.to_string()),
-                serde_json::json!({
-                    "code": error.code,
-                    "rollback": error.rollback,
-                    "paths": error.paths,
-                }),
-            )
+            Err(error) => {
+                if error.code != WikiRenameErrorCode::UnsavedEdits {
+                    repairs.remove(&args.candidate_id);
+                }
+                ApiResult::err_with_details(
+                    AppError::message(error.to_string()),
+                    serde_json::json!({
+                        "code": error.code,
+                        "rollback": error.rollback,
+                        "paths": error.paths,
+                    }),
+                )
+            }
         }
-    }
+    })
+    .await)
 }

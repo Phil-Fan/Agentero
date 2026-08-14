@@ -1,3 +1,4 @@
+use crate::core::blocking::run_blocking;
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::features::wiki::heading_rename::run_heading_rename_transaction;
 use crate::features::wiki::models::{
@@ -21,183 +22,219 @@ pub struct WikiRenameHeadingArgs {
     pub dirty_paths: Vec<String>,
 }
 
+// Every command here may lazily (re)build the whole Wiki index behind the
+// global Mutex, so each one is async and runs the lock+work inside
+// `run_blocking` — never on the main thread (Windows UI message pump).
+
 #[tauri::command]
-pub fn graph_get_backlinks(
+pub async fn graph_get_backlinks(
     index: State<'_, WikiIndexState>,
     vault_path: String,
     path: String,
-) -> ApiResult<BacklinksResponse> {
-    let mut guard = match index.inner.lock() {
-        Ok(g) => g,
-        Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
-    };
-    if let Err(e) = guard.ensure_vault(&vault_path) {
-        return map_err(AppError::message(e));
-    }
-    ApiResult::ok(guard.get_backlinks(&vault_path, &path))
+) -> Result<ApiResult<BacklinksResponse>, String> {
+    let index = index.handle();
+    Ok(run_blocking(move || {
+        let mut guard = match index.lock() {
+            Ok(g) => g,
+            Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
+        };
+        if let Err(e) = guard.ensure_vault(&vault_path) {
+            return map_err(AppError::message(e));
+        }
+        ApiResult::ok(guard.get_backlinks(&vault_path, &path))
+    })
+    .await)
 }
 
 /// Return every explicit occurrence authored by `path`, including unresolved and
 /// invalid-fragment diagnostics. This is intentionally separate from Graph, whose
 /// file-level projection may deduplicate edges.
 #[tauri::command]
-pub fn wiki_get_outgoing(
+pub async fn wiki_get_outgoing(
     index: State<'_, WikiIndexState>,
     vault_path: String,
     path: String,
-) -> ApiResult<OutgoingLinksResponse> {
-    let mut guard = match index.inner.lock() {
-        Ok(g) => g,
-        Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
-    };
-    if let Err(e) = guard.ensure_vault(&vault_path) {
-        return map_err(AppError::message(e));
-    }
-    ApiResult::ok(guard.get_outgoing(&vault_path, &path))
+) -> Result<ApiResult<OutgoingLinksResponse>, String> {
+    let index = index.handle();
+    Ok(run_blocking(move || {
+        let mut guard = match index.lock() {
+            Ok(g) => g,
+            Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
+        };
+        if let Err(e) = guard.ensure_vault(&vault_path) {
+            return map_err(AppError::message(e));
+        }
+        ApiResult::ok(guard.get_outgoing(&vault_path, &path))
+    })
+    .await)
 }
 
 #[tauri::command]
-pub fn wiki_resolve(
+pub async fn wiki_resolve(
     index: State<'_, WikiIndexState>,
     vault_path: String,
     source_path: String,
     link_text: String,
     syntax: Option<InternalLinkSyntax>,
-) -> ApiResult<WikiResolveResponse> {
-    let mut guard = match index.inner.lock() {
-        Ok(g) => g,
-        Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
-    };
-    if let Err(e) = guard.ensure_vault(&vault_path) {
-        return map_err(AppError::message(e));
-    }
-    ApiResult::ok(guard.resolve_text(
-        &vault_path,
-        &source_path,
-        &link_text,
-        syntax.unwrap_or(InternalLinkSyntax::Wikilink),
-    ))
+) -> Result<ApiResult<WikiResolveResponse>, String> {
+    let index = index.handle();
+    Ok(run_blocking(move || {
+        let mut guard = match index.lock() {
+            Ok(g) => g,
+            Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
+        };
+        if let Err(e) = guard.ensure_vault(&vault_path) {
+            return map_err(AppError::message(e));
+        }
+        ApiResult::ok(guard.resolve_text(
+            &vault_path,
+            &source_path,
+            &link_text,
+            syntax.unwrap_or(InternalLinkSyntax::Wikilink),
+        ))
+    })
+    .await)
 }
 
 /// Resolve and read the exact source projection for one `![[...]]` embed.
 #[tauri::command]
-pub fn wiki_embed_read(
+pub async fn wiki_embed_read(
     index: State<'_, WikiIndexState>,
     vault_path: String,
     source_path: String,
     link_text: String,
-) -> ApiResult<WikiEmbedResponse> {
-    let mut guard = match index.inner.lock() {
-        Ok(g) => g,
-        Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
-    };
-    if let Err(e) = guard.ensure_vault(&vault_path) {
-        return map_err(AppError::message(e));
-    }
-    match guard.read_embed(&vault_path, &source_path, &link_text) {
-        Ok(response) => ApiResult::ok(response),
-        Err(error) => map_err(AppError::message(error)),
-    }
+) -> Result<ApiResult<WikiEmbedResponse>, String> {
+    let index = index.handle();
+    Ok(run_blocking(move || {
+        let mut guard = match index.lock() {
+            Ok(g) => g,
+            Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
+        };
+        if let Err(e) = guard.ensure_vault(&vault_path) {
+            return map_err(AppError::message(e));
+        }
+        match guard.read_embed(&vault_path, &source_path, &link_text) {
+            Ok(response) => ApiResult::ok(response),
+            Err(error) => map_err(AppError::message(error)),
+        }
+    })
+    .await)
 }
 
 #[tauri::command]
-pub fn wiki_search(
+pub async fn wiki_search(
     index: State<'_, WikiIndexState>,
     vault_path: String,
     query: String,
     path: Option<String>,
     kind: Option<WikiSearchCandidateKind>,
-) -> ApiResult<Vec<WikiSearchCandidate>> {
-    let mut guard = match index.inner.lock() {
-        Ok(g) => g,
-        Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
-    };
-    if let Err(e) = guard.ensure_vault(&vault_path) {
-        return map_err(AppError::message(e));
-    }
-    ApiResult::ok(guard.search_scoped(&query, path.as_deref(), kind.as_ref()))
+) -> Result<ApiResult<Vec<WikiSearchCandidate>>, String> {
+    let index = index.handle();
+    Ok(run_blocking(move || {
+        let mut guard = match index.lock() {
+            Ok(g) => g,
+            Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
+        };
+        if let Err(e) = guard.ensure_vault(&vault_path) {
+            return map_err(AppError::message(e));
+        }
+        ApiResult::ok(guard.search_scoped(&query, path.as_deref(), kind.as_ref()))
+    })
+    .await)
 }
 
 /// Explicitly rename one saved heading and rewrite every resolved inbound
 /// heading fragment as one rollback-capable local transaction.
 #[tauri::command]
-pub fn wiki_rename_heading(
+pub async fn wiki_rename_heading(
     args: WikiRenameHeadingArgs,
     index: State<'_, WikiIndexState>,
-) -> ApiResult<WikiRenameHeadingResult> {
-    let vault = PathBuf::from(&args.vault_path);
-    if !vault.is_dir() {
-        return map_err(AppError::message("vault path is not a directory"));
-    }
-    let mut guard = match index.inner.lock() {
-        Ok(guard) => guard,
-        Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
-    };
-    match run_heading_rename_transaction(
-        &vault,
-        &mut guard,
-        &args.path,
-        &args.heading_path,
-        args.heading_line,
-        &args.expected_content,
-        &args.new_text,
-        &args.dirty_paths,
-    ) {
-        Ok(result) => ApiResult::ok(result),
-        Err(error) => ApiResult::err_with_details(
-            AppError::message(error.to_string()),
-            serde_json::json!({
-                "code": error.code,
-                "rollback": error.rollback,
-                "paths": error.paths,
-            }),
-        ),
-    }
+) -> Result<ApiResult<WikiRenameHeadingResult>, String> {
+    let index = index.handle();
+    Ok(run_blocking(move || {
+        let vault = PathBuf::from(&args.vault_path);
+        if !vault.is_dir() {
+            return map_err(AppError::message("vault path is not a directory"));
+        }
+        let mut guard = match index.lock() {
+            Ok(guard) => guard,
+            Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
+        };
+        match run_heading_rename_transaction(
+            &vault,
+            &mut guard,
+            &args.path,
+            &args.heading_path,
+            args.heading_line,
+            &args.expected_content,
+            &args.new_text,
+            &args.dirty_paths,
+        ) {
+            Ok(result) => ApiResult::ok(result),
+            Err(error) => ApiResult::err_with_details(
+                AppError::message(error.to_string()),
+                serde_json::json!({
+                    "code": error.code,
+                    "rollback": error.rollback,
+                    "paths": error.paths,
+                }),
+            ),
+        }
+    })
+    .await)
 }
 
 #[tauri::command]
-pub fn graph_rebuild(
+pub async fn graph_rebuild(
     index: State<'_, WikiIndexState>,
     vault_path: String,
-) -> ApiResult<RebuildResult> {
+) -> Result<ApiResult<RebuildResult>, String> {
     use crate::core::log_util::OpTimer;
 
-    let op = OpTimer::start("graph_rebuild");
-    let mut guard = match index.inner.lock() {
-        Ok(g) => g,
-        Err(e) => {
-            let err = AppError::message(format!("wiki index lock: {e}"));
-            op.finish_err(&err);
-            return map_err(err);
+    let index = index.handle();
+    Ok(run_blocking(move || {
+        let op = OpTimer::start("graph_rebuild");
+        let mut guard = match index.lock() {
+            Ok(g) => g,
+            Err(e) => {
+                let err = AppError::message(format!("wiki index lock: {e}"));
+                op.finish_err(&err);
+                return map_err(err);
+            }
+        };
+        match guard.rebuild(&vault_path) {
+            Ok(r) => {
+                op.finish_ok();
+                ApiResult::ok(r)
+            }
+            Err(e) => {
+                let err = AppError::message(e);
+                op.finish_err(&err);
+                map_err(err)
+            }
         }
-    };
-    match guard.rebuild(&vault_path) {
-        Ok(r) => {
-            op.finish_ok();
-            ApiResult::ok(r)
-        }
-        Err(e) => {
-            let err = AppError::message(e);
-            op.finish_err(&err);
-            map_err(err)
-        }
-    }
+    })
+    .await)
 }
 
 /// Internal diagnostic: remove the derived snapshot and rebuild it from Vault files.
 #[tauri::command]
-pub fn wiki_cache_rebuild(
+pub async fn wiki_cache_rebuild(
     index: State<'_, WikiIndexState>,
     vault_path: String,
-) -> ApiResult<RebuildResult> {
-    let mut guard = match index.inner.lock() {
-        Ok(guard) => guard,
-        Err(error) => {
-            return map_err(AppError::message(format!("wiki index lock: {error}")));
+) -> Result<ApiResult<RebuildResult>, String> {
+    let index = index.handle();
+    Ok(run_blocking(move || {
+        let mut guard = match index.lock() {
+            Ok(guard) => guard,
+            Err(error) => {
+                return map_err(AppError::message(format!("wiki index lock: {error}")));
+            }
+        };
+        match guard.rebuild_fresh(&vault_path) {
+            Ok(result) => ApiResult::ok(result),
+            Err(error) => map_err(AppError::message(error)),
         }
-    };
-    match guard.rebuild_fresh(&vault_path) {
-        Ok(result) => ApiResult::ok(result),
-        Err(error) => map_err(AppError::message(error)),
-    }
+    })
+    .await)
 }

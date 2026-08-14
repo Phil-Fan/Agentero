@@ -15,7 +15,7 @@ use std::error::Error;
 use std::fmt;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -83,14 +83,18 @@ struct PlannedSource {
 /// Host-owned short-lived external rename repair snapshots. Keeping the plan
 /// here lets an `ask` confirmation survive a regular watcher-triggered index
 /// rebuild without rediscovering old links from the already-renamed Vault.
+///
+/// Cloning yields another handle to the same shared map, so async commands can
+/// move a clone into `spawn_blocking` closures.
+#[derive(Clone)]
 pub struct ExternalRenameRepairStore {
-    inner: Mutex<HashMap<String, WikiRenameTransaction>>,
+    inner: Arc<Mutex<HashMap<String, WikiRenameTransaction>>>,
 }
 
 impl ExternalRenameRepairStore {
     pub fn new() -> Self {
         Self {
-            inner: Mutex::new(HashMap::new()),
+            inner: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 

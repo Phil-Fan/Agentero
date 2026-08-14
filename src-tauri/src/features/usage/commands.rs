@@ -1,5 +1,9 @@
 //! Tauri commands for the device-local activity log.
+//!
+//! All commands are async and run their SQLite work in `run_blocking` so the
+//! main thread (Windows UI message pump) is never blocked.
 
+use crate::core::blocking::run_blocking;
 use crate::core::error::{map_err, ApiResult};
 use crate::features::settings::AppSettingsStore;
 use crate::features::usage::events::{
@@ -16,21 +20,23 @@ pub struct ActivityRecordArgs {
 }
 
 #[tauri::command]
-pub fn activity_record_events(
+pub async fn activity_record_events(
     store: State<'_, AppSettingsStore>,
     args: ActivityRecordArgs,
-) -> ApiResult<usize> {
+) -> Result<ApiResult<usize>, String> {
+    // Settings snapshot is an in-memory read; only the SQLite write is heavy.
     match store.get() {
         Ok(snapshot) if !snapshot.settings.usage_tracking_enabled => {
-            return ApiResult::ok(0);
+            return Ok(ApiResult::ok(0));
         }
         Ok(_) => {}
-        Err(e) => return map_err(e),
+        Err(e) => return Ok(map_err(e)),
     }
-    match record_default(&args.events) {
+    Ok(run_blocking(move || match record_default(&args.events) {
         Ok(n) => ApiResult::ok(n),
         Err(e) => map_err(e),
-    }
+    })
+    .await)
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,18 +55,21 @@ pub struct UsageListArgs {
 }
 
 #[tauri::command]
-pub fn usage_list(args: UsageListArgs) -> ApiResult<Vec<UsageEvent>> {
-    let filter = ListFilter {
-        vault: args.vault,
-        kind: args.kind,
-        path_prefix: args.path,
-        since: args.since,
-        limit: args.limit.unwrap_or(100),
-    };
-    match list_default(&filter) {
-        Ok(rows) => ApiResult::ok(rows),
-        Err(e) => map_err(e),
-    }
+pub async fn usage_list(args: UsageListArgs) -> ApiResult<Vec<UsageEvent>> {
+    run_blocking(move || {
+        let filter = ListFilter {
+            vault: args.vault,
+            kind: args.kind,
+            path_prefix: args.path,
+            since: args.since,
+            limit: args.limit.unwrap_or(100),
+        };
+        match list_default(&filter) {
+            Ok(rows) => ApiResult::ok(rows),
+            Err(e) => map_err(e),
+        }
+    })
+    .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,11 +82,14 @@ pub struct UsageSummaryArgs {
 }
 
 #[tauri::command]
-pub fn usage_summary(args: UsageSummaryArgs) -> ApiResult<Vec<UsageKindCount>> {
-    match summarize_default(args.vault.as_deref(), args.since.as_deref()) {
-        Ok(rows) => ApiResult::ok(rows),
-        Err(e) => map_err(e),
-    }
+pub async fn usage_summary(args: UsageSummaryArgs) -> ApiResult<Vec<UsageKindCount>> {
+    run_blocking(
+        move || match summarize_default(args.vault.as_deref(), args.since.as_deref()) {
+            Ok(rows) => ApiResult::ok(rows),
+            Err(e) => map_err(e),
+        },
+    )
+    .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -88,9 +100,10 @@ pub struct UsageClearArgs {
 }
 
 #[tauri::command]
-pub fn usage_clear(args: UsageClearArgs) -> ApiResult<u64> {
-    match clear_default(args.vault.as_deref()) {
+pub async fn usage_clear(args: UsageClearArgs) -> ApiResult<u64> {
+    run_blocking(move || match clear_default(args.vault.as_deref()) {
         Ok(n) => ApiResult::ok(n),
         Err(e) => map_err(e),
-    }
+    })
+    .await
 }
