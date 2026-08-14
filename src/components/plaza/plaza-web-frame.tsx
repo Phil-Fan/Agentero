@@ -12,7 +12,7 @@
  */
 
 import { ArrowLeft, ArrowRight, ExternalLink, RotateCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/tooltip";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { cn } from "@/lib/core/utils";
+import { importPlazaPaper, type PlazaImportRequest } from "@/lib/plaza/import";
 
 /** No `allow-popups`: every link must resolve inside this frame. */
 const SANDBOX = "allow-scripts allow-same-origin allow-forms";
@@ -31,13 +32,19 @@ type NavMessage = {
 	path?: string;
 	/** Third-party link the frame refused to follow; open it outside. */
 	external?: string;
+	/** A paper row's `[入库]` was clicked. */
+	importPaper?: PlazaImportRequest;
 };
 
 function isNavMessage(data: unknown): data is NavMessage {
 	if (typeof data !== "object" || data === null) return false;
 	const value = data as Partial<NavMessage>;
 	if (value.source !== "agentero-plaza") return false;
-	return typeof value.path === "string" || typeof value.external === "string";
+	return (
+		typeof value.path === "string" ||
+		typeof value.external === "string" ||
+		typeof value.importPaper === "object"
+	);
 }
 
 export function PlazaWebFrame({
@@ -66,6 +73,8 @@ export function PlazaWebFrame({
 	 * snap the user back to where the frame started).
 	 */
 	const [frame, setFrame] = useState({ path: homePath, epoch: 0 });
+	/** Needed to post import results back into the frame. */
+	const frameRef = useRef<HTMLIFrameElement>(null);
 	/** While HTML5 DnD is active, disable frame hit-testing so dragover reaches
 	 *  dockview drop targets (the frame otherwise swallows drag events). */
 	const [dragShield, setDragShield] = useState(false);
@@ -87,9 +96,22 @@ export function PlazaWebFrame({
 		if (!embedOrigin) return;
 		const onMessage = (event: MessageEvent) => {
 			if (event.origin !== embedOrigin || !isNavMessage(event.data)) return;
-			const { path, external } = event.data;
+			const { path, external, importPaper } = event.data;
 			if (external) {
 				openExternalUrl(external);
+				return;
+			}
+			if (importPaper) {
+				void importPlazaPaper(importPaper).then((ok) => {
+					frameRef.current?.contentWindow?.postMessage(
+						{
+							source: "agentero-plaza-host",
+							importedId: importPaper.id,
+							ok,
+						},
+						embedOrigin,
+					);
+				});
 				return;
 			}
 			if (!path) return;
@@ -204,6 +226,7 @@ export function PlazaWebFrame({
 					// Keying on observed navigation would reload `frame.path` on every
 					// in-frame click and bounce the user back to the starting page.
 					key={frame.epoch}
+					ref={frameRef}
 					title={title}
 					src={frameSrc}
 					sandbox={SANDBOX}

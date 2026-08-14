@@ -1,4 +1,8 @@
 export {
+	importPlazaPaper,
+	type PlazaImportRequest,
+} from "@/lib/plaza/import";
+export {
 	isPlazaRootPath,
 	isPlazaVirtualPath,
 	PLAZA_SOURCES,
