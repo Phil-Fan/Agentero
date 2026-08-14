@@ -205,7 +205,7 @@
 	},
 	"statusBar": {
 		"label": "文档统计",
-		"backlinks": "{{count}}条反向链接",
+		"backlinks_other": "{{count}}条反向链接",
 		"backlinksHoverTitle": "入链（{{count}}）",
 		"noBacklinks": "暂无入链",
 		"backlinkStatus": {
@@ -213,8 +213,8 @@
 			"ambiguous": "歧义",
 			"invalidFragment": "无效片段"
 		},
-		"words": "{{count}}个词",
-		"characters": "{{count}}个字符"
+		"words_other": "{{count}}个词",
+		"characters_other": "{{count}}个字符"
 	},
 	"html": {
 		"edit": "编辑 HTML",

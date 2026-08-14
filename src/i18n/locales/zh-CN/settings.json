@@ -177,7 +177,7 @@
 			"placeholder": "codex-cli/0.50.0",
 			"presetsAria": "User-Agent 预设",
 			"off": "关闭",
-			"providerIdsLabel": "Codex Provider id",
+			"providerIdsLabel": "Codex 服务商 ID",
 			"providerIdsPlaceholder": "my_proxy, openai"
 		},
 		"desktopOnly": "Agent 注册表需要桌面应用。",
