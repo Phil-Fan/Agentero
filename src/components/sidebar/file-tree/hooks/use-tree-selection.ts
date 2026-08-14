@@ -39,6 +39,7 @@ export function useTreeSelection({
 	onSelectTrash,
 	onSelectPlaza,
 	onSelectPlazaSource,
+	onExpandPath,
 	onDeletePath,
 	onDeletePaths,
 	onCutPaths,
@@ -55,6 +56,7 @@ export function useTreeSelection({
 	onSelectTrash?: () => void;
 	onSelectPlaza?: () => void;
 	onSelectPlazaSource?: (source: PlazaSource) => void;
+	onExpandPath?: (path: string) => void;
 	onDeletePath?: (path: string) => void | Promise<void>;
 	onDeletePaths?: (paths: string[]) => void | Promise<void>;
 	onCutPaths?: (paths: string[]) => void;
@@ -89,7 +91,12 @@ export function useTreeSelection({
 			if (isPlazaVirtualPath(path)) {
 				const source = plazaSourceForPath(path);
 				if (source) onSelectPlazaSource?.(source);
-				else onSelectPlaza?.();
+				else {
+					// Row click opens the plaza home and reveals Cool Papers etc.
+					// Chevron still toggles collapse independently.
+					onExpandPath?.(path);
+					onSelectPlaza?.();
+				}
 				return;
 			}
 			const node = byPath.get(path);
@@ -105,6 +112,7 @@ export function useTreeSelection({
 			onSelectTrash,
 			onSelectPlaza,
 			onSelectPlazaSource,
+			onExpandPath,
 		],
 	);
 

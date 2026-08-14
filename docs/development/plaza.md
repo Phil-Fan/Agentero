@@ -64,7 +64,7 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 |---|---|
 | 路径 | `agentero:plaza`、`agentero:plaza/<sourceId>`；**永不落盘** |
 | 位置 | Library 与 Recycle Bin **之下**，真实根目录 **之上** |
-| 父节点 | 展开/折叠；单击 → 广场首页（三来源卡片） |
+| 父节点 | 单击 → 展开子来源并打开广场首页；chevron 单独切换折叠 |
 | 子节点 | 单击 → 对应来源 panel（dockview 虚拟 tab） |
 | 右键 | Cool Papers：可选「在系统浏览器打开 papers.cool」；无删除/拖拽/Finder |
 | 禁用 | 拖入拖出、删除、重命名、终端打开 |

@@ -240,6 +240,7 @@ export const FileTree = memo(
 			onSelectTrash,
 			onSelectPlaza,
 			onSelectPlazaSource,
+			onExpandPath: expansion.expandPath,
 			onDeletePath,
 			onDeletePaths,
 			onCutPaths,

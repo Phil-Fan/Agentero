@@ -38,6 +38,8 @@ export type TreeExpansion = {
 	 */
 	collapsePaths: (paths: string[]) => void;
 	expandAncestorsOf: (target: string) => void;
+	/** Open a collapsed row (no-op if already expanded). Does not toggle. */
+	expandPath: (path: string) => void;
 	/**
 	 * After an intentional collapse, skip one flatRows-driven re-reveal so a deep
 	 * selection does not immediately re-expand collapsed ancestors.
@@ -223,6 +225,15 @@ export function useTreeExpansion({
 		[vaultPath, byPathKey],
 	);
 
+	const expandPath = useCallback((path: string) => {
+		setExpanded((prev) => {
+			if (prev.has(path)) return prev;
+			const next = new Set(prev);
+			next.add(path);
+			return next;
+		});
+	}, []);
+
 	return {
 		expanded,
 		setExpanded,
@@ -230,6 +241,7 @@ export function useTreeExpansion({
 		collapseToDefault,
 		collapsePaths,
 		expandAncestorsOf,
+		expandPath,
 		suppressAutoRevealRef,
 	};
 }
