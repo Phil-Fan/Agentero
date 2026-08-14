@@ -46,8 +46,9 @@ function RepoCard({ repo }: { repo: SkillRepo }) {
 	return (
 		<div
 			className={cn(
-				"group relative rounded-lg border bg-background p-3",
+				"group flex items-center gap-3 rounded-lg border bg-background p-2.5",
 				"transition-colors hover:border-foreground/20 hover:bg-muted/50",
+				busy && "pointer-events-none opacity-70",
 			)}
 		>
 			<button
@@ -56,20 +57,19 @@ function RepoCard({ repo }: { repo: SkillRepo }) {
 				aria-label={t("plaza.skills.import", { name: fullName })}
 				onClick={() => void importRepo()}
 				className={cn(
-					"flex w-full items-start gap-3 pr-7 text-left",
+					"flex min-w-0 flex-1 items-center gap-3 text-left",
 					"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-					"disabled:pointer-events-none disabled:opacity-70",
 				)}
 			>
 				<img
-					src={`https://avatars.githubusercontent.com/${repo.owner}?s=80`}
+					src={`https://avatars.githubusercontent.com/${repo.owner}?s=96`}
 					alt=""
 					width={40}
 					height={40}
-					className="size-10 shrink-0 rounded-md shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]"
+					className="size-10 shrink-0 rounded-md object-cover shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]"
 				/>
-				<div className="min-w-0 flex-1">
-					<div className="flex items-center gap-2">
+				<span className="min-w-0 flex-1">
+					<span className="flex items-center gap-2">
 						<span className="min-w-0 truncate font-medium text-sm">
 							{fullName}
 						</span>
@@ -79,30 +79,33 @@ function RepoCard({ repo }: { repo: SkillRepo }) {
 								aria-hidden
 							/>
 						) : null}
-						<span className="ml-auto inline-flex shrink-0 items-center gap-0.5 text-muted-foreground text-xs">
-							<Star className="size-3 fill-current" aria-hidden />
-							{formatStars(repo.stars)}
-						</span>
-					</div>
-					<p className="mt-0.5 line-clamp-2 text-muted-foreground text-xs leading-snug">
+					</span>
+					<span className="mt-0.5 line-clamp-2 block text-muted-foreground text-xs leading-snug">
 						{repo.description}
-					</p>
-				</div>
+					</span>
+				</span>
 			</button>
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<button
 						type="button"
 						className={cn(
-							"absolute top-2.5 right-2.5 inline-flex size-6 items-center justify-center rounded-sm",
-							"text-muted-foreground opacity-0 transition-opacity",
-							"hover:bg-muted hover:text-foreground group-hover:opacity-100",
-							"focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+							"inline-flex shrink-0 items-center gap-0.5 self-start pt-0.5 text-muted-foreground text-xs",
+							"rounded-sm hover:text-foreground",
+							"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 						)}
 						aria-label={t("plaza.skills.openGithub")}
 						onClick={() => openExternalUrl(repo.url)}
 					>
-						<ExternalLink className="size-3.5" />
+						<Star
+							className="size-3 fill-current group-hover:hidden"
+							aria-hidden
+						/>
+						<ExternalLink
+							className="hidden size-3 group-hover:block"
+							aria-hidden
+						/>
+						{formatStars(repo.stars)}
 					</button>
 				</TooltipTrigger>
 				<TooltipContent side="top">
@@ -129,7 +132,7 @@ export function PlazaSkillsView({ className }: { className?: string }) {
 						<h2 className="mb-2 font-medium text-muted-foreground text-xs">
 							{t(`plaza.skills.themes.${theme.id as SkillThemeId}`)}
 						</h2>
-						<div className="grid grid-cols-3 gap-2">
+						<div className="grid grid-cols-3 items-start gap-2">
 							{theme.repos.map((repo) => (
 								<RepoCard key={repo.url} repo={repo} />
 							))}
