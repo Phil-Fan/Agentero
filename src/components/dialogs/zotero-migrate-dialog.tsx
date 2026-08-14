@@ -311,6 +311,12 @@ export function ZoteroMigrateDialog({
 							selectedItems.size === scan.items.length
 								? undefined
 								: Array.from(selectedItems),
+						// Multi-folder items land inside the folder being imported,
+						// not in some deeper unrelated branch.
+						preferCollection:
+							typeof collFilter === "number" && collFilter !== 0
+								? collFilter
+								: undefined,
 						onProgress: (current, total) => {
 							setProgress({ current, total });
 							setBg(total ? Math.round((current / total) * 100) : null);
@@ -391,6 +397,13 @@ export function ZoteroMigrateDialog({
 									<li>
 										{t("sidebar:zoteroMigrate.summarySkipped", {
 											count: result.skipped,
+										})}
+									</li>
+								) : null}
+								{result.mergedDuplicates > 0 ? (
+									<li>
+										{t("sidebar:zoteroMigrate.summaryDuplicates", {
+											count: result.mergedDuplicates,
 										})}
 									</li>
 								) : null}

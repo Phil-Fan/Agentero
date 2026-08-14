@@ -42,6 +42,8 @@ export type ZoteroMigrateResult = {
 	notesAdded: number;
 	/** Already-imported papers moved into their collection folder. */
 	relocated: number;
+	/** Duplicate Zotero items merged into an already-imported paper. */
+	mergedDuplicates: number;
 	pruned: number;
 	paths: string[];
 	errors: string[];
@@ -81,6 +83,8 @@ export async function migrateZotero(opts: {
 	migrateAnnotations: boolean;
 	includeCollections?: number[];
 	includeItems?: number[];
+	/** Selected collection: placement prefers this subtree for multi-folder items. */
+	preferCollection?: number;
 	onProgress?: (
 		current: number,
 		total: number,
@@ -112,6 +116,7 @@ export async function migrateZotero(opts: {
 				migrateAnnotations: opts.migrateAnnotations,
 				includeCollections: opts.includeCollections ?? null,
 				includeItems: opts.includeItems ?? null,
+				preferCollection: opts.preferCollection ?? null,
 			},
 			onProgress,
 		},

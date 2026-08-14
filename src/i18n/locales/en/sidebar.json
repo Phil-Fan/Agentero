@@ -168,6 +168,7 @@
 		"summaryPdfs": "{{count}} PDFs copied",
 		"summaryPruned": "{{count}} stale entries cleaned up",
 		"summarySkipped": "{{count}} already in your library",
+		"summaryDuplicates": "{{count}} duplicate Zotero entries merged into existing papers (notes kept)",
 		"summaryErrors": "{{count}} failed",
 		"done": "Done",
 		"tutorial": "View import tutorial",

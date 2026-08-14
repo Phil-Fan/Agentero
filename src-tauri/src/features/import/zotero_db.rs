@@ -97,6 +97,12 @@ pub struct ZoteroMigrateArgs {
     /// If set, only import these Zotero itemIDs (per-paper selection). None = all.
     #[serde(default)]
     pub include_items: Option<Vec<i64>>,
+    /// When set (a Zotero collectionID), placement prefers the item's own
+    /// collection inside this collection's subtree over a deeper path in
+    /// another branch — so importing a selected folder puts its papers where
+    /// the user expects even when they also live in other collections.
+    #[serde(default)]
+    pub prefer_collection: Option<i64>,
     /// Migrate each item's Zotero notes (HTML → Markdown) into NOTES.md.
     #[serde(default)]
     pub migrate_notes: bool,
@@ -115,6 +121,9 @@ pub struct ZoteroMigrateResult {
     pub notes_added: usize,
     /// Already-imported papers moved into their collection folder on re-migration.
     pub relocated: usize,
+    /// Duplicate Zotero items merged into an already-imported paper (one
+    /// vault copy per real paper; notes/annotations backfilled into it).
+    pub merged_duplicates: usize,
     /// Orphan catalog rows removed before import (paper folder gone from disk).
     pub pruned: usize,
     pub paths: Vec<String>,
@@ -236,6 +245,7 @@ pub async fn migrate_zotero(
         preserve_collections: args.preserve_collections,
         migrate_notes: args.migrate_notes,
         migrate_annotations: args.migrate_annotations,
+        prefer_collection: args.prefer_collection,
     };
 
     // Materialize the whole Zotero collection tree up front — including empty
@@ -272,29 +282,65 @@ pub async fn migrate_zotero(
         })
         .collect();
 
+    // Placement lookup: collectionID -> sanitized path segments. Used to
+    // honor the selected-collection preference for multi-folder items.
+    let id_to_path: HashMap<i64, Vec<String>> = collections
+        .iter()
+        .map(|c| {
+            (
+                c.id,
+                c.path
+                    .split('/')
+                    .filter(|s| !s.is_empty())
+                    .map(String::from)
+                    .collect(),
+            )
+        })
+        .collect();
+
     let total = selected_items.len();
     for (idx, item) in selected_items.into_iter().enumerate() {
         progress(idx, total, "migrate");
-        match migrate_one(&vault, &parent_rel, &item, flags, &mut dedup).await {
-            Ok(MigrateOutcome::Imported { path, copied_pdf }) => {
+        // Placement path honors the selected-collection preference.
+        let coll_path = if flags.prefer_collection.is_some() {
+            collection_path_prefer(&id_to_path, &item.collection_ids, flags.prefer_collection)
+        } else {
+            item.collection_path.clone()
+        };
+        match migrate_one(&vault, &parent_rel, &item, &coll_path, flags, &mut dedup).await {
+            Ok((MigrateOutcome::Imported { path, copied_pdf }, dup)) => {
                 out.imported += 1;
+                if dup {
+                    out.merged_duplicates += 1;
+                }
                 out.paths.push(path);
                 if copied_pdf {
                     out.copied_pdfs += 1;
                 }
             }
-            Ok(MigrateOutcome::NotesBackfilled { path }) => {
+            Ok((MigrateOutcome::NotesBackfilled { path }, dup)) => {
                 out.notes_added += 1;
+                if dup {
+                    out.merged_duplicates += 1;
+                }
                 out.paths.push(path);
             }
-            Ok(MigrateOutcome::Relocated { path, backfilled }) => {
+            Ok((MigrateOutcome::Relocated { path, backfilled }, dup)) => {
                 out.relocated += 1;
                 if backfilled {
                     out.notes_added += 1;
                 }
+                if dup {
+                    out.merged_duplicates += 1;
+                }
                 out.paths.push(path);
             }
-            Ok(MigrateOutcome::Skipped) => out.skipped += 1,
+            Ok((MigrateOutcome::Skipped, dup)) => {
+                out.skipped += 1;
+                if dup {
+                    out.merged_duplicates += 1;
+                }
+            }
             Err(e) => out.errors.push(e.to_string()),
         }
     }
@@ -319,15 +365,19 @@ struct MigrateFlags {
     preserve_collections: bool,
     migrate_notes: bool,
     migrate_annotations: bool,
+    /// Placement preference: keep papers inside the selected collection's
+    /// subtree when possible (see `chosen_collection_path_prefer`).
+    prefer_collection: Option<i64>,
 }
 
 async fn migrate_one(
     vault: &Path,
     parent_rel: &str,
     item: &ReadItem,
+    coll_path: &[String],
     flags: MigrateFlags,
     dedup: &mut Dedup,
-) -> Result<MigrateOutcome, AppError> {
+) -> Result<(MigrateOutcome, bool), AppError> {
     let mut meta = map_zotero_item(&item.json)?; // errors when the item has no title
     enrich_remote_urls(&mut meta);
     let id = meta.id.clone();
@@ -338,8 +388,8 @@ async fn migrate_one(
     let blocks = note_blocks(item, flags.migrate_notes, flags.migrate_annotations);
 
     // Recreate the Zotero collection folder under the base parent when requested.
-    let base_parent = if flags.preserve_collections && !item.collection_path.is_empty() {
-        format!("{parent_rel}/{}", item.collection_path.join("/"))
+    let base_parent = if flags.preserve_collections && !coll_path.is_empty() {
+        format!("{parent_rel}/{}", coll_path.join("/"))
     } else {
         parent_rel.to_string()
     };
@@ -352,7 +402,7 @@ async fn migrate_one(
         // re-import or touch other content.
         let mut path = dedup.existing_path(&meta);
         let mut relocated = false;
-        if flags.preserve_collections && !item.collection_path.is_empty() {
+        if flags.preserve_collections && !coll_path.is_empty() {
             if let Some(existing) = path.clone() {
                 if let Some(new_rel) = plan_relocation(&existing, &base_parent) {
                     relocate_paper(vault, &existing, &new_rel)?;
@@ -372,27 +422,40 @@ async fn migrate_one(
             }
         }
         // Backfill the Zotero linkage on legacy rows (imported before the
-        // sync columns existed) so later syncs match exactly.
+        // sync columns existed) so later syncs match exactly. A row already
+        // linked to a DIFFERENT Zotero item means this item is a duplicate
+        // that got merged into the existing paper.
+        let mut duplicate = false;
         if let Some(p) = &path {
             if let Ok(Some(mut rec)) = papers::get_by_path(vault, p) {
-                if rec.zotero_item_id.is_none() {
-                    rec.zotero_item_id = Some(item.item_id);
-                    let _ = papers::upsert_paper(vault, &rec);
+                match rec.zotero_item_id {
+                    None => {
+                        rec.zotero_item_id = Some(item.item_id);
+                        let _ = papers::upsert_paper(vault, &rec);
+                    }
+                    Some(zid) if zid != item.item_id => duplicate = true,
+                    _ => {}
                 }
             }
         }
         if relocated {
-            return Ok(MigrateOutcome::Relocated {
-                path: path.unwrap_or_default(),
-                backfilled,
-            });
+            return Ok((
+                MigrateOutcome::Relocated {
+                    path: path.unwrap_or_default(),
+                    backfilled,
+                },
+                duplicate,
+            ));
         }
         if backfilled {
-            return Ok(MigrateOutcome::NotesBackfilled {
-                path: path.unwrap_or_default(),
-            });
+            return Ok((
+                MigrateOutcome::NotesBackfilled {
+                    path: path.unwrap_or_default(),
+                },
+                duplicate,
+            ));
         }
-        return Ok(MigrateOutcome::Skipped);
+        return Ok((MigrateOutcome::Skipped, duplicate));
     }
 
     let (folder_id, path_rel, paper_dir) = allocate_paper_path(vault, &base_parent, &id);
@@ -421,10 +484,13 @@ async fn migrate_one(
         }
     }
 
-    Ok(MigrateOutcome::Imported {
-        path: path_rel,
-        copied_pdf: copied,
-    })
+    Ok((
+        MigrateOutcome::Imported {
+            path: path_rel,
+            copied_pdf: copied,
+        },
+        false,
+    ))
 }
 
 /// New vault-relative path when an existing paper sits outside its collection
@@ -1017,6 +1083,50 @@ fn chosen_collection_path(collections: &HashMap<i64, Collection>, ids: &[i64]) -
         .unwrap_or_default()
 }
 
+/// Pick an item's placement path from precomputed collection paths. When
+/// `prefer` is set and the item belongs to a collection inside that
+/// collection's subtree, the deepest such membership wins — even if the item
+/// also sits deeper in another branch. Importing a selected folder then
+/// places papers where the user expects.
+fn collection_path_prefer(
+    id_to_path: &HashMap<i64, Vec<String>>,
+    ids: &[i64],
+    prefer: Option<i64>,
+) -> Vec<String> {
+    let paths: Vec<&Vec<String>> = ids
+        .iter()
+        .filter_map(|id| id_to_path.get(id))
+        .filter(|p| !p.is_empty())
+        .collect();
+    if let Some(pid) = prefer {
+        if let Some(pref) = id_to_path.get(&pid) {
+            if !pref.is_empty() {
+                let best = paths
+                    .iter()
+                    .filter(|p| p.len() >= pref.len() && p[..pref.len()] == pref[..])
+                    .max_by(|a, b| {
+                        a.len()
+                            .cmp(&b.len())
+                            .then_with(|| b.join("/").cmp(&a.join("/")))
+                    });
+                if let Some(p) = best {
+                    return (*p).clone();
+                }
+            }
+        }
+    }
+    paths
+        .iter()
+        .max_by(|a, b| {
+            a.len()
+                .cmp(&b.len())
+                .then_with(|| b.join("/").cmp(&a.join("/")))
+        })
+        .copied()
+        .cloned()
+        .unwrap_or_default()
+}
+
 /// Leaf collection names (all memberships) for use as tags.
 fn collection_leaf_names(collections: &HashMap<i64, Collection>, ids: &[i64]) -> Vec<String> {
     ids.iter()
@@ -1370,6 +1480,7 @@ mod tests {
                 preserve_collections: true,
                 include_collections: None,
                 include_items: None,
+                prefer_collection: None,
                 migrate_notes: false,
                 migrate_annotations: false,
             },
@@ -1440,6 +1551,7 @@ mod tests {
                 preserve_collections: true,
                 include_collections: None,
                 include_items: None,
+                prefer_collection: None,
                 migrate_notes: false,
                 migrate_annotations: false,
             },
