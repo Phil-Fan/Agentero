@@ -194,8 +194,12 @@ function FetchKimiNotesButton() {
 			aria-label={t("toolbar.fetchKimiNotes")}
 			disabled={busy}
 			onClick={onClick}
+			className="gap-1 px-2"
 		>
 			{busy ? <Loader2 className="animate-spin" /> : <CoolPapersIcon />}
+			<span className="text-xs font-medium">
+				{t("toolbar.fetchKimiNotesShort")}
+			</span>
 		</ToolbarButton>
 	);
 }

@@ -20,6 +20,7 @@
 		"image": "Insert image",
 		"properties": "Properties",
 		"fetchKimiNotes": "Get Kimi notes",
+		"fetchKimiNotesShort": "Notes",
 		"more": "More"
 	},
 	"codeBlock": {
