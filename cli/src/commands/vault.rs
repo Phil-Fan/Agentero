@@ -6,7 +6,7 @@ use crate::output::to_value;
 use crate::resolve::{looks_like_vault, resolve_vault, GlobalOpts};
 use agentero_lib::features::catalog::{self, papers};
 use agentero_lib::features::vault as vault_svc;
-use clap::Subcommand;
+use clap::{Subcommand, ValueHint};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::fs;
@@ -17,6 +17,7 @@ pub enum VaultCmd {
     /// Scaffold a new vault (catalog + dirs + AGENTS.md). Does not overwrite existing files.
     Create {
         /// Directory to create / scaffold.
+        #[arg(value_hint = ValueHint::DirPath)]
         path: PathBuf,
         /// Also print absolute path suitable for shell cd (text: path only).
         #[arg(long = "open")]
@@ -29,7 +30,10 @@ pub enum VaultCmd {
     /// Structural / schema health check (non-zero if issues).
     Check,
     /// Persist CLI default_vault.
-    Use { path: PathBuf },
+    Use {
+        #[arg(value_hint = ValueHint::DirPath)]
+        path: PathBuf,
+    },
 }
 
 #[derive(Debug, Serialize)]

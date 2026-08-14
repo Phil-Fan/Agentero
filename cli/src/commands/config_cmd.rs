@@ -12,7 +12,11 @@ pub enum ConfigCmd {
     /// Show CLI config path and values.
     Show,
     /// Set a CLI config key (`default_vault`, `translator_base_url`).
-    Set { key: String, value: String },
+    Set {
+        #[arg(value_parser = ["default_vault", "translator_base_url", "translator"])]
+        key: String,
+        value: String,
+    },
 }
 
 pub fn run(cmd: ConfigCmd, _globals: &GlobalOpts) -> Result<Value, CliError> {

@@ -9,8 +9,21 @@ use std::path::Path;
 
 /// Subcommand names accepted by the CLI (must stay in sync with `Commands`).
 const KNOWN_COMMANDS: &[&str] = &[
-    "vault", "tree", "paper", "import", "export", "trash", "config", "wiki", "doctor", "layout",
-    "mark", "usage", "open", "help",
+    "vault",
+    "tree",
+    "paper",
+    "import",
+    "export",
+    "trash",
+    "config",
+    "wiki",
+    "doctor",
+    "layout",
+    "mark",
+    "usage",
+    "open",
+    "completion",
+    "help",
 ];
 
 /// Rewrite `agentero <path>` into `agentero open <path>` when safe.
@@ -167,6 +180,12 @@ mod tests {
     fn leaves_known_subcommands() {
         let out = rewrite_path_shorthand(os(&["agentero", "paper", "list"]));
         assert_eq!(as_str(&out), vec!["agentero", "paper", "list"]);
+    }
+
+    #[test]
+    fn leaves_completion_subcommand() {
+        let out = rewrite_path_shorthand(os(&["agentero", "completion", "zsh"]));
+        assert_eq!(as_str(&out), vec!["agentero", "completion", "zsh"]);
     }
 
     #[test]

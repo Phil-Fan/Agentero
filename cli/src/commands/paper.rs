@@ -8,7 +8,7 @@ use agentero_lib::features::catalog;
 use agentero_lib::features::catalog::papers::{self, PaperRecord, PaperTag};
 use agentero_lib::features::import::pdf_parse::{self, PaperParseBodyArgs};
 use agentero_lib::features::import::{self, PaperDownloadAssetsArgs};
-use clap::Subcommand;
+use clap::{Subcommand, ValueHint};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::fs;
@@ -41,19 +41,24 @@ pub enum PaperCmd {
     /// Meta + asset flags + suggestedReads (no body dump).
     Get {
         /// Vault-relative path or paper id.
+        #[arg(value_hint = ValueHint::DirPath)]
         r#ref: String,
         /// Include internal `@zotero:` tags in output.
         #[arg(long = "all")]
         all: bool,
     },
     /// Print related file paths only.
-    Paths { r#ref: String },
+    Paths {
+        #[arg(value_hint = ValueHint::DirPath)]
+        r#ref: String,
+    },
     /// Move a paper or papers organization directory to the recycle bin.
     ///
     /// With `--files`, permanently remove the catalog rows and files instead
     /// (requires `-y`, retained for explicit destructive automation).
     Delete {
         /// Vault-relative path (paper or org folder under papers/).
+        #[arg(value_hint = ValueHint::DirPath)]
         path: String,
         /// Also delete files on disk.
         #[arg(long = "files")]
@@ -61,15 +66,20 @@ pub enum PaperCmd {
     },
     /// Set catalog `is_read` (does not run paper-reader).
     SetRead {
+        #[arg(value_hint = ValueHint::DirPath)]
         r#ref: String,
         /// Set is_read to false.
         #[arg(long = "false")]
         set_false: bool,
     },
     /// Download PDF / arXiv TeX for an existing paper.
-    Download { r#ref: String },
+    Download {
+        #[arg(value_hint = ValueHint::DirPath)]
+        r#ref: String,
+    },
     /// liteparse PDF → PAPER.md when no TeX.
     Parse {
+        #[arg(value_hint = ValueHint::DirPath)]
         r#ref: String,
         #[arg(long = "force")]
         force: bool,
@@ -77,8 +87,10 @@ pub enum PaperCmd {
     /// Move a paper or papers organization directory under another papers/ directory.
     Move {
         /// Vault-relative source path under papers/.
+        #[arg(value_hint = ValueHint::DirPath)]
         from: String,
         /// Vault-relative destination parent under papers/.
+        #[arg(value_hint = ValueHint::DirPath)]
         dest_parent: String,
     },
 }
@@ -96,6 +108,7 @@ pub enum TagCmd {
     /// Pass tag names as arguments, or use `--clear` to remove all tags.
     Set {
         /// Vault-relative path or paper id.
+        #[arg(value_hint = ValueHint::DirPath)]
         r#ref: String,
         /// Tag names (replace entire list).
         tags: Vec<String>,
@@ -105,6 +118,7 @@ pub enum TagCmd {
     },
     /// Append tags to a paper (case-insensitive dedupe).
     Add {
+        #[arg(value_hint = ValueHint::DirPath)]
         r#ref: String,
         /// Tag names to append (at least one).
         #[arg(required = true)]
@@ -112,6 +126,7 @@ pub enum TagCmd {
     },
     /// Remove tags from a paper (case-insensitive).
     Rm {
+        #[arg(value_hint = ValueHint::DirPath)]
         r#ref: String,
         /// Tag names to remove (at least one).
         #[arg(required = true)]

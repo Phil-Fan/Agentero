@@ -5,7 +5,7 @@ use crate::output::to_value;
 use crate::resolve::{resolve_vault, GlobalOpts};
 use agentero_lib::features::import as paper_import;
 use agentero_lib::features::import::{LookupImportArgs, PaperImportArgs};
-use clap::Subcommand;
+use clap::{Subcommand, ValueHint};
 use serde_json::{json, Value};
 use std::fs;
 use std::io::{self, Read};
@@ -18,14 +18,15 @@ pub enum ImportCmd {
         /// Identifier text (arxiv id, DOI, URL, …).
         text: String,
         /// Vault-relative parent (default `papers`).
-        #[arg(long = "parent", default_value = "papers")]
+        #[arg(long = "parent", default_value = "papers", value_hint = ValueHint::DirPath)]
         parent: String,
     },
     /// Import BibTeX/RIS/… via Translator (`-` = stdin).
     Bib {
         /// File path, or `-` for stdin.
+        #[arg(value_hint = ValueHint::FilePath)]
         file: PathBuf,
-        #[arg(long = "parent", default_value = "papers")]
+        #[arg(long = "parent", default_value = "papers", value_hint = ValueHint::DirPath)]
         parent: String,
     },
 }

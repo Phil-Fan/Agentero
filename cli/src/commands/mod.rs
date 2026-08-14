@@ -1,3 +1,4 @@
+pub mod completion;
 pub mod config_cmd;
 pub mod doctor;
 pub mod export;

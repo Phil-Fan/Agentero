@@ -4,7 +4,7 @@ use crate::commands::layout::{self as layout_cmd, LayoutIndexItem};
 use crate::error::{CliError, ExitCode};
 use crate::prompt;
 use crate::resolve::{paper_dir, resolve_paper, resolve_vault, GlobalOpts};
-use clap::Subcommand;
+use clap::{Subcommand, ValueHint};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::fs;
@@ -16,13 +16,19 @@ pub enum MarkCmd {
     /// List per-id mark files under `{paper}/marks/`.
     List {
         /// Vault-relative paper path or id.
+        #[arg(value_hint = ValueHint::DirPath)]
         r#ref: String,
         /// Filter by kind (highlight|ask|translate|agent-trace).
-        #[arg(long = "kind", value_name = "KIND")]
+        #[arg(
+            long = "kind",
+            value_name = "KIND",
+            value_parser = ["highlight", "ask", "translate", "agent-trace"]
+        )]
         kind: Option<String>,
     },
     /// Get one mark by id.
     Get {
+        #[arg(value_hint = ValueHint::DirPath)]
         r#ref: String,
         /// Mark id. Accepts a leading `-`: ids are nanoids and that alphabet
         /// includes `-`, so ~1 in 64 would otherwise parse as an unknown flag.
@@ -31,12 +37,17 @@ pub enum MarkCmd {
     },
     /// Add a mark. Prefer `--region` for figure/table/algorithm/formula anchors.
     Add {
+        #[arg(value_hint = ValueHint::DirPath)]
         r#ref: String,
         /// Layout index region id from `layout list` (resolved geometry).
         #[arg(long = "region", value_name = "ID")]
         region: Option<String>,
         /// Mark kind (default: highlight with --region; ask when --question set).
-        #[arg(long = "kind", value_name = "KIND")]
+        #[arg(
+            long = "kind",
+            value_name = "KIND",
+            value_parser = ["highlight", "ask"]
+        )]
         kind: Option<String>,
         /// Annotation note / comment.
         #[arg(long = "comment", value_name = "TEXT")]
@@ -46,7 +57,12 @@ pub enum MarkCmd {
         question: Option<String>,
         /// Highlight color (yellow|green|blue|pink|purple). Default yellow (desktop palette).
         /// Named `--mark-color` to avoid clashing with global `--color` (ANSI TTY paint).
-        #[arg(long = "mark-color", value_name = "NAME", default_value = "yellow")]
+        #[arg(
+            long = "mark-color",
+            value_name = "NAME",
+            default_value = "yellow",
+            value_parser = ["yellow", "green", "blue", "pink", "purple"]
+        )]
         mark_color: String,
         /// Optional quote override (default: region title).
         #[arg(long = "quote", value_name = "TEXT")]
@@ -54,6 +70,7 @@ pub enum MarkCmd {
     },
     /// Delete a mark file.
     Delete {
+        #[arg(value_hint = ValueHint::DirPath)]
         r#ref: String,
         /// Mark id. Accepts a leading `-` (see `Get`).
         #[arg(allow_hyphen_values = true)]

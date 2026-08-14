@@ -4,7 +4,7 @@ use crate::error::CliError;
 use crate::output::to_value;
 use crate::resolve::{resolve_vault, GlobalOpts};
 use agentero_lib::features::import::{self, PaperExportArgs};
-use clap::Subcommand;
+use clap::{Subcommand, ValueHint};
 use serde_json::{json, Value};
 use std::fs;
 use std::io::{self, Write};
@@ -19,7 +19,13 @@ pub enum ExportCmd {
         format: String,
         /// Output file, or `-` for stdout (default `-`).
         /// Uses `-o` / `--out` so it does not clash with global `--output` (format).
-        #[arg(short = 'o', long = "out", default_value = "-", value_name = "FILE")]
+        #[arg(
+            short = 'o',
+            long = "out",
+            default_value = "-",
+            value_name = "FILE",
+            value_hint = ValueHint::FilePath
+        )]
         out: PathBuf,
     },
 }

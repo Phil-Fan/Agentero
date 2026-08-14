@@ -13,7 +13,7 @@ mod resolve;
 mod style;
 
 use clap::builder::styling::{AnsiColor, Effects, Styles};
-use clap::{ColorChoice, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
+use clap::{ColorChoice, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum, ValueHint};
 use error::{CliError, ExitCode};
 use output::{emit_err, emit_ok, OutputFormat};
 use resolve::GlobalOpts;
@@ -122,7 +122,13 @@ fn color_choice(when: ColorWhen) -> ColorChoice {
 )]
 struct Cli {
     /// Vault root (absolute or relative). Overrides env / walk-up / config.
-    #[arg(short = 'v', long = "vault", global = true, value_name = "PATH")]
+    #[arg(
+        short = 'v',
+        long = "vault",
+        global = true,
+        value_name = "PATH",
+        value_hint = ValueHint::DirPath
+    )]
     vault: Option<PathBuf>,
 
     /// Emit JSON on stdout (alias for `-o json`).
@@ -143,7 +149,12 @@ struct Cli {
     yes: bool,
 
     /// Override Translator base URL.
-    #[arg(long = "translator-url", global = true, value_name = "URL")]
+    #[arg(
+        long = "translator-url",
+        global = true,
+        value_name = "URL",
+        value_hint = ValueHint::Url
+    )]
     translator_url: Option<String>,
 
     /// Colorize help and text output (`auto` = TTY; `always` / `never` force).
@@ -164,6 +175,7 @@ enum Commands {
     /// List vault-relative file tree.
     Tree {
         /// Subpath under vault (default: root).
+        #[arg(value_hint = ValueHint::AnyPath)]
         path: Option<String>,
         /// Max depth (default 3; -1 = unlimited).
         #[arg(long = "depth", default_value = "3")]
@@ -225,7 +237,22 @@ enum Commands {
     /// a directory path and is not a known subcommand.
     Open {
         /// Local directory to open (absolute, relative, or `~`).
+        #[arg(value_hint = ValueHint::DirPath)]
         path: PathBuf,
+    },
+    /// Generate shell completion script (bash / zsh / fish / powershell / elvish).
+    ///
+    /// Prints the script to stdout. `--install` writes it into the user
+    /// completion directory and does not edit shell rc files.
+    Completion {
+        /// Target shell.
+        shell: clap_complete::Shell,
+        /// Write the script to the user completion directory.
+        #[arg(long = "install")]
+        install: bool,
+        /// Command name to complete (`agentero` or `agentero-cli`).
+        #[arg(long = "bin-name", value_name = "NAME")]
+        bin_name: Option<String>,
     },
 }
 
@@ -279,6 +306,37 @@ fn main() -> StdExitCode {
         style,
     };
 
+    let cmd_name = command_label(&cli.command);
+    let start = std::time::Instant::now();
+    log::info!(target: "agentero::op", "op start {cmd_name}");
+
+    // Completion scripts must be raw stdout — never wrap in the JSON/text envelope.
+    if let Commands::Completion {
+        shell,
+        install,
+        bin_name,
+    } = cli.command
+    {
+        return match commands::completion::run(
+            shell,
+            install,
+            bin_name.as_deref(),
+            Cli::command(),
+            &globals,
+        ) {
+            Ok(None) => {
+                log::info!(
+                    target: "agentero::op",
+                    "op end {cmd_name} ok=true duration_ms={}",
+                    start.elapsed().as_millis()
+                );
+                StdExitCode::SUCCESS
+            }
+            Ok(Some(value)) => finish_ok(cmd_name, start, &globals, &value),
+            Err(err) => finish_err(cmd_name, start, &globals, err),
+        };
+    }
+
     let rt = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -291,43 +349,53 @@ fn main() -> StdExitCode {
         }
     };
 
-    let cmd_name = command_label(&cli.command);
-    let start = std::time::Instant::now();
-    log::info!(target: "agentero::op", "op start {cmd_name}");
-
     let result = rt.block_on(run(cli.command, &globals));
     match result {
-        Ok(value) => {
-            if let Err(e) = emit_ok(&globals, &value) {
-                log::error!(
-                    target: "agentero::op",
-                    "op end {cmd_name} ok=false duration_ms={} error={}",
-                    start.elapsed().as_millis(),
-                    e
-                );
-                eprintln!("{e}");
-                return StdExitCode::from(ExitCode::Business as u8);
-            }
-            log::info!(
-                target: "agentero::op",
-                "op end {cmd_name} ok=true duration_ms={}",
-                start.elapsed().as_millis()
-            );
-            StdExitCode::SUCCESS
-        }
-        Err(err) => {
-            log::error!(
-                target: "agentero::op",
-                "op end {cmd_name} ok=false duration_ms={} error_code={} error={}",
-                start.elapsed().as_millis(),
-                err.code,
-                err.message
-            );
-            let code = err.exit_code();
-            let _ = emit_err(&globals, &err);
-            StdExitCode::from(code as u8)
-        }
+        Ok(value) => finish_ok(cmd_name, start, &globals, &value),
+        Err(err) => finish_err(cmd_name, start, &globals, err),
     }
+}
+
+fn finish_ok(
+    cmd_name: &str,
+    start: std::time::Instant,
+    globals: &GlobalOpts,
+    value: &serde_json::Value,
+) -> StdExitCode {
+    if let Err(e) = emit_ok(globals, value) {
+        log::error!(
+            target: "agentero::op",
+            "op end {cmd_name} ok=false duration_ms={} error={}",
+            start.elapsed().as_millis(),
+            e
+        );
+        eprintln!("{e}");
+        return StdExitCode::from(ExitCode::Business as u8);
+    }
+    log::info!(
+        target: "agentero::op",
+        "op end {cmd_name} ok=true duration_ms={}",
+        start.elapsed().as_millis()
+    );
+    StdExitCode::SUCCESS
+}
+
+fn finish_err(
+    cmd_name: &str,
+    start: std::time::Instant,
+    globals: &GlobalOpts,
+    err: CliError,
+) -> StdExitCode {
+    log::error!(
+        target: "agentero::op",
+        "op end {cmd_name} ok=false duration_ms={} error_code={} error={}",
+        start.elapsed().as_millis(),
+        err.code,
+        err.message
+    );
+    let code = err.exit_code();
+    let _ = emit_err(globals, &err);
+    StdExitCode::from(code as u8)
 }
 
 fn command_label(cmd: &Commands) -> &'static str {
@@ -351,6 +419,7 @@ fn command_label(cmd: &Commands) -> &'static str {
         Commands::Mark { .. } => "cli.mark",
         Commands::Usage { .. } => "cli.usage",
         Commands::Open { .. } => "cli.open",
+        Commands::Completion { .. } => "cli.completion",
     }
 }
 
@@ -386,5 +455,6 @@ async fn run(command: Commands, globals: &GlobalOpts) -> Result<serde_json::Valu
         Commands::Mark { cmd } => commands::mark::run(cmd, globals).await,
         Commands::Usage { cmd } => commands::usage::run(cmd, globals),
         Commands::Open { path } => commands::open::run(&path, globals),
+        Commands::Completion { .. } => unreachable!("handled before async runtime"),
     }
 }

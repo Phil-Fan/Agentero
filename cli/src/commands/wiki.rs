@@ -6,7 +6,7 @@ use crate::resolve::{resolve_vault, GlobalOpts};
 use agentero_lib::core::fs::sanitize_vault_rel;
 use agentero_lib::features::wiki::index::WikiIndex;
 use agentero_lib::features::wiki::models::LinkResolutionStatus;
-use clap::Subcommand;
+use clap::{Subcommand, ValueHint};
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -15,6 +15,7 @@ pub enum WikiCmd {
     /// Check Vault-local links with the same resolver used by the desktop app.
     Check {
         /// Optional Vault-relative Markdown file or directory.
+        #[arg(value_hint = ValueHint::AnyPath)]
         source: Option<String>,
     },
 }

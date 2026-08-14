@@ -4,7 +4,7 @@ use crate::error::{CliError, ExitCode};
 use crate::output::to_value;
 use crate::resolve::{paper_dir, resolve_paper, resolve_vault, GlobalOpts};
 use crate::style::{format_table, truncate_chars};
-use clap::Subcommand;
+use clap::{Subcommand, ValueHint};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::fs;
@@ -18,10 +18,15 @@ pub enum LayoutCmd {
     /// List sidebar-aligned regions (figure / table / algorithm / formula).
     List {
         /// Vault-relative paper path or id.
+        #[arg(value_hint = ValueHint::DirPath)]
         r#ref: String,
         /// Filter: figure (image+chart), image, chart, table, algorithm, formula.
         /// Repeatable; OR semantics.
-        #[arg(long = "kind", value_name = "KIND")]
+        #[arg(
+            long = "kind",
+            value_name = "KIND",
+            value_parser = ["figure", "image", "chart", "table", "algorithm", "formula"]
+        )]
         kinds: Vec<String>,
         /// Minimum score (0–1). Default: index minScore or 0.3.
         #[arg(long = "min-score", value_name = "N")]
@@ -30,6 +35,7 @@ pub enum LayoutCmd {
     /// Get one region by id (CLI id from `layout list`).
     Get {
         /// Vault-relative paper path or id.
+        #[arg(value_hint = ValueHint::DirPath)]
         r#ref: String,
         /// Region id (e.g. figure-3).
         id: String,

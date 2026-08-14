@@ -15,6 +15,7 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 | 组 | 用途 |
 |---|---|
 | `open` | 在桌面 App 打开本地目录为 Vault（`agentero open <PATH>`；简写 `agentero <PATH>`） |
+| `completion` | 生成 / 安装 shell 自动补全（bash / zsh / fish / powershell / elvish） |
 | `vault` | create / which / info 等 |
 | `tree` | 列树 |
 | `paper` | list/get、tag list/set/add/rm、move、download/parse… |
@@ -66,6 +67,7 @@ cargo run -p agentero-cli -- vault which --json
 cargo run -p agentero-cli -- wiki check papers/demo/NOTES.md --json
 cargo run -p agentero-cli -- doctor --json
 cargo run -p agentero-cli -- layout list papers/demo --json
+cargo run -p agentero-cli -- completion zsh
 cargo test -p agentero-cli
 ```
 
@@ -114,6 +116,45 @@ agentero .             # 当前目录
 ```
 
 CLI 通过 `agentero://open?path=…` 深链唤起已安装的桌面 App；无参数时仍打印 help，不会隐式打开最近 Vault。
+
+## Shell 自动补全
+
+`agentero completion <SHELL>` 向 stdout 打印补全脚本（始终是原始脚本，即使带了 `--json`）。`--install` 把脚本写入用户目录，**不**改 shell rc。
+
+```bash
+# 打印脚本
+agentero completion zsh
+agentero completion bash
+agentero completion fish
+
+# 写入用户补全目录（不改 rc）
+agentero completion zsh --install
+agentero completion bash --install
+agentero completion fish --install
+```
+
+| Shell | `--install` 路径 | 是否自动加载 |
+|---|---|---|
+| bash | `~/.local/share/bash-completion/completions/agentero` | bash-completion 2.8+ 会自动加载 |
+| zsh | `~/.zfunc/_agentero` | 需把 `~/.zfunc` 加进 `fpath` 后 `compinit` |
+| fish | `~/.config/fish/completions/agentero.fish` | 自动 |
+| powershell | `~/.config/powershell/Completions/agentero-cli.ps1` | 需在 `$PROFILE` 里 `.` source |
+| elvish | `~/.config/elvish/lib/agentero.elv` | 需在 `rc.elv` 里 `use agentero` |
+
+zsh 若尚未配置 `fpath`，在 `~/.zshrc` 加：
+
+```zsh
+fpath=(~/.zfunc $fpath)
+autoload -Uz compinit && compinit
+```
+
+Windows 安装后命令名是 `agentero-cli`，可显式指定：
+
+```powershell
+agentero-cli completion powershell --install --bin-name agentero-cli
+```
+
+补全会带上子命令、全局 flag，以及已声明的枚举值（如 `layout --kind`、`mark --mark-color`）。路径参数带 `ValueHint`，由 shell 按目录/文件补全。
 
 ## 双链检查
 
