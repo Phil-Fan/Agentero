@@ -1,6 +1,6 @@
 ---
 name: agentero-cli
-version: 5
+version: 6
 description: >-
   Use the Agentero CLI (bin `agentero-cli` on Windows) to create, discover, and
   inspect a local research vault and catalog—list/get papers, import by id/URL,
@@ -135,7 +135,8 @@ Global: `--vault`, `--json` / `--output json`, `-y` / `--yes`, `--translator-url
 | Paths only | `agentero-cli paper paths <path\|id> --json` |
 | Download PDF/TeX | `agentero-cli paper download <path\|id> --json` |
 | PDF → PAPER.md | `agentero-cli paper parse <path\|id> [--force] --json` |
-| Delete catalog (± files) | `agentero-cli paper delete <path> [--files -y] --json` |
+| Delete → recycle bin | `agentero-cli paper delete <path> --json`（可用 `trash restore` 恢复） |
+| Permanent delete | `agentero-cli paper delete <path> --files -y --json`（不可恢复，仅在用户明确要求时） |
 | Mark is_read | `agentero-cli paper set-read <path\|id> [--false] --json` |
 | Set / add / remove tags | `agentero-cli paper tag set\|add\|rm <path\|id> … --json`（清空：`tag set --clear`） |
 | Magic-wand import | `agentero-cli import id <text> [--parent papers/…] --json` |
@@ -144,7 +145,17 @@ Global: `--vault`, `--json` / `--output json`, `-y` / `--yes`, `--translator-url
 | Layout get | `agentero-cli layout get <paper> <regionId> --json` |
 | Mark on region | `agentero-cli mark add <paper> --region <id> [--comment …] [--question …] --json` |
 | Mark list/get/delete | `agentero-cli mark list\|get\|delete … --json`（delete 需 `-y`） |
-| Graph (later) | `agentero-cli graph backlinks|export|rebuild --json` |
+| Move paper / org folder | `agentero-cli paper move <from> <destParent> --json` |
+| Recycle bin | `agentero-cli trash list --json` / `trash restore <batchId> <stored> --json` |
+| Purge recycle bin | `agentero-cli trash purge [batchId] [stored] -y --json`（省略参数 = 清空全部） |
+| Diagnose vault | `agentero-cli doctor --json` |
+| Safe repairs | `agentero-cli doctor fix aliases\|visual-marks\|catalog-duplicates --json` |
+| Persist default vault | `agentero-cli vault use <path> --json` |
+| Show CLI config | `agentero-cli config show --json` |
+| Open vault in desktop App | `agentero-cli open <path>` |
+
+There is **no** `agentero-cli graph` command. Do not invent subcommands: when
+unsure, run `agentero-cli <group> --help` and use only what it prints.
 
 ## JSON contract
 

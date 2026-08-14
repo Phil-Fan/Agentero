@@ -1,6 +1,6 @@
 ---
 name: agentero-cli
-version: 5
+version: 6
 description: >-
   Use the Agentero CLI (bin `agentero`) to create, discover, and inspect a local
   research vault and catalog—list/get papers, import by id/URL, check wikilinks,
@@ -131,7 +131,8 @@ Global: `--vault`, `--json` / `--output json`, `-y` / `--yes`, `--translator-url
 | Paths only | `agentero paper paths <path\|id> --json` |
 | Download PDF/TeX | `agentero paper download <path\|id> --json` |
 | PDF → PAPER.md | `agentero paper parse <path\|id> [--force] --json` |
-| Delete catalog (± files) | `agentero paper delete <path> [--files -y] --json` |
+| Delete → recycle bin | `agentero paper delete <path> --json`（可用 `trash restore` 恢复） |
+| Permanent delete | `agentero paper delete <path> --files -y --json`（不可恢复，仅在用户明确要求时） |
 | Mark is_read | `agentero paper set-read <path\|id> [--false] --json` |
 | Set / add / remove tags | `agentero paper tag set\|add\|rm <path\|id> … --json`（清空：`tag set --clear`） |
 | Magic-wand import | `agentero import id <text> [--parent papers/…] --json` |
@@ -140,7 +141,17 @@ Global: `--vault`, `--json` / `--output json`, `-y` / `--yes`, `--translator-url
 | Layout get | `agentero layout get <paper> <regionId> --json` |
 | Mark on region | `agentero mark add <paper> --region <id> [--comment …] [--question …] --json` |
 | Mark list/get/delete | `agentero mark list\|get\|delete … --json`（delete 需 `-y`） |
-| Graph (later) | `agentero graph backlinks|export|rebuild --json` |
+| Move paper / org folder | `agentero paper move <from> <destParent> --json` |
+| Recycle bin | `agentero trash list --json` / `trash restore <batchId> <stored> --json` |
+| Purge recycle bin | `agentero trash purge [batchId] [stored] -y --json`（省略参数 = 清空全部） |
+| Diagnose vault | `agentero doctor --json` |
+| Safe repairs | `agentero doctor fix aliases\|visual-marks\|catalog-duplicates --json` |
+| Persist default vault | `agentero vault use <path> --json` |
+| Show CLI config | `agentero config show --json` |
+| Open vault in desktop App | `agentero open <path>` |
+
+There is **no** `agentero graph` command. Do not invent subcommands: when unsure,
+run `agentero <group> --help` and use only what it prints.
 
 ## JSON contract
 
