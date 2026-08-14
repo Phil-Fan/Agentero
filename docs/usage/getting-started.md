@@ -81,7 +81,7 @@ ResearchVault/
 |---|---|
 | 左侧文件树 | 浏览 Vault；顶部有 Library、回收站；魔棒可入库 |
 | 中间工作区 | Dockview 文档面板：Library 表、PDF、Markdown、回收站等 |
-| 右侧栏（可选） | Agent 对话，或 Backlinks + 双链 Graph |
+| 右侧栏（可选） | Agent / 批注 / References（引用卡片 + 近邻图）/ Figures；编辑器状态栏看双链反链 |
 | 左下角 | 后台任务（下载、入库、精读等） |
 | 右上角 | 错误 / 警告 Toast |
 
@@ -105,7 +105,9 @@ ResearchVault/
 | `papers/<paper>/marks/` | PDF 高亮、批注、提问和翻译结果 |
 | `papers/<paper>/*.pdf` | PDF 原文 |
 | `papers/<paper>/source/` | arXiv 等来源的 TeX 或其它源文件 |
+| `papers/<paper>/attachments/` | 可选支撑材料（补充 PDF、幻灯片、代码仓库）；有文件时文件树论文行才可展开 |
 | `.agentero/catalog.sqlite` | Library 使用的论文集合和元数据 |
+| `~/.local/share/agentero/usage.sqlite` | 本机使用记录（不在 Vault 内；设置 → 通用 → 隐私可关或清除） |
 
 建议定期备份整个 Vault。若使用 Git，优先提交 Markdown、JSON、TeX 和其它源文件；`catalog.sqlite` 也应随 Vault 一起备份，以保留 Library 元数据。
 

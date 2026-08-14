@@ -51,7 +51,7 @@ command -v opencode
 - 编辑并保存 `NOTES.md`；
 - 导入论文；
 - 使用 Agent 总结或整理；
-- 使用 Backlinks 和 Graph。
+- 看双链反链；在 References 里看引用近邻图。
 
 PDF 和部分大文件可能会暂存在本机缓存中，仅用于预览。断开连接后，远程目录仍是唯一事实来源。
 

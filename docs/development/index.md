@@ -11,7 +11,7 @@
 
 | 文档 | 说明 |
 |---|---|
-| [roadmap.md](roadmap.md) | 自 **0.5.0** 起的未来版本切片（无已实现清单） |
+| [roadmap.md](roadmap.md) | 自 **0.6.0** 起的未来版本切片（无已实现清单） |
 | [todo.md](todo.md) | **仅未完成** backlog（按 0.3 / 0.4… 分组） |
 | [bug.md](bug.md) | 已知问题语料（精简） |
 | [interface-details-review.md](interface-details-review.md) | 界面细节审计（PDF 交互面）**已闭环**：修复记录 + 回归护栏（已达标表面，勿改坏）+ 交互改动自查清单 |

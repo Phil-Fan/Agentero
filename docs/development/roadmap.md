@@ -1,6 +1,6 @@
 # Agentero 路线图
 
-**当前发布版本：`0.5.0`**
+**当前发布版本：`0.6.0`**
 
 已实现能力见功能文档（[`../frontend/`](../frontend/index.md) · [`../backend/`](../backend/index.md)），不在此重复勾选。  
 可执行 backlog 见 [`todo.md`](todo.md)。
@@ -12,15 +12,15 @@
 - 先做好精确入库与阅读闭环，再扩展发现流与文献引用图。
 - 不静默覆盖用户手写 Vault 文件。
 
-## 0.5.0 基线（已发布，摘要）
+## 0.6.0 基线（当前线，摘要）
 
-工作台 + Dockview 分屏、Catalog/Library/标签（含阅读热力条）、魔棒与本地 PDF 入库、Zotero Connector/迁移（含 collection tree 物化与条目重定位）、PDF 划词与翻译、PDF 版面分析（Figures/Tables/Algorithms/Formulas）、公式 hover 符号对照卡、视觉批注 v2（与 Agent 会话解耦）、BYOA Agent（精读/权限/自动安装升级/自由模型选择）、双链与 Graph、CLI（含 `layout`/`mark`）、远程 Vault MVP、Bridge + iOS 远程客户端 M2（TestFlight 已提交）、Release CI。细节以功能文档为准。
+0.5 工作台之上，本线已落地：文献引用近邻图（`paper_refs_graph` 节点 `role` + 库外 stub，嵌在 References 下方；全库模式可切换）、论文 `attachments/` 在文件树展开、XDG `usage.sqlite`（`track()` + CLI `usage` + 设置页开关/清除）、PDF 全文翻译按阅读顺序分批带上下文、Host 独占 skill 激活语法且翻译不套 envelope。其余 0.5 能力仍在：Dockview、Catalog/Library、魔棒与本地 PDF、Zotero Connector/迁移、PDF 划词、版面分析、视觉批注 v2、BYOA Agent、双链、CLI `layout`/`mark`、远程 Vault MVP、iOS 远程客户端 M2。细节以功能文档为准。
 
 ---
 
 ## 0.3 — 入库与 Agent 补强
 
-在 0.5.0 基线上补齐仍缺口的「输入 → 资产 → Agent」路径。
+在当前基线上补齐仍缺口的「输入 → 资产 → Agent」路径。
 
 | 主题 | 交付 |
 |---|---|
@@ -29,7 +29,7 @@
 | Agent | workflow 自动注入 Vault `AGENTS.md` |
 | 配置 | 最近 Vault / UI 偏好与 XDG settings 完全对齐；设置内打开/导出日志目录 |
 | 导出 | `catalog:export_papers_md`（Markdown 表） |
-| CLI | `graph` / shell completions；`export papers-md` 对齐（Doctor 已实现） |
+| CLI | shell completions；`export papers-md` 对齐（Doctor 已实现；不要发明 `graph` 子命令，引用图走 Host `paper_refs_graph`） |
 | 阅读标注 CLI | `mark` CRUD + 默认惰性文字定位 + Skill（[#170](https://github.com/poco-ai/Agentero/issues/170)，设计：[mark-cli-roadmap.md](mark-cli-roadmap.md)） |
 | 桌面分发 | 桌面安装包内置同版本 `agentero` CLI；命令行打开本地 Vault；各平台 PATH 策略 |
 
@@ -82,7 +82,7 @@
 | 解析 | 本地 PDF/TeX → citation/figure sidecar |
 | UI | Paper Content 侧栏；文内引用 hover → Paper Info 已实现；待补卡片到 PDF 的反向高亮 |
 | PDF Agent | 视觉批注草稿 → 多模态 Agent 会话与 trace 回跳已实现；待补自动视觉区域检测 |
-| 图 | 引用图谱 MVP（`paper_refs_graph` + Graph 面板）已落地；cites/cited_by 持久缓存与 Connected Papers 式布局加深 |
+| 图 | 近邻图（`center` / `reference` / `citedBy` / stub）+ 全库切换已落地；cites/cited_by 持久缓存与 Connected Papers 式布局加深 |
 | Agent | Explore citations / Map related work / Ingest neighborhood |
 | 检索 | PDF 正文层检索；搜索历史/过滤；命令注册表 + MRU |
 
@@ -113,7 +113,7 @@
 ## 版本号约定
 
 - 应用 / Tauri / CLI manifest 与 git tag `vX.Y.Z` **一致**（见 [release.md](../test/release.md)）。
-- **当前线：`0.5.0`**。下一功能版本从 **`0.6.0`** 起；`0.5.x` 仅用于 0.5 基线的补丁与热修。
+- **当前线：`0.6.0`**。下一功能版本从 **`0.7.0`** 起；`0.6.x` 仅用于 0.6 基线的补丁与热修。
 - 路线图版本（0.3 / 0.4…）是**产品切片**，落地时再写入 manifest 并打 tag。
 
 ## 相关文档

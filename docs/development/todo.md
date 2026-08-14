@@ -1,6 +1,6 @@
 # Agentero TODO
 
-仅列**未完成**项。当前发布 **`0.5.0`**。版本切片见 [`roadmap.md`](roadmap.md)；已实现能力见 [`../frontend/`](../frontend/index.md) · [`../backend/`](../backend/index.md)。
+仅列**未完成**项。当前发布 **`0.6.0`**。版本切片见 [`roadmap.md`](roadmap.md)；已实现能力见 [`../frontend/`](../frontend/index.md) · [`../backend/`](../backend/index.md)。
 
 ## 0.3 — 入库与 Agent 补强
 
@@ -19,7 +19,7 @@
 - [ ] 设置「打开/导出日志文件夹」
 - [ ] `catalog:export_papers_md`（Markdown 表）
 - [x] CLI + 设置：聚合 Doctor 与论文 `NOTES.md` aliases 安全修复（[#198](https://github.com/poco-ai/Agentero/issues/198)）
-- [ ] CLI：`graph` / shell completions（只读 `wiki check` 与 Doctor 已实现）
+- [ ] CLI：shell completions（只读 `wiki check` 与 Doctor 已实现；不要发明 `graph` 子命令）
 - [ ] CLI：`export papers-md`（随 Host 导出）
 - [x] `agentero open <PATH>` / `agentero <PATH>` 打开本地 Vault；设置内安装 PATH shim（[#165](https://github.com/poco-ai/Agentero/issues/165)，设计：[../backend/cli.md](../backend/cli.md)）
 - [x] 桌面安装包不内嵌 CLI；About 从 GitHub Release 下载同版本 CLI（[#285](https://github.com/poco-ai/Agentero/issues/285)）
@@ -56,7 +56,7 @@
 - [ ] 反向联动：hover 引用卡片 → PDF 文中 anchor 高亮（需 anchors bbox）
 - [ ] 本地 PDF citation/figure sidecar + Paper Content 侧栏
 - [ ] Agent `#` 编号提及 + 引用卡片拖拽（citation-parsing M3/M5）
-- [x] 引用图谱 MVP：`paper_refs_graph` + Graph 面板改用引用边（非双链）；邻近含 stub / 全图库内边（[#260](https://github.com/poco-ai/Agentero/issues/260)）
+- [x] 引用图谱 MVP：`paper_refs_graph` + 近邻节点 `role`（center / reference / citedBy）+ 库外 stub；header 可切全库库内边（[#260](https://github.com/poco-ai/Agentero/issues/260)）
 - [ ] cites/cited_by 持久缓存 + Connected Papers 式布局 / 多跳聚类
 - [ ] Agent：Explore citations / Map related work / Ingest neighborhood
 - [ ] PDF 正文层检索；搜索历史/过滤；命令注册表 + MRU

@@ -43,7 +43,7 @@ Agentero **不**内置模型，也**不**托管模型 API Key。通过 ACP 连�
 - Connector 支持保存条目与 PDF 附件；网页快照等能力未覆盖。
 - PDF 标注在 `marks/` 中，不改写原始 PDF。
 - 自动精读（paper-reader）默认关闭，需在设置中开启。
-- 文献引用图 / Connected Papers / 广场发现流等仍在规划中，见开发路线图。
+- 文献引用近邻图已可用（References 下方）；Connected Papers 式多跳布局与广场发现流仍在规划中。
 
 ## 开发者文档
 

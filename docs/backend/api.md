@@ -2181,6 +2181,42 @@ UI 入口见 `settings_window_open`：Settings 现为独立原生单例窗口，
 
 实现：`src-tauri/src/features/settings/`（`mod.rs` + `commands.rs`）、`core/paths.rs`、`src-tauri/src/features/window/commands.rs`。
 
+### 3.10.3 使用记录（XDG `usage.sqlite`）
+
+设备本地活动日志，**不在 Vault 内**。schema v2、列定义与 `kind`/`facet` 对照见 [usage.md](usage.md)。`usageTrackingEnabled === false` 时写入命令直接返回 `0`、不碰库。
+
+#### `activity_record_events`（已实现）
+
+前端 `track()` 缓冲后批量写入。Host 从 `path` / `mode` / `extra` 推导 `paper_path`、`facet`、`qty`、`status`，并同事务 upsert `usage_daily` / `usage_vaults`。
+
+- **参数**（`args`）：`{ events: ActivityRecord[] }`
+- **`ActivityRecord`**：`{ ts?, vault?, kind, path?, mode?, durMs?, extra? }`。调用方不要自己填 `paper_path` / `facet` / `qty` / `status`。
+- **返回**：写入条数（`number`）。开关关闭或空数组为 `0`。单批上限 200。
+- **说明**：浏览器预览（非 Tauri）前端短路为 `0`。
+
+#### `usage_list`（已实现）
+
+按时间倒序列出事件。`path` 同时匹配 `path` 与 `paper_path` 前缀。
+
+- **参数**（`args`）：`{ vault?, kind?, path?, since?, limit? }`。`limit` 默认 100。
+- **返回**：`UsageEvent[]`（含 `paperPath` / `facet` / `status` / `qty`）。
+
+#### `usage_summary`（已实现）
+
+按 `kind` 聚合 `count` 与 `dur_ms`。
+
+- **参数**（`args`）：`{ vault?, since? }`
+- **返回**：`{ kind, count, durMs }[]`
+
+#### `usage_clear`（已实现）
+
+清空事件、日聚合与 memories。指定 `vault` 时只清该库，其它 Vault 保留。
+
+- **参数**（`args`）：`{ vault? }`
+- **返回**：删除的事件条数。
+
+CLI 对照：`agentero usage which|timeline|summary|clear`（见 [cli.md](cli.md)）。前端入口：`src/lib/activity/`。
+
 ### 3.11 界面与本地化（UI / i18n）
 
 #### `set_locale`（已实现）
@@ -2222,14 +2258,22 @@ UI 入口见 `settings_window_open`：Settings 现为独立原生单例窗口，
 
 | CLI | Host service / command 锚点 |
 |---|---|
+| `open` / `<PATH>` | 深链唤起桌面 App（`agentero://open?path=…`） |
 | `vault create` | `services::vault::create_vault` / `vault_create`（与 GUI `vault_ensure` 同幂等实现） |
 | `vault which\|info\|check\|use` | CLI 自管解析 + catalog `ensure_catalog` / `schema_version` |
 | `tree` | 磁盘扫描（非 Library 虚拟节点） |
 | `paper list\|get\|paths\|delete\|set-read\|tag list\|set\|add\|rm` | `catalog::papers::*`（含 `set_tags` / `list_all_tags`）/ `paper_*` |
 | `paper list --tag` / `--query` 含 tags | CLI 侧过滤（读 `list_all`）；Host `paper_list` 仍全量 |
+| `paper move` | 文件夹 + Catalog 路径同步 |
 | `paper download\|parse` | `lookup::download_paper_assets` / `pdf_parse::parse_paper_body` |
+| `trash list\|restore\|purge` | `path_list_trash` / `path_restore_item` / `path_purge_*` |
 | `import id\|bib` | `lookup::import_by_identifier` / `import_catalog` |
 | `export bib` | `lookup::export_catalog`（`-o`/`--out` 写文件；全局格式用 `--json`） |
+| `wiki check` | 只读双链语义检查（`WikiIndex`） |
+| `doctor` / `doctor fix` | 聚合诊断与 aliases / visual-marks 修复 |
+| `layout list\|get` | `{paper}/source/layout-index.json` |
+| `mark list\|get\|add\|delete` | `{paper}/marks/`（区域锚点优先） |
+| `usage which\|timeline\|summary\|clear` | XDG `usage.sqlite`（`activity_record_events` / `usage_*`） |
 | `config show\|set` | `~/.config/agentero/config.toml`（与 GUI 隔离） |
 
 构建：`cargo build -p agentero-cli` → bin `agentero`。
@@ -2258,7 +2302,7 @@ UI 入口见 `settings_window_open`：Settings 现为独立原生单例窗口，
 | V0.4 | `graph:*`（双链 / 反链 / 图谱）；前端文件变更防抖 `graph_rebuild`。 |
 | V0.5 | 抽象 importer，落地 arxiv 与本地 PDF；新增 `pdf:*` 命令与可插拔 `PdfParser`（liteparse 默认 + 云端 MinerU）。 |
 | ≤0.5.0 | 全局 Dockview、视觉批注、版面分析、公式解析卡、阅读热力条、Zotero collection tree 迁移、Agent 自动安装/升级、自由模型选择等已发布能力见功能文档；Host 侧一般无需新 paper API。见 [`../frontend/workspace.md`](../frontend/workspace.md)。 |
-| 0.6 | 引用关系：`paper_refs_*`（含 `paper_refs_graph` 引用图谱）、可选 catalog `paper_refs` 表 / Connected Papers 邻域加深；与 `graph:*` 双链 API 并存。 |
+| 0.6 | 引用关系：`paper_refs_*`（近邻图节点 `role=center\|reference\|citedBy` + stub）；XDG `usage.sqlite`（`activity_record_events` / `usage_*`）；论文 `attachments/` 进文件树。可选 catalog `paper_refs` 表 / Connected Papers 邻域加深仍待做；与 `graph:*` 双链 API 并存。 |
 | V0.x | 魔棒 `lookup:*` + 本机 Translator Runtime（见 [`paper-import.md`](paper-import.md)）。 |
 
 后续扩展：

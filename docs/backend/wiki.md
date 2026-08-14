@@ -10,7 +10,7 @@
 - 标题 fragment 以 `LinkFragment::Heading { path: Vec<String> }` 保存 Markdown 实际写下的完整路径或连续后缀。完整 heading path 是 canonical identity；任意长度的路径后缀仅在唯一命中时解析成功。
 - **单向写入** Markdown + 索引反查（不做目标文件自动插回链）。
 - 未解析目标可为 stub 节点。
-- 与 **文献引用图**（右侧 Graph / `paper_refs_graph`，见 [citation-parsing.md](citation-parsing.md)）分层，边语义不复用；双链索引不驱动关系图 UI。
+- 与 **文献引用图**（References 下方 / `paper_refs_graph`，见 [citation-parsing.md](citation-parsing.md)）分层，边语义不复用；双链索引不驱动关系图 UI。
 - `PAPER.md` 是派生全文：保留 document 与 heading anchors 供其它笔记链接，但不提取其 outgoing occurrences，避免 LiteParse 生成的裸域名和参考文献污染双链诊断。
 
 ## Host 能力

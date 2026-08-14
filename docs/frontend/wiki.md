@@ -1,6 +1,6 @@
 # 双链 UI
 
-编辑器状态栏展示反链数量与列表。右侧 **Graph** 栏为**文献引用图谱**（非 Markdown 双链图）；数据来自参考文献 sidecar 与库内匹配，见 [../backend/citation-parsing.md](../backend/citation-parsing.md)。
+编辑器状态栏展示反链数量与列表。右侧 **References** 下方的图为**文献引用图谱**（非 Markdown 双链图）；数据来自参考文献 sidecar 与库内匹配，见 [../backend/citation-parsing.md](../backend/citation-parsing.md)。
 
 ## 编辑器
 

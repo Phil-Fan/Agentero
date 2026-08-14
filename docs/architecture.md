@@ -12,9 +12,9 @@ Agentero 基于 Tauri 2 + React 19，本地优先，Vault 文件与 Catalog SQLi
 │  Tauri IPC (invoke / events)                    │
 ├─────────────────────────────────────────────────┤
 │  Rust Host (src-tauri/)                         │
-│  feature-first: vault/catalog/import/wiki/agent │
+│  feature-first: vault/catalog/refs/usage/agent  │
 ├─────────────────────────────────────────────────┤
-│  Vault 文件系统 + Catalog SQLite + XDG 设置     │
+│  Vault + Catalog SQLite + XDG 设置 / 使用记录   │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -28,9 +28,9 @@ Agentero 基于 Tauri 2 + React 19，本地优先，Vault 文件与 Catalog SQLi
 |---|---|---|
 | 左侧栏 | 文件树 + Paper Info | 常驻 collapsible，`preserve-pixel-size` |
 | 中间 | Dockview 工作区 | Library / PDF / HTML / 图片 / Markdown / Trash |
-| 右侧栏 | Agent / Backlinks / 批注 / References / Figures | 可选，同样 collapsible |
+| 右侧栏 | Agent / 批注 / References（引用卡片 + 近邻图）/ Figures | 可选，同样 collapsible |
 
-- **文件树**：顶部虚拟 Library + Recycle Bin、魔棒按钮。右键新建/删除/在 Finder 中显示/终端打开。多选（⌘/Shift）+ 拖拽移动。详见 [vault-tree.md](frontend/vault-tree.md)。
+- **文件树**：顶部虚拟 Library + Recycle Bin、魔棒按钮。论文默认是叶子；`{paper}/attachments/` 非空时行上出现 chevron，子项直接挂在论文下。右键新建/删除/在 Finder 中显示/终端打开。多选（⌘/Shift）+ 拖拽移动。详见 [vault-tree.md](frontend/vault-tree.md)。
 - **Dockview**：每个打开文档一个 panel，支持 tab、上下左右分屏、多格网格。布局 `toJSON()` 持久化，path/mode 在 panel params。详见 [workspace.md](frontend/workspace.md)。
 - **论文 NOTES**：默认左右分屏（PDF/HTML 左、`NOTES.md` 右）；多篇 paper 叠到同一两栏；body/NOTES tab 同步切换。
 - **错误 Toast**：右上角 Sonner，经 `notifyError`（`src/lib/core/notify.ts`）；表单就地校验不走 Toast。

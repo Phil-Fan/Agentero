@@ -15,7 +15,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。
 
 - [架构总览](architecture.md)：整体架构、工作台布局、核心工作流与数据流。
 - [前端文档](frontend/index.md)：工作台、文件树、论文库、Markdown、PDF 与 Agent UI。
-- [后端文档](backend/index.md)：Host、Vault、Catalog、索引、导入与 API 契约。
+- [后端文档](backend/index.md)：Host、Vault、Catalog、引用图谱、使用记录、导入与 API 契约。
 - [测试与发布](test/index.md)：验证策略和发布前检查。
 - [开发草稿](development/index.md)：路线图、TODO 与设计记录。
 
