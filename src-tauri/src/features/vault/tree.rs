@@ -9,6 +9,7 @@
 //!   files) is a pending shell listed lazily on expand.
 
 use crate::core::error::AppError;
+use crate::features::catalog::CapsCache;
 use crate::features::import::has_local_tex;
 use serde::Serialize;
 use std::fs;
@@ -112,7 +113,29 @@ fn pending_shell(name: String, path: String) -> VaultTreeNode {
     }
 }
 
-fn list_dir(dir: &Path, rel: &str, depth: usize, mode: Mode) -> Vec<VaultTreeNode> {
+/// TeX presence for a paper's lazy `source/` shell.
+///
+/// Goes through `CapsCache` keyed by the paper's vault-relative path so a full
+/// tree rebuild does not re-walk every paper's `source/` (arXiv e-prints often
+/// contain hundreds of files; on NTFS that walk dominates build time). The
+/// watcher invalidates the paper's caps entry when capability-relevant files
+/// change, so cached values stay fresh.
+fn source_shell_has_tex(root: &Path, paper_rel: &str, source_dir: &Path, caps: &CapsCache) -> bool {
+    if paper_rel.is_empty() {
+        // Paper markers at the vault root cannot be keyed in the cache.
+        return has_local_tex(source_dir);
+    }
+    caps.caps_for(root, paper_rel).has_tex
+}
+
+fn list_dir(
+    root: &Path,
+    dir: &Path,
+    rel: &str,
+    depth: usize,
+    mode: Mode,
+    caps: &CapsCache,
+) -> Vec<VaultTreeNode> {
     if depth > MAX_DEPTH {
         return Vec::new();
     }
@@ -169,14 +192,21 @@ fn list_dir(dir: &Path, rel: &str, depth: usize, mode: Mode) -> Vec<VaultTreeNod
             Mode::Eager => {
                 if paper_marker && name == LAZY_PAPER_DIR {
                     let mut shell = pending_shell(name, path_str);
-                    shell.has_tex = Some(has_local_tex(&child_path));
+                    shell.has_tex = Some(source_shell_has_tex(root, rel, &child_path, caps));
                     shell
                 } else if is_eager_rel(&child_rel) {
                     VaultTreeNode {
                         name,
                         path: path_str,
                         kind: "directory",
-                        children: Some(list_dir(&child_path, &child_rel, depth + 1, Mode::Eager)),
+                        children: Some(list_dir(
+                            root,
+                            &child_path,
+                            &child_rel,
+                            depth + 1,
+                            Mode::Eager,
+                            caps,
+                        )),
                         children_pending: None,
                         has_tex: None,
                     }
@@ -186,10 +216,12 @@ fn list_dir(dir: &Path, rel: &str, depth: usize, mode: Mode) -> Vec<VaultTreeNod
                         path: path_str,
                         kind: "directory",
                         children: Some(list_dir(
+                            root,
                             &child_path,
                             &child_rel,
                             depth + 1,
                             Mode::OneLevel,
+                            caps,
                         )),
                         children_pending: Some(false),
                         has_tex: None,
@@ -204,8 +236,8 @@ fn list_dir(dir: &Path, rel: &str, depth: usize, mode: Mode) -> Vec<VaultTreeNod
 }
 
 /// Full tree for the vault root, in one pass.
-pub fn build_tree(root: &Path) -> Vec<VaultTreeNode> {
-    list_dir(root, "", 0, Mode::Eager)
+pub fn build_tree(root: &Path, caps: &CapsCache) -> Vec<VaultTreeNode> {
+    list_dir(root, root, "", 0, Mode::Eager, caps)
 }
 
 /// True when `rel` sits at or below a paper folder's lazy `source/` subtree.
@@ -241,7 +273,11 @@ fn rel_under_root(root: &Path, dir: &Path) -> Result<String, AppError> {
 
 /// Children of one directory, applying the same semantics as the full build:
 /// eager subtrees recurse; non-eager dirs and paper `source/` list one level.
-pub fn list_children(root: &Path, dir: &Path) -> Result<Vec<VaultTreeNode>, AppError> {
+pub fn list_children(
+    root: &Path,
+    dir: &Path,
+    caps: &CapsCache,
+) -> Result<Vec<VaultTreeNode>, AppError> {
     let rel = rel_under_root(root, dir)?;
     if !dir.is_dir() {
         return Err(AppError::message("directory does not exist"));
@@ -251,7 +287,7 @@ pub fn list_children(root: &Path, dir: &Path) -> Result<Vec<VaultTreeNode>, AppE
     } else {
         Mode::Eager
     };
-    Ok(list_dir(dir, &rel, 0, mode))
+    Ok(list_dir(root, dir, &rel, 0, mode, caps))
 }
 
 #[cfg(test)]
@@ -285,7 +321,7 @@ mod tests {
         write(&root.join("src/lib/deep/file.ts"), "x");
         write(&root.join(".git/config"), "x");
 
-        let tree = build_tree(root);
+        let tree = build_tree(root, &CapsCache::new());
         assert!(find(&tree, ".git").is_none());
 
         let papers = find(&tree, "papers").unwrap();
@@ -310,23 +346,24 @@ mod tests {
         write(&root.join("papers/p1/NOTES.md"), "# n");
         write(&root.join("papers/p1/source/sub/deep.tex"), "x");
         write(&root.join("papers/p1/source/main.tex"), "x");
+        let caps = CapsCache::new();
 
         // Expanding the paper's source/: one level, subdirs pending.
         let source_dir = root.join("papers/p1/source");
-        let children = list_children(root, &source_dir).unwrap();
+        let children = list_children(root, &source_dir, &caps).unwrap();
         assert!(find(&children, "main.tex").is_some());
         let sub = find(&children, "sub").unwrap();
         assert_eq!(sub.children_pending, Some(true));
 
         // Refreshing the paper folder recurses but keeps source/ pending.
         let paper = root.join("papers/p1");
-        let children = list_children(root, &paper).unwrap();
+        let children = list_children(root, &paper, &caps).unwrap();
         let source = find(&children, "source").unwrap();
         assert_eq!(source.children_pending, Some(true));
         assert_eq!(source.has_tex, Some(true));
 
         // Outside the vault is rejected.
-        assert!(list_children(root, Path::new("/")).is_err());
+        assert!(list_children(root, Path::new("/"), &caps).is_err());
     }
 
     #[test]
@@ -335,10 +372,87 @@ mod tests {
         write(&root.join("papers/p1/NOTES.md"), "# n");
         write(&root.join("papers/p1/source/figs/a.png"), "x");
 
-        let tree = build_tree(root);
+        let tree = build_tree(root, &CapsCache::new());
         let papers = find(&tree, "papers").unwrap();
         let p1 = find(papers.children.as_ref().unwrap(), "p1").unwrap();
         let source = find(p1.children.as_ref().unwrap(), "source").unwrap();
         assert_eq!(source.has_tex, Some(false));
+    }
+
+    #[test]
+    fn source_probe_uses_caps_cache_until_invalidated() {
+        let root = &temp_root("caps-fresh");
+        write(&root.join("papers/p1/NOTES.md"), "# n");
+        write(&root.join("papers/p1/source/notes.txt"), "x");
+        let caps = CapsCache::new();
+
+        let source_has_tex = |tree: &[VaultTreeNode]| {
+            let papers = find(tree, "papers").unwrap();
+            let p1 = find(papers.children.as_ref().unwrap(), "p1").unwrap();
+            find(p1.children.as_ref().unwrap(), "source")
+                .unwrap()
+                .has_tex
+        };
+
+        assert_eq!(source_has_tex(&build_tree(root, &caps)), Some(false));
+
+        // TeX appears; the cached probe is stale until the watcher invalidates.
+        write(&root.join("papers/p1/source/main.tex"), "x");
+        assert_eq!(source_has_tex(&build_tree(root, &caps)), Some(false));
+
+        // Watcher-style invalidation of the paper folder refreshes the probe.
+        caps.invalidate(root, "papers/p1");
+        assert_eq!(source_has_tex(&build_tree(root, &caps)), Some(true));
+    }
+
+    /// Quantifies the caps-cache win: 20 papers with 200 files each under
+    /// `source/`. The first build walks every source/ tree (cold); the second
+    /// hits the cache and must not re-walk. Prints both durations
+    /// (`cargo test ... -- --nocapture` to see the numbers).
+    #[test]
+    fn build_tree_second_pass_hits_caps_cache() {
+        let root = &temp_root("caps-perf");
+        for p in 0..20 {
+            let paper = root.join(format!("papers/p{p:02}"));
+            write(&paper.join("NOTES.md"), "# n");
+            let src = paper.join("source");
+            fs::create_dir_all(src.join("figs")).unwrap();
+            for f in 0..199 {
+                fs::write(src.join(format!("figs/f{f:03}.png")), "x").unwrap();
+            }
+            fs::write(src.join("main.tex"), "x").unwrap();
+        }
+        let caps = CapsCache::new();
+
+        let cold_start = std::time::Instant::now();
+        let cold_tree = build_tree(root, &caps);
+        let cold = cold_start.elapsed();
+
+        let warm_start = std::time::Instant::now();
+        let warm_tree = build_tree(root, &caps);
+        let warm = warm_start.elapsed();
+
+        eprintln!(
+            "build_tree 20 papers x 200 source files: cold={cold:?} warm={warm:?} ({:.1}x)",
+            cold.as_secs_f64() / warm.as_secs_f64().max(f64::EPSILON)
+        );
+
+        let check = |tree: &[VaultTreeNode]| {
+            let papers = find(tree, "papers").unwrap();
+            for p in 0..20 {
+                let paper = find(papers.children.as_ref().unwrap(), &format!("p{p:02}")).unwrap();
+                let source = find(paper.children.as_ref().unwrap(), "source").unwrap();
+                assert_eq!(source.has_tex, Some(true));
+                assert_eq!(source.children_pending, Some(true));
+            }
+        };
+        check(&cold_tree);
+        check(&warm_tree);
+        // The warm build only does directory listings + cache lookups; it must
+        // beat the cold build that walked 20 x 200 source files.
+        assert!(
+            warm < cold,
+            "warm build ({warm:?}) should be faster than cold build ({cold:?})"
+        );
     }
 }

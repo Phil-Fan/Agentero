@@ -154,8 +154,11 @@ fn is_caps_relevant(path: &str) -> bool {
         || lower.ends_with(".ltx")
 }
 
-/// Paper folders a changed file can belong to: its own folder, plus the one
-/// above it so `source/main.tex` and `source/paper.pdf` count for the paper.
+/// Paper folders a changed file can belong to: every ancestor directory of the
+/// changed path (up to the vault root). Caps entries are keyed by the paper
+/// folder, so a deep write like `source/figs/a.tex` must invalidate
+/// `papers/p1` too; non-paper ancestors are never cache keys, so removing them
+/// is a harmless no-op.
 fn caps_paper_dirs(vault_root: &str, path: &str) -> Vec<String> {
     let root = std::path::Path::new(vault_root);
     let canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
@@ -169,10 +172,7 @@ fn caps_paper_dirs(vault_root: &str, path: &str) -> Vec<String> {
     let rel = rel.to_string_lossy().replace('\\', "/");
     let mut dirs = Vec::new();
     let mut current = rel.as_str();
-    for _ in 0..2 {
-        let Some((parent, _)) = current.rsplit_once('/') else {
-            break;
-        };
+    while let Some((parent, _)) = current.rsplit_once('/') {
         if parent.is_empty() {
             break;
         }
@@ -327,7 +327,22 @@ mod tests {
 
         assert_eq!(
             caps_paper_dirs("/vault", "/vault/papers/a/source/main.tex"),
-            vec!["papers/a/source".to_string(), "papers/a".to_string()]
+            vec![
+                "papers/a/source".to_string(),
+                "papers/a".to_string(),
+                "papers".to_string()
+            ]
+        );
+        // Deep source writes must still invalidate the paper folder itself:
+        // the tree build caches caps keyed by `papers/a`.
+        assert_eq!(
+            caps_paper_dirs("/vault", "/vault/papers/a/source/figs/deep.tex"),
+            vec![
+                "papers/a/source/figs".to_string(),
+                "papers/a/source".to_string(),
+                "papers/a".to_string(),
+                "papers".to_string()
+            ]
         );
         assert_eq!(
             caps_paper_dirs("/vault", "/vault/papers/a/PAPER.md"),

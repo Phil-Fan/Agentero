@@ -95,8 +95,12 @@ pub fn vault_allow_fs_scope<R: Runtime>(app: AppHandle<R>, path: String) -> ApiR
 
 /// Build the whole vault file tree in one pass (single IPC).
 #[tauri::command]
-pub async fn vault_tree_build(vault_path: String) -> ApiResult<Vec<VaultTreeNode>> {
-    run_blocking(move || {
+pub async fn vault_tree_build(
+    vault_path: String,
+    caps: State<'_, crate::features::catalog::CapsCache>,
+) -> Result<ApiResult<Vec<VaultTreeNode>>, String> {
+    let caps = caps.inner().clone();
+    Ok(run_blocking(move || {
         let op = OpTimer::start_with(
             "vault_tree_build",
             format!("vault={}", trunc(&vault_path, 200)),
@@ -113,9 +117,9 @@ pub async fn vault_tree_build(vault_path: String) -> ApiResult<Vec<VaultTreeNode
                 return map_err(err);
             }
         };
-        op.finish_result(Ok(tree::build_tree(&root)))
+        op.finish_result(Ok(tree::build_tree(&root, &caps)))
     })
-    .await
+    .await)
 }
 
 /// List one directory's children (lazy expand / targeted tree refresh).
@@ -123,8 +127,10 @@ pub async fn vault_tree_build(vault_path: String) -> ApiResult<Vec<VaultTreeNode
 pub async fn vault_tree_children(
     vault_path: String,
     dir_path: String,
-) -> ApiResult<Vec<VaultTreeNode>> {
-    run_blocking(move || {
+    caps: State<'_, crate::features::catalog::CapsCache>,
+) -> Result<ApiResult<Vec<VaultTreeNode>>, String> {
+    let caps = caps.inner().clone();
+    Ok(run_blocking(move || {
         let op = OpTimer::start_with(
             "vault_tree_children",
             format!("dir={}", trunc(&dir_path, 200)),
@@ -143,9 +149,9 @@ pub async fn vault_tree_children(
                 return map_err(err);
             }
         };
-        op.finish_result(tree::list_children(&root, &dir))
+        op.finish_result(tree::list_children(&root, &dir, &caps))
     })
-    .await
+    .await)
 }
 
 #[derive(Debug, serde::Deserialize)]

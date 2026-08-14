@@ -778,7 +778,10 @@ async fn dispatch_rpc(
         return dispatch_agent_rpc(app, vault_root, method, params).await;
     }
     match method {
-        "vault_tree_build" => to_value(tree::build_tree(vault_root)),
+        "vault_tree_build" => to_value(tree::build_tree(
+            vault_root,
+            &app.state::<crate::features::catalog::CapsCache>(),
+        )),
         "paper_list" => to_value(papers::list_all(vault_root)?),
         "vault_search" => {
             #[derive(Deserialize)]

@@ -180,7 +180,7 @@ type VaultTreeNode = {
 
 - **语义**（Rust `features/vault/tree.rs`，与 `src/lib/vault/tree.ts` 的远端路径保持一致）：
   - eager 根（`papers/` / `notes/` / `.agents/`）全量递归；其它根目录列一层，子目录 `childrenPending`。
-  - **论文文件夹内的 `source/`**（含 `metadata.json` / `NOTES.md` / `PAPER.md` 任一 marker 的目录）不再递归 —— arXiv e-print 解压产物动辄上百文件，标记 `childrenPending` 懒加载；这里的 marker 只用于 Host 判断 `source/` 是否懒加载，不单独决定前端是否把目录识别为论文。前端论文识别会优先保留含嵌套论文的组织目录，并在已有论文路径列表时按该列表归属文件。壳上附带 `hasTex`（Host 扫盘），供前端 Download 判定（`paperAssetDownloadReasons`）识别被懒加载藏住的 TeX。
+  - **论文文件夹内的 `source/`**（含 `metadata.json` / `NOTES.md` / `PAPER.md` 任一 marker 的目录）不再递归 —— arXiv e-print 解压产物动辄上百文件，标记 `childrenPending` 懒加载；这里的 marker 只用于 Host 判断 `source/` 是否懒加载，不单独决定前端是否把目录识别为论文。前端论文识别会优先保留含嵌套论文的组织目录，并在已有论文路径列表时按该列表归属文件。壳上附带 `hasTex`，供前端 Download 判定（`paperAssetDownloadReasons`）识别被懒加载藏住的 TeX；探测复用按论文目录键控的 `CapsCache`（watcher 对能力相关文件失效缓存），避免每次整树构建都递归 walk 每篇论文的 `source/`（NTFS 上尤其昂贵）。
   - 忽略名（`.git` / `.venv` / `node_modules` / `*.egg-info` / 其它 dot 名，白名单 `.agents` / `.env.example`）与深度上限 12 同前端规则。
   - 排序仍在前端（`sortNodes`，locale 感知）。
 - **局部刷新**：`vault:file-changed`（非 `modify`）携带的路径经 `collectTreeRefreshTargets`（`src/lib/vault/tree.ts`）映射到已加载的最近祖先目录节点，防抖 400ms 后仅对这些目录调 `vault_tree_children` 打补丁；根级变化 / 目标过多（>8）/ 无路径信息时回退整树 `vault_tree_build`。
