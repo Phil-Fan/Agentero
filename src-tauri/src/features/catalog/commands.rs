@@ -233,6 +233,11 @@ fn move_inner(
                 .map_err(|error| error.to_string())
         })
         .map_err(|error| AppError::message(error.to_string()))?;
+    crate::features::usage::events::rename_path_best_effort(
+        args.vault_path.trim(),
+        &from,
+        &new_rel,
+    );
     Ok(PaperMoveResult {
         new_rel,
         link_update,

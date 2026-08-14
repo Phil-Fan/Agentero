@@ -5,6 +5,7 @@
  */
 
 import i18n from "@/i18n";
+import { track } from "@/lib/activity";
 import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
 import { invokeApi } from "@/lib/core/ipc";
 import { logger } from "@/lib/core/logger";
@@ -169,6 +170,10 @@ export async function downloadPaperAssetsAction(node: FileNode): Promise<void> {
 				enqueuePaperLayoutAnalysis({
 					paperAbsPath: joinVaultPath(vaultPath, rel),
 				});
+				track("asset.download", {
+					path: rel,
+					extra: { pdf: r.pdf, tex: r.tex, paperMd: r.paperMd },
+				});
 				return r;
 			},
 		);
@@ -312,6 +317,10 @@ export async function paperTagsChange(
 	}
 	try {
 		const updated = await setPaperTags(vaultPath, path, tags);
+		track("paper.tag", {
+			path,
+			extra: { op: "set", tagCount: tags.length },
+		});
 		setLibraryPapers((prev) =>
 			prev.map((p) => {
 				const key = (p.path ?? "")

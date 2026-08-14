@@ -1,119 +1,292 @@
-# 使用记录与习惯总结（Usage Analytics）
+# 使用记录、Memory 与产品分析
 
 > 状态：设计草案。关联 [\#239](https://github.com/poco-ai/Agentero/issues/239)。
-> 相关：[`../backend/catalog.md`](../backend/catalog.md)、[`../backend/agent.md`](../backend/agent.md)、[`../backend/logging.md`](../backend/logging.md)、[`../frontend/library.md`](../frontend/library.md)、[`plaza.md`](plaza.md)
+> 相关：[`../backend/catalog.md`](../backend/catalog.md)、[`../backend/agent.md`](../backend/agent.md)、[`../backend/telemetry.md`](../backend/telemetry.md)、[`../backend/translate.md`](../backend/translate.md)、[`../backend/skill-import.md`](../backend/skill-import.md)、[`../frontend/pdf.md`](../frontend/pdf.md)、[`../frontend/pdf-layout-analysis.md`](../frontend/pdf-layout-analysis.md)、[`plaza.md`](plaza.md)
 
 ## 1. 目标与非目标
 
-Issue 三条诉求拆成三层：
+Issue 三条诉求 + 产品分析，落在同一条 Activity 总线上：
 
 | # | 诉求 | 本文对应 |
 |---|---|---|
-| 1 | 记录浏览 / 下载 / 阅读记录 | §3 事件模型 + §4 存储 |
-| 2 | 让 Agent 拿到用户操作习惯 | §5 UsageProfile + §6 Agent 三层接入 |
+| 1 | 记录浏览 / 下载 / 阅读，以及翻译、版面、Skill、批注等操作 | §3 事件模型 + §4 存储 |
+| 2 | 让 Agent 拿到用户操作习惯 | §5 Memory + §6 Agent 接入 |
 | 3 | 基于额外 context 做总结、推荐 | §7 上层功能 |
+| 4 | 部分行为投影到 PostHog | §3.4 Registry + §8 隐私 |
 
 **目标**
 
-- 本地记录**无法从产物反推**的行为事件，形成可查询的使用画像。
-- 让 BYOA Agent 以「被动注入 + 主动查询」两种方式获得习惯 context。
-- 在画像之上提供**继续阅读 / 周回顾 / 本地推荐**三个可验证功能。
+- 本地记录**用户意图动作**的时间线（何时、对哪篇、用什么方式），形成可查询画像。
+- BYOA Agent 以「被动注入 + 主动查询」获得习惯 context。
+- 同一条事件按白名单投影到 PostHog，做功能采用率，不含论文身份与正文。
+- 在画像之上提供继续阅读 / 周回顾 / 库内推荐。
 
 **非目标（首版）**
 
-- 不做 embedding / 向量库 / 语义相似度（推荐用图 + 标签 + 时长，见 §7.3）。
-- 不上传任何行为数据。
-- 不跨设备同步使用记录（习惯是设备本地事实，见 §4.1）。
-- 不重复记录已能从 Vault 产物派生的信号（见 §3.1）。
+- 不做 embedding / 向量库。
+- 不把检索词、论文标题、划词原文、译文、批注正文、Skill 仓库 URL 发给 PostHog。
+- 不跨设备同步使用记录。
+- 不自动抽取 ChatGPT 式「记忆短句」（P3 需用户确认）。
+- 不记录纯 UI 噪音（缩放、大纲展开、滚动、命令面板打开）。
 
 ## 2. 现状盘点
 
 | 能力 | 现状 | 复用方式 |
 |---|---|---|
-| Catalog SQLite | `features/catalog/schema.rs`：`SCHEMA_VERSION` + `MIGRATE_Vn_TO_Vn+1` + `schema_meta` | **复用迁移范式**，不复用同一个库（§4.1） |
-| `papers` 表 | 有 `is_read` / `added_at` / `updated_at`；**无** `opened_at` / 访问计数 | `ATTACH` 后 join 取 title/tags |
-| 结构化日志 | `core/log_util.rs` 的 `OpTimer` → `op start\|end <name> k=v` | 沿用字段风格，便于排查；日志不作为数据源 |
-| 阅读产物派生 | `src/lib/paper/reading-heatmap/`：从高亮/提问/翻译派生热力图 | **先例**：能派生的不落库（§3.1） |
-| 已有 recents | `agent/mention.ts` 的 `pushRecentMentionPath`、`vault/session.ts` 的 `rememberRecentVault`、`pdf/reading-position.ts` | 后续可由 usage 库统一供数，首版并存 |
-| 双链图 | `features/wiki/`（`graph_get_graph` / `graph_get_backlinks`） | 推荐候选集来源 |
-| 搜索 | `features/search`：walk 式无索引 | 只在此埋 `search.query` 事件 |
-| 相似度 / 推荐 | **不存在任何实现** | 从零起，见 §7.3 |
+| PostHog | `features/telemetry`：仅 `app started` / `app exited`；无私有 `capture()` | 扩 `Telemetry::capture`，业务禁止直连 |
+| Catalog SQLite | `SCHEMA_VERSION` + 迁移；`is_read` / `added_at`；无 opened_at | 复用迁移范式；不共用库 |
+| 阅读产物 | `marks/`、`reading-heatmap`、`reading-position` | 空间分布仍派生；**动作时间线另记事件** |
+| 翻译 | `runTranslate` + 划词 mark + `layout-translate.json` | 在消费方记 1 次会话，不在每块 MT 调用上打点 |
+| 版面 | `enqueuePaperLayoutAnalysis` / `run-analysis`；sidecar 可重建 | 只记真实分析，跳过 cache hit 静默载入 |
+| Skill 导入 | `lookup_import_batch` → `confirmSkillImport` → `skill_install` | 确认安装后记一条 |
+| 批注 | 高亮走 `annotations.json`；ask/translate/visual 走 `marks/<id>.json` | 在用户提交处打点，不在防抖导出处 |
+| 已有 recents | `@` MRU、最近 Vault、`reading-position` | 首版并存 |
+| Agent 上下文 | `agentPersonalPrompt` + `AGENTS.md` + 会话 chip | 无习惯 Memory；见 §5 |
 
 ## 3. 事件模型
 
-### 3.1 原则：只记录不可反推的行为
+### 3.1 原则：记动作，不记内容
 
-Vault 产物本身已经是最好的行为记录。高亮、批注、翻译、`is_read`、PDF 阅读页码都已落盘，`reading-heatmap` 已证明可从产物派生统计。**重复落一份事件只会引入不一致。**
+旧草案「能从产物派生的一律不记」对**空间热力**仍然成立，但对 **Memory / 产品分析** 不够：
 
-| 信号 | 来源 | 是否记事件 |
-|---|---|---|
-| 高亮 / 批注 / 划词提问 / 翻译 | `marks/*.json`、NOTES | ❌ 派生（`reading-heatmap`） |
-| 是否已读 | `papers.is_read` | ❌ 直接查 catalog |
-| PDF 阅读进度 | `pdf/reading-position.ts` | ❌ 直接读 |
-| 打开了什么 / 何时 / 停留多久 | 无痕迹 | ✅ |
-| 下载了哪些附件 | 只留文件，无时间线 | ✅ |
-| 搜过什么词 | 无痕迹 | ✅ |
-| 调用了哪个 Agent workflow | 无痕迹 | ✅ |
+| 产物能回答 | 产物答不好 |
+|---|---|
+| 这篇有没有高亮、译过哪一段 | 何时开始密集翻译、用哪个 provider |
+| `layout.json` 是否存在 | 是入库自动跑的还是用户点了「重新分析」 |
+| `.agents/skills/pptx` 在不在 | 什么时候从 GitHub 装的、装了几个 |
+| `is_read` | 是人点的还是 paper-reader 写的 |
 
-### 3.2 事件表
+因此：
 
-| `kind` | 载荷 | 埋点位置 |
-|---|---|---|
-| `paper.open` | `path`, `mode`(pdf/html) | `src/lib/workspace/actions.ts` `openTab`（唯一漏斗，会分类 `kind`/`mode`） |
-| `note.open` | `path` | 同上 |
-| `paper.focus` / `paper.blur` | `path`, `dur_ms` | `actions.ts` `handleActivePanelChange`、`closeTab` |
-| `asset.download` | `path`, `asset`(pdf/tex/…) | `src/lib/paper/library-actions.ts` `downloadPaperAssetsAction` / `downloadAllMissingAssets` |
-| `paper.import` | `path`, `source`(arxiv/doi/url/zotero) | 入库 action |
-| `search.query` | `q`, `hits` | `src/lib/vault/search.ts` |
-| `agent.run` | `workflow`, `path?` | `src/lib/agent/api.ts` `runOnce` |
+1. **事件 = 用户意图动作的时间线**（kind + 类别字段 + 可选 path）。
+2. **不把动作内容写入事件**（划词原文、译文、批注正文、检索词对 PostHog 禁用；本地仅 `search.query` 保留 `q`）。
+3. **空间分布继续从产物派生**（`reading-heatmap`）。删掉一条高亮不会改写历史事件——「用过这个功能」仍在。
+4. **自动后台任务要降噪**：版面 cache hit、全文翻译的逐 region `runTranslate`、EmbedPDF 标注防抖回写，都不单独成事件。
 
-**停留时长**用 focus/blur 配对而非 `open`→`close` 差值：Dockview 多面板下同时打开多篇是常态，只有获得焦点的面板才计时。单次 focus 段设上限（如 30min）以吸收「开着页面去吃饭」。
+### 3.2 统一总线
 
-### 3.3 上报路径
-
-前端**缓冲批量上报**，避免每次点击一次 IPC：
-
-```
-埋点 → usage-buffer（内存数组）
-      → flush 触发：5s 定时 / window blur / beforeunload / 满 50 条
-      → usage_record_events(events[])   单条命令，一次事务
+```text
+UI / Host 动作
+      │
+      ▼
+ track(kind, payload)          ← 唯一入口
+      │
+      ▼
+ Event Registry                ← 本地 schema + PostHog 投影白名单
+      │
+      ├──────────────┬─────────────────┐
+      ▼              ▼                 ▼
+ LocalSink      TelemetrySink     UsageProfile
+ usage.sqlite   PostHog 投影      Agent / 继续阅读
 ```
 
-同一 `(kind, path)` 在 1s 内去重（Dockview 重挂载会重复触发 open）。
+前端缓冲：5s / window blur / beforeunload / 满 50 条 → `activity_record_events`。同一 `(kind, path)` 1s 去重。Host 一事务写本地后按 Registry 投影 `Telemetry::capture`。
+
+业务代码禁止直接 `posthog_rs::Event` 或手写 `INSERT usage_events`。
+
+### 3.3 事件表
+
+#### A. 阅读与库（#239 原范围）
+
+| `kind` | 本地载荷 | PostHog | 漏斗 |
+|---|---|---|---|
+| `paper.open` / `note.open` | `path`, `mode` | `paper_opened` / `note_opened`：`mode` | `openTab` |
+| `paper.focus` / `paper.blur` | `path`, `dur_ms` | **不上报** | `handleActivePanelChange` / `closeTab` |
+| `paper.session` | `path`, `dur_ms` | `paper_session`：`dur_bucket`（仅 ≥10s） | blur 结算 |
+| `asset.download` | `path`, `asset` | `asset_downloaded`：`asset` | `downloadPaperAssetsAction` |
+| `paper.import` | `path`, `source` | `paper_imported`：`source` | 入库 action |
+| `search.query` | `q`, `hits` | `search_performed`：`hits_bucket`（无 `q`） | `vault/search.ts` |
+| `agent.run` | `workflow`, `path?` | `agent_run`：`workflow` | `runOnce` |
+
+停留用 focus/blur 配对。单段上限 30min；window blur 立刻结算。
+
+#### B. 翻译
+
+`runTranslate` 是执行引擎，**不是**埋点漏斗：版面全文翻译会对每个 region 调一次，若在此处打点会爆炸。
+
+| `kind` | 本地载荷 | PostHog | 漏斗 |
+|---|---|---|---|
+| `translate.selection` | `path`, `provider`, `target_lang`, `chars`, `auto` | `translate_ran`：`surface=selection`, `provider_family`, `target_lang`, `chars_bucket` | `use-pdf-selection-translate` 一次划词结束 |
+| `translate.layout` | `path`, `scope`(doc\|page), `provider`, `target_lang`, `region_count`, `ok_count` | `translate_ran`：`surface=layout`, `scope`, `provider_family`, `target_lang`, `region_bucket` | `use-pdf-layout-translate` **整次** doc/page 任务结束（不是每块） |
+
+- `provider_family`：`free` / `commercial` / `agent`。本地可存具体 `provider` id（`deepl` / `tencent`…）；PostHog 只传 family，避免把商用配置当画像。
+- 不记原文、译文。
+- `auto=true` 仅当「划词自动翻译」触发；手动点菜单为 `false`。
+- 停止 / 清除覆盖层不记成功事件；可记 `translate.layout` + `ok_count` 反映部分完成。
+
+#### C. 版面分析
+
+| `kind` | 本地载荷 | PostHog | 漏斗 |
+|---|---|---|---|
+| `layout.analyze` | `path`, `trigger`(import\|open\|manual), `backend`(onnx\|paddle), `cache`(miss\|force), `region_count`, `dur_ms` | `layout_analyzed`：`trigger`, `backend`, `cache`, `dur_bucket` | `run-analysis` / headless executor **实际跑模型成功后** |
+
+**跳过**：sidecar cache hit 的静默 JSON→侧栏（打开论文时的常态）。那不是用户动作，会淹没画像。
+
+用户点 Figures「分析 / 重新分析」：
+
+- 有 sidecar 且非 force → 只是再归并，**不记**（与打开时相同）。
+- 无缓存或内部 `force` → 记 `cache=miss|force`。
+
+#### D. Skill 导入
+
+| `kind` | 本地载荷 | PostHog | 漏斗 |
+|---|---|---|---|
+| `skill.install` | `skill_id[]`, `source_kind`(github\|npx\|skills_sh), `installed`, `skipped` | `skill_installed`：`source_kind`, `count_bucket` | `confirmSkillImport` 任务成功 |
+
+- 一次确认装多个 → **一条**事件，带数量。
+- 本地可存 `skill_id`（给 Agent：「你装过 pptx」）。
+- PostHog **不传** owner/repo、URL、skill 名。
+- 仅发现、用户取消 → 不记。远程 Vault 禁用安装，无事件。
+
+#### E. 批注 / 划词产物
+
+| `kind` | 本地载荷 | PostHog | 漏斗 |
+|---|---|---|---|
+| `mark.create` | `path`, `type`(highlight\|comment\|ask\|translate\|visual), `source`(selection\|region\|formula), `page?` | `mark_created`：`type`, `source` | 见下 |
+| `mark.update` | `path`, `type` | 不上报（编辑备注噪音） | 改 comment / 续写 ask |
+| `mark.delete` | `path`, `type` | `mark_deleted`：`type` | 删除 pin / 高亮 |
+
+**漏斗必须在用户提交，禁止挂在防抖导出上：**
+
+| type | 写入 | 打点处 |
+|---|---|---|
+| `highlight` / `comment` | `marks/annotations.json`（`saveAnnotationItems` 会整表回写） | 划词菜单「高亮 / 批注」确认、批注编辑器首次保存；对 annotations 做 **id diff**，只对新增 id 打 `create` |
+| `ask` | `marks/<id>.json` | 划词「提问」提交，或选区 chip **发送后**落盘对话卡（与现有 ask 卡同一路径） |
+| `translate`（划词卡） | `marks/<id>.json` | 与 `translate.selection` **成对**：一次划词既有翻译会话，也有 mark 落盘。允许两条，kind 不同 |
+| `visual` | `marks/<id>.json` + `assets/` | 视觉批注编辑器「保存」；仅草稿不记 |
+
+`ask` / 带 Agent 的 `visual` 另外会走 `agent.run`。两条都记：一条是「做了批注」，一条是「叫了 Agent」。
+
+不记：quote、comment 正文、裁剪图、公式符号表内容。
+
+#### F. 其它高信号动作（「等」的首版清单）
+
+只收**有明确漏斗、对习惯或采用率有用**的。滚动 / 缩放 / 大纲 / 命令面板开合排除。
+
+| `kind` | 本地载荷 | PostHog | 漏斗 |
+|---|---|---|---|
+| `paper.tag` | `path`, `op`(set\|add\|rm), `tags?` | `paper_tagged`：`op`, `tag_count_bucket` | `paper_set_tags` 前端 action |
+| `paper.read` | `path`, `is_read`, `via`(user\|paper_reader) | `paper_read_set`：`is_read`, `via` | `paper_set_is_read` |
+| `refs.parse` | `path`, `trigger`(auto\|manual) | `refs_parsed`：`trigger` | `paper_refs_parse` 成功 |
+| `refs.import` | `path`（目标论文） | `refs_imported` | References 卡「入库」 |
+| `zotero.save` | `count` | `zotero_saved`：`count_bucket` | Connector `saveItems` 提交成功 |
+| `vault.open` | （无 path 出站） | `vault_opened` | 打开 / 切换 Vault |
+| `onboarding.complete` | — | `onboarding_completed` | 向导最后一步 |
+
+标签名可进本地（喂 `tagAffinity`）；PostHog 只传操作类型与数量桶。
+
+### 3.4 Registry 形状
+
+```ts
+'translate.selection': {
+  local: { path: 'string', provider: 'string', target_lang: 'string', chars: 'number', auto: 'boolean' },
+  posthog: {
+    name: 'translate_ran',
+    props: ['surface', 'provider_family', 'target_lang', 'chars_bucket'],
+    map: { surface: () => 'selection', provider_family: fromProvider, chars_bucket: bucketChars },
+  },
+},
+'layout.analyze': {
+  local: { path: 'string', trigger: 'import'|'open'|'manual', backend: 'onnx'|'paddle', cache: 'miss'|'force', region_count: 'number', dur_ms: 'number' },
+  posthog: { name: 'layout_analyzed', props: ['trigger', 'backend', 'cache', 'dur_bucket'] },
+},
+```
+
+没登记的 kind 不能发出。新增事件先改 Registry，再在漏斗调用 `track()`。
+
+### 3.5 候选事件（未纳入 P0）
+
+首版故意不收下面这些。按「值 / 噪音 / 隐私」分成三档，需要时再进 Registry。
+
+#### 建议下一波（P1，对 Memory 或采用率都有用）
+
+| `kind` | 为什么值得 | 漏斗 | PostHog 投影 |
+|---|---|---|---|
+| `library.export` / `library.import` | 文献工作流是否闭环 | `exportLibraryToFile` / `importLibraryFromFile` | `format`（bibtex/ris/…）、`count_bucket` |
+| `library.rescan` | Doctor/盘漂是否被用 | `rescanLibraryPapers` | `added_bucket` |
+| `paper.parse` | liteparse 是否在补正文 | `enqueuePaperPdfParse` **成功写出 PAPER.md**（跳过 cache） | `trigger`(import\|manual) |
+| `paper.reader` | 精读触发面 | `runPaperReaderWorkflow` 开始；与 `agent.run`+`paper.read` 互补 | `via`(zap\|auto) |
+| `skill.use` | 装了不等于用了 | Composer 提交时 `skillIds` | `count_bucket`（无 skill 名出站） |
+| `agent.session` | 续聊 vs 新开 | 新建草稿 / `loadSession` | `op`(new\|load\|cancel) |
+| `agent.fail` | 产品质量 | `agent:failed` | `workflow`（无错误正文） |
+| `note.export` | 笔记离开应用 | Markdown 导出 PDF/PNG | `format` |
+| `note.format` | 编辑习惯 | 右键「整理 Markdown」 | 仅计数 |
+| `wiki.follow` | 双链是否在被走 | `navigateWiki` | 不上报 path |
+| `refs.graph.click` | 引用图是否驱动打开 | Graph 节点点击 | `node`(paper\|stub) |
+| `zotero.sync` | 双向同步采用 | `zotero_sync` 成功 | `direction`/`count_bucket` |
+| `zotero.migrate` | 欢迎页迁移 | `migrateZoteroFromWelcome` | `count_bucket` |
+| `vault.create` | 激活漏斗 | `vault_create` | 仅计数 |
+| `command.run` | 哪些命令真有人用 | 命令面板 `run()` | `command_id`（稳定 id，如 `settings.open`） |
+| `doctor.run` / `doctor.fix` | 诊断是否被用 | Doctor pane | `section`（alias\|wiki\|visual） |
+| `update.install` | 版本采纳 | 关于页「安装并重启」 | `from_version` 已在 person |
+
+`skill.use` 对 Memory 比 `skill.install` 更重要：画像应说「常用 pptx」，而不是「曾经装过」。
+
+#### 可后置（有信号，但漏斗散或和已有事件重叠）
+
+| `kind` | 备注 |
+|---|---|
+| `import.fail` | 魔棒失败原因类别（识别失败 / 超时 / 限流），无 URL |
+| `asset.download.fail` | 与成功对称，看补下健康度 |
+| `search.surface` | 把 `search.query` 拆成 palette / library / vault；首版一个 kind 即可 |
+| `library.scope` | 进入文件夹作用域；弱信号 |
+| `file.create` / `file.rename` / `file.move` / `file.trash` / `file.restore` | 组织习惯；和 `paper.import`/`paper.tag` 部分重叠 |
+| `workspace.split` / `note.split` | 分屏是否为核心读法 |
+| `window.new` | 多窗采用 |
+| `pdf.find` | ⌘F；采用率有用，对 Memory 弱 |
+| `pdf.outline` / `pdf.immersive` / `pdf.page_theme` | 阅读 chrome |
+| `formula.card` | 公式解析卡打开；`source=formula` 的 mark 已覆盖「批注公式」 |
+| `citation.goto` | 文中引用跳页 / 外链 |
+| `layout.figure.focus` | 侧栏点开图/表 |
+| `agent.permission` | ask 模式回应；`option_kind` |
+| `agent.ask_user` | 结构化问卷提交/取消 |
+| `agent.model` / `agent.mode` | 换模型、Plan/Default；出站只传是否第三方，不传 model id |
+| `agent.context` | `@` / 选区固定 / 图片附件；易噪，应用「每轮发送时汇总」而不是每次点 chip |
+| `agent.install` | 设置页安装/升级/卸载 CLI | `op` + `template` |
+| `settings.change` | 只传 **allowlist 键名**（`telemetryEnabled`、`uiTheme`、`translate.provider`…），永不传值 |
+| `onboarding.step` | 比只记 complete 更能看流失；P0 有 complete 即可 |
+| `remote.open` / `bridge.pair` | 远程 / iOS 采用；移动端本身无 PostHog |
+| `cli.invoke` | `agentero` 子命令名；看 Agent 是否真走 CLI |
+
+#### 明确不记
+
+| 动作 | 原因 |
+|---|---|
+| 滚动、缩放、翻页、大纲展开 | 高频、无意图 |
+| 命令面板 / 设置窗 **打开** | 打开 ≠ 使用 |
+| Markdown 自动保存、每次按键 | 爆炸 |
+| EmbedPDF 标注防抖导出、layout cache hit、逐 region `runTranslate` | 机器回声 |
+| citation hover、公式 dwell 未点开 | 试探不是动作 |
+| 剪贴板复制、Finder / 终端打开 | OS chrome |
+| 错误 toast 原文、Agent 回复正文、检索词出站 | 隐私 |
+| 主题预览 hover、列宽拖拽 | 无分析价值 |
+
+判定口诀：**有明确提交/成功边界、一天不会上百次、对「习惯」或「这功能有没有人用」有增量** 才进 Registry。
 
 ## 4. 存储
 
-### 4.1 为什么另起 `.agentero/usage.sqlite`
+### 4.1 `$XDG_DATA_HOME/agentero/usage.sqlite`
 
-不放进 `catalog.sqlite`，两个理由：
+**P0 已落地。** 不放进 Vault、也不放进 `catalog.sqlite`：远程会镜像 catalog；使用记录是设备本地事实。一台机器上的多个 Vault 用 `vault` 列（绝对路径）区分。
 
-1. **远程 Vault 会整文件镜像 catalog**（`features/remote/catalog_mirror.rs`，`CATALOG_REL = ".agentero/catalog.sqlite"`）。高频行为写入会把镜像推送变成持续抖动，甚至让「谁的 catalog 更新」判定失真。
-2. **使用记录是设备本地事实**。同一 Vault 在台式机和 iPad 上的阅读节奏不该互相覆盖；合并两台设备的 focus 段也没有语义。
-
-代价是跨库 join，用 `ATTACH catalog.sqlite AS cat` 解决（同目录、同进程，成本可忽略）。
-
-### 4.2 Schema
-
-新建 `src-tauri/src/features/usage/{mod,schema,events,profile,commands}.rs`，`schema.rs` 复用 catalog 的迁移范式（独立的 `schema_meta` + `SCHEMA_VERSION` 从 1 起）。
+路径与命令见 [`../backend/usage.md`](../backend/usage.md)。
 
 ```sql
--- 原始事件，append-only
 CREATE TABLE usage_events (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
-  ts       TEXT    NOT NULL,          -- RFC3339 UTC
+  ts       TEXT    NOT NULL,
   kind     TEXT    NOT NULL,
-  path     TEXT,                      -- vault 相对路径，可空（如 search.query）
+  path     TEXT,
   mode     TEXT,
   dur_ms   INTEGER,
-  extra    TEXT                       -- JSON，低频字段不开新列
+  extra    TEXT                 -- JSON：provider / type / trigger / skill_id 等
 );
 CREATE INDEX idx_usage_events_ts   ON usage_events(ts);
 CREATE INDEX idx_usage_events_path ON usage_events(path, ts);
 CREATE INDEX idx_usage_events_kind ON usage_events(kind, ts);
 
--- 日聚合，画像查询只读这张表
 CREATE TABLE usage_daily (
-  day    TEXT    NOT NULL,            -- 本地日期 YYYY-MM-DD
+  day    TEXT    NOT NULL,
   kind   TEXT    NOT NULL,
   path   TEXT    NOT NULL DEFAULT '',
   count  INTEGER NOT NULL DEFAULT 0,
@@ -122,139 +295,134 @@ CREATE TABLE usage_daily (
 );
 ```
 
-`usage_daily` 在写入事件的同一事务里 upsert（`ON CONFLICT DO UPDATE`），保证聚合与原始一致，画像查询不必扫全表。
+写入事件的同一事务 upsert `usage_daily`。WAL + `busy_timeout` + `foreign_keys`。
 
-同 catalog：WAL、`busy_timeout`、`foreign_keys`。
+P3 再加 `usage_memories`（用户确认过的短句），见 §5.3。
 
-### 4.3 路径重命名
+### 4.2 路径与忽略
 
-`paper_move` 改路径时，catalog 的 `papers.path` 会更新；usage 侧需同步。做法：`usage_rename_path(old, new)` 在 `catalog/commands.rs::paper_move` 成功后调用，`UPDATE usage_events / usage_daily SET path = new WHERE path = old OR path LIKE old || '/%'`。失配的历史事件不清理，画像查询 join 不到 title 时降级只显示路径。
+- `paper_move` 成功后 `usage_rename_path`。
+- 必须忽略：wiki / search / watcher（catalog 故意不忽略；usage 必须忽略）/ remote catalog 镜像。
+- 保留期：事件 180 天；日聚合 2 年。`usage_clear()` + 设置页清除。
 
-### 4.4 需要更新的忽略列表
+## 5. Memory
 
-新增 `.agentero/usage.sqlite` 后必须排除，否则会触发 wiki 重建 / 搜索命中 / watcher 风暴：
+没有第四套「ChatGPT Memory」库。三层：
 
-- `features/vault/tree.rs`（`.agentero` 已整体隐藏，确认即可）
-- `features/wiki/index.rs`
-- `features/search/mod.rs`
-- `features/watcher/mod.rs`（注意：catalog 是**故意不忽略**以触发刷新；usage 必须忽略）
-- `features/remote/catalog_mirror.rs`（确认不会连带镜像）
+| 层 | 是什么 | 持久化 | 注入 |
+|---|---|---|---|
+| 情节 | `usage_events` | usage.sqlite | CLI 按需 |
+| 语义 | `UsageProfile` | 由 daily 算出 | `build_prompt` |
+| 声明 | `agentPersonalPrompt`（已有）+ 可选 `usage_memories` | settings / sqlite | 现有 preference 块 |
+| 工作 | 当前论文 / `@` / 选区 | 会话 | 已有，不动 |
 
-## 5. UsageProfile
+### 5.1 UsageProfile（≤800 tokens）
 
-单个命令 `usage_profile_get(window_days)` 输出紧凑 JSON，目标 **≤800 tokens**（要塞进 prompt）。
+| 字段 | 算法 |
+|---|---|
+| `topPapers` | `Σ dur_ms × 0.5^(age/14)` Top 8 + title/tags |
+| `continueReading` | 未读 + 有 `reading-position`，按最后 focus |
+| `stalled` | 已下载未 open，或 focus < 60s 且 ≥7 天未碰 |
+| `tagAffinity` | catalog tags + 本地 `paper.tag` 事件 |
+| `rhythm` | 3h 桶、日均、本周 vs 上周 |
+| `agentUsage` | workflow 次数 |
+| `toolAffinity` | **新增**：翻译 / 版面 / 批注 / Skill 的频次与近况 |
 
-| 字段 | 含义 | 算法 |
-|---|---|---|
-| `topPapers` | 最投入的 N 篇 | 时间衰减停留时长 `Σ dur_ms × 0.5^(age_days/14)`，取 Top 8，带 title/tags |
-| `continueReading` | 该接着读的 | `is_read=0` 且有 `reading-position` 进度，按最后 focus 时间排序 |
-| `stalled` | 卡住的 | 下载后从未 open，或累计 focus < 60s 且 ≥7 天未碰 |
-| `tagAffinity` | 兴趣分布 | 按 `cat.papers.tags` 聚合衰减时长，归一化 Top 8 |
-| `rhythm` | 节奏 | 活跃时段直方图（3h 桶）、日均时长、本周 vs 上周 |
-| `agentUsage` | Agent 习惯 | 各 workflow 调用次数与占比 |
+`toolAffinity` 示例：
 
-半衰期 14 天：既让「上周在啃的论文」仍占权重，又不让三个月前的旧课题长期霸榜。
+```json
+{
+  "translate": { "selection": 24, "layout": 3, "providerFamily": "free", "targetLang": "zh-CN" },
+  "layout": { "analyzed": 11, "manual": 2, "backend": "onnx" },
+  "marks": { "highlight": 40, "comment": 8, "ask": 12, "visual": 6, "translate": 20 },
+  "skills": { "installed": ["pptx", "frontend-design"], "lastAt": "2026-08-10" }
+}
+```
 
-## 6. Agent 接入：三层，按需取用
+半衰期 14 天。超出 800 tokens 先截 `topPapers`，再截 `skills.installed`。
 
-### 6.1 被动注入（默认，轻量）
+### 5.2 注入语气
 
-`src-tauri/src/features/agent/prompts.rs` 的 `build_prompt` 是唯一 prompt 组装点。在现有 `personal_preference_directive()` 旁边加可选块：
+画像是**观察，不是指令**。`agentPersonalPrompt` 仍是「必须遵守」。
 
 ```
 <user_usage_profile>
 近 30 天：日均 42min，活跃 21:00-24:00。
-主要方向（时长占比）：diffusion 38% · 3D 22% · RL 11%
-在读：[[Flow Matching]]（p12/24，2 天前）· [[DiT]]（p3/18，昨天）
+主要方向：diffusion 38% · 3D 22%
+在读：[[Flow Matching]]（p12/24，2 天前）
+工具：划词翻译较多（免费 MT → zh-CN）；视觉批注 6；提问 12
+已装 Skill：pptx、frontend-design
 搁置：[[NeRF Survey]]（下载 12 天未打开）
 </user_usage_profile>
 ```
 
-注入策略按 workflow 区分：
+| workflow | 注入 |
+|---|---|
+| `summary` / `qa` / `free` / `related_work` | 是 |
+| `paper_reader` | 否（忠于原文） |
+| ACP slash（`isAcpCommand`） | 否（本就跳过 envelope） |
 
-| workflow | 注入 | 理由 |
-|---|---|---|
-| `summary` | ✅ | 摘要可按用户方向调整侧重 |
-| `qa` / `free` | ✅ | 通用对话最需要背景 |
-| `related_work` | ✅ | 相关工作应贴合已读范围 |
-| `paper_reader` | ❌ | 精读要忠于原文，习惯 context 是噪声 |
-
-### 6.2 主动查询（详细）
-
-给 headless CLI 加 `usage` 子命令组（`cli/src/commands/usage.rs`，与 `paper.rs` / `mark.rs` 同构，沿用 `--vault` / `--json`）：
+细节走 CLI，不塞 prompt：
 
 ```bash
 agentero usage summary --days 30 --json
 agentero usage top --days 30 --limit 20 --json
 agentero usage timeline --path papers/xxx --json
+agentero usage tools --days 30 --json
 ```
 
-BYOA Agent 本来就有 shell，这条路**不需要新增 MCP 或 Host command**，与既有 `agentero-cli` skill 的用法一致。被动注入给概览，需要细节时 Agent 自己拉。
+### 5.3 声明式记忆（P3）
 
-### 6.3 Skill 编排
+周回顾 skill **提议**短句 → 设置页确认 → `usage_memories`。不自动写入。可删。关本地开关则不注入。
 
-新增内置 vault skill `templates/vault/.agents/skills/usage-reviewer/SKILL.md`（frontmatter `version: 1`），约定：
+## 6. Agent 接入
 
-- 何时该跑 `agentero usage summary`，何时只用注入的概览
-- 周回顾输出格式（写 `notes/Reviews/YYYY-WW.md`，双链指向论文）
-- 推荐输出必须给「因为你在读 X」的理由，不许凭空推荐库外论文
-- 不许改写用户手写笔记，只在 `Reviews/` 下新建
+与 §5.2 相同：`prompts.rs::build_prompt` 在 `personal_preference_directive` 旁加可选块；Host 在组装时读 Profile（不要让前端把画像塞进 `personalPrompt`）。
 
-同步 `src-tauri/src/features/vault/mod.rs` 的 seed 常量列表（`include_str!` + `ensure_vault` 时补齐）。
+内置 skill `templates/vault/.agents/skills/usage-reviewer/SKILL.md`（`version: 1`）：何时用 CLI、周回顾写 `notes/Reviews/YYYY-WW.md`、推荐必须给「因为你在读 X」、不改用户手写笔记。
 
 ## 7. 上层功能
 
-### 7.1 继续阅读（纯本地，零 Agent 成本）
-
-论文库顶部一行卡片：`continueReading` 前 3 + `stalled` 前 2。点击直接 `openPaper` 并跳到 `reading-position` 的页码。这是投入产出比最高的一项，先做。
-
-### 7.2 周回顾
-
-手动触发（论文库工具栏 / 命令面板）→ 以 `usage-reviewer` skill 跑一次 → 产出 `notes/Reviews/YYYY-WW.md`：本周读了什么、时长分布、新增标签、卡住的论文、下周建议。不做自动定时触发（避免无声消耗 Agent 额度）。
-
-### 7.3 推荐（v0，无 embedding）
-
-候选集三路并集，全部来自**本地已有信号**：
-
-1. `topPapers` 在双链图中的邻居（`graph_get_graph`）
-2. 与 `tagAffinity` 高分标签同标签的未读论文
-3. `topPapers` 参考文献中已入库的条目（`features/refs`）
-
-排序 `score = 衰减时长贡献 × 标签亲和度 × 未读加成`，去掉已读与近期打开过的。每条附理由。与 [`plaza.md`](plaza.md) 的「论文推荐 v0」是同一件事的库内版本——**plaza 面向库外发现，本节面向库内重拾**，两者共用 `tagAffinity`。
+- **继续阅读**：Library 顶栏 `continueReading` 前 3 + `stalled` 前 2。
+- **周回顾**：手动触发，不自动跑 Agent。
+- **库内推荐 v0**：双链邻居 ∪ 同标签未读 ∪ 已入库参考文献；plaza 管库外。
 
 ## 8. 隐私与开关
 
-- 新增 `AppSettings::usage_tracking_enabled`（`serde(default = "default_true")`）。关闭后**不写库**（不是写了不用）。
-- 使用记录只存本地，不经任何网络通道上报。
-- 保留期 180 天，`ensure_usage` 时 prune `usage_events`；`usage_daily` 保留 2 年（体积极小，支撑年度回顾）。
-- `usage_clear()` 命令 + 设置页「清除使用记录」按钮。
-- `search.query` 存原文（否则推荐无从利用），受同一开关与保留期约束，须在设置页文案与文档中明示。
-- 使用记录**不随远程 Vault 同步**（§4.1），需在 `docs/backend/remote.md` 说明。
+| 开关 | 默认 | 含义 |
+|---|---|---|
+| `usageTrackingEnabled` | true | 写本地、生成画像、注入 Agent |
+| `telemetryEnabled` | true（已有） | 投影到 PostHog |
+
+独立：可「本地 Memory 开、PostHog 关」。关本地则**不写库**。
+
+PostHog 硬约束：无路径、标题、paper id、DOI、检索词、划词/译文/批注正文、Skill URL/名称、Vault 路径。已有 `app started` / `app exited` 保留；新事件用 `object_verb`。
+
+设置 → 隐私：两行开关 +「清除使用记录」；文案写明本地检索词与 Skill id 不出站。
+
+iOS / TestFlight 仍无遥测。debug / 无 key 构建不上报。
 
 ## 9. 分期
 
-| 阶段 | 内容 | 可验证产出 |
+| 阶段 | 内容 | 可验证 |
 |---|---|---|
-| **P0** | `features/usage` + schema + 前端埋点 + 批量上报 + 开关 + prune | `agentero usage timeline --json` 能 dump 出真实事件 |
-| **P1** | `usage_profile_get` + 论文库「继续阅读」卡片 | UI 上能看到该接着读哪篇并跳对页码 |
-| **P2** | `build_prompt` 注入 + CLI `usage summary` / `top` | Agent 回答体现方向偏好；关闭开关后注入消失 |
-| **P3** | `usage-reviewer` skill + 周回顾 + 推荐 v0 | 生成 `Reviews/YYYY-WW.md`；推荐列表带理由 |
-
-P0/P1 完全不依赖 Agent，可独立交付价值；P2 起才涉及 prompt 与额度。
+| **P0** | Registry + `track()` + usage.sqlite + 双开关 + 本节全部事件漏斗 + `Telemetry::capture` | CLI dump 含翻译/版面/Skill/批注；关开关分别停本地 / PostHog；cache hit 与逐 region 翻译不刷屏 |
+| **P1** | Profile（含 `toolAffinity`）+ 继续阅读 | 顶栏能跳对页 |
+| **P2** | `build_prompt` 注入 + CLI `usage` | 问答能提到工具习惯；关本地后注入消失 |
+| **P3** | usage-reviewer、周回顾、推荐、可选 memories | `Reviews/YYYY-WW.md` |
 
 ## 10. 风险
 
 | 风险 | 缓解 |
 |---|---|
-| 埋点散落各处，日后漏埋 | 只在 `openTab` 这一个漏斗埋 open；其余 6 类事件集中在 3 个文件 |
-| focus 计时把挂机算成阅读 | 单段上限 30min；`window blur` 立即结算 |
-| prompt 注入把 context 撑爆 | 画像输出硬上限 ≤800 tokens，超出截断 `topPapers` |
-| 用户觉得被监视 | 设置页显式开关 + 一键清除 + 文档写明本地不上传 |
-| usage.sqlite 触发 watcher 风暴 | §4.4 忽略列表逐项确认 |
-| 与 `plaza.md` 推荐重复实现 | 共用 `tagAffinity`，plaza 管库外、本文管库内 |
+| 漏斗挂错层（`runTranslate` / `saveAnnotationItems`）导致事件爆炸 | 消费方打点；高亮用 id diff；layout 跳过 cache hit |
+| 翻译双记（`translate.selection` + `mark.create`） | 允许，语义不同；Profile 分别统计 |
+| 用户觉得被监视 | 双开关 + 清除 + 文档写明本地 / 出站边界 |
+| prompt 被工具习惯撑爆 | 800 token 硬顶；Skill 列表截断 |
+| usage.sqlite 触发 watcher | §4.2 忽略列表逐项确认 |
+| 与 heatmap 重复 | heatmap 继续只读产物；事件不存坐标 |
 
 ## 11. 文档落点
 
-- 本文（草案）：`docs/development/usage-analytics.md`，登记进 `development/index.md` 与 `mkdocs.yml`
-- 实现后：`docs/backend/usage.md`（schema / 命令 / CLI）+ `docs/frontend/library.md`（继续阅读卡片）
-- 需同步：`docs/backend/data-model.md`（新库与表）、`docs/backend/agent.md`（注入块）、`docs/backend/remote.md`（不同步）、`docs/backend/cli.md`（`usage` 命令组）、`docs/development/roadmap.md` + `todo.md`
+- 本文（草案）：`docs/development/usage-analytics.md`
+- 实现后：`docs/backend/usage.md` + 同步 `telemetry.md` / `data-model.md` / `agent.md` / `cli.md` / `remote.md` / `library.md` / `roadmap.md` + `todo.md`

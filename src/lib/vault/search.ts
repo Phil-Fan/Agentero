@@ -3,6 +3,7 @@
  * Powers the command palette's "In contents" tier (see command-palette.tsx).
  */
 
+import { track } from "@/lib/activity";
 import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
 
@@ -34,9 +35,13 @@ export async function searchVault(opts: {
 	if (!isTauri()) return EMPTY;
 	const query = opts.query.trim();
 	if (!query) return EMPTY;
-	return invokeApi<VaultSearchResult>(
+	const result = await invokeApi<VaultSearchResult>(
 		"vault_search",
 		{ args: { vaultPath: opts.vaultPath, query, limit: opts.limit } },
 		{ fallback: "vault_search failed" },
 	);
+	track("search.query", {
+		extra: { q: query, hits: result.hits.length, truncated: result.truncated },
+	});
+	return result;
 }

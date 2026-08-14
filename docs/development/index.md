@@ -23,7 +23,7 @@
 | [paper-pipeline-orchestration.md](paper-pipeline-orchestration.md) | 打开论文的三条时间轴（T0/T1/T2）、`paper_open_bundle` 聚合命令、内存 Job Center 与五条流水线（下载 / liteparse / 引用 / 图谱 / layout）编排；含 Operation/Job 判定、`auto`/`all` 类函数审计、依赖选型。零 schema 变更 |
 | [paper-behavior-dag.md](paper-behavior-dag.md) | 导入（identifier / Connector / 本地 PDF / BibTeX 四条入口）与打开论文的行为 DAG、现状不合理之处（`PAPER.md` 生成责任在前端、refs 重复 spawn、PDF/TeX 串行）与目标 DAG |
 | [plaza.md](plaza.md) | 广场（Cool Papers / 推荐 / 播客） |
-| [usage-analytics.md](usage-analytics.md) | \#239 使用记录总结：`.agentero/usage.sqlite` 事件与画像、Agent 习惯 context 三层接入、继续阅读 / 周回顾 / 库内推荐 |
+| [usage-analytics.md](usage-analytics.md) | \#239 Activity 总线。P0 存储已落地：XDG `usage.sqlite`（见 [../backend/usage.md](../backend/usage.md)） |
 | [zotero-word-integration.md](zotero-word-integration.md) | 官方 Zotero Word 插件 provider 兼容、文档迁移与平台实现评估 |
 | [mark-cli-roadmap.md](mark-cli-roadmap.md) | \#170 阅读标注**内置进 CLI**（方案/命令面/边界）+ 基础→上层→Skill；与 [CLI 文档](../backend/cli.md) 分发衔接 |
 | [mark-locate-lazy.md](mark-locate-lazy.md) | 文字定位：打开 PDF 再算（惰性，默认主路径） |

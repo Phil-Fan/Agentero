@@ -4,6 +4,7 @@
  */
 
 import i18n from "@/i18n";
+import { track } from "@/lib/activity";
 import {
 	enqueueBackgroundTask,
 	isBackgroundTaskCancelledError,
@@ -115,6 +116,17 @@ export async function lookupSubmit(
 					);
 				}
 
+				for (const paper of result.imported) {
+					const rel = (paper.path || "")
+						.replace(/\\/g, "/")
+						.replace(/^\/+|\/+$/g, "");
+					if (rel) {
+						track("paper.import", {
+							path: rel,
+							extra: { source: inferLookupSource(input) },
+						});
+					}
+				}
 				const first = result.imported[0];
 				if (first) {
 					const paperAbs = first.paperDir
@@ -245,8 +257,18 @@ export async function confirmSkillImport(
 				return installed;
 			},
 		);
-		const installedCount = result.filter((item) => !item.skipped).length;
+		const installed = result.filter((item) => !item.skipped);
+		const installedCount = installed.length;
 		const skippedCount = result.length - installedCount;
+		if (installedCount > 0) {
+			track("skill.install", {
+				extra: {
+					sourceKind: "github",
+					installed: installed.map((item) => item.name),
+					skipped: skippedCount,
+				},
+			});
+		}
 		notifySuccess(
 			i18n.t("sidebar:lookup.skillImportDone", {
 				installed: installedCount,
@@ -256,6 +278,15 @@ export async function confirmSkillImport(
 	} catch (e) {
 		notifyError(e instanceof Error ? e.message : String(e));
 	}
+}
+
+function inferLookupSource(raw: string): string {
+	const text = raw.trim();
+	if (/npx\s+skills|github\.com|skills\.sh/i.test(text)) return "skill";
+	if (/arxiv\.org|^\d{4}\.\d{4,5}(v\d+)?$/i.test(text)) return "arxiv";
+	if (/^10\.\d{4,}/.test(text) || /^doi:/i.test(text)) return "doi";
+	if (/^https?:\/\//i.test(text)) return "url";
+	return "id";
 }
 
 export function cancelSkillImport(): void {

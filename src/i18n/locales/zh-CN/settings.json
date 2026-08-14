@@ -99,6 +99,15 @@
 			"section": "隐私",
 			"telemetry": {
 				"label": "共享匿名使用数据"
+			},
+			"usageTracking": {
+				"label": "记录本地使用活动",
+				"description": "打开、下载、工具操作只写在本机 XDG usage.sqlite，供 Agent 作上下文。"
+			},
+			"clearUsage": {
+				"label": "清除使用记录",
+				"action": "清除",
+				"done": "已清除使用记录"
 			}
 		}
 	},

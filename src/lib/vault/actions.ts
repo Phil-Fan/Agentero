@@ -110,6 +110,9 @@ export async function activateVault(path: string): Promise<void> {
 	}
 	saveVaultPath(path);
 	setVaultPath(path);
+	void import("@/lib/activity").then(({ track }) => {
+		track("vault.open");
+	});
 	setTabs([]);
 	setActiveTabId(null);
 	setTreeSelectedPath(null);

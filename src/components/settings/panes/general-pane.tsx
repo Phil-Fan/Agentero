@@ -7,6 +7,7 @@ import {
 	SettingsRow,
 } from "@/components/settings/settings-layout";
 import type { SettingsHostContext } from "@/components/settings/types";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -16,7 +17,8 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { notifyError } from "@/lib/core/notify";
+import { clearUsage } from "@/lib/activity";
+import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import {
 	PAPER_TREE_LABEL_MODES,
@@ -192,6 +194,37 @@ function PrivacySettingsBlock({
 						checked={settings.telemetryEnabled}
 						onCheckedChange={(v) => patch({ telemetryEnabled: v })}
 					/>
+				</SettingsRow>
+				<SettingsRow
+					label={t("general.privacy.usageTracking.label")}
+					description={t("general.privacy.usageTracking.description")}
+					htmlFor="usage-tracking-enabled"
+				>
+					<Switch
+						id="usage-tracking-enabled"
+						checked={settings.usageTrackingEnabled}
+						onCheckedChange={(v) => patch({ usageTrackingEnabled: v })}
+					/>
+				</SettingsRow>
+				<SettingsRow label={t("general.privacy.clearUsage.label")}>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onClick={() => {
+							void clearUsage()
+								.then(() => notifySuccess(t("general.privacy.clearUsage.done")))
+								.catch((e) =>
+									notifyError(
+										e instanceof Error
+											? e.message
+											: t("general.privacy.clearUsage.done"),
+									),
+								);
+						}}
+					>
+						{t("general.privacy.clearUsage.action")}
+					</Button>
 				</SettingsRow>
 			</SettingsGroup>
 		</div>

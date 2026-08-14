@@ -535,6 +535,15 @@ export async function runOnce(request: {
 		language && language !== "auto" ? language : undefined;
 	const personalRaw = request.personalPrompt ?? settings.agentPersonalPrompt;
 	const personalPrompt = personalRaw?.trim() ? personalRaw.trim() : undefined;
+	void import("@/lib/activity").then(({ track }) => {
+		track("agent.run", {
+			path: request.target,
+			extra: {
+				workflow: request.workflow ?? "free",
+				skillCount: request.skillIds?.length ?? 0,
+			},
+		});
+	});
 	return invokeAgentApi("agent_run_once", {
 		request: {
 			agentId: request.agentId,

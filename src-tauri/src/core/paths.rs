@@ -5,7 +5,7 @@
 //! |------|-----|----------------|----------|
 //! | config | `$XDG_CONFIG_HOME` | `~/.config` | `agentero/settings.json`, `agents.json` |
 //! | cache | `$XDG_CACHE_HOME` | `~/.cache` | remote work mirrors, PDF blobs |
-//! | data | `$XDG_DATA_HOME` | `~/.local/share` | reserved |
+//! | data | `$XDG_DATA_HOME` | `~/.local/share` | `usage.sqlite` (device-local activity) |
 //! | state | `$XDG_STATE_HOME` | `~/.local/state` | reserved |
 //!
 //! On Windows and iOS, when XDG env vars are unset, falls back to the platform
@@ -50,9 +50,34 @@ pub fn agentero_config_dir() -> PathBuf {
     xdg_config_home().join("agentero")
 }
 
+/// Resolve XDG data home (`$XDG_DATA_HOME` or platform default).
+pub fn xdg_data_home() -> PathBuf {
+    if let Some(p) = env_dir("XDG_DATA_HOME") {
+        return p;
+    }
+    #[cfg(any(windows, target_os = "ios"))]
+    {
+        dirs::data_dir().unwrap_or_else(|| PathBuf::from("."))
+    }
+    #[cfg(not(any(windows, target_os = "ios")))]
+    {
+        home_dir().join(".local").join("share")
+    }
+}
+
 /// `$XDG_CACHE_HOME/agentero` (created on demand by callers).
 pub fn agentero_cache_dir() -> PathBuf {
     xdg_cache_home().join("agentero")
+}
+
+/// `$XDG_DATA_HOME/agentero` (created on demand by callers).
+pub fn agentero_data_dir() -> PathBuf {
+    xdg_data_home().join("agentero")
+}
+
+/// Device-local activity log: `…/agentero/usage.sqlite`.
+pub fn usage_db_path() -> PathBuf {
+    agentero_data_dir().join("usage.sqlite")
 }
 
 /// ONNX / other large assets: `$XDG_CACHE_HOME/agentero/models`.
@@ -160,5 +185,18 @@ mod tests {
         let p = agentero_models_dir();
         assert_eq!(p.file_name().and_then(|s| s.to_str()), Some("models"));
         assert_eq!(p.parent(), Some(agentero_cache_dir().as_path()));
+    }
+
+    #[test]
+    fn data_dir_ends_with_agentero() {
+        let p = agentero_data_dir();
+        assert_eq!(p.file_name().and_then(|s| s.to_str()), Some("agentero"));
+    }
+
+    #[test]
+    fn usage_db_under_data_dir() {
+        let p = usage_db_path();
+        assert_eq!(p.file_name().and_then(|s| s.to_str()), Some("usage.sqlite"));
+        assert_eq!(p.parent(), Some(agentero_data_dir().as_path()));
     }
 }

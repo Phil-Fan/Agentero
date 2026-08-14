@@ -99,6 +99,15 @@
 			"section": "Privacy",
 			"telemetry": {
 				"label": "Share anonymous usage data"
+			},
+			"usageTracking": {
+				"label": "Record local activity",
+				"description": "Paper opens, downloads, and tool use stay on this device (XDG usage.sqlite) for Agent context."
+			},
+			"clearUsage": {
+				"label": "Clear activity history",
+				"action": "Clear",
+				"done": "Activity history cleared"
 			}
 		}
 	},

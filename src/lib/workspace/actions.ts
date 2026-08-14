@@ -6,6 +6,7 @@
  */
 
 import i18n from "@/i18n";
+import { notePaperFocus, track } from "@/lib/activity";
 import { notifyError, notifyUndo, notifyWarning } from "@/lib/core/notify";
 import { closeTopOverlay } from "@/lib/core/overlay-stack";
 import { isTauri } from "@/lib/core/tauri";
@@ -144,9 +145,14 @@ export function handleActivePanelChange(panelId: string | null): void {
 			});
 		},
 	);
-	if (!panelId || readingSync) return;
+	if (!panelId || readingSync) {
+		return;
+	}
 	const tab = activeTab;
 	if (!tab) return;
+	if (!isLibraryVirtualPath(tab.path) && !isTrashVirtualPath(tab.path)) {
+		notePaperFocus(tab.path);
+	}
 
 	if (isPaperContentTab(tab) && tab.notesPath) {
 		const notesId = tabIdForPath(tab.notesPath);
@@ -311,6 +317,14 @@ export function openTab(
 		if (res.didDownloadAssets && vault) {
 			await refreshTree(vault, { quiet: true });
 		}
+		if (!isLibraryVirtualPath(path) && !isTrashVirtualPath(path)) {
+			if (res.kind === "paper" && (res.mode === "pdf" || res.mode === "html")) {
+				track("paper.open", { path, mode: res.mode });
+			} else if (res.kind === "paper" || res.kind === "file") {
+				track("note.open", { path, mode: res.mode });
+			}
+			notePaperFocus(path);
+		}
 	})();
 }
 
@@ -322,6 +336,10 @@ export function openTab(
 export function closeTab(id: string): void {
 	// Resolve pair before setState so Strict Mode double-invoke is stable.
 	const idsToClose = readingPairCloseIds(getTabs(), id);
+	const active = getActiveTabId();
+	if (active && idsToClose.includes(active)) {
+		notePaperFocus(null);
+	}
 
 	setTabs((prev) => {
 		let next = prev;

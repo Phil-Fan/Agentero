@@ -137,6 +137,11 @@ export type AppSettings = {
 	 */
 	telemetryEnabled: boolean;
 	/**
+	 * Local activity log (paper opens, downloads, Agent runs, …) written to
+	 * XDG `usage.sqlite`. Default **on**. Off = do not write.
+	 */
+	usageTrackingEnabled: boolean;
+	/**
 	 * First-run setup wizard completed (welcome → theme → agent →
 	 * translate/layout → create vault / Zotero import). `false` shows the
 	 * onboarding overlay on the main window for fresh installs.

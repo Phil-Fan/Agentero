@@ -144,6 +144,9 @@ function OnboardingDialog() {
 
 	const finish = () => {
 		patch({ onboardingDone: true });
+		void import("@/lib/activity").then(({ track }) => {
+			track("onboarding.complete");
+		});
 		closeOnboarding();
 	};
 

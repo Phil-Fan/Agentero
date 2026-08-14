@@ -336,6 +336,9 @@ function normalizePartial(
 	if (typeof parsed.telemetryEnabled !== "boolean") {
 		merged.telemetryEnabled = DEFAULT_SETTINGS.telemetryEnabled;
 	}
+	if (typeof parsed.usageTrackingEnabled !== "boolean") {
+		merged.usageTrackingEnabled = DEFAULT_SETTINGS.usageTrackingEnabled;
+	}
 	if (typeof parsed.onboardingDone !== "boolean") {
 		merged.onboardingDone = DEFAULT_SETTINGS.onboardingDone;
 	}

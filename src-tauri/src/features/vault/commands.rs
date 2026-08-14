@@ -194,7 +194,14 @@ pub fn wiki_move(
                 .map_err(|error| error.to_string())
         },
     ) {
-        Ok(result) => ApiResult::ok(result),
+        Ok(result) => {
+            crate::features::usage::events::rename_path_best_effort(
+                args.vault_path.trim(),
+                &args.from_rel,
+                &args.to_rel,
+            );
+            ApiResult::ok(result)
+        }
         Err(error) => map_err(AppError::message(error.to_string())),
     }
 }

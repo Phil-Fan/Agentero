@@ -361,6 +361,9 @@ export async function setPaperIsRead(
 				fallback: i18n.t("sidebar:fileTree.readMarkFailed"),
 			},
 		);
+		void import("@/lib/activity").then(({ track }) => {
+			track("paper.read", { path, extra: { isRead } });
+		});
 		return withNormalizedTags(paper);
 	}
 	const paper = await invokeApi<PaperMetadata>(
@@ -372,6 +375,9 @@ export async function setPaperIsRead(
 			fallback: i18n.t("sidebar:fileTree.readMarkFailed"),
 		},
 	);
+	void import("@/lib/activity").then(({ track }) => {
+		track("paper.read", { path, extra: { isRead } });
+	});
 	return withNormalizedTags(paper);
 }
 

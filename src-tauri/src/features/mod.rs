@@ -42,6 +42,7 @@ pub mod telemetry;
 pub mod terminal;
 pub mod translate;
 pub mod trash;
+pub mod usage;
 pub mod vault;
 #[cfg(feature = "desktop")]
 pub mod watcher;

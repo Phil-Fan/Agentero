@@ -102,6 +102,9 @@ pub struct AppSettings {
     /// PostHog product analytics opt-out (applies from the next launch).
     #[serde(default = "default_true")]
     pub telemetry_enabled: bool,
+    /// Local activity log (XDG `usage.sqlite`). Off = do not write.
+    #[serde(default = "default_true")]
+    pub usage_tracking_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -230,6 +233,7 @@ impl Default for AppSettings {
             layout: LayoutSettings::default(),
             export_watermark_enabled: false,
             telemetry_enabled: default_true(),
+            usage_tracking_enabled: default_true(),
         }
     }
 }
