@@ -75,8 +75,14 @@ import {
 } from "@/lib/wiki/navigation";
 
 export type MarkdownEditorProps = {
-	/** Initial Markdown content for the open file. The component reseeds on remount (key). */
+	/** Initial Markdown content for the open file. Reloaded in place when `reloadKey` bumps. */
 	initialMarkdown: string;
+	/**
+	 * Bump to reload `initialMarkdown` in place (external/Agent disk write the
+	 * tab layer already accepted). Unlike a remount, plugins, DOM and scroll
+	 * position survive the reload.
+	 */
+	reloadKey?: number;
 	/**
 	 * Absolute path this editor instance persists to. Captured for the lifetime of the
 	 * instance (parent keys the editor per file), so autosave and unmount-flush always
@@ -140,6 +146,7 @@ function hasEnoughHeadings(children: readonly unknown[]): boolean {
 
 export function MarkdownEditor({
 	initialMarkdown,
+	reloadKey,
 	filePath,
 	readOnly,
 	placeholder,
@@ -292,6 +299,7 @@ export function MarkdownEditor({
 		serialize,
 		noteDocumentChanged,
 		saveNow,
+		applyExternalMarkdown,
 		savedRef,
 		dirtyRef,
 	} = useMarkdownPersistence({
@@ -304,6 +312,25 @@ export function MarkdownEditor({
 		filePathRef,
 		onAssetsChangedRef,
 	});
+
+	/**
+	 * External disk change accepted by the tab layer (applyDiskChange / Agent
+	 * write): the parent bumps `reloadKey` alongside `initialMarkdown`. Reload
+	 * in place — a keyed remount would re-init every plugin, re-deserialize the
+	 * whole document and drop scroll/caret on each streamed Agent write.
+	 */
+	const reloadKeyRef = useRef(reloadKey);
+	useEffect(() => {
+		if (reloadKey === undefined || reloadKey === reloadKeyRef.current) return;
+		reloadKeyRef.current = reloadKey;
+		const container = editorContainerRef.current;
+		const scrollTop = container?.scrollTop ?? 0;
+		if (!applyExternalMarkdown(initialMarkdown)) return;
+		window.requestAnimationFrame(() => {
+			const el = editorContainerRef.current;
+			if (el) el.scrollTop = scrollTop;
+		});
+	}, [reloadKey, initialMarkdown, applyExternalMarkdown]);
 
 	const {
 		wikiCompletionDraft,

@@ -167,7 +167,7 @@ export function readingPairCloseIds(tabs: DocTab[], id: string): string[] {
 	return [companion.id, id];
 }
 
-/** Reseed an open paper tab's NOTES editor (bumps notesKey to remount). */
+/** Reseed an open paper tab's NOTES editor (bumps notesKey to reload in place). */
 export function reseedNotesTab(
 	prev: DocTab[],
 	paperDir: string,
@@ -188,7 +188,7 @@ export function reseedNotesTab(
 	});
 }
 
-/** Reseed an open plain-Markdown tab (bumps seedKey to remount). */
+/** Reseed an open plain-Markdown tab (bumps seedKey to reload in place). */
 export function reseedMarkdownTab(
 	prev: DocTab[],
 	absPath: string,

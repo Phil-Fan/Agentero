@@ -9,6 +9,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
 import {
 	frontmatterInterior,
 	joinFrontmatter,
@@ -52,6 +53,13 @@ export type MarkdownPersistence = {
 	noteDocumentChanged: () => void;
 	/** Flush the pending debounce and write immediately. */
 	saveNow: () => void;
+	/**
+	 * Replace the whole document in place after an external/Agent disk write.
+	 * Does not remount the editor, does not mark it dirty and does not trigger
+	 * autosave. Returns false when the content matches the current disk
+	 * snapshot (own-write echo) and nothing was reloaded.
+	 */
+	applyExternalMarkdown: (markdown: string) => boolean;
 	/** Content currently believed to be on disk. */
 	savedRef: RefObject<string>;
 	dirtyRef: RefObject<boolean>;
@@ -91,6 +99,14 @@ export function useMarkdownPersistence({
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const persistInFlightRef = useRef<Promise<void> | null>(null);
 	const persistQueuedRef = useRef(false);
+	/**
+	 * True while `applyExternalMarkdown` replaces the document: the resulting
+	 * editor change is disk content, not a user edit, so it must not mark the
+	 * document dirty or schedule autosave.
+	 */
+	const externalReloadRef = useRef(false);
+	/** Bumped by external reloads so an in-flight persist cannot settle stale state. */
+	const reloadGenerationRef = useRef(0);
 	/** Image URL ref-counts; used to GC `./assets/` when an image node is removed. */
 	const imageCountsRef = useRef<Map<string, number> | null>(null);
 	/**
@@ -135,6 +151,7 @@ export function useMarkdownPersistence({
 				}
 				if (!markdown.trim() && lastSaved.trim()) return;
 
+				const generation = reloadGenerationRef.current;
 				let persisted = false;
 				try {
 					persisted = await onPersist(filePath, markdown, lastSaved);
@@ -142,6 +159,9 @@ export function useMarkdownPersistence({
 					// The App owns user-facing persistence errors. Keep this editor
 					// dirty and retain the last disk-confirmed snapshot.
 				}
+				// An external reload replaced the document while this write was in
+				// flight; its snapshot is authoritative, do not settle over it.
+				if (generation !== reloadGenerationRef.current) return;
 				const settlement = settleMarkdownSaveAttempt({
 					attemptedMarkdown: markdown,
 					currentMarkdown: serialize(),
@@ -210,7 +230,7 @@ export function useMarkdownPersistence({
 	}, [editor]);
 
 	const schedulePersist = useCallback(() => {
-		if (readOnly || !readyRef.current) return;
+		if (readOnly || !readyRef.current || externalReloadRef.current) return;
 		if (!dirtyRef.current) {
 			setDirty(true);
 		}
@@ -221,6 +241,48 @@ export function useMarkdownPersistence({
 			persistRef.current();
 		}, CHANGE_DEBOUNCE_MS);
 	}, [readOnly, setDirty]);
+
+	/**
+	 * Reload the whole document from an external/Agent disk write without
+	 * remounting the editor (keeps plugins, DOM and scroll position alive).
+	 * The caller (tab layer) has already decided the disk content wins.
+	 */
+	const applyExternalMarkdown = useCallback(
+		(markdown: string) => {
+			// Own-write echo (autosave advanced the seed): nothing to reload.
+			if (markdown === savedRef.current && !dirtyRef.current) return false;
+			reloadGenerationRef.current += 1;
+			persistQueuedRef.current = false;
+			if (timerRef.current) {
+				clearTimeout(timerRef.current);
+				timerRef.current = null;
+			}
+			const { frontmatter, body } = splitFrontmatter(markdown);
+			frontmatterRef.current = frontmatter;
+			setFrontmatterYaml(frontmatterInterior(frontmatter));
+			externalReloadRef.current = true;
+			try {
+				const value = editor
+					.getApi(MarkdownPlugin)
+					.markdown.deserialize(prepareMarkdownForDeserialize(body || " "));
+				editor.tf.deselect();
+				editor.tf.setValue(value);
+			} finally {
+				// Slate flushes onChange in a microtask; release the guard after it
+				// has run so the reload never marks the document dirty.
+				window.setTimeout(() => {
+					externalReloadRef.current = false;
+				}, 0);
+			}
+			savedRef.current = markdown;
+			setDirty(false);
+			// Re-seed asset ref-counts so the reload does not GC images that only
+			// existed in the replaced value.
+			imageCountsRef.current = collectImageUrlCounts(editor.children);
+			return true;
+		},
+		[editor, setDirty],
+	);
 
 	const onFrontmatterChange = useCallback(
 		(interior: string) => {
@@ -246,6 +308,7 @@ export function useMarkdownPersistence({
 		serialize,
 		noteDocumentChanged: schedulePersist,
 		saveNow,
+		applyExternalMarkdown,
 		savedRef,
 		dirtyRef,
 	};

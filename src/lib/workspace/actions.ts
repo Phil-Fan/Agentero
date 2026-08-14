@@ -760,8 +760,8 @@ export function dirtyVaultPaths(root: string): string[] {
 	return [...dirty];
 }
 
-/** Normalized paths currently being reloaded from disk; suppresses the editor
- * unmount-flush so an external/Agent write is never clobbered by stale
+/** Normalized paths currently being reloaded from disk; suppresses any racing
+ * editor autosave so an external/Agent write is never clobbered by stale
  * in-memory text. */
 const reseedGuard = new Set<string>();
 /** Serialize Markdown saves per absolute path so overlapping editor lifecycles
@@ -771,8 +771,9 @@ const markdownPersistQueues = new Map<string, Promise<boolean>>();
 /**
  * Reload an open editor when its file changed on disk (external editor /
  * Agent). Reseeds only when disk content differs from the current seed —
- * equal content means it was our own autosave. The path is guarded briefly so
- * the remount's unmount-flush cannot overwrite the fresh disk text.
+ * equal content means it was our own autosave. The mounted editor reloads the
+ * new seed in place (no remount); the path is guarded briefly so a racing
+ * autosave cannot overwrite the fresh disk text.
  */
 export async function applyDiskChange(absPath: string): Promise<void> {
 	const norm = normalizeTabPath(absPath);

@@ -31,9 +31,9 @@ export type DocTab = {
 	markdownSeed: string;
 	markdownDirty: boolean;
 	notesDirty: boolean;
-	/** Bump to remount + reseed the center Markdown editor. */
+	/** Bump to reload the center Markdown editor's content in place from `markdownSeed`. */
 	seedKey: number;
-	/** Bump to remount + reseed the NOTES editor. */
+	/** Bump to reload the NOTES editor's content in place from `notesSeed`. */
 	notesKey: number;
 	/** One-shot, monotonic intent consumed by the mounted Markdown editor. */
 	navigationIntent?: { id: number; fragment: LinkFragment };

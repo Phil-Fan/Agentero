@@ -167,13 +167,12 @@ export const DocView = memo(function DocView({
 			<div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-muted/30">
 				<Suspense fallback={<TabLoadingSkeleton />}>
 					<MarkdownEditor
-						key={
-							isNotes
-								? `notes-center-${tab.id}-${tab.notesKey}`
-								: `file-${tab.id}-${tab.seedKey}`
-						}
+						// Stable per-tab key: external disk changes reload in place via
+						// `reloadKey` instead of remounting the whole editor.
+						key={isNotes ? `notes-center-${tab.id}` : `file-${tab.id}`}
 						className="h-full min-h-0"
 						initialMarkdown={isNotes ? tab.notesSeed : tab.markdownSeed}
+						reloadKey={isNotes ? tab.notesKey : tab.seedKey}
 						filePath={
 							isNotes
 								? tab.notesPath
