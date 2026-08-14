@@ -59,11 +59,15 @@ export async function paperRefsList(
 /** Node type for the citation relationship graph (same shape as wiki graph). */
 export type CiteGraphNodeType = "paper" | "note" | "index" | "stub";
 
+/** Role of a node relative to the center paper (neighborhood mode only). */
+export type CiteGraphRole = "center" | "reference" | "citedBy";
+
 export type CiteGraphNode = {
 	id: string;
 	label: string;
 	type: CiteGraphNodeType;
 	path?: string;
+	role?: CiteGraphRole;
 };
 
 export type CiteGraphEdge = {

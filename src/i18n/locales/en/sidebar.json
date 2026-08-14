@@ -230,7 +230,15 @@
 	"graph": {
 		"title": "Citation graph",
 		"loading": "Loading citation graph…",
-		"noEdges": "No citation links yet. Open a paper to parse references, or import more library papers."
+		"noEdges": "No citation links yet. Open a paper to parse references, or import more library papers.",
+		"modeAll": "Switch to full library graph",
+		"modeCenter": "Switch to current paper graph",
+		"legend": {
+			"center": "This paper",
+			"reference": "Cited · in library",
+			"citedBy": "Citing · in library",
+			"external": "Not in library"
+		}
 	},
 	"paperInfo": {
 		"info": "Info",

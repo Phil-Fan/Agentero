@@ -1130,7 +1130,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 #### `paper_refs_graph`
 
-从已有引用 sidecar + catalog `localMatch` 构建**文献引用关系图**（与双链 `graph_get_graph` 分层，边语义不复用）。不解析缺失 sidecar；当前前端只展示全库引用图谱，不再按当前论文构建近邻图。
+从已有引用 sidecar + catalog `localMatch` 构建**文献引用关系图**（与双链 `graph_get_graph` 分层，边语义不复用）。不解析缺失 sidecar。支持全库图与当前论文近邻图两种模式（前端默认近邻，可切换全库）。
 
 - **参数**（`args`）：
 
@@ -1139,7 +1139,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     vaultPath: string;
     /** 论文文件夹或其中文件；省略 / 空 = 全库库内引用边 */
     center?: string | null;
-    /** 库内边无向 BFS 跳数；默认 1。全图时忽略 */
+    /** 近邻深度；目前钳制为 1（直接引用）。全图时忽略 */
     depth?: number | null;
   }
   ```
@@ -1149,10 +1149,11 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   ```ts
   type CiteGraphResponse = {
     nodes: Array<{
-      id: string;           // 库内 paper path，或 stub:doi:… / stub:arxiv:… / stub:title:… / stub:cite-…
+      id: string;           // 库内 paper path，或 stub:{center}#{citationId}
       label: string;        // catalog title 或引用标题/编号
       type: "paper" | "stub" | "note" | "index";
       path?: string;        // 仅 paper：Vault 相对路径
+      role?: "center" | "reference" | "citedBy"; // 仅近邻模式；全图无
     }>;
     edges: Array<{
       id: string;
@@ -1166,9 +1167,9 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   ```
 
 - **行为**
-  - **邻近**：当前论文的全部出边（含未入库 stub）+ 经 `localMatch` 的库内边无向 BFS 至多 `depth` 跳（含被引）。
-  - **全图**：仅库内 `localMatch` 边；节点为参与至少一条边的 paper；不含 stub。
-  - 中心路径可传 `papers/…/NOTES.md` 等，Host 归一到 catalog paper folder。
+  - **近邻**（`center` 非空）：中心论文（`role: center`）+ 全部出边——`localMatch` 命中的库内论文（`role: reference`）与未入库引用（`stub` 节点，label 取引用标题/key）——加上入边：其他论文 sidecar `localMatch` 指向中心的库内论文（`role: citedBy`）。互引时先到先得，保留 `reference` 角色。
+  - **全图**：仅库内 `localMatch` 边；节点为参与至少一条边的 paper；不含 stub、无 role。
+  - 中心路径可传 `papers/…/NOTES.md` 等，Host 逐级归一到 catalog paper folder；不在 catalog 中报错。
 
 ### 3.6 论文
 
@@ -1673,8 +1674,8 @@ interface UninstallInfo {
 {
   session_id: string;
   prompt: string;
-  workflow?: 'summary' | 'qa' | 'related_work' | 'free'; // 默认 'free'
-  target?: string; // workflow 为 summary/qa/related_work 时的目标文件路径
+  workflow?: 'summary' | 'qa' | 'related_work' | 'paper_reader' | 'translate' | 'free'; // 默认 'free'
+  target?: string; // workflow 为 summary/qa/related_work/paper_reader 时的目标文件路径
   stream?: boolean; // 默认 true
   write_target?: string; // 可选：输出写入目标文件相对路径，需用户确认
 }

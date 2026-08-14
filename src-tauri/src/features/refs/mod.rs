@@ -420,6 +420,18 @@ pub enum CiteGraphNodeType {
     Stub,
 }
 
+/// Role of a node relative to the center paper (neighborhood mode only).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CiteGraphRole {
+    /// The paper the neighborhood is built around.
+    Center,
+    /// Cited by the center paper.
+    Reference,
+    /// Library paper that cites the center paper.
+    CitedBy,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CiteGraphNode {
@@ -430,6 +442,9 @@ pub struct CiteGraphNode {
     pub node_type: CiteGraphNodeType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    /// Neighborhood role; absent in full-library mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<CiteGraphRole>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -458,18 +473,20 @@ pub struct CiteGraphResponse {
 ///
 /// - **Full graph** (`center = None`): library-local `cites` edges only
 ///   (papers whose references match other catalog papers via `localMatch`).
-/// - **Neighborhood** (`center = Some`): direct outgoing citations (including
-///   unresolved stubs) plus undirected BFS through library-local edges up to
-///   `depth` hops (default 1).
+/// - **Neighborhood** (`center = Some`): the center paper plus its direct
+///   outgoing citations (library matches with `role: reference`, unmatched
+///   citations as `stub` nodes) and incoming citations (library papers whose
+///   sidecars match the center, `role: citedBy`). `depth` is currently
+///   clamped to 1 (direct citations only).
 ///
 /// Does not parse missing sidecars — callers that want fresh center data should
 /// run `paper_refs_parse` first. Missing sidecars simply contribute no edges.
 pub fn build_citation_graph(
     vault: &Path,
-    _center: Option<&str>,
-    _depth: Option<u32>,
+    center: Option<&str>,
+    depth: Option<u32>,
 ) -> Result<CiteGraphResponse, AppError> {
-    let depth = _depth.unwrap_or(1).max(1);
+    let depth = depth.unwrap_or(1).max(1);
     let catalog = papers::list_all(vault).unwrap_or_default();
     let by_path: HashMap<String, &PaperRecord> =
         catalog.iter().map(|r| (r.path.clone(), r)).collect();
@@ -504,6 +521,12 @@ pub fn build_citation_graph(
     lib_edges.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
     lib_edges.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
 
+    if let Some(hint) = center {
+        let center_path = resolve_center_path(&by_path, hint)
+            .ok_or_else(|| AppError::message("center paper not found in catalog"))?;
+        return build_neighborhood(vault, &by_path, &lib_edges, &center_path, depth);
+    }
+
     // Full graph: only library papers that participate in at least one edge.
     let mut keep_nodes: HashSet<String> = HashSet::new();
     for (s, t, _) in &lib_edges {
@@ -513,24 +536,12 @@ pub fn build_citation_graph(
 
     let mut nodes: Vec<CiteGraphNode> = keep_nodes
         .iter()
-        .map(|id| {
-            let label = by_path
-                .get(id)
-                .map(|r| {
-                    let t = r.title.trim();
-                    if t.is_empty() {
-                        paper_folder_label(id)
-                    } else {
-                        t.to_string()
-                    }
-                })
-                .unwrap_or_else(|| paper_folder_label(id));
-            CiteGraphNode {
-                id: id.clone(),
-                label,
-                node_type: CiteGraphNodeType::Paper,
-                path: Some(id.clone()),
-            }
+        .map(|id| CiteGraphNode {
+            id: id.clone(),
+            label: paper_label(&by_path, id),
+            node_type: CiteGraphNodeType::Paper,
+            path: Some(id.clone()),
+            role: None,
         })
         .collect();
     nodes.sort_by(|a, b| a.id.cmp(&b.id));
@@ -552,6 +563,164 @@ pub fn build_citation_graph(
         center: None,
         depth,
     })
+}
+
+/// Neighborhood around one paper: direct outgoing citations (library papers
+/// plus unresolved stubs) and incoming citations from library papers.
+fn build_neighborhood(
+    vault: &Path,
+    by_path: &HashMap<String, &PaperRecord>,
+    lib_edges: &[(String, String, Option<String>)],
+    center: &str,
+    depth: u32,
+) -> Result<CiteGraphResponse, AppError> {
+    // Insert-order-preserving node set; the first role wins (a mutual citation
+    // keeps its outgoing "reference" role).
+    let mut nodes: Vec<CiteGraphNode> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+
+    push_node(
+        CiteGraphNode {
+            id: center.to_string(),
+            label: paper_label(by_path, center),
+            node_type: CiteGraphNodeType::Paper,
+            path: Some(center.to_string()),
+            role: Some(CiteGraphRole::Center),
+        },
+        &mut nodes,
+        &mut seen,
+    );
+
+    let mut edges: Vec<(String, String, Option<String>)> = Vec::new();
+
+    // Outgoing: the center's own references (sidecar may be absent).
+    let sidecar_path = vault.join(center).join("source").join(SIDECAR_FILE);
+    if let Some(sidecar) = read_sidecar(&sidecar_path) {
+        for cite in &sidecar.citations {
+            let raw_hint = cite
+                .display
+                .clone()
+                .or_else(|| cite.raw_key.clone())
+                .or_else(|| cite.metadata.title.clone());
+            let matched = cite.local_match.as_ref().and_then(|m| {
+                let target = m.paper_path.trim().trim_end_matches('/').replace('\\', "/");
+                if target.is_empty() || target == center || !by_path.contains_key(&target) {
+                    None
+                } else {
+                    Some(target)
+                }
+            });
+            if let Some(target) = matched {
+                push_node(
+                    CiteGraphNode {
+                        id: target.clone(),
+                        label: paper_label(by_path, &target),
+                        node_type: CiteGraphNodeType::Paper,
+                        path: Some(target.clone()),
+                        role: Some(CiteGraphRole::Reference),
+                    },
+                    &mut nodes,
+                    &mut seen,
+                );
+                edges.push((center.to_string(), target, raw_hint));
+            } else {
+                let id = format!("stub:{center}#{}", cite.id);
+                let label = cite
+                    .metadata
+                    .title
+                    .clone()
+                    .filter(|t| !t.trim().is_empty())
+                    .or_else(|| cite.raw_key.clone())
+                    .unwrap_or_else(|| cite.id.clone());
+                push_node(
+                    CiteGraphNode {
+                        id: id.clone(),
+                        label,
+                        node_type: CiteGraphNodeType::Stub,
+                        path: None,
+                        role: None,
+                    },
+                    &mut nodes,
+                    &mut seen,
+                );
+                edges.push((center.to_string(), id, raw_hint));
+            }
+        }
+    }
+
+    // Incoming: library papers whose sidecars match the center.
+    for (s, t, raw) in lib_edges {
+        if t != center || s == center {
+            continue;
+        }
+        push_node(
+            CiteGraphNode {
+                id: s.clone(),
+                label: paper_label(by_path, s),
+                node_type: CiteGraphNodeType::Paper,
+                path: Some(s.clone()),
+                role: Some(CiteGraphRole::CitedBy),
+            },
+            &mut nodes,
+            &mut seen,
+        );
+        edges.push((s.clone(), center.to_string(), raw.clone()));
+    }
+
+    edges.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
+    edges.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
+    let edges: Vec<CiteGraphEdge> = edges
+        .into_iter()
+        .enumerate()
+        .map(|(i, (s, t, raw))| CiteGraphEdge {
+            id: format!("cites{i}:{s}->{t}"),
+            source: s,
+            target: t,
+            target_raw: raw,
+        })
+        .collect();
+
+    nodes.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(CiteGraphResponse {
+        nodes,
+        edges,
+        center: Some(center.to_string()),
+        depth: depth.min(1),
+    })
+}
+
+/// Map a center hint (paper folder or any file under it) to a catalog path.
+fn resolve_center_path(by_path: &HashMap<String, &PaperRecord>, hint: &str) -> Option<String> {
+    let rel = crate::core::fs::sanitize_vault_rel(hint).ok()?;
+    let mut cur = rel.as_str();
+    loop {
+        if by_path.contains_key(cur) {
+            return Some(cur.to_string());
+        }
+        let i = cur.rfind('/')?;
+        cur = &cur[..i];
+    }
+}
+
+/// Append a node unless its id was already seen (first role wins).
+fn push_node(node: CiteGraphNode, nodes: &mut Vec<CiteGraphNode>, seen: &mut HashSet<String>) {
+    if seen.insert(node.id.clone()) {
+        nodes.push(node);
+    }
+}
+
+fn paper_label(by_path: &HashMap<String, &PaperRecord>, id: &str) -> String {
+    by_path
+        .get(id)
+        .map(|r| {
+            let t = r.title.trim();
+            if t.is_empty() {
+                paper_folder_label(id)
+            } else {
+                t.to_string()
+            }
+        })
+        .unwrap_or_else(|| paper_folder_label(id))
 }
 
 fn paper_folder_label(path: &str) -> String {
@@ -1209,17 +1378,89 @@ K.~He.
         )
         .unwrap();
 
+        // Third paper cites demo → incoming (citedBy) edge for the neighborhood.
+        papers::upsert_paper(
+            &vault,
+            &test_paper("papers/follower", "follower", "Follower Paper", None),
+        )
+        .unwrap();
+        let follower_sidecar = CiteSidecar {
+            schema_version: SCHEMA_VERSION,
+            source: CiteSource {
+                mode: "test".into(),
+                generated_at: "2020-01-01T00:00:00Z".into(),
+                fingerprint: "test".into(),
+            },
+            citations: vec![Citation {
+                id: "cite-demo".into(),
+                raw_key: Some("demo2020".into()),
+                display: Some("[1]".into()),
+                raw: None,
+                metadata: CitationMeta {
+                    title: Some("Demo Paper".into()),
+                    ..Default::default()
+                },
+                local_match: Some(LocalMatch {
+                    paper_path: "papers/demo".into(),
+                    match_by: "title".into(),
+                }),
+                source: "test".into(),
+                status: "resolved".into(),
+            }],
+            messages: vec![],
+        };
+        fs::create_dir_all(vault.join("papers/follower/source")).unwrap();
+        write_sidecar(
+            &vault.join("papers/follower/source").join(SIDECAR_FILE),
+            &follower_sidecar,
+        )
+        .unwrap();
+
         let full = build_citation_graph(&vault, None, None).unwrap();
         assert!(full.center.is_none());
-        // Full graph only includes library-local edges (no stubs).
+        // Full graph only includes library-local edges (no stubs, no roles).
         assert!(full
             .nodes
             .iter()
-            .all(|n| n.node_type == CiteGraphNodeType::Paper));
+            .all(|n| n.node_type == CiteGraphNodeType::Paper && n.role.is_none()));
         assert!(full
             .edges
             .iter()
             .any(|e| { e.source == "papers/demo" && e.target == "papers/vaswani" }));
+
+        // Neighborhood around demo (file hint resolves to the paper folder).
+        let near = build_citation_graph(&vault, Some("papers/demo/NOTES.md"), None).unwrap();
+        assert_eq!(near.center.as_deref(), Some("papers/demo"));
+        let role_of = |id: &str| {
+            near.nodes
+                .iter()
+                .find(|n| n.id == id)
+                .unwrap_or_else(|| panic!("missing node {id}"))
+                .role
+        };
+        assert_eq!(role_of("papers/demo"), Some(CiteGraphRole::Center));
+        assert_eq!(role_of("papers/vaswani"), Some(CiteGraphRole::Reference));
+        assert_eq!(role_of("papers/follower"), Some(CiteGraphRole::CitedBy));
+        let stub = near
+            .nodes
+            .iter()
+            .find(|n| n.node_type == CiteGraphNodeType::Stub)
+            .expect("unresolved citation should appear as stub node");
+        assert_eq!(stub.id, "stub:papers/demo#cite-he");
+        assert_eq!(stub.label, "Deep Residual Learning");
+        assert!(stub.role.is_none());
+        assert!(near
+            .edges
+            .iter()
+            .any(|e| e.source == "papers/demo" && e.target == "papers/vaswani"));
+        assert!(near
+            .edges
+            .iter()
+            .any(|e| e.source == "papers/demo" && e.target == stub.id));
+        assert!(near
+            .edges
+            .iter()
+            .any(|e| e.source == "papers/follower" && e.target == "papers/demo"));
 
         let _ = fs::remove_dir_all(&vault);
     }

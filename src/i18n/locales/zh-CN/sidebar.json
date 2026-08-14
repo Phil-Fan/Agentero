@@ -230,7 +230,15 @@
 	"graph": {
 		"title": "引用图谱",
 		"loading": "正在加载引用图谱…",
-		"noEdges": "暂无引用连接。打开论文以解析参考文献，或入库更多相关论文。"
+		"noEdges": "暂无引用连接。打开论文以解析参考文献，或入库更多相关论文。",
+		"modeAll": "切换到全库图谱",
+		"modeCenter": "切换到当前论文图谱",
+		"legend": {
+			"center": "本论文",
+			"reference": "本文引用 · 库内",
+			"citedBy": "引用本文 · 库内",
+			"external": "库外文献"
+		}
 	},
 	"paperInfo": {
 		"info": "信息",

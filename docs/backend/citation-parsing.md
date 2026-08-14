@@ -45,7 +45,7 @@
 - **事实来源：`{paper}/source/agentero-cite.json` sidecar**，可重建、可删除、不碰用户文件——这同时回答「没有 bib 文件时的持久化」：L1 在线结果与 L3 的 raw + 尽力字段都写入 sidecar，重开应用不重解析、不重复请求 API（fingerprint 判断；`source` 字段记 `s2 | crossref | bib | bbl | tex | pdf-text`）。
 - 库内匹配（`localMatch`）：DOI → arXiv id → 归一化 title+author+year，只查本地 catalog。
 - **catalog 建 `paper_refs` 索引表**推迟到需要大规模跨论文查询 / 被引统计时再评估，避免双写；MVP 单论文 sidecar 足够。
-- **引用图谱（MVP）**：Host `paper_refs_graph` 扫描各 paper 的 sidecar + `localMatch` 构图（邻近含 stub，全图仅库内边）。嵌在 **References 侧栏下方约 35%**，**不再**使用双链 `graph_get_graph`。入库 `paper_commit`（Created）后后台自动解析 sidecar。见 [api.md](api.md) / [../frontend/wiki.md](../frontend/wiki.md)。
+- **引用图谱（MVP）**：Host `paper_refs_graph` 扫描各 paper 的 sidecar + `localMatch` 构图：近邻模式（默认）以当前论文为中心，出边含未入库 stub、入边为库内被引，节点带 `role`（`center`/`reference`/`citedBy`）；全图仅库内边。嵌在 **References 侧栏下方约 35%**，**不再**使用双链 `graph_get_graph`。入库 `paper_commit`（Created）后后台自动解析 sidecar。见 [api.md](api.md) / [../frontend/wiki.md](../frontend/wiki.md)。
 - 导出：右键论文提供 **导出 references.bib**（本地 BibTeX 序列化 sidecar 条目），非默认落盘。
 
 ## 4. 文中 citation 交互与引用侧栏
