@@ -9,6 +9,8 @@
 //! the GUI binary `agentero` in `target/{debug,release}/`.
 
 mod download;
+#[cfg(windows)]
+pub(crate) mod windows_path;
 
 use crate::core::error::AppError;
 use crate::core::install_dirs::{ABS_BIN_DIRS, HOME_BIN_DIRS};
@@ -24,11 +26,23 @@ use tauri::{AppHandle, Manager, Runtime};
 
 pub mod commands;
 
+// Windows: shim is `agentero-cli.cmd` so the installed command matches the
+// actual binary name on PATH (`agentero-cli`); POSIX keeps the bare `agentero`
+// symlink for muscle memory and Homebrew-style usage.
 const SHIM_NAME: &str = if cfg!(windows) {
-    "agentero.cmd"
+    "agentero-cli.cmd"
 } else {
     "agentero"
 };
+
+/// The command a user types after install (platform-consistent with the shim).
+pub(crate) fn cli_command_name() -> &'static str {
+    if cfg!(windows) {
+        "agentero-cli"
+    } else {
+        "agentero"
+    }
+}
 
 const BUNDLED_CLI_NAME: &str = if cfg!(windows) {
     "agentero-cli.exe"
@@ -251,6 +265,31 @@ pub(crate) fn managed_shim_path() -> PathBuf {
     preferred_bin_dir().join(SHIM_NAME)
 }
 
+/// Windows: add the shim dir to the user PATH (HKCU\Environment) so a fresh
+/// terminal can run `agentero-cli`. POSIX: no-op — the symlink shim lives in a
+/// bin dir the user normally already has on PATH (e.g. `~/.local/bin`).
+#[cfg(windows)]
+pub(crate) fn add_shim_dir_to_user_path() -> Result<(), AppError> {
+    windows_path::add_to_user_path(&preferred_bin_dir())
+}
+
+#[cfg(not(windows))]
+pub(crate) fn add_shim_dir_to_user_path() -> Result<(), AppError> {
+    Ok(())
+}
+
+/// Windows: drop the shim dir from the user PATH (best-effort cleanup).
+/// POSIX: no-op.
+#[cfg(windows)]
+pub(crate) fn remove_shim_dir_from_user_path() -> Result<bool, AppError> {
+    windows_path::remove_from_user_path(&preferred_bin_dir())
+}
+
+#[cfg(not(windows))]
+pub(crate) fn remove_shim_dir_from_user_path() -> Result<bool, AppError> {
+    Ok(false)
+}
+
 fn path_env_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Ok(path) = std::env::var("PATH") {
@@ -371,10 +410,17 @@ pub fn collect_status<R: Runtime>(app: &AppHandle<R>) -> CliInstallStatus {
             app_ver
         ));
     } else if installed && !preferred_bin_on_path {
-        message = Some(format!(
-            "CLI installed at {} but that directory is not on PATH. Add it to your shell PATH (do not edit rc from Agentero).",
-            bin_dir.display()
-        ));
+        message = Some(if cfg!(windows) {
+            format!(
+                "CLI installed at {} but that directory is not on the user PATH. Add it to the PATH environment variable and open a new terminal.",
+                bin_dir.display()
+            )
+        } else {
+            format!(
+                "CLI installed at {} but that directory is not on PATH. Add it to your shell PATH (do not edit rc from Agentero).",
+                bin_dir.display()
+            )
+        });
     }
 
     CliInstallStatus {

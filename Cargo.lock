@@ -143,6 +143,7 @@ dependencies = [
  "uuid",
  "walkdir",
  "which",
+ "winreg",
  "zip 2.4.2",
 ]
 

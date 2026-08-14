@@ -118,3 +118,8 @@ security-framework-sys = "2.17"
 [target.'cfg(unix)'.dependencies]
 openssh = { version = "0.11.6", features = ["native-mux"] }
 openssh-sftp-client = { version = "0.15.7", features = ["openssh"] }
+
+# Windows CLI install: add the shim dir to the user PATH (HKCU\Environment) so
+# new terminals can run `agentero-cli` without manual setup.
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"

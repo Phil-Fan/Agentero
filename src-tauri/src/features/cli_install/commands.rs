@@ -1,8 +1,9 @@
 use crate::core::error::{map_err, ApiResult};
 
 use super::{
-    collect_status, ensure_cli_binary, install_shim, managed_cli_binary, managed_cli_dir,
-    managed_shim_path, resolve_local_cli, uninstall_shim, CliInstallResult, CliInstallStatus,
+    add_shim_dir_to_user_path, cli_command_name, collect_status, ensure_cli_binary, install_shim,
+    managed_cli_binary, managed_cli_dir, managed_shim_path, remove_shim_dir_from_user_path,
+    resolve_local_cli, uninstall_shim, CliInstallResult, CliInstallStatus,
 };
 use tauri::{AppHandle, Runtime};
 
@@ -21,14 +22,32 @@ pub async fn cli_install_command<R: Runtime>(app: AppHandle<R>) -> ApiResult<Cli
     if let Err(e) = install_shim(&binary, &shim) {
         return map_err(e);
     }
+    // Windows: register the shim dir on the user PATH so `agentero-cli` works in
+    // new terminals without manual setup. Non-fatal — the message below then
+    // still points the user at the directory to add.
+    if let Err(e) = add_shim_dir_to_user_path() {
+        log::warn!("cli install: failed to add shim dir to user PATH: {e}");
+    }
     let mut status = collect_status(&app);
     if !status.preferred_bin_on_path {
-        status.message = Some(format!(
-            "Installed to {}. Add that directory to PATH if `agentero` is not found in new terminals.",
-            status.preferred_bin_dir
-        ));
+        status.message = Some(if cfg!(windows) {
+            format!(
+                "Installed to {}. Add that directory to the PATH environment variable if `{}` is not found in new terminals.",
+                status.preferred_bin_dir,
+                cli_command_name()
+            )
+        } else {
+            format!(
+                "Installed to {}. Add that directory to PATH if `{}` is not found in new terminals.",
+                status.preferred_bin_dir,
+                cli_command_name()
+            )
+        });
     } else {
-        status.message = Some("Installed. Run `agentero --version` in a new terminal.".to_string());
+        status.message = Some(format!(
+            "Installed. Run `{} --version` in a new terminal.",
+            cli_command_name()
+        ));
     }
     ApiResult::ok(CliInstallResult {
         status,
@@ -50,6 +69,10 @@ pub fn cli_uninstall_command<R: Runtime>(app: AppHandle<R>) -> ApiResult<CliInst
     if managed.is_file() {
         let _ = std::fs::remove_file(&managed);
         let _ = std::fs::remove_dir(managed_cli_dir());
+    }
+    // Windows: best-effort removal of the shim dir from the user PATH.
+    if let Err(e) = remove_shim_dir_from_user_path() {
+        log::warn!("cli uninstall: failed to remove shim dir from user PATH: {e}");
     }
     let mut status = collect_status(&app);
     status.message = Some("Removed the Agentero-managed CLI shim.".into());
