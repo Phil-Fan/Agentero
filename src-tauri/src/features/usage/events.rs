@@ -1,7 +1,7 @@
 //! Append-only event writes, daily rollup, rename, and queries.
 
 use crate::core::error::AppError;
-use crate::features::usage::schema::ensure_usage_at;
+use crate::features::usage::schema::{ensure_usage_at, paper_path_of};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -11,6 +11,8 @@ const MAX_KIND: usize = 64;
 const MAX_PATH: usize = 1024;
 const MAX_VAULT: usize = 1024;
 const MAX_MODE: usize = 64;
+const MAX_FACET: usize = 64;
+const MAX_STATUS: usize = 16;
 const MAX_EXTRA_BYTES: usize = 8 * 1024;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -39,8 +41,16 @@ pub struct UsageEvent {
     pub vault: Option<String>,
     pub kind: String,
     pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paper_path: Option<String>,
     pub mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub facet: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
     pub dur_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub qty: Option<i64>,
     pub extra: Option<serde_json::Value>,
 }
 
@@ -78,16 +88,24 @@ pub fn record_events(db_path: &Path, events: &[UsageRecord]) -> Result<usize, Ap
     let mut inserted = 0usize;
     for raw in events {
         let event = normalize(raw)?;
+        if let Some(vault) = event.vault.as_deref() {
+            upsert_vault(&tx, vault, &event.ts)?;
+        }
         tx.execute(
-            "INSERT INTO usage_events (ts, vault, kind, path, mode, dur_ms, extra)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO usage_events
+             (ts, vault, kind, path, paper_path, mode, facet, status, dur_ms, qty, extra)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 event.ts,
                 event.vault,
                 event.kind,
                 event.path,
+                event.paper_path,
                 event.mode,
+                event.facet,
+                event.status,
                 event.dur_ms,
+                event.qty,
                 event.extra,
             ],
         )
@@ -110,6 +128,8 @@ pub fn rename_path(db_path: &Path, vault: &str, from: &str, to: &str) -> Result<
     if vault.is_empty() {
         return Ok(0);
     }
+    let from_paper = paper_path_of(&from).unwrap_or_else(|| from.clone());
+    let to_paper = paper_path_of(&to).unwrap_or_else(|| to.clone());
     let conn = ensure_usage_at(db_path)?;
     let like = format!("{from}/%");
     let tx = conn
@@ -122,21 +142,28 @@ pub fn rename_path(db_path: &Path, vault: &str, from: &str, to: &str) -> Result<
                WHEN path = ?1 THEN ?2
                WHEN path LIKE ?3 THEN ?2 || substr(path, length(?1) + 1)
                ELSE path
+             END,
+             paper_path = CASE
+               WHEN paper_path = ?5 THEN ?6
+               WHEN paper_path LIKE ?5 || '/%' THEN ?6 || substr(paper_path, length(?5) + 1)
+               ELSE paper_path
              END
-             WHERE vault = ?4 AND (path = ?1 OR path LIKE ?3)",
-            params![from, to, like, vault],
+             WHERE vault = ?4 AND (
+               path = ?1 OR path LIKE ?3 OR paper_path = ?5 OR paper_path LIKE ?5 || '/%'
+             )",
+            params![from, to, like, vault, from_paper, to_paper],
         )
         .map_err(|e| AppError::message(format!("rename usage_events: {e}")))?;
     let daily = tx
         .execute(
             "UPDATE usage_daily
-             SET path = CASE
-               WHEN path = ?1 THEN ?2
-               WHEN path LIKE ?3 THEN ?2 || substr(path, length(?1) + 1)
-               ELSE path
+             SET paper_path = CASE
+               WHEN paper_path = ?1 THEN ?2
+               WHEN paper_path LIKE ?1 || '/%' THEN ?2 || substr(paper_path, length(?1) + 1)
+               ELSE paper_path
              END
-             WHERE vault = ?4 AND (path = ?1 OR path LIKE ?3)",
-            params![from, to, like, vault],
+             WHERE vault = ?3 AND (paper_path = ?1 OR paper_path LIKE ?1 || '/%')",
+            params![from_paper, to_paper, vault],
         )
         .map_err(|e| AppError::message(format!("rename usage_daily: {e}")))?;
     tx.commit()
@@ -178,11 +205,12 @@ pub fn list_events(db_path: &Path, filter: &ListFilter) -> Result<Vec<UsageEvent
         .unwrap_or("");
     let mut stmt = conn
         .prepare(
-            "SELECT id, ts, vault, kind, path, mode, dur_ms, extra
+            "SELECT id, ts, vault, kind, path, paper_path, mode, facet, status, dur_ms, qty, extra
              FROM usage_events
              WHERE (?1 = '' OR vault = ?1)
                AND (?2 = '' OR kind = ?2)
-               AND (?3 = '' OR path = ?3 OR path LIKE ?4)
+               AND (?3 = '' OR path = ?3 OR path LIKE ?4
+                    OR paper_path = ?3 OR paper_path LIKE ?4)
                AND (?5 = '' OR ts >= ?5)
              ORDER BY ts DESC, id DESC
              LIMIT ?6",
@@ -243,6 +271,10 @@ pub fn clear_all(db_path: &Path) -> Result<u64, AppError> {
         .map_err(|e| AppError::message(format!("clear usage_events: {e}")))?;
     conn.execute("DELETE FROM usage_daily", [])
         .map_err(|e| AppError::message(format!("clear usage_daily: {e}")))?;
+    conn.execute("DELETE FROM usage_memories", [])
+        .map_err(|e| AppError::message(format!("clear usage_memories: {e}")))?;
+    conn.execute("DELETE FROM usage_vaults", [])
+        .map_err(|e| AppError::message(format!("clear usage_vaults: {e}")))?;
     Ok(n as u64)
 }
 
@@ -257,6 +289,8 @@ pub fn clear_vault(db_path: &Path, vault: &str) -> Result<u64, AppError> {
         .map_err(|e| AppError::message(format!("clear vault usage_events: {e}")))?;
     conn.execute("DELETE FROM usage_daily WHERE vault = ?1", [vault])
         .map_err(|e| AppError::message(format!("clear vault usage_daily: {e}")))?;
+    conn.execute("DELETE FROM usage_memories WHERE vault = ?1", [vault])
+        .map_err(|e| AppError::message(format!("clear vault usage_memories: {e}")))?;
     Ok(n as u64)
 }
 
@@ -265,8 +299,12 @@ struct Normalized {
     vault: Option<String>,
     kind: String,
     path: Option<String>,
+    paper_path: Option<String>,
     mode: Option<String>,
+    facet: Option<String>,
+    status: Option<String>,
     dur_ms: Option<i64>,
+    qty: Option<i64>,
     extra: Option<String>,
 }
 
@@ -287,7 +325,9 @@ fn normalize(raw: &UsageRecord) -> Result<Normalized, AppError> {
     if path.as_ref().is_some_and(|p| p.len() > MAX_PATH) {
         return Err(AppError::message("usage path too long"));
     }
+    let paper_path = path.as_deref().and_then(paper_path_of);
     let mode = optional_trimmed(&raw.mode, MAX_MODE);
+    let (facet, status, qty) = project_extra(&kind, mode.as_deref(), raw.extra.as_ref());
     let dur_ms = raw.dur_ms.filter(|n| *n >= 0);
     let extra = match &raw.extra {
         None | Some(serde_json::Value::Null) => None,
@@ -311,31 +351,137 @@ fn normalize(raw: &UsageRecord) -> Result<Normalized, AppError> {
         vault,
         kind,
         path,
+        paper_path,
         mode,
+        facet,
+        status,
         dur_ms,
+        qty,
         extra,
     })
+}
+
+fn project_extra(
+    kind: &str,
+    mode: Option<&str>,
+    extra: Option<&serde_json::Value>,
+) -> (Option<String>, Option<String>, Option<i64>) {
+    let obj = extra.and_then(|v| v.as_object());
+    let extra_str = |key: &str| -> Option<String> {
+        obj.and_then(|m| m.get(key))
+            .and_then(|v| {
+                v.as_str().map(|s| s.to_string()).or_else(|| {
+                    if v.is_boolean() || v.is_number() {
+                        Some(v.to_string())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.chars().take(MAX_FACET).collect())
+    };
+    let extra_i64 = |keys: &[&str]| -> Option<i64> {
+        let map = obj?;
+        for key in keys {
+            if let Some(n) = map.get(*key).and_then(|v| {
+                v.as_i64()
+                    .or_else(|| v.as_u64().map(|n| n as i64))
+                    .or_else(|| v.as_f64().map(|n| n as i64))
+                    .or_else(|| v.as_array().map(|a| a.len() as i64))
+            }) {
+                if n >= 0 {
+                    return Some(n);
+                }
+            }
+        }
+        None
+    };
+
+    let facet = match kind {
+        "paper.open" | "note.open" => mode.map(str::to_string),
+        "paper.import" => extra_str("source"),
+        "asset.download" => extra_str("asset").or_else(|| {
+            if obj.and_then(|m| m.get("pdf")).and_then(|v| v.as_bool()) == Some(true) {
+                Some("pdf".into())
+            } else if obj.and_then(|m| m.get("tex")).and_then(|v| v.as_bool()) == Some(true) {
+                Some("tex".into())
+            } else {
+                None
+            }
+        }),
+        "agent.run" => extra_str("workflow"),
+        k if k.starts_with("translate.") => {
+            extra_str("providerFamily").or_else(|| extra_str("provider"))
+        }
+        "layout.analyze" => extra_str("trigger"),
+        k if k.starts_with("skill.") => extra_str("sourceKind"),
+        k if k.starts_with("mark.") => extra_str("type"),
+        "paper.tag" => extra_str("op"),
+        "paper.read" => extra_str("via").or_else(|| extra_str("isRead")),
+        k if k.starts_with("refs.") => extra_str("trigger"),
+        k if k.starts_with("zotero.") => extra_str("direction").or_else(|| extra_str("source")),
+        _ => extra_str("facet"),
+    }
+    .filter(|s| s.len() <= MAX_FACET);
+
+    let status = extra_str("status").and_then(|s| {
+        let s = s.to_ascii_lowercase();
+        matches!(s.as_str(), "ok" | "fail" | "cancel").then_some(s)
+    });
+    let status = status.filter(|s| s.len() <= MAX_STATUS);
+    let qty = extra_i64(&[
+        "qty",
+        "count",
+        "hits",
+        "region_count",
+        "regionCount",
+        "tagCount",
+        "tag_count",
+        "chars",
+        "installed",
+    ]);
+    (facet, status, qty)
+}
+
+fn upsert_vault(tx: &rusqlite::Transaction<'_>, vault: &str, ts: &str) -> Result<(), AppError> {
+    tx.execute(
+        "INSERT INTO usage_vaults (path, created_at, last_seen)
+         VALUES (?1, ?2, ?2)
+         ON CONFLICT(path) DO UPDATE SET last_seen = excluded.last_seen",
+        params![vault, ts],
+    )
+    .map_err(|e| AppError::message(format!("upsert usage_vaults: {e}")))?;
+    Ok(())
 }
 
 fn upsert_daily(tx: &rusqlite::Transaction<'_>, event: &Normalized) -> Result<(), AppError> {
     let day = event.ts.get(..10).unwrap_or("1970-01-01");
     let vault = event.vault.as_deref().unwrap_or("");
-    let path = event.path.as_deref().unwrap_or("");
+    let paper = event
+        .paper_path
+        .as_deref()
+        .or(event.path.as_deref())
+        .unwrap_or("");
+    let facet = event.facet.as_deref().unwrap_or("");
     let dur = event.dur_ms.unwrap_or(0);
+    let qty = event.qty.unwrap_or(0);
     tx.execute(
-        "INSERT INTO usage_daily (day, vault, kind, path, count, dur_ms)
-         VALUES (?1, ?2, ?3, ?4, 1, ?5)
-         ON CONFLICT(day, vault, kind, path) DO UPDATE SET
+        "INSERT INTO usage_daily (day, vault, kind, paper_path, facet, count, dur_ms, qty)
+         VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7)
+         ON CONFLICT(day, vault, kind, paper_path, facet) DO UPDATE SET
            count = count + 1,
-           dur_ms = dur_ms + excluded.dur_ms",
-        params![day, vault, event.kind, path, dur],
+           dur_ms = dur_ms + excluded.dur_ms,
+           qty = qty + excluded.qty",
+        params![day, vault, event.kind, paper, facet, dur, qty],
     )
     .map_err(|e| AppError::message(format!("upsert usage_daily: {e}")))?;
     Ok(())
 }
 
 fn row_to_event(row: &rusqlite::Row<'_>) -> Result<UsageEvent, AppError> {
-    let extra_raw: Option<String> = row.get(7)?;
+    let extra_raw: Option<String> = row.get(11)?;
     let extra = match extra_raw.as_deref() {
         None | Some("") => None,
         Some(raw) => Some(serde_json::from_str(raw)?),
@@ -346,8 +492,12 @@ fn row_to_event(row: &rusqlite::Row<'_>) -> Result<UsageEvent, AppError> {
         vault: row.get(2)?,
         kind: row.get(3)?,
         path: row.get(4)?,
-        mode: row.get(5)?,
-        dur_ms: row.get(6)?,
+        paper_path: row.get(5)?,
+        mode: row.get(6)?,
+        facet: row.get(7)?,
+        status: row.get(8)?,
+        dur_ms: row.get(9)?,
+        qty: row.get(10)?,
         extra,
     })
 }
@@ -379,7 +529,6 @@ pub fn since_rfc3339_days(days: u32) -> String {
         .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
-/// Used by Host commands that should never fail a user-facing mutation.
 #[cfg(feature = "desktop")]
 pub fn rename_path_best_effort(vault: &str, from: &str, to: &str) {
     match rename_path(&crate::features::usage::usage_db_path(), vault, from, to) {
@@ -390,7 +539,6 @@ pub fn rename_path_best_effort(vault: &str, from: &str, to: &str) {
     }
 }
 
-/// Default-db wrapper used by Tauri commands.
 #[cfg(feature = "desktop")]
 pub fn record_default(events: &[UsageRecord]) -> Result<usize, AppError> {
     record_events(&crate::features::usage::usage_db_path(), events)
@@ -468,9 +616,41 @@ mod tests {
         .unwrap();
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].kind, "paper.open");
+        assert_eq!(rows[0].paper_path.as_deref(), Some("papers/b"));
+        assert_eq!(rows[0].facet.as_deref(), Some("pdf"));
         let summary = summarize(&db, Some("/vaults/demo"), None).unwrap();
         assert_eq!(summary[0].kind, "paper.open");
         assert_eq!(summary[0].count, 2);
+        let _ = fs::remove_dir_all(db.parent().unwrap());
+    }
+
+    #[test]
+    fn derives_paper_path_and_import_facet() {
+        let db = temp_db();
+        record_events(
+            &db,
+            &[UsageRecord {
+                ts: Some("2026-08-14T10:00:00.000Z".into()),
+                vault: Some("/vaults/demo".into()),
+                kind: "paper.import".into(),
+                path: Some("papers/1706.03762/1706.03762.pdf".into()),
+                mode: None,
+                dur_ms: None,
+                extra: Some(serde_json::json!({ "source": "arxiv" })),
+            }],
+        )
+        .unwrap();
+        let rows = list_events(
+            &db,
+            &ListFilter {
+                path_prefix: Some("papers/1706.03762".into()),
+                limit: 5,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(rows[0].paper_path.as_deref(), Some("papers/1706.03762"));
+        assert_eq!(rows[0].facet.as_deref(), Some("arxiv"));
         let _ = fs::remove_dir_all(db.parent().unwrap());
     }
 
@@ -497,6 +677,9 @@ mod tests {
         )
         .unwrap();
         assert_eq!(rows.len(), 2);
+        assert!(rows
+            .iter()
+            .all(|r| r.paper_path.as_deref() == Some("papers/new")));
         let _ = fs::remove_dir_all(db.parent().unwrap());
     }
 

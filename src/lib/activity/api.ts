@@ -17,8 +17,12 @@ export type UsageEvent = {
 	vault: string | null;
 	kind: string;
 	path: string | null;
+	paperPath?: string | null;
 	mode: string | null;
+	facet?: string | null;
+	status?: string | null;
 	durMs: number | null;
+	qty?: number | null;
 	extra: Record<string, unknown> | null;
 };
 

@@ -269,37 +269,16 @@ UI / Host 动作
 
 **P0 已落地。** 不放进 Vault、也不放进 `catalog.sqlite`：远程会镜像 catalog；使用记录是设备本地事实。一台机器上的多个 Vault 用 `vault` 列（绝对路径）区分。
 
-路径与命令见 [`../backend/usage.md`](../backend/usage.md)。
+路径、列定义与 `kind`↔`facet` 对照见 [`../backend/usage.md`](../backend/usage.md)（schema v2）。
 
 ```sql
-CREATE TABLE usage_events (
-  id       INTEGER PRIMARY KEY AUTOINCREMENT,
-  ts       TEXT    NOT NULL,
-  vault    TEXT,                  -- 打开时的绝对路径
-  kind     TEXT    NOT NULL,
-  path     TEXT,                  -- vault 相对路径
-  mode     TEXT,
-  dur_ms   INTEGER,
-  extra    TEXT                   -- JSON：provider / type / trigger / skill_id 等
-);
-CREATE INDEX idx_usage_events_ts    ON usage_events(ts);
-CREATE INDEX idx_usage_events_vault ON usage_events(vault, ts);
-CREATE INDEX idx_usage_events_path  ON usage_events(path, ts);
-CREATE INDEX idx_usage_events_kind  ON usage_events(kind, ts);
-
-CREATE TABLE usage_daily (
-  day    TEXT    NOT NULL,
-  kind   TEXT    NOT NULL,
-  path   TEXT    NOT NULL DEFAULT '',
-  count  INTEGER NOT NULL DEFAULT 0,
-  dur_ms INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (day, kind, path)
-);
+usage_vaults    -- 本机 Vault 身份（path UNIQUE）
+usage_events    -- append-only：ts, vault, kind, path, paper_path, mode, facet, status, dur_ms, qty, extra
+usage_daily     -- PRIMARY KEY (day, vault, kind, paper_path, facet)
+usage_memories  -- 声明式短句（P3 再写）
 ```
 
-写入事件的同一事务 upsert `usage_daily`。WAL + `busy_timeout` + `foreign_keys`。
-
-P3 再加 `usage_memories`（用户确认过的短句），见 §5.3。
+`paper_path` / `facet` / `qty` 由 Host 写入时从 path + extra 抽出，画像只读 `usage_daily`。WAL + `busy_timeout` + `foreign_keys`。
 
 ### 4.2 路径与忽略
 
