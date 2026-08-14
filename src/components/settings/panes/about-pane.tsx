@@ -155,7 +155,7 @@ export function AboutPane() {
 						size="sm"
 						onClick={() => openExternalUrl(GITHUB_REPO_URL)}
 					>
-						<Star data-icon="inline-start" />
+						<Star data-icon="inline-start" className="star-twinkle" />
 						{t("about.starGithub")}
 					</Button>
 				}

@@ -26,6 +26,22 @@
 	animation: library-shimmer 1.8s ease-in-out infinite;
 }
 
+@keyframes star-twinkle {
+	0%,
+	100% {
+		color: oklch(0.88 0.14 95);
+		fill: oklch(0.88 0.14 95 / 0.2);
+	}
+	50% {
+		color: oklch(0.82 0.19 95);
+		fill: oklch(0.82 0.19 95);
+	}
+}
+
+.star-twinkle {
+	animation: star-twinkle 1.6s ease-in-out infinite;
+}
+
 /*
  * Rail collapse/expand: use-shell-layout marks every panel in the group with
  * data-rail-animating, then commits the final layout via collapse()/expand().
@@ -56,6 +72,11 @@
 	.animate-spin {
 		animation-duration: 1s !important;
 		animation-iteration-count: infinite !important;
+	}
+	.star-twinkle {
+		animation: none !important;
+		color: oklch(0.82 0.19 95);
+		fill: oklch(0.82 0.19 95);
 	}
 }
 
