@@ -46,7 +46,7 @@ function RepoCard({ repo }: { repo: SkillRepo }) {
 	return (
 		<div
 			className={cn(
-				"group relative flex flex-col gap-2 rounded-lg border bg-background p-3",
+				"group relative rounded-lg border bg-background p-3",
 				"transition-colors hover:border-foreground/20 hover:bg-muted/50",
 			)}
 		>
@@ -56,37 +56,37 @@ function RepoCard({ repo }: { repo: SkillRepo }) {
 				aria-label={t("plaza.skills.import", { name: fullName })}
 				onClick={() => void importRepo()}
 				className={cn(
-					"flex w-full flex-col gap-2 text-left",
+					"flex w-full items-start gap-3 pr-7 text-left",
 					"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 					"disabled:pointer-events-none disabled:opacity-70",
 				)}
 			>
-				<div className="flex items-start gap-2 pr-7">
-					<img
-						src={`https://avatars.githubusercontent.com/${repo.owner}?s=40`}
-						alt=""
-						width={20}
-						height={20}
-						className="mt-0.5 size-5 shrink-0 rounded-full"
-					/>
-					<div className="min-w-0 flex-1">
-						<div className="flex items-center gap-1">
-							<span className="truncate font-medium text-sm">{fullName}</span>
-							{busy ? (
-								<Loader2
-									className="size-3.5 shrink-0 animate-spin text-muted-foreground"
-									aria-hidden
-								/>
-							) : null}
-						</div>
-						<p className="mt-0.5 line-clamp-2 text-muted-foreground text-xs leading-snug">
-							{repo.description}
-						</p>
+				<img
+					src={`https://avatars.githubusercontent.com/${repo.owner}?s=80`}
+					alt=""
+					width={40}
+					height={40}
+					className="size-10 shrink-0 rounded-md shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]"
+				/>
+				<div className="min-w-0 flex-1">
+					<div className="flex items-center gap-2">
+						<span className="min-w-0 truncate font-medium text-sm">
+							{fullName}
+						</span>
+						{busy ? (
+							<Loader2
+								className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+								aria-hidden
+							/>
+						) : null}
+						<span className="ml-auto inline-flex shrink-0 items-center gap-0.5 text-muted-foreground text-xs">
+							<Star className="size-3 fill-current" aria-hidden />
+							{formatStars(repo.stars)}
+						</span>
 					</div>
-				</div>
-				<div className="flex items-center gap-1 text-muted-foreground text-xs">
-					<Star className="size-3 fill-current" aria-hidden />
-					<span>{formatStars(repo.stars)}</span>
+					<p className="mt-0.5 line-clamp-2 text-muted-foreground text-xs leading-snug">
+						{repo.description}
+					</p>
 				</div>
 			</button>
 			<Tooltip>
