@@ -13,6 +13,7 @@
  *   a PDF for any of them.
  */
 
+import i18n from "@/i18n";
 import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
 import { invokeApi } from "@/lib/core/ipc";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
@@ -87,7 +88,11 @@ async function importViaPage(
 ): Promise<boolean> {
 	const label = request.title?.trim() || request.id;
 	const result = await enqueueBackgroundTask(
-		{ kind: "lookup", title: "导入到论文库", detail: label },
+		{
+			kind: "lookup",
+			title: i18n.t("app:plazaImport.taskTitle"),
+			detail: label,
+		},
 		({ id }) =>
 			invokeApi<PaperCommitResult>(
 				"paper_coolpapers_import",
@@ -100,7 +105,7 @@ async function importViaPage(
 						taskId: id,
 					},
 				},
-				{ fallback: "导入失败" },
+				{ fallback: i18n.t("app:plazaImport.failed") },
 			),
 	);
 
@@ -109,13 +114,15 @@ async function importViaPage(
 
 	if (result.status === "created") {
 		const name = result.title || label;
-		if (result.pdf) notifySuccess(`已导入：${name}`);
+		if (result.pdf) notifySuccess(i18n.t("app:plazaImport.imported", { name }));
 		// The unit is in the library; only the PDF is missing. Say so instead of
 		// reporting a clean success the user would later find untrue.
-		else notifyWarning(`已导入（未取到 PDF）：${name}`);
+		else notifyWarning(i18n.t("app:plazaImport.importedNoPdf", { name }));
 		return true;
 	}
-	notifyWarning(`论文库中已有这篇：${result.title || label}`);
+	notifyWarning(
+		i18n.t("app:plazaImport.duplicate", { name: result.title || label }),
+	);
 	return true;
 }
 
@@ -130,11 +137,11 @@ export async function importPlazaPaper(
 ): Promise<boolean> {
 	const vaultPath = getVaultPath();
 	if (!vaultPath) {
-		notifyError("请先打开一个知识库");
+		notifyError(i18n.t("app:plazaImport.needsVault"));
 		return false;
 	}
 	if (!request.id.trim()) {
-		notifyWarning("这条论文缺少来源标识，无法导入");
+		notifyWarning(i18n.t("app:plazaImport.missingId"));
 		return false;
 	}
 

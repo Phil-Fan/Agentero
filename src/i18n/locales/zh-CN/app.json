@@ -199,6 +199,24 @@
 	"confirm": {
 		"createNote": "「{{target}}」不存在。\n\n是否创建 {{path}}？"
 	},
+	"coolPapers": {
+		"resolveFailed": "无法定位论文目录",
+		"missingIdentifier": "这篇论文缺少 arXiv 标识号和标题，无法在 Cool Papers 上定位",
+		"fetchTask": "获取 Cool Papers 笔记",
+		"fetchFailed": "获取 Cool Papers 笔记失败",
+		"notFound": "Cool Papers 上没有找到这篇论文，未写入笔记",
+		"alreadyInNotes": "NOTES.md 中已有该解析，未重复写入",
+		"appended": "Cool Papers 解析已追加到 NOTES.md"
+	},
+	"plazaImport": {
+		"taskTitle": "导入到论文库",
+		"failed": "导入失败",
+		"imported": "已导入：{{name}}",
+		"importedNoPdf": "已导入（未取到 PDF）：{{name}}",
+		"duplicate": "论文库中已有这篇：{{name}}",
+		"needsVault": "请先打开一个知识库",
+		"missingId": "这条论文缺少来源标识，无法导入"
+	},
 	"tasks": {
 		"title": "后台任务",
 		"toggle": "显示或隐藏后台任务",

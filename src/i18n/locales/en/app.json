@@ -199,6 +199,24 @@
 	"confirm": {
 		"createNote": "「{{target}}」 does not exist.\n\nCreate {{path}}?"
 	},
+	"coolPapers": {
+		"resolveFailed": "Could not locate the paper folder",
+		"missingIdentifier": "This paper has no arXiv ID or title, so it cannot be located on Cool Papers",
+		"fetchTask": "Fetch Cool Papers notes",
+		"fetchFailed": "Failed to fetch Cool Papers notes",
+		"notFound": "Paper not found on Cool Papers; no notes were written",
+		"alreadyInNotes": "NOTES.md already contains this analysis; nothing was appended",
+		"appended": "Cool Papers analysis appended to NOTES.md"
+	},
+	"plazaImport": {
+		"taskTitle": "Import into library",
+		"failed": "Import failed",
+		"imported": "Imported: {{name}}",
+		"importedNoPdf": "Imported (no PDF retrieved): {{name}}",
+		"duplicate": "Already in the library: {{name}}",
+		"needsVault": "Open a vault first",
+		"missingId": "This paper has no source identifier and cannot be imported"
+	},
 	"tasks": {
 		"title": "Background Tasks",
 		"toggle": "Show or hide background tasks",

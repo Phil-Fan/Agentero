@@ -3,9 +3,10 @@
  *
  * The Host resolves the paper (arXiv id, else exact title match), pulls its Kimi
  * analysis and appends it to `NOTES.md`. The NOTES editor toolbar triggers this
- * and reseeds the open editor. Toast copy is intentionally not routed through i18n.
+ * and reseeds the open editor.
  */
 
+import i18n from "@/i18n";
 import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
 import { invokeApi } from "@/lib/core/ipc";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
@@ -39,33 +40,37 @@ export async function fetchCoolPapersNotes(meta: PaperMetadata): Promise<void> {
 	if (!vaultPath) return;
 	const rel = await resolvePaperCatalogRel(meta);
 	if (!rel) {
-		notifyError("无法定位论文目录");
+		notifyError(i18n.t("app:coolPapers.resolveFailed"));
 		return;
 	}
 	const arxivId = meta.arxiv_id ? (arxivUrls(meta.arxiv_id)?.id ?? null) : null;
 	const title = meta.title?.trim() || null;
 	if (!arxivId && !title) {
-		notifyWarning("这篇论文缺少 arXiv 标识号和标题，无法在 Cool Papers 上定位");
+		notifyWarning(i18n.t("app:coolPapers.missingIdentifier"));
 		return;
 	}
 
 	try {
 		const result = await enqueueBackgroundTask(
-			{ kind: "parse", title: "获取 Cool Papers 笔记", detail: title ?? rel },
+			{
+				kind: "parse",
+				title: i18n.t("app:coolPapers.fetchTask"),
+				detail: title ?? rel,
+			},
 			() =>
 				invokeApi<CoolPapersNotes>(
 					"paper_coolpapers_notes",
 					{ args: { vaultPath, path: rel, arxivId, title } },
-					{ fallback: "获取 Cool Papers 笔记失败" },
+					{ fallback: i18n.t("app:coolPapers.fetchFailed") },
 				),
 		);
 
 		if (!result.found) {
-			notifyWarning("Cool Papers 上没有找到这篇论文，未写入笔记");
+			notifyWarning(i18n.t("app:coolPapers.notFound"));
 			return;
 		}
 		if (!result.appended) {
-			notifySuccess("NOTES.md 中已有该解析，未重复写入");
+			notifySuccess(i18n.t("app:coolPapers.alreadyInNotes"));
 			return;
 		}
 
@@ -76,7 +81,7 @@ export async function fetchCoolPapersNotes(meta: PaperMetadata): Promise<void> {
 		} catch {
 			// Reseeding the open editor is best-effort; the file is already written.
 		}
-		notifySuccess("Cool Papers 解析已追加到 NOTES.md");
+		notifySuccess(i18n.t("app:coolPapers.appended"));
 	} catch (e) {
 		notifyError(e instanceof Error ? e.message : String(e));
 	}
