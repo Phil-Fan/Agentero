@@ -165,6 +165,7 @@ const NAV_BRIDGE: &str = r##"<style>
       post({
         importPaper: {
           id: button.dataset.paperId,
+          branch: document.body.id || "",
           url: button.dataset.url,
           title: titleLink ? titleLink.textContent.trim() : null
         }

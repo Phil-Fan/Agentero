@@ -8,10 +8,13 @@
 //! An unknown paper id answers `200` with an empty body, so "no content" is the
 //! not-found signal.
 //!
-//! [`proxy`] serves the same site under our own scheme for the 广场 panel.
+//! [`proxy`] serves the same site under our own scheme for the 广场 panel, and
+//! [`page`] imports a row straight from its page metadata (no Translator).
 
 #[cfg(feature = "desktop")]
 pub mod commands;
+#[cfg(feature = "desktop")]
+pub mod page;
 #[cfg(feature = "desktop")]
 pub mod proxy;
 
@@ -22,7 +25,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
-const ORIGIN: &str = "https://papers.cool";
+pub(crate) const ORIGIN: &str = "https://papers.cool";
 const USER_AGENT: &str = "agentero/0.6 (+https://github.com/poco-ai/agentero)";
 /// Branches searched when resolving by title, in preference order.
 const BRANCHES: [&str; 2] = ["arxiv", "venue"];
@@ -71,7 +74,7 @@ impl CoolPapersNotes {
     }
 }
 
-fn http_client() -> Result<reqwest::Client, AppError> {
+pub(crate) fn http_client() -> Result<reqwest::Client, AppError> {
     crate::features::network::client_builder()
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .user_agent(USER_AGENT)
@@ -201,7 +204,7 @@ fn strip_tags(input: &str) -> String {
     out
 }
 
-fn decode_entities(input: &str) -> String {
+pub(crate) fn decode_entities(input: &str) -> String {
     if !input.contains('&') {
         return input.to_string();
     }
