@@ -54,64 +54,79 @@ function RepoCard({ repo }: { repo: SkillRepo }) {
 			<button
 				type="button"
 				disabled={busy}
-				aria-label={t("plaza.skills.import", { name: fullName })}
+				tabIndex={-1}
+				aria-hidden
 				onClick={() => void importRepo()}
-				className={cn(
-					"flex min-w-0 flex-1 items-center gap-3 text-left",
-					"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-				)}
+				className="shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 			>
 				<img
-					src={`https://avatars.githubusercontent.com/${repo.owner}?s=96`}
+					src={`https://avatars.githubusercontent.com/${repo.owner}?s=128`}
 					alt=""
-					width={40}
-					height={40}
-					className="size-10 shrink-0 rounded-md object-cover shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]"
+					width={48}
+					height={48}
+					className="size-12 rounded-md object-cover shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]"
 				/>
-				<span className="min-w-0 flex-1">
-					<span className="flex items-center gap-2">
-						<span className="min-w-0 truncate font-medium text-sm">
-							{fullName}
-						</span>
-						{busy ? (
-							<Loader2
-								className="size-3.5 shrink-0 animate-spin text-muted-foreground"
-								aria-hidden
-							/>
-						) : null}
-					</span>
-					<span className="mt-0.5 line-clamp-2 block text-muted-foreground text-xs leading-snug">
-						{repo.description}
-					</span>
-				</span>
 			</button>
-			<Tooltip>
-				<TooltipTrigger asChild>
+			<div className="min-w-0 flex-1">
+				<div className="flex items-center gap-2">
 					<button
 						type="button"
+						disabled={busy}
+						aria-label={t("plaza.skills.import", { name: fullName })}
+						onClick={() => void importRepo()}
 						className={cn(
-							"inline-flex shrink-0 items-center gap-0.5 self-start pt-0.5 text-muted-foreground text-xs",
-							"rounded-sm hover:text-foreground",
+							"min-w-0 truncate text-left font-medium text-sm",
 							"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 						)}
-						aria-label={t("plaza.skills.openGithub")}
-						onClick={() => openExternalUrl(repo.url)}
 					>
-						<Star
-							className="size-3 fill-current group-hover:hidden"
-							aria-hidden
-						/>
-						<ExternalLink
-							className="hidden size-3 group-hover:block"
-							aria-hidden
-						/>
-						{formatStars(repo.stars)}
+						{fullName}
 					</button>
-				</TooltipTrigger>
-				<TooltipContent side="top">
-					{t("plaza.skills.openGithub")}
-				</TooltipContent>
-			</Tooltip>
+					{busy ? (
+						<Loader2
+							className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+							aria-hidden
+						/>
+					) : null}
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<button
+								type="button"
+								className={cn(
+									"ml-auto inline-flex shrink-0 items-center gap-0.5 text-muted-foreground text-xs",
+									"rounded-sm hover:text-foreground",
+									"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+								)}
+								aria-label={t("plaza.skills.openGithub")}
+								onClick={() => openExternalUrl(repo.url)}
+							>
+								<Star
+									className="size-3 fill-current group-hover:hidden"
+									aria-hidden
+								/>
+								<ExternalLink
+									className="hidden size-3 group-hover:block"
+									aria-hidden
+								/>
+								{formatStars(repo.stars)}
+							</button>
+						</TooltipTrigger>
+						<TooltipContent side="top">
+							{t("plaza.skills.openGithub")}
+						</TooltipContent>
+					</Tooltip>
+				</div>
+				<button
+					type="button"
+					disabled={busy}
+					onClick={() => void importRepo()}
+					className={cn(
+						"mt-0.5 line-clamp-2 w-full text-left text-muted-foreground text-xs leading-snug",
+						"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+					)}
+				>
+					{repo.description}
+				</button>
+			</div>
 		</div>
 	);
 }
