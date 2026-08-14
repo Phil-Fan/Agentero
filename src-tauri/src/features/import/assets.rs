@@ -79,6 +79,57 @@ impl AssetProgressContext<'_> {
     }
 }
 
+/// Throttle byte-level download progress events.
+///
+/// reqwest yields 8–16KB chunks, so a 20MB PDF used to emit 1000–2500
+/// `background-task:progress` events (×5 with batch import concurrency),
+/// flooding the webview event loop. Emit only when enough time passed or the
+/// percentage actually moved; the caller emits the final value unconditionally
+/// when the download completes.
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
+pub(crate) struct ProgressThrottle {
+    min_interval: Duration,
+    last_emit: Option<std::time::Instant>,
+    last_percent: Option<u8>,
+}
+
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
+impl ProgressThrottle {
+    pub(crate) fn new(min_interval: Duration) -> Self {
+        Self {
+            min_interval,
+            last_emit: None,
+            last_percent: None,
+        }
+    }
+
+    /// True when this sample should be emitted: first sample, ≥ interval since
+    /// the last emit, or the percent moved by ≥ 1 point since the last emit.
+    pub(crate) fn should_emit(&mut self, now: std::time::Instant, percent: Option<u8>) -> bool {
+        let elapsed_ok = match self.last_emit {
+            None => true,
+            Some(last) => now.duration_since(last) >= self.min_interval,
+        };
+        let percent_moved = match (self.last_percent, percent) {
+            (Some(prev), Some(cur)) => cur != prev,
+            (None, Some(_)) => true,
+            _ => false,
+        };
+        if !elapsed_ok && !percent_moved {
+            return false;
+        }
+        self.last_emit = Some(now);
+        if percent.is_some() {
+            self.last_percent = percent;
+        }
+        true
+    }
+}
+
+/// Minimum spacing between byte-progress events when the percent is unknown.
+#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
+pub(crate) const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(100);
+
 /// Download missing PDF (always try when URL known) and arXiv LaTeX source.
 ///
 /// - **PDF** → paper folder root: `{paper}/{id}.pdf` (not under `source/`)
@@ -740,6 +791,8 @@ pub(crate) async fn http_get_bytes_with_progress(
     let total_bytes = res.content_length();
     #[cfg(feature = "desktop")]
     let mut downloaded_bytes = 0_u64;
+    #[cfg(feature = "desktop")]
+    let mut throttle = ProgressThrottle::new(PROGRESS_EMIT_INTERVAL);
     let mut bytes = Vec::new();
     while let Some(chunk) = res
         .chunk()
@@ -761,21 +814,44 @@ pub(crate) async fn http_get_bytes_with_progress(
             let progress = total_bytes.map(|total| {
                 ((downloaded_bytes.saturating_mul(100) / total.max(1)).min(100)) as u8
             });
-            let _ = app.emit(
-                "background-task:progress",
-                AssetDownloadProgress {
-                    task_id: task_id.to_string(),
-                    phase: phase.to_string(),
-                    downloaded_bytes,
-                    total_bytes,
-                    progress,
-                    current_count: None,
-                    total_count: None,
-                },
-            );
+            // Per-chunk emits flood the webview event loop; throttle to
+            // percent moves / ≥100ms. The final value is emitted below.
+            if throttle.should_emit(std::time::Instant::now(), progress) {
+                let _ = app.emit(
+                    "background-task:progress",
+                    AssetDownloadProgress {
+                        task_id: task_id.to_string(),
+                        phase: phase.to_string(),
+                        downloaded_bytes,
+                        total_bytes,
+                        progress,
+                        current_count: None,
+                        total_count: None,
+                    },
+                );
+            }
         }
         #[cfg(not(feature = "desktop"))]
         let _ = (app, phase);
+    }
+    // Completion event always lands, even when the throttle just swallowed
+    // the last chunk: the task bar must reach the final byte count.
+    #[cfg(feature = "desktop")]
+    if let (Some(app), Some(task_id)) = (app, task_id) {
+        let progress = total_bytes
+            .map(|total| ((downloaded_bytes.saturating_mul(100) / total.max(1)).min(100)) as u8);
+        let _ = app.emit(
+            "background-task:progress",
+            AssetDownloadProgress {
+                task_id: task_id.to_string(),
+                phase: phase.to_string(),
+                downloaded_bytes,
+                total_bytes,
+                progress,
+                current_count: None,
+                total_count: None,
+            },
+        );
     }
     Ok(bytes)
 }
@@ -812,6 +888,61 @@ mod tests {
     use flate2::write::GzEncoder;
     use flate2::Compression;
     use std::io::Write;
+
+    /// 2000 × 8KB chunks of a 16MB known-size download at the same instant
+    /// (time gate never opens) must be capped by percent moves: ≤ ~100 emits
+    /// plus one unconditional completion event.
+    #[test]
+    fn progress_throttle_caps_known_size_chunk_storm() {
+        let mut throttle = ProgressThrottle::new(PROGRESS_EMIT_INTERVAL);
+        let now = std::time::Instant::now();
+        let total: u64 = 2000 * 8 * 1024;
+        let mut downloaded: u64 = 0;
+        let mut emits = 0usize;
+        for _ in 0..2000 {
+            downloaded += 8 * 1024;
+            let percent = Some(((downloaded * 100 / total).min(100)) as u8);
+            if throttle.should_emit(now, percent) {
+                emits += 1;
+            }
+        }
+        // Final event bypasses the throttle in http_get_bytes_with_progress.
+        let final_emits = emits + 1;
+        assert!(
+            final_emits <= 102,
+            "expected ≤102 emits for 2000 chunks, got {final_emits}"
+        );
+        assert!(final_emits >= 50, "throttle must not starve the task bar");
+        println!("throttled 2000 progress callbacks to {final_emits} emits (incl. final)");
+    }
+
+    /// Unknown content-length downloads fall back to the time gate: at most
+    /// one emit per interval.
+    #[test]
+    fn progress_throttle_time_gates_unknown_size() {
+        let mut throttle = ProgressThrottle::new(Duration::from_millis(100));
+        let start = std::time::Instant::now();
+        let mut emits = 0usize;
+        for i in 0..2000u64 {
+            // 2000 chunks arriving over 2 seconds.
+            let now = start + Duration::from_millis(i);
+            if throttle.should_emit(now, None) {
+                emits += 1;
+            }
+        }
+        assert!(
+            emits <= 21,
+            "expected ≤21 time-gated emits over 2s, got {emits}"
+        );
+        assert!(emits >= 1, "first sample must emit");
+    }
+
+    /// The first sample always emits so the task bar leaves 'queued' quickly.
+    #[test]
+    fn progress_throttle_first_sample_emits() {
+        let mut throttle = ProgressThrottle::new(PROGRESS_EMIT_INTERVAL);
+        assert!(throttle.should_emit(std::time::Instant::now(), Some(0)));
+    }
 
     #[test]
     fn sanitize_rejects_parent() {

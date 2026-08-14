@@ -60,7 +60,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 | `agent:permission-request` | 权限「每次询问」档：ACP 权限请求转交用户 | `{ requestId, sessionId, title, kind?, paths, options: { optionId, name, kind }[] }` |
 | `agent:elicitation-request` | form elicitation（Codex request_user_input） | `{ requestId, sessionId, message, toolCallId?, fields: { id, title, description?, required, kind, options[] }[] }` |
 | `agent:ask-user-request` | Grok `_x.ai/ask_user_question` | `{ requestId, sessionId, toolCallId?, mode, questions: { question, options[{label,description?}], multiSelect, allowOther }[] }` |
-| `background-task:progress` | 下载/解析任务进度 | `{ taskId, phase, downloadedBytes, totalBytes?, progress? }`；下载阶段的字节进度由前端聚合为总体进度（PDF 映射到 0–50%，TeX 映射到 50–100%），解析阶段显示为处理中，任务完成时为 100% |
+| `background-task:progress` | 下载/解析任务进度 | `{ taskId, phase, downloadedBytes, totalBytes?, progress? }`；下载阶段的字节进度由前端聚合为总体进度（PDF 映射到 0–50%，TeX 映射到 50–100%），解析阶段显示为处理中，任务完成时为 100%。Host 对字节级进度做节流：百分比变化 ≥1 个点或距上次 emit ≥100ms 才发事件，下载完成时必发最终值 |
 
 #### `agent_warm`
 
