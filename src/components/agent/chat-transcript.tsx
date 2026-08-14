@@ -1,5 +1,6 @@
 import { CopyIcon, Pencil } from "lucide-react";
 import type { RefObject } from "react";
+import { memo, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	ChatAttachedImages,
@@ -94,6 +95,420 @@ function AskUserToolPendingNote() {
 	);
 }
 
+type ImeGuardEvent = {
+	nativeEvent?: { isComposing?: boolean; keyCode?: number };
+	isComposing?: boolean;
+	keyCode?: number;
+};
+
+/**
+ * Row callbacks bundled behind one identity-stable object so memoized rows
+ * bail out during streaming. Wrappers read the latest handler from a ref, so
+ * stability never means stale closures.
+ */
+type RowHandlers = {
+	isEditBlockedByIme: (event: ImeGuardEvent) => boolean;
+	onEditingTextChange: (text: string) => void;
+	onCancelEditing: () => void;
+	onResendEdited: (lineId: string) => void;
+	onStartEditing: (lineId: string, text: string) => void;
+	onSendSuggestion: (label: string, workflow?: string) => void;
+	onOpenSource?: (source: string) => void;
+	editCompositionProps: {
+		onCompositionStart?: () => void;
+		onCompositionEnd?: () => void;
+	};
+};
+
+/**
+ * One transcript line. Memoized so a streaming update to the last line does
+ * not re-render the whole history: `updateSessionLines` keeps unchanged line
+ * references stable, and every other prop is either a primitive or the
+ * identity-stable handlers object.
+ */
+const ChatTranscriptRow = memo(function ChatTranscriptRow({
+	line,
+	activeTabId,
+	agentName,
+	activeTabIsRunning,
+	submitting,
+	switching,
+	isEditing,
+	editingText,
+	editTextareaRef,
+	handlers,
+}: {
+	line: ChatLine;
+	activeTabId: string;
+	agentName: string;
+	activeTabIsRunning: boolean;
+	submitting: boolean;
+	switching: boolean;
+	isEditing: boolean;
+	/** Empty string for non-editing rows so keystrokes only re-render the edited row. */
+	editingText: string;
+	editTextareaRef: RefObject<HTMLTextAreaElement | null>;
+	handlers: RowHandlers;
+}) {
+	const { t } = useTranslation("agent");
+	const { onOpenSource } = handlers;
+
+	if (line.kind === "user") {
+		const visuals = line.visualAnnotations ?? [];
+		const attachedImages = line.images ?? [];
+		if (isEditing) {
+			return (
+				<Message from="user">
+					{/* Chips sit above the bubble, matching composer context chips. */}
+					{visuals.length > 0 ? (
+						<ChatVisualAnnotations annotations={visuals} />
+					) : null}
+					{attachedImages.length > 0 ? (
+						<ChatAttachedImages images={attachedImages} />
+					) : null}
+					<div className="ml-auto flex w-full flex-col gap-2 rounded-lg bg-black/5 px-3 py-2.5 ring-1 ring-black/10 dark:bg-white/10 dark:ring-white/15">
+						<textarea
+							ref={editTextareaRef}
+							className="max-h-60 min-h-16 w-full resize-none overflow-y-auto bg-transparent text-foreground text-sm leading-6 outline-none"
+							value={editingText}
+							onChange={(event) =>
+								handlers.onEditingTextChange(event.currentTarget.value)
+							}
+							{...handlers.editCompositionProps}
+							onKeyDown={(event) => {
+								if (event.key === "Escape") {
+									event.preventDefault();
+									handlers.onCancelEditing();
+								} else if (
+									event.key === "Enter" &&
+									!event.shiftKey &&
+									!handlers.isEditBlockedByIme(event)
+								) {
+									event.preventDefault();
+									handlers.onResendEdited(line.id);
+								}
+							}}
+						/>
+						<div className="flex items-center justify-end gap-2">
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								onClick={handlers.onCancelEditing}
+							>
+								{t("edit.cancel")}
+							</Button>
+							<Button
+								type="button"
+								size="sm"
+								disabled={!editingText.trim() || submitting || switching}
+								onClick={() => handlers.onResendEdited(line.id)}
+							>
+								{t("edit.resend")}
+							</Button>
+						</div>
+					</div>
+				</Message>
+			);
+		}
+		const userDisplay = stripPromptEnvelopeForDisplay(line.text);
+		// Never render Codex env / Host system envelopes as user bubbles.
+		if (!userDisplay && visuals.length === 0 && attachedImages.length === 0)
+			return null;
+		const copyPayload = formatUserLineForCopy({
+			text: userDisplay,
+			visualAnnotations: visuals,
+			images: attachedImages,
+		});
+		return (
+			<Message from="user">
+				{/* Visual / image chips above the text bubble (not inside it). */}
+				{visuals.length > 0 ? (
+					<ChatVisualAnnotations annotations={visuals} />
+				) : null}
+				{attachedImages.length > 0 ? (
+					<ChatAttachedImages images={attachedImages} />
+				) : null}
+				{/* Free-text only: skip empty bubble when the turn is image/visual-only. */}
+				{userDisplay ? (
+					<MessageContent>
+						<MessageResponse>{userDisplay}</MessageResponse>
+					</MessageContent>
+				) : null}
+				{/* Align under user content (Message is full-width) */}
+				<MessageActions className="-mt-1 ml-auto opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+					{activeTabIsRunning || !userDisplay ? null : (
+						<MessageAction
+							tooltip={t("edit.action")}
+							label={t("edit.action")}
+							disabled={submitting || switching}
+							onClick={() => handlers.onStartEditing(line.id, userDisplay)}
+						>
+							<Pencil className="size-3.5" />
+						</MessageAction>
+					)}
+					<MessageAction
+						tooltip={t("copy")}
+						label={t("copy")}
+						onClick={() => void copyText(copyPayload)}
+					>
+						<CopyIcon className="size-3.5" />
+					</MessageAction>
+				</MessageActions>
+			</Message>
+		);
+	}
+	if (line.kind === "agent") {
+		// Include activeTabId so per-part Reasoning/Tool state never
+		// leaks across sessions when history line ids collide
+		// (e.g. Codex thread message ids).
+		const rowKey = `${activeTabId}:${line.id}`;
+		const parts = line.parts;
+		const lastIndex = parts.length - 1;
+		let lastTextIndex = -1;
+		for (let i = lastIndex; i >= 0; i--) {
+			if (parts[i].type === "text") {
+				lastTextIndex = i;
+				break;
+			}
+		}
+		const agentText = agentTextFromParts(parts);
+		const showThinking = Boolean(line.streaming) && parts.length === 0;
+		return (
+			<div className="flex w-full flex-col gap-2">
+				<Message from="assistant">
+					<MessageContent>
+						<p className="mb-1 font-medium text-muted-foreground text-xs">
+							{agentName}
+						</p>
+						{parts.map((part, index) => {
+							const partKey = `${rowKey}:${part.id}`;
+							if (part.type === "reasoning") {
+								const streaming =
+									Boolean(line.streaming) && index === lastIndex;
+								if (!part.text.trim() && !streaming) return null;
+								return (
+									<Reasoning
+										key={partKey}
+										className="mb-2"
+										isStreaming={streaming}
+										// Collapsed by default so the transcript stays
+										// scannable; expand on click. Also collapsed
+										// while streaming (no auto-expand).
+										defaultOpen={false}
+									>
+										<ReasoningTrigger />
+										<ReasoningContent>{part.text}</ReasoningContent>
+									</Reasoning>
+								);
+							}
+							if (part.type === "plan") {
+								const plan = part.entries;
+								if (plan.length === 0) return null;
+								const planStreaming =
+									Boolean(line.streaming) &&
+									plan.some((p) => p.status !== "completed");
+								return (
+									<Plan
+										key={partKey}
+										className="mb-2"
+										defaultOpen
+										isStreaming={planStreaming}
+									>
+										<PlanHeader>
+											<div className="min-w-0 flex-1 space-y-1">
+												<PlanTitle>{t("plan.title")}</PlanTitle>
+												<PlanDescription>
+													{t("plan.steps", {
+														completed: plan.filter(
+															(p) => p.status === "completed",
+														).length,
+														total: plan.length,
+													})}
+												</PlanDescription>
+											</div>
+											<PlanAction>
+												<PlanTrigger />
+											</PlanAction>
+										</PlanHeader>
+										<PlanContent className="pt-0">
+											<ol className="space-y-2">
+												{plan.map((entry) => (
+													<PlanStep
+														key={`${entry.status}:${entry.priority}:${entry.content}`}
+														status={
+															entry.status === "completed"
+																? "completed"
+																: entry.status === "in_progress"
+																	? "in_progress"
+																	: "pending"
+														}
+													>
+														{entry.content}
+													</PlanStep>
+												))}
+											</ol>
+										</PlanContent>
+									</Plan>
+								);
+							}
+							if (part.type === "tool") {
+								const tool = part.tool;
+								const state = toolPartState(tool.status);
+								const askUserQuestion = parseAskUserQuestions(tool.input);
+								// Interactive form is owned by the composer; transcript
+								// only shows a compact tool row (and a short pending note).
+								const askPending =
+									Boolean(askUserQuestion) &&
+									isPendingAskUserToolStatus(tool.status);
+								return (
+									<Tool key={partKey} defaultOpen={askPending}>
+										<ToolHeader
+											title={tool.title || t("tool.defaultTitle")}
+											type={`tool-${tool.kind}`}
+											state={state}
+										/>
+										{askPending ? (
+											<AskUserToolPendingNote />
+										) : askUserQuestion ? null : (
+											<ToolContent>
+												{tool.input !== undefined ? (
+													<ToolInput input={tool.input} />
+												) : null}
+												<ToolOutput
+													output={tool.output}
+													errorText={
+														tool.status === "failed"
+															? t("tool.failed")
+															: undefined
+													}
+												/>
+											</ToolContent>
+										)}
+									</Tool>
+								);
+							}
+							if (!part.text) return null;
+							const isAnimating =
+								Boolean(line.streaming) &&
+								index === lastIndex &&
+								part.text.length > 0;
+							const showCitation =
+								!line.streaming &&
+								index === lastTextIndex &&
+								Boolean(line.sources && line.sources.length > 0);
+							return (
+								<div key={partKey} className="min-w-0">
+									<MessageResponse isAnimating={isAnimating}>
+										{part.text}
+									</MessageResponse>
+									{showCitation && line.sources ? (
+										<span className="mt-1 inline-flex items-center">
+											<InlineCitation>
+												<InlineCitationCard>
+													<InlineCitationCardTrigger
+														sources={line.sources.map(normalizeAgentSourcePath)}
+													/>
+													<InlineCitationCardBody>
+														<InlineCitationCarousel>
+															<InlineCitationCarouselHeader>
+																<InlineCitationCarouselPrev />
+																<InlineCitationCarouselNext />
+																<InlineCitationCarouselIndex />
+															</InlineCitationCarouselHeader>
+															<InlineCitationCarouselContent>
+																{line.sources.map((raw) => {
+																	const s = normalizeAgentSourcePath(raw);
+																	return (
+																		<InlineCitationCarouselItem key={s}>
+																			<InlineCitationSource
+																				title={s.split(/[/\\]/).pop() || s}
+																				url={s}
+																				description={
+																					/^https?:\/\//i.test(s)
+																						? undefined
+																						: t("citation.vaultPath")
+																				}
+																				onOpen={
+																					onOpenSource
+																						? () => onOpenSource(s)
+																						: undefined
+																				}
+																			/>
+																		</InlineCitationCarouselItem>
+																	);
+																})}
+															</InlineCitationCarouselContent>
+														</InlineCitationCarousel>
+													</InlineCitationCardBody>
+												</InlineCitationCard>
+											</InlineCitation>
+										</span>
+									) : null}
+								</div>
+							);
+						})}
+						{showThinking ? (
+							<Shimmer className="text-sm">{t("thinking")}</Shimmer>
+						) : null}
+					</MessageContent>
+					{!line.streaming && agentText ? (
+						<MessageActions className="-mt-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+							<MessageAction
+								tooltip={t("copy")}
+								label={t("copy")}
+								onClick={() => void copyText(agentText)}
+							>
+								<CopyIcon className="size-3.5" />
+							</MessageAction>
+						</MessageActions>
+					) : null}
+				</Message>
+				{line.sources && line.sources.length > 0 ? (
+					<Sources>
+						<SourcesTrigger count={line.sources.length} />
+						<SourcesContent>
+							{line.sources.map((raw) => {
+								const s = normalizeAgentSourcePath(raw);
+								const isHttp = /^https?:\/\//i.test(s);
+								return (
+									<Source
+										key={s}
+										title={s}
+										href={isHttp ? s : undefined}
+										onClick={onOpenSource ? () => onOpenSource(s) : undefined}
+									/>
+								);
+							})}
+						</SourcesContent>
+					</Sources>
+				) : null}
+			</div>
+		);
+	}
+	if (line.kind === "error") {
+		return (
+			<Message from="assistant">
+				<MessageContent className="text-destructive">
+					<MessageResponse>{line.text}</MessageResponse>
+				</MessageContent>
+			</Message>
+		);
+	}
+	return (
+		<Checkpoint className="my-1 px-1">
+			<CheckpointIcon />
+			<CheckpointTrigger
+				className="h-auto px-1 py-0.5 text-muted-foreground text-xs"
+				variant="ghost"
+				tooltip={line.text}
+			>
+				{line.text}
+			</CheckpointTrigger>
+		</Checkpoint>
+	);
+});
+
 export function ChatTranscript({
 	lines,
 	activeTabId,
@@ -128,11 +543,7 @@ export function ChatTranscript({
 		onCompositionStart?: () => void;
 		onCompositionEnd?: () => void;
 	};
-	isEditBlockedByIme: (event: {
-		nativeEvent?: { isComposing?: boolean; keyCode?: number };
-		isComposing?: boolean;
-		keyCode?: number;
-	}) => boolean;
+	isEditBlockedByIme: (event: ImeGuardEvent) => boolean;
 	onEditingTextChange: (text: string) => void;
 	onCancelEditing: () => void;
 	onResendEdited: (lineId: string) => void;
@@ -142,6 +553,56 @@ export function ChatTranscript({
 	onOpenSource?: (source: string) => void;
 }) {
 	const { t } = useTranslation("agent");
+
+	// Latest-callback ref + identity-stable wrappers: parents may pass inline
+	// closures, but memoized rows must not re-render on every parent render.
+	const latestHandlersRef = useRef<RowHandlers>({
+		isEditBlockedByIme,
+		onEditingTextChange,
+		onCancelEditing,
+		onResendEdited,
+		onStartEditing,
+		onSendSuggestion,
+		onOpenSource,
+		editCompositionProps,
+	});
+	latestHandlersRef.current = {
+		isEditBlockedByIme,
+		onEditingTextChange,
+		onCancelEditing,
+		onResendEdited,
+		onStartEditing,
+		onSendSuggestion,
+		onOpenSource,
+		editCompositionProps,
+	};
+	const hasOpenSource = Boolean(onOpenSource);
+	const rowHandlers = useMemo<RowHandlers>(
+		() => ({
+			isEditBlockedByIme: (event) =>
+				latestHandlersRef.current.isEditBlockedByIme(event),
+			onEditingTextChange: (text) =>
+				latestHandlersRef.current.onEditingTextChange(text),
+			onCancelEditing: () => latestHandlersRef.current.onCancelEditing(),
+			onResendEdited: (lineId) =>
+				latestHandlersRef.current.onResendEdited(lineId),
+			onStartEditing: (lineId, text) =>
+				latestHandlersRef.current.onStartEditing(lineId, text),
+			onSendSuggestion: (label, workflow) =>
+				latestHandlersRef.current.onSendSuggestion(label, workflow),
+			// Keep undefined when absent so rows preserve "no open handler" UI.
+			onOpenSource: hasOpenSource
+				? (source) => latestHandlersRef.current.onOpenSource?.(source)
+				: undefined,
+			editCompositionProps: {
+				onCompositionStart: () =>
+					latestHandlersRef.current.editCompositionProps.onCompositionStart?.(),
+				onCompositionEnd: () =>
+					latestHandlersRef.current.editCompositionProps.onCompositionEnd?.(),
+			},
+		}),
+		[hasOpenSource],
+	);
 
 	return (
 		<Conversation className="min-h-0 flex-1">
@@ -183,383 +644,25 @@ export function ChatTranscript({
 						</ConversationEmptyState>
 					) : (
 						lines.map((line) => {
-							if (line.kind === "user") {
-								const isEditing = editingLineId === line.id;
-								const visuals = line.visualAnnotations ?? [];
-								const attachedImages = line.images ?? [];
-								if (isEditing) {
-									return (
-										<Message key={line.id} from="user">
-											{/* Chips sit above the bubble, matching composer context chips. */}
-											{visuals.length > 0 ? (
-												<ChatVisualAnnotations annotations={visuals} />
-											) : null}
-											{attachedImages.length > 0 ? (
-												<ChatAttachedImages images={attachedImages} />
-											) : null}
-											<div className="ml-auto flex w-full flex-col gap-2 rounded-lg bg-black/5 px-3 py-2.5 ring-1 ring-black/10 dark:bg-white/10 dark:ring-white/15">
-												<textarea
-													ref={editTextareaRef}
-													className="max-h-60 min-h-16 w-full resize-none overflow-y-auto bg-transparent text-foreground text-sm leading-6 outline-none"
-													value={editingText}
-													onChange={(event) =>
-														onEditingTextChange(event.currentTarget.value)
-													}
-													{...editCompositionProps}
-													onKeyDown={(event) => {
-														if (event.key === "Escape") {
-															event.preventDefault();
-															onCancelEditing();
-														} else if (
-															event.key === "Enter" &&
-															!event.shiftKey &&
-															!isEditBlockedByIme(event)
-														) {
-															event.preventDefault();
-															onResendEdited(line.id);
-														}
-													}}
-												/>
-												<div className="flex items-center justify-end gap-2">
-													<Button
-														type="button"
-														variant="ghost"
-														size="sm"
-														onClick={onCancelEditing}
-													>
-														{t("edit.cancel")}
-													</Button>
-													<Button
-														type="button"
-														size="sm"
-														disabled={
-															!editingText.trim() || submitting || switching
-														}
-														onClick={() => onResendEdited(line.id)}
-													>
-														{t("edit.resend")}
-													</Button>
-												</div>
-											</div>
-										</Message>
-									);
-								}
-								const userDisplay = stripPromptEnvelopeForDisplay(line.text);
-								// Never render Codex env / Host system envelopes as user bubbles.
-								if (
-									!userDisplay &&
-									visuals.length === 0 &&
-									attachedImages.length === 0
-								)
-									return null;
-								const copyPayload = formatUserLineForCopy({
-									text: userDisplay,
-									visualAnnotations: visuals,
-									images: attachedImages,
-								});
-								return (
-									<Message key={line.id} from="user">
-										{/* Visual / image chips above the text bubble (not inside it). */}
-										{visuals.length > 0 ? (
-											<ChatVisualAnnotations annotations={visuals} />
-										) : null}
-										{attachedImages.length > 0 ? (
-											<ChatAttachedImages images={attachedImages} />
-										) : null}
-										{/* Free-text only: skip empty bubble when the turn is image/visual-only. */}
-										{userDisplay ? (
-											<MessageContent>
-												<MessageResponse>{userDisplay}</MessageResponse>
-											</MessageContent>
-										) : null}
-										{/* Align under user content (Message is full-width) */}
-										<MessageActions className="-mt-1 ml-auto opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-											{activeTabIsRunning || !userDisplay ? null : (
-												<MessageAction
-													tooltip={t("edit.action")}
-													label={t("edit.action")}
-													disabled={submitting || switching}
-													onClick={() => onStartEditing(line.id, userDisplay)}
-												>
-													<Pencil className="size-3.5" />
-												</MessageAction>
-											)}
-											<MessageAction
-												tooltip={t("copy")}
-												label={t("copy")}
-												onClick={() => void copyText(copyPayload)}
-											>
-												<CopyIcon className="size-3.5" />
-											</MessageAction>
-										</MessageActions>
-									</Message>
-								);
-							}
-							if (line.kind === "agent") {
-								// Include activeTabId so per-part Reasoning/Tool state never
-								// leaks across sessions when history line ids collide
-								// (e.g. Codex thread message ids).
-								const rowKey = `${activeTabId}:${line.id}`;
-								const parts = line.parts;
-								const lastIndex = parts.length - 1;
-								let lastTextIndex = -1;
-								for (let i = lastIndex; i >= 0; i--) {
-									if (parts[i].type === "text") {
-										lastTextIndex = i;
-										break;
-									}
-								}
-								const agentText = agentTextFromParts(parts);
-								const showThinking =
-									Boolean(line.streaming) && parts.length === 0;
-								return (
-									<div key={rowKey} className="flex w-full flex-col gap-2">
-										<Message from="assistant">
-											<MessageContent>
-												<p className="mb-1 font-medium text-muted-foreground text-xs">
-													{agentName}
-												</p>
-												{parts.map((part, index) => {
-													const partKey = `${rowKey}:${part.id}`;
-													if (part.type === "reasoning") {
-														const streaming =
-															Boolean(line.streaming) && index === lastIndex;
-														if (!part.text.trim() && !streaming) return null;
-														return (
-															<Reasoning
-																key={partKey}
-																className="mb-2"
-																isStreaming={streaming}
-																// Collapsed by default so the transcript stays
-																// scannable; expand on click. Also collapsed
-																// while streaming (no auto-expand).
-																defaultOpen={false}
-															>
-																<ReasoningTrigger />
-																<ReasoningContent>{part.text}</ReasoningContent>
-															</Reasoning>
-														);
-													}
-													if (part.type === "plan") {
-														const plan = part.entries;
-														if (plan.length === 0) return null;
-														const planStreaming =
-															Boolean(line.streaming) &&
-															plan.some((p) => p.status !== "completed");
-														return (
-															<Plan
-																key={partKey}
-																className="mb-2"
-																defaultOpen
-																isStreaming={planStreaming}
-															>
-																<PlanHeader>
-																	<div className="min-w-0 flex-1 space-y-1">
-																		<PlanTitle>{t("plan.title")}</PlanTitle>
-																		<PlanDescription>
-																			{t("plan.steps", {
-																				completed: plan.filter(
-																					(p) => p.status === "completed",
-																				).length,
-																				total: plan.length,
-																			})}
-																		</PlanDescription>
-																	</div>
-																	<PlanAction>
-																		<PlanTrigger />
-																	</PlanAction>
-																</PlanHeader>
-																<PlanContent className="pt-0">
-																	<ol className="space-y-2">
-																		{plan.map((entry) => (
-																			<PlanStep
-																				key={`${entry.status}:${entry.priority}:${entry.content}`}
-																				status={
-																					entry.status === "completed"
-																						? "completed"
-																						: entry.status === "in_progress"
-																							? "in_progress"
-																							: "pending"
-																				}
-																			>
-																				{entry.content}
-																			</PlanStep>
-																		))}
-																	</ol>
-																</PlanContent>
-															</Plan>
-														);
-													}
-													if (part.type === "tool") {
-														const tool = part.tool;
-														const state = toolPartState(tool.status);
-														const askUserQuestion = parseAskUserQuestions(
-															tool.input,
-														);
-														// Interactive form is owned by the composer; transcript
-														// only shows a compact tool row (and a short pending note).
-														const askPending =
-															Boolean(askUserQuestion) &&
-															isPendingAskUserToolStatus(tool.status);
-														return (
-															<Tool key={partKey} defaultOpen={askPending}>
-																<ToolHeader
-																	title={tool.title || t("tool.defaultTitle")}
-																	type={`tool-${tool.kind}`}
-																	state={state}
-																/>
-																{askPending ? (
-																	<AskUserToolPendingNote />
-																) : askUserQuestion ? null : (
-																	<ToolContent>
-																		{tool.input !== undefined ? (
-																			<ToolInput input={tool.input} />
-																		) : null}
-																		<ToolOutput
-																			output={tool.output}
-																			errorText={
-																				tool.status === "failed"
-																					? t("tool.failed")
-																					: undefined
-																			}
-																		/>
-																	</ToolContent>
-																)}
-															</Tool>
-														);
-													}
-													if (!part.text) return null;
-													const isAnimating =
-														Boolean(line.streaming) &&
-														index === lastIndex &&
-														part.text.length > 0;
-													const showCitation =
-														!line.streaming &&
-														index === lastTextIndex &&
-														Boolean(line.sources && line.sources.length > 0);
-													return (
-														<div key={partKey} className="min-w-0">
-															<MessageResponse isAnimating={isAnimating}>
-																{part.text}
-															</MessageResponse>
-															{showCitation && line.sources ? (
-																<span className="mt-1 inline-flex items-center">
-																	<InlineCitation>
-																		<InlineCitationCard>
-																			<InlineCitationCardTrigger
-																				sources={line.sources.map(
-																					normalizeAgentSourcePath,
-																				)}
-																			/>
-																			<InlineCitationCardBody>
-																				<InlineCitationCarousel>
-																					<InlineCitationCarouselHeader>
-																						<InlineCitationCarouselPrev />
-																						<InlineCitationCarouselNext />
-																						<InlineCitationCarouselIndex />
-																					</InlineCitationCarouselHeader>
-																					<InlineCitationCarouselContent>
-																						{line.sources.map((raw) => {
-																							const s =
-																								normalizeAgentSourcePath(raw);
-																							return (
-																								<InlineCitationCarouselItem
-																									key={s}
-																								>
-																									<InlineCitationSource
-																										title={
-																											s.split(/[/\\]/).pop() ||
-																											s
-																										}
-																										url={s}
-																										description={
-																											/^https?:\/\//i.test(s)
-																												? undefined
-																												: t(
-																														"citation.vaultPath",
-																													)
-																										}
-																										onOpen={
-																											onOpenSource
-																												? () => onOpenSource(s)
-																												: undefined
-																										}
-																									/>
-																								</InlineCitationCarouselItem>
-																							);
-																						})}
-																					</InlineCitationCarouselContent>
-																				</InlineCitationCarousel>
-																			</InlineCitationCardBody>
-																		</InlineCitationCard>
-																	</InlineCitation>
-																</span>
-															) : null}
-														</div>
-													);
-												})}
-												{showThinking ? (
-													<Shimmer className="text-sm">{t("thinking")}</Shimmer>
-												) : null}
-											</MessageContent>
-											{!line.streaming && agentText ? (
-												<MessageActions className="-mt-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-													<MessageAction
-														tooltip={t("copy")}
-														label={t("copy")}
-														onClick={() => void copyText(agentText)}
-													>
-														<CopyIcon className="size-3.5" />
-													</MessageAction>
-												</MessageActions>
-											) : null}
-										</Message>
-										{line.sources && line.sources.length > 0 ? (
-											<Sources>
-												<SourcesTrigger count={line.sources.length} />
-												<SourcesContent>
-													{line.sources.map((raw) => {
-														const s = normalizeAgentSourcePath(raw);
-														const isHttp = /^https?:\/\//i.test(s);
-														return (
-															<Source
-																key={s}
-																title={s}
-																href={isHttp ? s : undefined}
-																onClick={
-																	onOpenSource
-																		? () => onOpenSource(s)
-																		: undefined
-																}
-															/>
-														);
-													})}
-												</SourcesContent>
-											</Sources>
-										) : null}
-									</div>
-								);
-							}
-							if (line.kind === "error") {
-								return (
-									<Message key={line.id} from="assistant">
-										<MessageContent className="text-destructive">
-											<MessageResponse>{line.text}</MessageResponse>
-										</MessageContent>
-									</Message>
-								);
-							}
+							const isEditing = editingLineId === line.id;
 							return (
-								<Checkpoint key={line.id} className="my-1 px-1">
-									<CheckpointIcon />
-									<CheckpointTrigger
-										className="h-auto px-1 py-0.5 text-muted-foreground text-xs"
-										variant="ghost"
-										tooltip={line.text}
-									>
-										{line.text}
-									</CheckpointTrigger>
-								</Checkpoint>
+								<ChatTranscriptRow
+									key={
+										line.kind === "agent"
+											? `${activeTabId}:${line.id}`
+											: line.id
+									}
+									line={line}
+									activeTabId={activeTabId}
+									agentName={agentName}
+									activeTabIsRunning={activeTabIsRunning}
+									submitting={submitting}
+									switching={switching}
+									isEditing={isEditing}
+									editingText={isEditing ? editingText : ""}
+									editTextareaRef={editTextareaRef}
+									handlers={rowHandlers}
+								/>
 							);
 						})
 					)}

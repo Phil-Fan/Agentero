@@ -229,3 +229,54 @@ mod acp_live {
         }
     }
 }
+
+#[cfg(test)]
+mod tool_payload {
+    use crate::features::agent::acp::{cap_tool_payload, TOOL_PAYLOAD_MAX_BYTES};
+    use serde_json::{json, Value};
+
+    #[test]
+    fn small_payloads_pass_through_unchanged() {
+        assert_eq!(cap_tool_payload(None), None);
+        let small = json!({ "questions": [{ "question": "Proceed?" }] });
+        assert_eq!(cap_tool_payload(Some(small.clone())), Some(small));
+    }
+
+    #[test]
+    fn oversized_string_is_truncated_with_marker() {
+        let big = "x".repeat(TOOL_PAYLOAD_MAX_BYTES * 4);
+        let capped = cap_tool_payload(Some(Value::String(big.clone()))).unwrap();
+        let Value::String(text) = capped else {
+            panic!("expected string payload");
+        };
+        assert!(text.len() < big.len() / 2, "payload must shrink");
+        assert!(
+            text.starts_with(&"x".repeat(1024)),
+            "head must be preserved"
+        );
+        assert!(text.contains("truncated"), "marker must be present");
+    }
+
+    #[test]
+    fn oversized_object_falls_back_to_json_head() {
+        let big = json!({ "fileText": "y".repeat(TOOL_PAYLOAD_MAX_BYTES * 2) });
+        let capped = cap_tool_payload(Some(big)).unwrap();
+        let Value::String(text) = capped else {
+            panic!("expected string payload");
+        };
+        assert!(text.starts_with("{\"fileText\":"));
+        assert!(text.contains("truncated"));
+        assert!(text.len() <= TOOL_PAYLOAD_MAX_BYTES + 128);
+    }
+
+    #[test]
+    fn truncation_respects_char_boundaries() {
+        // Multi-byte chars across the cut point must not panic.
+        let big = "汉".repeat(TOOL_PAYLOAD_MAX_BYTES);
+        let capped = cap_tool_payload(Some(Value::String(big))).unwrap();
+        let Value::String(text) = capped else {
+            panic!("expected string payload");
+        };
+        assert!(text.contains("truncated"));
+    }
+}

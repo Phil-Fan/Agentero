@@ -59,6 +59,13 @@ spawn 用户配置的 agent
   → 完成（含 providerSessionId）/ 失败
 ```
 
+流式 chunk 合并（`stream_coalesce.rs`）：agent 通常每秒推 20–100 个小 chunk，
+逐条 emit 会让 webview 每 token 重渲染一次（Windows 卡顿主因）。Host 用
+~40ms 窗口合并连续同 kind 的文本 chunk 再发 `agent:stream`；kind 切换
+（message ↔ thought）、tool/plan 等有序事件、`agent:completed` / `agent:failed`
+之前都会先 flush，保证顺序与文本无损。`agent:tool` 的 `input`/`output` 超过
+32KB 时截断为「头部 + truncated 标记」（前端只做预览渲染）。
+
 多轮续聊必须传 **provider session id**（不是 Agentero runtime id）。Grok Build ACP
 声明 `loadSession: true`、**不**声明 `resume`；对 Grok 调用 `session/resume` 会
 `Method not found`，Host 应改走 `session/load`。

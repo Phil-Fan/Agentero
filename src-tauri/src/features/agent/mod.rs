@@ -14,6 +14,7 @@ pub mod prompts;
 pub mod registry;
 pub mod runtime;
 pub mod skills;
+pub mod stream_coalesce;
 pub mod templates;
 pub mod tool_lifecycle;
 

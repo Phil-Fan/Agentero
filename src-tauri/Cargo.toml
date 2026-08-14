@@ -45,6 +45,10 @@ desktop = [
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[dev-dependencies]
+# `start_paused` virtual clock for stream coalescer / throttle unit tests.
+tokio = { version = "1", features = ["test-util", "macros"] }
+
 [dependencies]
 tauri = { version = "2", features = [], optional = true }
 tauri-plugin-opener = { version = "2", optional = true }

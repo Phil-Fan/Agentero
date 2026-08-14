@@ -19,6 +19,7 @@ use crate::features::agent::prompts::{build_prompt, extract_sources};
 use crate::features::agent::skills::{
     load_skill_instructions, skill_activation_prefix, skill_mention_style,
 };
+use crate::features::agent::stream_coalesce::{StreamCoalescer, STREAM_COALESCE_WINDOW};
 use agent_client_protocol::schema::v1::{
     AvailableCommandInput, CancelNotification, ClientCapabilities, ContentBlock,
     CreateElicitationRequest, CreateElicitationResponse, ElicitationAcceptAction,
@@ -573,6 +574,35 @@ fn emit_session_config_options(
     }
 }
 
+/// Cap tool payloads relayed to the webview. `raw_input`/`raw_output` of
+/// read/fetch-style tools can carry whole files (MBs) per ToolCallUpdate; the
+/// transcript only renders a preview, so ship a bounded head + marker instead.
+pub(crate) const TOOL_PAYLOAD_MAX_BYTES: usize = 32 * 1024;
+
+pub(crate) fn cap_tool_payload(value: Option<serde_json::Value>) -> Option<serde_json::Value> {
+    let value = value?;
+    let serialized = serde_json::to_string(&value).unwrap_or_default();
+    if serialized.len() <= TOOL_PAYLOAD_MAX_BYTES {
+        return Some(value);
+    }
+    // Keep raw text for string payloads; other shapes fall back to their JSON.
+    let source = match value {
+        serde_json::Value::String(s) => s,
+        _ => serialized,
+    };
+    let total = source.len();
+    let mut cut = TOOL_PAYLOAD_MAX_BYTES.min(total);
+    while cut > 0 && !source.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    Some(serde_json::Value::String(format!(
+        "{}\n… [truncated {} of {} bytes]",
+        &source[..cut],
+        total - cut,
+        total
+    )))
+}
+
 fn emit_rich_session_update(
     app: &AgentEventEmitter,
     session_id: &str,
@@ -619,8 +649,8 @@ fn emit_rich_session_update(
                     title: Some(tc.title.clone()),
                     kind: Some(tool_kind_str(tc.kind).to_string()),
                     status: Some(tool_status_str(tc.status).to_string()),
-                    input: tc.raw_input.clone(),
-                    output: tc.raw_output.clone(),
+                    input: cap_tool_payload(tc.raw_input.clone()),
+                    output: cap_tool_payload(tc.raw_output.clone()),
                     full: true,
                 },
             );
@@ -635,8 +665,8 @@ fn emit_rich_session_update(
                     title: f.title.clone(),
                     kind: f.kind.map(tool_kind_str).map(str::to_string),
                     status: f.status.map(tool_status_str).map(str::to_string),
-                    input: f.raw_input.clone(),
-                    output: f.raw_output.clone(),
+                    input: cap_tool_payload(f.raw_input.clone()),
+                    output: cap_tool_payload(f.raw_output.clone()),
                     full: false,
                 },
             );
@@ -1335,6 +1365,24 @@ pub async fn run_once(
     let session_for_notif = session_id.clone();
     let agent_id_for_notif = desc.id.clone();
     let pi_for_notif = matches!(desc.template, AgentTemplate::Pi);
+    // Merge token-storm chunks into ~25 emits/s (Windows webview jank source).
+    // Payload shape is unchanged: same event, longer `chunk`, lower rate.
+    let coalescer = StreamCoalescer::new(STREAM_COALESCE_WINDOW, {
+        let app = app.clone();
+        let session_id = session_id.clone();
+        move |chunk, kind| {
+            let _ = app.emit(
+                "agent:stream",
+                AgentStreamEvent {
+                    session_id: session_id.clone(),
+                    chunk,
+                    kind,
+                },
+            );
+        }
+    });
+    let coalescer_for_notif = coalescer.clone();
+    let coalescer_for_conn = coalescer.clone();
     // dsh keeps sessions in-process and never advertises resume/load, so a
     // requested continue degrades to a fresh session — always stream live.
     let dsh_fresh_sessions = matches!(desc.template, AgentTemplate::Dsh);
@@ -1398,15 +1446,12 @@ pub async fn run_once(
                                 }
                             }
                         }
-                        let _ = app_for_notif.emit(
-                            "agent:stream",
-                            AgentStreamEvent {
-                                session_id: session_for_notif.clone(),
-                                chunk,
-                                kind,
-                            },
-                        );
+                        coalescer_for_notif.push(&chunk, kind);
                     }
+                } else {
+                    // Non-chunk update (tool/plan/…): flush buffered text first
+                    // so the transcript order stays text → tool/plan.
+                    coalescer_for_notif.flush();
                 }
                 emit_rich_session_update(
                     &app_for_notif,
@@ -1501,6 +1546,7 @@ pub async fn run_once(
                             &content_for_conn,
                             &thought_for_conn,
                         );
+                        coalescer_for_conn.flush();
                         let _ = app_for_conn.emit("agent:completed", payload.clone());
                         return Ok(payload);
                     }
@@ -1557,6 +1603,7 @@ pub async fn run_once(
                                     &content_for_conn,
                                     &thought_for_conn,
                                 );
+                                coalescer_for_conn.flush();
                                 let _ = app_for_conn.emit("agent:completed", payload.clone());
                                 return Ok(payload);
                             }
@@ -1590,6 +1637,7 @@ pub async fn run_once(
                                     &content_for_conn,
                                     &thought_for_conn,
                                 );
+                                coalescer_for_conn.flush();
                                 let _ = app_for_conn.emit("agent:completed", payload.clone());
                                 return Ok(payload);
                             }
@@ -1613,6 +1661,7 @@ pub async fn run_once(
                                 &content_for_conn,
                                 &thought_for_conn,
                             );
+                            coalescer_for_conn.flush();
                             let _ = app_for_conn.emit("agent:completed", payload.clone());
                             return Ok(payload);
                         }
@@ -1631,6 +1680,7 @@ pub async fn run_once(
                             &content_for_conn,
                             &thought_for_conn,
                         );
+                        coalescer_for_conn.flush();
                         let _ = app_for_conn.emit("agent:completed", payload.clone());
                         return Ok(payload);
                     }};
@@ -1771,6 +1821,7 @@ pub async fn run_once(
                         &content_for_conn,
                         &thought_for_conn,
                     );
+                    coalescer_for_conn.flush();
                     let _ = app_for_conn.emit("agent:completed", payload.clone());
                     return Ok(payload);
                 }
@@ -1817,6 +1868,7 @@ pub async fn run_once(
                             &content_for_conn,
                             &thought_for_conn,
                         );
+                        coalescer_for_conn.flush();
                         let _ = app_for_conn.emit("agent:completed", payload.clone());
                         return Ok(payload);
                     }
@@ -1848,6 +1900,7 @@ pub async fn run_once(
                     stop_reason: stop_for_conn.lock().ok().and_then(|g| g.clone()),
                     provider_session_id: Some(acp_session_id.to_string()),
                 };
+                coalescer_for_conn.flush();
                 let _ = app_for_conn.emit("agent:completed", payload.clone());
                 Ok(payload)
             }
@@ -1858,6 +1911,7 @@ pub async fn run_once(
         Ok(payload) => Ok(payload),
         Err(e) => {
             let msg = e.to_string();
+            coalescer.flush();
             let _ = app.emit(
                 "agent:failed",
                 AgentFailedEvent {
