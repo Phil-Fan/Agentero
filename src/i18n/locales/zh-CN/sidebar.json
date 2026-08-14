@@ -137,14 +137,28 @@
 	},
 	"plaza": {
 		"plaza": "广场",
-		"plazaDescription": "从外部来源发现论文；入库后会出现在论文库中。",
+		"plazaDescription": "从外部来源发现论文与科研 Skill；入库后会出现在论文库中。",
 		"back": "后退",
 		"forward": "前进",
 		"reload": "重新载入",
 		"openInSystemBrowser": "在系统浏览器打开",
 		"comingSoon": "即将推出",
 		"comingSoonFor": "{{label}} 即将推出。",
-		"arxivDescription": "浏览 arXiv 日更与会议论文流"
+		"arxivDescription": "浏览 arXiv 日更与会议论文流",
+		"skillsDescription": "按科研流程精选的 GitHub Skill 仓库，一点即可导入",
+		"skills": {
+			"title": "Skill 推荐",
+			"blurb": "按科研流程精选的 GitHub Skill 仓库。点击卡片即走魔棒导入。",
+			"openGithub": "在 GitHub 打开",
+			"import": "导入 {{name}} 的 Skill",
+			"themes": {
+				"reading": "论文阅读",
+				"writing": "论文写作",
+				"figures": "绘图",
+				"reproduce": "复现",
+				"submit": "投稿"
+			}
+		}
 	},
 	"connector": {
 		"saved": "已从浏览器保存「{{title}}」",

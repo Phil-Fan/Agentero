@@ -154,3 +154,12 @@ export async function importPlazaPaper(
 		return false;
 	}
 }
+
+/** Feed a GitHub Skill repo into the 魔棒 discovery → install dialog. */
+export async function importPlazaSkillRepo(url: string): Promise<void> {
+	try {
+		await lookupSubmit([url], { openImported: false });
+	} catch (error) {
+		notifyError(error instanceof Error ? error.message : String(error));
+	}
+}

@@ -9,6 +9,7 @@
  */
 
 import type { ParseKeys } from "i18next";
+import { Sparkles } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { CoolPapersIcon } from "@/components/icons/cool-papers-icon";
 import i18n from "@/i18n";
@@ -28,10 +29,11 @@ export type PlazaSource = {
 	description: ParseKeys<"sidebar">;
 	/**
 	 * Canonical public site: used for "open in browser", and embedded directly
-	 * when there is no proxy. `null` renders a placeholder page, so a planned
-	 * source can ship as a visible-but-empty entry instead of a dead link.
+	 * when there is no proxy. `null` with no {@link panel} is a placeholder.
 	 */
 	url: string | null;
+	/** Native plaza panel (not an iframe). */
+	panel?: "skills";
 	/**
 	 * Host proxy scheme origin used for embedding. A cross-origin frame cannot
 	 * retarget the site's `target="_blank"` links or report its navigations, so
@@ -63,9 +65,19 @@ export const PLAZA_SOURCES: readonly PlazaSource[] = [
 		embedOrigin: () => schemeOrigin("agentero-coolpapers"),
 		icon: CoolPapersIcon,
 	},
+	{
+		id: "skills",
+		path: sourcePath("skills"),
+		label: "Skill picks",
+		description: "plaza.skillsDescription",
+		url: null,
+		embedOrigin: null,
+		panel: "skills",
+		icon: Sparkles,
+	},
 ];
 
-/** True for the Plaza parent node and every source under it. */
+/** True for the Plaza parent node and every source under this parent. */
 export function isPlazaVirtualPath(path: string | null | undefined): boolean {
 	if (!path) return false;
 	return (
@@ -87,5 +99,9 @@ export function plazaSourceForPath(
 
 /** Tab title for any Plaza path. */
 export function plazaTitleForPath(path: string): string {
-	return plazaSourceForPath(path)?.label ?? i18n.t("sidebar:plaza.plaza");
+	const source = plazaSourceForPath(path);
+	if (source?.id === "skills") {
+		return i18n.t("sidebar:plaza.skills.title");
+	}
+	return source?.label ?? i18n.t("sidebar:plaza.plaza");
 }

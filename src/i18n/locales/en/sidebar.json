@@ -137,14 +137,28 @@
 	},
 	"plaza": {
 		"plaza": "Plaza",
-		"plazaDescription": "Discover papers from external sources; imported papers appear in your library.",
+		"plazaDescription": "Discover papers and research Skills from external sources; imported papers appear in your library.",
 		"back": "Back",
 		"forward": "Forward",
 		"reload": "Reload",
 		"openInSystemBrowser": "Open in system browser",
 		"comingSoon": "Coming soon",
 		"comingSoonFor": "{{label}} is coming soon.",
-		"arxivDescription": "Browse daily arXiv updates and conference papers"
+		"arxivDescription": "Browse daily arXiv updates and conference papers",
+		"skillsDescription": "Curated GitHub Skill repos for research — click to import",
+		"skills": {
+			"title": "Skill picks",
+			"blurb": "Curated GitHub Skill repos for research. Click a card to import via the magic wand.",
+			"openGithub": "Open on GitHub",
+			"import": "Import skills from {{name}}",
+			"themes": {
+				"reading": "Reading",
+				"writing": "Writing",
+				"figures": "Figures",
+				"reproduce": "Reproduction",
+				"submit": "Submission"
+			}
+		}
 	},
 	"connector": {
 		"saved": "Saved “{{title}}” from browser",

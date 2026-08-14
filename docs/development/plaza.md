@@ -1,6 +1,6 @@
 # 广场（Plaza）— 外部来源发现
 
-> 范围：侧栏虚拟节点 **广场** 及其子来源（Cool Papers / 播客 / 论文推荐）；中间栏发现流。  
+> 范围：侧栏虚拟节点 **广场** 及其子来源（Cool Papers / ModelScope 论文 / 播客 / 论文推荐）；中间栏发现流。  
 > 相关：[`../frontend/vault-tree.md`](../frontend/vault-tree.md)、[`../backend/paper-import.md`](../backend/paper-import.md)、[`../backend/index.md`](../backend/index.md)。
 
 ## 0. 产品结论（2026-07-25，2026-08-14 修订）
@@ -10,18 +10,21 @@
 | Q1 | 树位置 | **Library + Recycle Bin 下方、真实 Vault 根目录上方**（已实现） |
 | Q2 | Cool Papers 呈现 | **内嵌 iframe + Host 代理协议** `agentero-coolpapers://`（已实现；见 §3.2） |
 | Q3 | 入库 | **已实现**：每行注入 `[入库]`，复用现成魔棒（见 §3.2.1） |
-| Q4 | P0 范围 | **已交付：广场壳 + Cool Papers 完整浏览 + 单条入库**；播客 / 推荐尚未实现 |
+| Q4 | P0 范围 | **已交付：广场壳 + Cool Papers 浏览入库 + Skill 推荐**；播客 / 论文推荐尚未实现 |
+| Q5 | ModelScope 论文 | **已实现**：同一代理模式，但站点是 SPA，另有取舍（见 §3.5） |
 
 **已实现落点（2026-08-14）**
 
 | 区域 | 路径 |
 |---|---|
 | 来源注册表 | `src/lib/plaza/sources.ts`（新增来源 = 一条数组项） |
-| 中间栏 | `src/components/plaza/plaza-view.tsx`、`plaza-web-frame.tsx` |
-| 入库 | `src/lib/plaza/import.ts` |
+| 中间栏 | `src/components/plaza/plaza-view.tsx`、`plaza-web-frame.tsx`、`plaza-skills-view.tsx` |
+| Skill 精选 | `src/lib/plaza/skill-catalog.ts` |
+| 入库 | `src/lib/plaza/import.ts`（论文 + Skill 仓库） |
 | 侧栏行 | `src/components/sidebar/file-tree/tree-rows.tsx`（`PlazaRow` / `PlazaSourceRow`） |
 | Tab kind | `src/lib/workspace/tabs/types.ts` 的 `"plaza"` + `doc-view.tsx` 分支 |
-| 站点代理 | `src-tauri/src/features/coolpapers/proxy.rs` |
+| 站点代理（共享管道） | `src-tauri/src/features/site_proxy.rs` |
+| 站点代理（各站改写 + 注入） | `src-tauri/src/features/coolpapers/proxy.rs`、`src-tauri/src/features/modelscope_proxy.rs` |
 
 > Kimi 解析没有走广场入库，而是作为论文侧的独立能力落在 Markdown 工具栏的
 > 「获取 Cool Paper 笔记」按钮上（`paper_coolpapers_notes` → 追加 `NOTES.md`）。
@@ -42,8 +45,10 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 来源：
 
 1. **Cool Papers**（[papers.cool](https://papers.cool/)）— P0：内嵌站点浏览。  
-2. **播客** — 占位，后续。  
-3. **论文推荐** — P0 v0：基于本地库的轻量推荐列表（无云端上传）。
+2. **ModelScope 论文**（[modelscope.cn/papers](https://modelscope.cn/papers)）— 内嵌站点浏览；魔搭每日读论文带中文摘要与评分。  
+3. **Skill 推荐** — 原生面板：按论文阅读 / 写作 / 绘图 / 复现 / 投稿精选 GitHub Skill 仓库；点卡片走魔棒 Skill 导入。  
+4. **播客** — 占位，后续。  
+5. **论文推荐** — P0 v0：基于本地库的轻量推荐列表（无云端上传）。
 
 ## 2. 侧栏信息架构
 
@@ -53,6 +58,8 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 ├── 🗑️ Recycle Bin             agentero:trash
 ├── 🌐 广场                     agentero:plaza              ← 可折叠
 │   ├── ✨ Cool Papers         agentero:plaza/cool-papers
+│   ├── ✨ ModelScope 论文      agentero:plaza/modelscope
+│   ├── ✨ Skill 推荐           agentero:plaza/skills
 │   ├── 🎙️ 播客                 agentero:plaza/podcasts      ← 占位
 │   └── 🧭 推荐                 agentero:plaza/recommend
 ├── papers/
@@ -75,6 +82,8 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 |---|---|---|---|
 | 广场 | `Globe` | Plaza | 广场 |
 | Cool Papers | `Flame` 或自定义标 | Cool Papers | Cool Papers |
+| ModelScope 论文 | 自定义标（魔搭 favicon） | ModelScope papers | ModelScope 论文 |
+| Skill 推荐 | `Sparkles` | Skill picks | Skill 推荐 |
 | 播客 | `Podcast` | Podcasts | 播客 |
 | 推荐 | `Compass` | For You | 推荐 |
 
@@ -173,6 +182,10 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 - PDF 没取到时提示「已导入（未取到 PDF）」，不谎报干净成功。
 
 **后续（非 P0）**：批量入库、预览抽屉；DOI 可按需回补（AAAI / IJCAI 的出版商页有 `citation_doi`，`/search` 按 DOI 的元数据质量最高）。
+
+### 3.2.2 Skill 推荐（已实现）
+
+原生面板（不 iframe）。五类：论文阅读 / 论文写作 / 绘图 / 复现 / 投稿。目录写在 `skill-catalog.ts`（静态 star 快照）。点卡片 → `importPlazaSkillRepo` → 魔棒 `lookupSubmit` → 现有 Skill 多选安装框。角上外链单独打开 GitHub。不含 Zotero / 文献库类仓库。
 
 ### 3.3 播客（占位）
 

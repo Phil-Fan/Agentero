@@ -1,7 +1,9 @@
 export {
-	importPlazaPaper,
-	type PlazaImportRequest,
-} from "@/lib/plaza/import";
+	SKILL_THEMES,
+	type SkillRepo,
+	type SkillTheme,
+	type SkillThemeId,
+} from "@/lib/plaza/skill-catalog";
 export {
 	isPlazaRootPath,
 	isPlazaVirtualPath,

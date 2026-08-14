@@ -332,15 +332,18 @@ export function PlazaRow({ expanded }: { expanded: boolean }) {
 }
 
 export function PlazaSourceRow({ source }: { source: PlazaSource }) {
+	const { t } = useTranslation("sidebar");
 	const Icon = source.icon;
+	const label =
+		source.id === "skills" ? t("plaza.skills.title") : source.label;
 	return (
-		<FileTreeFile path={source.path} name={source.label}>
+		<FileTreeFile path={source.path} name={label}>
 			<span className="size-4 shrink-0" />
 			<FileTreeIcon>
 				<Icon className="size-4" />
 			</FileTreeIcon>
-			<FileTreeName className="min-w-0 flex-1 truncate" title={source.label}>
-				{source.label}
+			<FileTreeName className="min-w-0 flex-1 truncate" title={label}>
+				{label}
 			</FileTreeName>
 		</FileTreeFile>
 	);

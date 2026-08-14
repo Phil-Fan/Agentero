@@ -7,6 +7,7 @@
 
 import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { PlazaSkillsView } from "@/components/plaza/plaza-skills-view";
 import { PlazaWebFrame } from "@/components/plaza/plaza-web-frame";
 import { cn } from "@/lib/core/utils";
 import {
@@ -24,7 +25,9 @@ function SourceCard({
 }) {
 	const { t } = useTranslation("sidebar");
 	const Icon = source.icon;
-	const available = Boolean(source.url);
+	const available = Boolean(source.url || source.panel);
+	const label =
+		source.id === "skills" ? t("plaza.skills.title") : source.label;
 	return (
 		<button
 			type="button"
@@ -41,7 +44,7 @@ function SourceCard({
 			<Icon className="mt-0.5 size-5 shrink-0" />
 			<span className="min-w-0 flex-1">
 				<span className="flex items-center gap-1 font-medium text-sm">
-					<span className="truncate">{source.label}</span>
+					<span className="truncate">{label}</span>
 					{available ? (
 						<ChevronRight
 							className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
@@ -68,6 +71,10 @@ export function PlazaView({
 }) {
 	const { t } = useTranslation("sidebar");
 	const source = plazaSourceForPath(path);
+
+	if (source?.panel === "skills") {
+		return <PlazaSkillsView className={className} />;
+	}
 
 	if (source?.url) {
 		return (
