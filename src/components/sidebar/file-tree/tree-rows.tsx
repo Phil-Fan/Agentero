@@ -308,26 +308,18 @@ export function TrashRow() {
 
 /** 广场 parent row — collapsible, with the discovery sources as children. */
 export function PlazaRow({ expanded }: { expanded: boolean }) {
-	const { togglePath } = useFileTree();
 	return (
-		<FileTreeFile path={PLAZA_VIRTUAL_PATH} name="广场">
-			<button
-				type="button"
-				aria-expanded={expanded}
-				aria-label={expanded ? "收起广场" : "展开广场"}
-				className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
-				onClick={(e) => {
-					e.stopPropagation();
-					e.preventDefault();
-					togglePath(PLAZA_VIRTUAL_PATH);
-				}}
-				onPointerDown={(e) => e.stopPropagation()}
-				onKeyDown={(e) => e.stopPropagation()}
-			>
-				<ChevronRight
-					className={cn("size-4 transition-transform", expanded && "rotate-90")}
-				/>
-			</button>
+		<FileTreeFile
+			path={PLAZA_VIRTUAL_PATH}
+			name="广场"
+			aria-expanded={expanded}
+		>
+			<ChevronRight
+				className={cn(
+					"size-4 shrink-0 text-muted-foreground transition-transform",
+					expanded && "rotate-90",
+				)}
+			/>
 			<FileTreeIcon>
 				<Globe className="size-4 text-muted-foreground" />
 			</FileTreeIcon>
