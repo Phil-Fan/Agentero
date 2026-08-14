@@ -9,7 +9,7 @@ use std::fs;
 use std::path::Path;
 
 /// Current usage schema version written to `schema_meta`.
-pub const SCHEMA_VERSION: i32 = 2;
+pub const SCHEMA_VERSION: i32 = 1;
 
 /// Raw events older than this are pruned on open.
 pub const EVENT_RETENTION_DAYS: i32 = 180;
@@ -17,7 +17,7 @@ pub const EVENT_RETENTION_DAYS: i32 = 180;
 /// Daily aggregates older than this are pruned on open.
 pub const DAILY_RETENTION_DAYS: i32 = 730;
 
-const DDL_V2: &str = r#"
+const DDL_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_meta (
     key   TEXT PRIMARY KEY NOT NULL,
     value TEXT NOT NULL
@@ -118,14 +118,19 @@ pub fn schema_version(conn: &Connection) -> Result<i32, AppError> {
 
 fn migrate(conn: &Connection) -> Result<(), AppError> {
     let version = schema_version(conn).unwrap_or(0);
+    // Dev builds briefly stamped this same table shape as 2. Relabel only.
+    if version == 2 {
+        set_schema_version(conn, SCHEMA_VERSION)?;
+        return Ok(());
+    }
     if version > SCHEMA_VERSION {
         return Err(AppError::message(format!(
             "usage schema version {version} is newer than this app supports ({SCHEMA_VERSION}); upgrade Agentero"
         )));
     }
     if version < 1 {
-        conn.execute_batch(DDL_V2)
-            .map_err(|e| AppError::message(format!("usage migrate v2: {e}")))?;
+        conn.execute_batch(DDL_V1)
+            .map_err(|e| AppError::message(format!("usage migrate v1: {e}")))?;
         set_schema_version(conn, SCHEMA_VERSION)?;
     }
     Ok(())
@@ -156,7 +161,7 @@ fn prune(conn: &Connection) -> Result<(), AppError> {
 }
 
 /// `papers/<id>/…` → `papers/<id>`; anything else stays `None`.
-// TODO(usage v2): drop this once the paper-level rollup recorder calls it.
+// Used by event writes and paper-level rollups.
 #[allow(dead_code)]
 pub fn paper_path_of(path: &str) -> Option<String> {
     let path = path.trim().replace('\\', "/");
@@ -198,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn ensure_usage_creates_v2_schema() {
+    fn ensure_usage_creates_schema() {
         let dir = temp_dir();
         let db = dir.join("usage.sqlite");
         let conn = ensure_usage_at(&db).expect("ensure");

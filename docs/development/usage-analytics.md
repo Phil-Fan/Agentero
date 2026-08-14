@@ -269,7 +269,7 @@ UI / Host 动作
 
 **P0 已落地。** 不放进 Vault、也不放进 `catalog.sqlite`：远程会镜像 catalog；使用记录是设备本地事实。一台机器上的多个 Vault 用 `vault` 列（绝对路径）区分。
 
-路径、列定义与 `kind`↔`facet` 对照见 [`../backend/usage.md`](../backend/usage.md)（schema v2）。
+路径、列定义与 `kind`↔`facet` 对照见 [`../backend/usage.md`](../backend/usage.md)（schema v1）。
 
 ```sql
 usage_vaults    -- 本机 Vault 身份（path UNIQUE）

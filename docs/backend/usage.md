@@ -19,7 +19,7 @@
 
 设置页可一键清除全部记录。
 
-## 数据模型（schema v2）
+## 数据模型（schema v1）
 
 四张表，职责分开。WAL + `busy_timeout` + `foreign_keys`。
 
