@@ -37,6 +37,18 @@ const NAV_BRIDGE: &str = r##"<style>
     };
     send();
     window.addEventListener("pageshow", send);
+    var isFeed = function (url) {
+      return /\/feed\/?$/.test(url.pathname);
+    };
+    // Same-origin URLs must be reopened upstream: the system browser cannot
+    // resolve our private scheme.
+    var handoff = function (url) {
+      if (url.origin === location.origin) {
+        post({ externalPath: url.pathname + url.search });
+      } else {
+        post({ external: url.href });
+      }
+    };
     document.addEventListener(
       "click",
       function (event) {
@@ -53,12 +65,32 @@ const NAV_BRIDGE: &str = r##"<style>
         } catch (e) {
           return;
         }
-        if (url.origin === location.origin) return;
+        // Site pages navigate in place; feeds and third-party sites do not.
+        if (url.origin === location.origin && !isFeed(url)) return;
         event.preventDefault();
-        post({ external: url.href });
+        handoff(url);
       },
       true
     );
+
+    // Every scripted navigation in cool.js goes through window.open — search,
+    // related papers, sort, feed, export, arXiv calendar — and most pass
+    // "_blank". Without allow-popups those calls are silently dropped, so route
+    // them here instead. Installed from <head>, before cool.js loads.
+    window.open = function (url) {
+      var resolved;
+      try {
+        resolved = new URL(url, location.href);
+      } catch (e) {
+        return null;
+      }
+      if (resolved.origin !== location.origin || isFeed(resolved)) {
+        handoff(resolved);
+        return null;
+      }
+      location.assign(resolved.href);
+      return null;
+    };
 
     // ---- [入库] ----------------------------------------------------------
     // The `#N` index anchor is the upstream landing page on every branch
@@ -266,7 +298,9 @@ mod tests {
     fn retargets_blank_links_so_they_open_in_frame() {
         let out = rewrite_html("<a href=\"/arxiv/cs.AI\" target=\"_blank\">x</a>");
         assert!(out.contains("target=\"_self\""));
-        assert!(!out.contains("_blank"));
+        // The bridge's own source mentions _blank, so check the attribute form.
+        assert!(!out.contains("target=\"_blank\""));
+        assert!(!out.contains("target='_blank'"));
     }
 
     #[test]
@@ -313,6 +347,17 @@ mod tests {
     fn defers_row_decoration_until_the_dom_exists() {
         assert!(NAV_BRIDGE.contains("DOMContentLoaded"));
         assert!(NAV_BRIDGE.contains("document.readyState"));
+    }
+
+    /// Search, related papers, sort, export and the arXiv calendar all navigate
+    /// through `window.open`, which the sandbox drops without `allow-popups`.
+    #[test]
+    fn routes_scripted_navigation_through_a_patched_window_open() {
+        assert!(NAV_BRIDGE.contains("window.open = function"));
+        assert!(NAV_BRIDGE.contains("location.assign"));
+        // Feeds and same-origin handoffs reopen upstream, not on our scheme.
+        assert!(NAV_BRIDGE.contains("isFeed"));
+        assert!(NAV_BRIDGE.contains("externalPath"));
     }
 
     #[test]

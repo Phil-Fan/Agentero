@@ -32,6 +32,11 @@ type NavMessage = {
 	path?: string;
 	/** Third-party link the frame refused to follow; open it outside. */
 	external?: string;
+	/**
+	 * Same-origin path the frame declined to render in place (a feed). Reopened
+	 * against the upstream site, since the browser cannot resolve our scheme.
+	 */
+	externalPath?: string;
 	/** A paper row's `[入库]` was clicked. */
 	importPaper?: PlazaImportRequest;
 };
@@ -43,6 +48,7 @@ function isNavMessage(data: unknown): data is NavMessage {
 	return (
 		typeof value.path === "string" ||
 		typeof value.external === "string" ||
+		typeof value.externalPath === "string" ||
 		typeof value.importPaper === "object"
 	);
 }
@@ -96,9 +102,13 @@ export function PlazaWebFrame({
 		if (!embedOrigin) return;
 		const onMessage = (event: MessageEvent) => {
 			if (event.origin !== embedOrigin || !isNavMessage(event.data)) return;
-			const { path, external, importPaper } = event.data;
+			const { path, external, externalPath, importPaper } = event.data;
 			if (external) {
 				openExternalUrl(external);
+				return;
+			}
+			if (externalPath) {
+				openExternalUrl(new URL(externalPath, homeUrl).href);
 				return;
 			}
 			if (importPaper) {
@@ -126,7 +136,7 @@ export function PlazaWebFrame({
 		};
 		window.addEventListener("message", onMessage);
 		return () => window.removeEventListener("message", onMessage);
-	}, [embedOrigin]);
+	}, [embedOrigin, homeUrl]);
 
 	const jump = useCallback((delta: number) => {
 		setNav((prev) => {

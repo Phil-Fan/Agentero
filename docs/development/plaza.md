@@ -121,6 +121,9 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 因此改为在 Host 侧以自有 scheme 转发（沿用 `arxiv_proxy.rs` 的既有模式），同源后即可改写与观测：
 
 - `target="_blank"` → `_self`，站内链接原地跳转；
+- **同时改写 `window.open`**。仅改 HTML 不够：cool.js 的所有脚本式跳转都走 `window.open`（搜索、`[REL]` 相关论文、排序、feed、导出收藏、arXiv 日历共 7 处），且多数传 `_blank`；sandbox 去掉 `allow-popups` 后这些调用会被**静默丢弃**，表现为「搜索点了没反应」。补丁在 `<head>` 安装，早于 body 末尾的 cool.js。
+- 统一的三档跳转规则（链接与脚本共用）：**站内页面** → 原地 `location.assign`；**Atom feed** → 交系统浏览器（面板里渲染裸 XML 没有意义）；**跨源** → 交系统浏览器。
+- feed 与站内 handoff 必须**换算回上游 origin** 再交出去——系统浏览器解析不了我们的私有 scheme（消息用 `externalPath`，由面板对 `homeUrl` 求解）。
 - 绝对自链接 `https://papers.cool/…` → `/…`，导航不会掉出代理；
 - 注入桥接脚本：`postMessage` 上报每次导航路径（前端据此维护 Back/Forward 栈），并拦截跨源链接交给系统浏览器；
 - 上游 origin 在 Rust 侧**硬编码**，避免代理退化成任意 URL 中继（SSRF）。
