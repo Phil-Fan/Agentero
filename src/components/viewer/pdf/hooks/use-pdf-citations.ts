@@ -32,16 +32,34 @@ import { useCitationImport } from "@/hooks/use-citation-import";
 import { usePaperRefsSidecar } from "@/hooks/use-paper-refs-sidecar";
 import { logger } from "@/lib/core/logger";
 import { openExternalUrl } from "@/lib/core/open-external";
-import { findLocalPdfPath, localFileToArrayBuffer } from "@/lib/paper";
 import type { Citation } from "@/lib/paper/refs";
 import {
-	buildCitationDestKeyMap,
 	type CitationDestKeyMap,
 	citationDestKey,
 } from "@/lib/pdf/citation-dest-keys";
+import { loadCitationDestKeyMap } from "@/lib/pdf/citation-dest-map";
 
 /** Grace period so the pointer can travel from the link into the card. */
 const CITATION_HIDE_MS = 250;
+
+/** Upper bound before the deferred dest-key map build runs anyway. */
+const DEST_MAP_IDLE_TIMEOUT_MS = 2000;
+/** Fallback delay when `requestIdleCallback` is unavailable (WebKit). */
+const DEST_MAP_FALLBACK_DELAY_MS = 500;
+
+/**
+ * Run `fn` when the main thread is idle (bounded), so the map build never
+ * competes with the PDF-open critical path (first paint, scroll, selection).
+ * Returns a canceller.
+ */
+function scheduleIdle(fn: () => void): () => void {
+	if (typeof requestIdleCallback === "function") {
+		const id = requestIdleCallback(fn, { timeout: DEST_MAP_IDLE_TIMEOUT_MS });
+		return () => cancelIdleCallback(id);
+	}
+	const id = setTimeout(fn, DEST_MAP_FALLBACK_DELAY_MS);
+	return () => clearTimeout(id);
+}
 
 type AnnotationCapabilityProvides = ReturnType<
 	typeof useAnnotationCapability
@@ -60,6 +78,11 @@ export type UsePdfCitationsOptions = {
 	paperPath: string | null;
 	/** Absolute paper folder; used to read PDF bytes for the cite-key map. */
 	paperAbsPath: string | null;
+	/**
+	 * PDF bytes the viewer already holds (`tab.pdfBytes`). Reused (copied) by
+	 * the cite-key map build so opening a paper never reads the PDF twice.
+	 */
+	sourceBytes?: ArrayBuffer | null;
 };
 
 export type PdfCitations = {
@@ -101,6 +124,7 @@ export function usePdfCitations({
 	vaultPath,
 	paperPath,
 	paperAbsPath,
+	sourceBytes = null,
 }: UsePdfCitationsOptions): PdfCitations {
 	const [citationPreview, setCitationPreview] =
 		useState<CitationPreviewState | null>(null);
@@ -123,27 +147,34 @@ export function usePdfCitations({
 
 	/** hyperref `cite.<key>` destinations of the open PDF, by destination coords. */
 	const destKeyMapRef = useRef<CitationDestKeyMap | null>(null);
+	/** Mirrored so a late bytes prop never re-triggers the build effect. */
+	const sourceBytesRef = useRef<ArrayBuffer | null>(sourceBytes);
+	sourceBytesRef.current = sourceBytes;
 	useEffect(() => {
 		destKeyMapRef.current = null;
 		if (!paperAbsPath) return;
 		let cancelled = false;
-		void (async () => {
-			try {
-				const pdfPath = await findLocalPdfPath(paperAbsPath);
-				if (!pdfPath || cancelled) return;
-				const bytes = await localFileToArrayBuffer(pdfPath);
-				if (!bytes || cancelled) return;
-				const map = await buildCitationDestKeyMap(bytes);
-				if (!cancelled) destKeyMapRef.current = map;
-			} catch (error) {
-				// Non-fatal: hover previews simply do not resolve.
-				logger.warn("citation dest key map failed", {
-					error: error instanceof Error ? error.message : String(error),
+		// Deferred to idle, parsed in a worker, memoized per PDF — the build
+		// never blocks the open-PDF critical path (hover previews simply do not
+		// resolve until the map is ready).
+		const cancelIdle = scheduleIdle(() => {
+			void loadCitationDestKeyMap({
+				paperAbsPath,
+				viewerBytes: sourceBytesRef.current,
+			})
+				.then((map) => {
+					if (!cancelled && map) destKeyMapRef.current = map;
+				})
+				.catch((error: unknown) => {
+					// Non-fatal: hover previews simply do not resolve.
+					logger.warn("citation dest key map failed", {
+						error: error instanceof Error ? error.message : String(error),
+					});
 				});
-			}
-		})();
+		});
 		return () => {
 			cancelled = true;
+			cancelIdle();
 		};
 	}, [paperAbsPath]);
 

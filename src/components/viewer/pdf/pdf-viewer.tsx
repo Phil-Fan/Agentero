@@ -310,6 +310,7 @@ export function PdfViewer(props: PdfViewerProps) {
 
 function PdfViewerInner({
 	docId,
+	sourceBytes = null,
 	paperAbsPath = null,
 	paperRelPath = null,
 	vaultPath = null,
@@ -667,6 +668,7 @@ function PdfViewerInner({
 		vaultPath,
 		paperPath: paperRelPath,
 		paperAbsPath,
+		sourceBytes,
 	});
 
 	/**
