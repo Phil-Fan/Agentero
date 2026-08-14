@@ -24,7 +24,7 @@
 | 站点代理 | `src-tauri/src/features/coolpapers/proxy.rs` |
 
 > Kimi 解析没有走广场入库，而是作为论文侧的独立能力落在 Markdown 工具栏的
-> 「获取 Kimi 笔记」按钮上（`paper_coolpapers_notes` → 追加 `NOTES.md`）。
+> 「获取 Cool Paper 笔记」按钮上（`paper_coolpapers_notes` → 追加 `NOTES.md`）。
 
 ## 1. 产品动机
 
