@@ -2,7 +2,7 @@
 
 ## 布局
 
-- **左栏**：文件树 + Paper Info（显示最近选中的论文；切换到非论文文档时保持不消失；无卡片容器、常驻 collapsible；上边缘可拖拽调整高度，`preserve-pixel-size`；arXiv 论文在资源按钮下显示魔搭论文解读与 alphaXiv 外链）。
+- **左栏**：文件树 + Paper Info（显示最近选中的论文；切换到非论文文档时保持不消失；无卡片容器、常驻 collapsible；上边缘可拖拽调整高度，`preserve-pixel-size`；arXiv 论文在资源按钮下显示魔搭论文解读与 alphaXiv 外链）。Cool Papers / Kimi 解析入口在论文 `NOTES.md` 的 Markdown 工具栏，不在 Paper Info。
 - **中间**：无 Vault 欢迎页；有 Vault 时为全局 Dockview（见 [workspace.md](workspace.md)）。
 - **右栏**（可选）：Agent / 批注 / **References**（引用卡片 + 下方约 35% 引用图谱）/ **Figures**（同样 collapsible）。
   - References：当前激活 paper 的参考文献卡片（数据来自 `agentero-cite.json` sidecar，Host `paper_refs_list` / `paper_refs_parse`）。卡片含编号 `[n]`、标题（无标题回退 raw）、首作者 et al. · 年份 · venue、DOI/arXiv 徽标；已入库（`localMatch`）卡片点击打开库内论文，未入库 hover 出「导入文库」（复用魔棒管线，但导入后不自动打开新论文）；顶部过滤框 + header 重解析按钮。下方约 35% 为**引用近邻图**（`paper_refs_graph`）：本论文 / 本文引用·库内 / 引用本文·库内 / 库外 stub 四级编码，header 可切全库。实现：`src/components/viewer/panels/references-panel.tsx`、`src/components/wiki/graph-panel.tsx`、`src/lib/paper/refs.ts`。详见 [wiki.md](wiki.md)。

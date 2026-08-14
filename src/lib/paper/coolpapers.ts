@@ -2,8 +2,8 @@
  * Cool Papers (papers.cool) note fetch.
  *
  * The Host resolves the paper (arXiv id, else exact title match), pulls its Kimi
- * analysis and appends it to `NOTES.md`. Here we surface progress and reseed the
- * open NOTES editor. Labels are intentionally not routed through i18n.
+ * analysis and appends it to `NOTES.md`. The NOTES editor toolbar triggers this
+ * and reseeds the open editor. Toast copy is intentionally not routed through i18n.
  */
 
 import { enqueueBackgroundTask } from "@/lib/core/background-tasks";

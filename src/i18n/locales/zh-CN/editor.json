@@ -19,6 +19,7 @@
 		"todoList": "待办列表",
 		"image": "插入图片",
 		"properties": "属性",
+		"fetchKimiNotes": "获取 Kimi 笔记",
 		"more": "更多"
 	},
 	"codeBlock": {

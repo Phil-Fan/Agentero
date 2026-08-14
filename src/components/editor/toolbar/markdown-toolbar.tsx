@@ -21,6 +21,7 @@ import {
 	ListOrdered,
 	ListTodo,
 	ListTree,
+	Loader2,
 	type LucideIcon,
 	Quote,
 	Search,
@@ -39,15 +40,20 @@ import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useMarkdownDoc } from "@/components/editor/context/markdown-doc-context";
+import { CoolPapersIcon } from "@/components/icons/cool-papers-icon";
 
 import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
+import { useLibraryStore } from "@/hooks/use-app-stores";
 import { errorMessage, notifyError } from "@/lib/core/notify";
 import { copyFileToMarkdownAssets, pickImageFiles } from "@/lib/markdown/image";
+import { fetchCoolPapersNotes } from "@/lib/paper/coolpapers";
 import { formatModShortcut } from "@/lib/shell/shortcuts";
+import { paperRelFromNotes } from "@/lib/vault";
+import { useWikiNav } from "@/lib/wiki/nav-context";
 import { ToolbarButton } from "./primitives";
 import {
 	ResponsiveFixedToolbar,
@@ -157,6 +163,41 @@ function useImageAction(label: string): ToolbarAction {
 		onClick,
 		group: 2,
 	};
+}
+
+/** Cool Papers Kimi notes — only on a paper NOTES.md that is in the catalog. */
+function FetchKimiNotesButton() {
+	const { t } = useTranslation("editor");
+	const { filePath } = useMarkdownDoc();
+	const vaultPath = useWikiNav()?.vaultPath ?? null;
+	const paperMetaByRelPath = useLibraryStore((s) => s.paperMetaByRelPath);
+	const [busy, setBusy] = useState(false);
+
+	const meta = useMemo(() => {
+		if (!filePath || !vaultPath) return null;
+		if (!/NOTES\.md$/i.test(filePath.replace(/\\/g, "/"))) return null;
+		const rel = paperRelFromNotes(filePath, vaultPath);
+		return (rel && paperMetaByRelPath.get(rel)) || null;
+	}, [filePath, vaultPath, paperMetaByRelPath]);
+
+	const onClick = useCallback(() => {
+		if (!meta || busy) return;
+		setBusy(true);
+		void fetchCoolPapersNotes(meta).finally(() => setBusy(false));
+	}, [busy, meta]);
+
+	if (!meta) return null;
+
+	return (
+		<ToolbarButton
+			tooltip={t("toolbar.fetchKimiNotes")}
+			aria-label={t("toolbar.fetchKimiNotes")}
+			disabled={busy}
+			onClick={onClick}
+		>
+			{busy ? <Loader2 className="animate-spin" /> : <CoolPapersIcon />}
+		</ToolbarButton>
+	);
 }
 
 /**
@@ -282,6 +323,7 @@ export function MarkdownEditorToolbar({
 							</PopoverContent>
 						</Popover>
 					) : null}
+					<FetchKimiNotesButton />
 					{onExport ? (
 						<ToolbarButton
 							tooltip={t("export.toolbar")}

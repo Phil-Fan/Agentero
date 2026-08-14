@@ -4,7 +4,6 @@ import {
 	ChevronRight,
 	ExternalLink,
 	Info,
-	Loader2,
 	Tag,
 	Users,
 } from "lucide-react";
@@ -20,7 +19,6 @@ import {
 import { useTranslation } from "react-i18next";
 import { SiArxiv, SiModelscope } from "react-icons/si";
 
-import { CoolPapersIcon } from "@/components/icons/cool-papers-icon";
 import {
 	PaperTagChip,
 	PaperTagRemoveButton,
@@ -56,8 +54,6 @@ type PaperInfoPanelProps = {
 	className?: string;
 	/** Persist tags to catalog. Required for editing. */
 	onTagsChange?: (tags: PaperTag[]) => Promise<void> | void;
-	/** Fetch the Cool Papers analysis into NOTES.md. Omit to hide the chip. */
-	onFetchNotes?: () => Promise<void>;
 };
 
 function MetaRow({
@@ -173,43 +169,6 @@ function ServiceLinkChip({
 			<span className="min-w-0 truncate">{label}</span>
 			<ExternalLink className="size-2.5 shrink-0 opacity-70" aria-hidden />
 		</a>
-	);
-}
-
-/** Button counterpart of {@link ServiceLinkChip} for in-app actions. */
-function ServiceActionChip({
-	label,
-	icon,
-	busy,
-	onClick,
-}: {
-	label: string;
-	icon: ReactNode;
-	busy: boolean;
-	onClick: () => void;
-}) {
-	return (
-		<button
-			type="button"
-			onClick={onClick}
-			disabled={busy}
-			aria-label={label}
-			title={label}
-			className={cn(
-				"inline-flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-md border bg-background px-2",
-				"text-[11px] text-muted-foreground transition-colors",
-				"hover:bg-muted hover:text-foreground",
-				"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-				"disabled:pointer-events-none disabled:opacity-60",
-			)}
-		>
-			{busy ? (
-				<Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
-			) : (
-				icon
-			)}
-			<span className="min-w-0 truncate">{label}</span>
-		</button>
 	);
 }
 
@@ -424,11 +383,9 @@ export function PaperInfoPanel({
 	meta,
 	className,
 	onTagsChange,
-	onFetchNotes,
 }: PaperInfoPanelProps) {
 	const { t } = useTranslation("sidebar");
 	const [open, setOpen] = useState(Boolean(meta));
-	const [fetchingNotes, setFetchingNotes] = useState(false);
 	const [contentHeight, setContentHeight] = useState(loadStoredHeight);
 	const dragRef = useRef<{
 		startY: number;
@@ -660,7 +617,7 @@ export function PaperInfoPanel({
 									) : null}
 								</div>
 							)}
-							{modelScopeUrl || alphaXivUrl || onFetchNotes ? (
+							{modelScopeUrl || alphaXivUrl ? (
 								<div className="flex flex-wrap gap-1.5 px-3 pt-1.5">
 									{modelScopeUrl ? (
 										<ServiceLinkChip
@@ -678,19 +635,6 @@ export function PaperInfoPanel({
 											icon={
 												<SiArxiv className="size-3.5 shrink-0 text-[#B31B1B]" />
 											}
-										/>
-									) : null}
-									{onFetchNotes ? (
-										<ServiceActionChip
-											label="获取笔记"
-											busy={fetchingNotes}
-											icon={<CoolPapersIcon className="size-3.5 shrink-0" />}
-											onClick={() => {
-												setFetchingNotes(true);
-												void onFetchNotes().finally(() =>
-													setFetchingNotes(false),
-												);
-											}}
 										/>
 									) : null}
 								</div>
