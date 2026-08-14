@@ -2,7 +2,7 @@
 
 import { Link2 } from "lucide-react";
 import { NodeApi } from "platejs";
-import { useEditorSelector } from "platejs/react";
+import { useEditorRef, useEditorSelector } from "platejs/react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,21 @@ import { countChars, countWords } from "@/lib/markdown/stats";
 import { isMarkdownPath } from "@/lib/vault/fs";
 import { getBacklinks, type ResolvedLink } from "@/lib/wiki";
 import { navigateWiki } from "@/lib/workspace/actions";
+
+/**
+ * Word/char counts walk every leaf of the document, so they must not run per
+ * keystroke. The status bar is allowed to lag slightly behind typing.
+ */
+const STATS_DEBOUNCE_MS = 400;
+
+type DocumentStats = { words: number; chars: number };
+
+function computeDocumentStats(children: readonly unknown[]): DocumentStats {
+	const text = children
+		.map((node) => NodeApi.string(node as Parameters<typeof NodeApi.string>[0]))
+		.join("\n");
+	return { words: countWords(text), chars: countChars(text) };
+}
 
 function fragmentLabel(link: ResolvedLink): string | null {
 	const fragment = link.occurrence.fragment;
@@ -35,20 +50,25 @@ export function EditorStatusBar({ filePath, vaultPath }: EditorStatusBarProps) {
 	const { t } = useTranslation("editor");
 	const wikiIndexRevision = useWikiStore((s) => s.wikiIndexRevision);
 	const [backlinks, setBacklinks] = useState<ResolvedLink[]>([]);
+	const editor = useEditorRef();
 
-	const { words, chars } = useEditorSelector(
-		(editor) => {
-			const text = editor.children
-				.map((node) => NodeApi.string(node))
-				.join("\n");
-			return {
-				words: countWords(text),
-				chars: countChars(text),
-			};
-		},
-		[],
-		{ equalityFn: (a, b) => a.words === b.words && a.chars === b.chars },
+	// Cheap change signal: the children array identity changes on every edit
+	// (selection-only changes keep it stable). The expensive full-document walk
+	// runs debounced below, never inside the selector.
+	const children = useEditorSelector((e) => e.children, []);
+	const [{ words, chars }, setStats] = useState<DocumentStats>(() =>
+		computeDocumentStats(editor.children),
 	);
+
+	useEffect(() => {
+		const timer = window.setTimeout(() => {
+			const next = computeDocumentStats(children);
+			setStats((prev) =>
+				prev.words === next.words && prev.chars === next.chars ? prev : next,
+			);
+		}, STATS_DEBOUNCE_MS);
+		return () => window.clearTimeout(timer);
+	}, [children]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: wikiIndexRevision is a refresh signal
 	useEffect(() => {
