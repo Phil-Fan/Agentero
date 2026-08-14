@@ -1,10 +1,10 @@
 import { lazy, memo, Suspense } from "react";
 import { PapersLibrary } from "@/components/library/papers-library";
-import { PlazaView } from "@/components/plaza/plaza-view";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { PdfViewerHandle } from "@/components/viewer";
 import { HtmlViewer, ImageViewer } from "@/components/viewer";
 import { RecycleBinView } from "@/components/workspace/recycle-bin-view";
+import { useSettings } from "@/hooks/use-app-stores";
 import type { PaperMetadata } from "@/lib/paper";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace/types";
 import type { PdfAskThread } from "@/lib/pdf/ask/types";
@@ -25,6 +25,11 @@ const PdfViewer = lazy(() =>
 const MarkdownEditor = lazy(() =>
 	import("@/components/editor").then((m) => ({
 		default: m.MarkdownEditor,
+	})),
+);
+const PlazaView = lazy(() =>
+	import("@/components/plaza/plaza-view").then((m) => ({
+		default: m.PlazaView,
 	})),
 );
 
@@ -130,6 +135,7 @@ export const DocView = memo(function DocView({
 	onTrashChanged,
 	trashReloadSignal = 0,
 }: DocViewProps) {
+	const plazaEnabled = useSettings((s) => s.plazaEnabled);
 	if (!tab.loaded) {
 		return <TabLoadingSkeleton />;
 	}
@@ -164,14 +170,17 @@ export const DocView = memo(function DocView({
 		);
 	}
 	if (tab.kind === "plaza") {
+		if (!plazaEnabled) return null;
 		// Embedded remote site: don't mount (and don't start its requests) until active.
 		if (!active) return null;
 		return (
-			<PlazaView
-				path={tab.path}
-				onOpenSource={openPlazaSource}
-				className="bg-muted/20"
-			/>
+			<Suspense fallback={<TabLoadingSkeleton />}>
+				<PlazaView
+					path={tab.path}
+					onOpenSource={openPlazaSource}
+					className="bg-muted/20"
+				/>
+			</Suspense>
 		);
 	}
 	const isNotes = tabIsPaperNotes(tab);

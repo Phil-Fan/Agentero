@@ -83,6 +83,10 @@
 		"networkProxy": {
 			"label": "网络代理"
 		},
+		"plaza": {
+			"label": "广场",
+			"description": "在侧栏显示发现来源。关闭后隐藏广场，也不再加载对应面板。"
+		},
 		"connector": {
 			"label": "兼容 Zotero Connector",
 			"hint": "请先退出本地Zotero",

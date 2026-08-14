@@ -35,6 +35,7 @@ import {
 	type PlazaSource,
 	plazaSourceForPath,
 } from "@/lib/plaza";
+import { loadSettings } from "@/lib/settings";
 import {
 	type FileNode,
 	isMarkdownPath,
@@ -360,6 +361,22 @@ export function closeTab(id: string): void {
 		return withLibraryIfEmpty(next);
 	});
 	removeTabAnnotations(idsToClose);
+}
+
+/** Close every Plaza overview / source tab. */
+export function closePlazaTabs(): void {
+	let removedIds: string[] = [];
+	setTabs((prev) => {
+		const removed = prev.filter(
+			(tab) => tab.kind === "plaza" || isPlazaVirtualPath(tab.path),
+		);
+		if (!removed.length) return prev;
+		for (const tab of removed) revokeTabMediaSources(tab);
+		removedIds = removed.map((tab) => tab.id);
+		const tabs = prev.filter((tab) => !removedIds.includes(tab.id));
+		return withLibraryIfEmpty(tabs);
+	});
+	if (removedIds.length) removeTabAnnotations(removedIds);
 }
 
 /** Close every panel whose path is at or under the given path. */
@@ -975,12 +992,14 @@ export function selectTrash(): void {
 
 /** Plaza tree node: the discovery-source overview. */
 export function selectPlaza(): void {
+	if (!loadSettings().plazaEnabled) return;
 	setTreeSelectedPath(PLAZA_VIRTUAL_PATH);
 	openTab(PLAZA_VIRTUAL_PATH);
 }
 
 /** Open one Plaza source panel (from its tree child row or a home card). */
 export function openPlazaSource(source: PlazaSource): void {
+	if (!loadSettings().plazaEnabled) return;
 	setTreeSelectedPath(source.path);
 	openTab(source.path);
 }
@@ -1016,6 +1035,7 @@ export function selectFileNode(node: FileNode): void {
 		return;
 	}
 	if (isPlazaVirtualPath(node.path)) {
+		if (!loadSettings().plazaEnabled) return;
 		const source = plazaSourceForPath(node.path);
 		if (source) openPlazaSource(source);
 		else selectPlaza();

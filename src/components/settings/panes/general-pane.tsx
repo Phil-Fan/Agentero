@@ -147,6 +147,17 @@ export function GeneralPane({
 						</SelectContent>
 					</Select>
 				</SettingsRow>
+				<SettingsRow
+					label={t("general.plaza.label")}
+					description={t("general.plaza.description")}
+					htmlFor="plaza-enabled"
+				>
+					<Switch
+						id="plaza-enabled"
+						checked={settings.plazaEnabled}
+						onCheckedChange={(v) => patch({ plazaEnabled: v })}
+					/>
+				</SettingsRow>
 				<NetworkProxyRow
 					htmlFor="network-proxy-enabled"
 					label={t("general.networkProxy.label")}

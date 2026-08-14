@@ -105,6 +105,9 @@ pub struct AppSettings {
     /// Local activity log (XDG `usage.sqlite`). Off = do not write.
     #[serde(default = "default_true")]
     pub usage_tracking_enabled: bool,
+    /// Plaza discovery sources in the sidebar. Default on.
+    #[serde(default = "default_true")]
+    pub plaza_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -234,6 +237,7 @@ impl Default for AppSettings {
             export_watermark_enabled: false,
             telemetry_enabled: default_true(),
             usage_tracking_enabled: default_true(),
+            plaza_enabled: default_true(),
         }
     }
 }

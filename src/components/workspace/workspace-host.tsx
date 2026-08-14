@@ -40,6 +40,7 @@ import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 import { refreshTree, setTreeSelectedPath } from "@/lib/vault/store";
 import { renameWikiHeadingAction } from "@/lib/wiki/actions";
 import {
+	closePlazaTabs,
 	closeTab,
 	ensureLibraryTabPresent,
 	handleActivePanelChange,
@@ -101,6 +102,7 @@ export function WorkspaceHost() {
 	const textFontFamily = useSettings((s) => s.textFontFamily);
 	const editorLineHeight = useSettings((s) => s.editorLineHeight);
 	const showEditorToolbar = useSettings((s) => s.showEditorToolbar);
+	const plazaEnabled = useSettings((s) => s.plazaEnabled);
 	const [visiblePanelIds, setVisiblePanelIds] = useState<string[]>([]);
 
 	const activeTab = useMemo(
@@ -119,6 +121,10 @@ export function WorkspaceHost() {
 			return ids;
 		});
 	}, []);
+
+	useEffect(() => {
+		if (!plazaEnabled) closePlazaTabs();
+	}, [plazaEnabled]);
 
 	const visiblePdfIds = useMemo(() => {
 		const visible = new Set(visiblePanelIds);

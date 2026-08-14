@@ -2,7 +2,8 @@
 
 > 范围：侧栏虚拟节点 **广场** 及其子来源（Cool Papers / ModelScope 论文 / Skill 推荐 / 订阅 / 播客 / 论文推荐）；中间栏发现流。  
 > 相关：[`../frontend/vault-tree.md`](../frontend/vault-tree.md)、[`../backend/paper-import.md`](../backend/paper-import.md)、[`../backend/index.md`](../backend/index.md)。  
-> 订阅 MVP（已落地）：[`plaza-feeds.md`](plaza-feeds.md)。
+> 订阅 MVP（已落地）：[`plaza-feeds.md`](plaza-feeds.md)。  
+> 开关：设置 → 通用 → **广场**（`plazaEnabled`，默认开）；关闭后不显示、不加载。
 
 ## 0. 产品结论（2026-07-25，2026-08-14 修订）
 

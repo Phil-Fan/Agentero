@@ -179,11 +179,13 @@ export function useTreeRows({
 	expanded,
 	createDraft,
 	vaultPath,
+	plazaEnabled,
 }: {
 	displayNodes: FileNode[];
 	expanded: ReadonlySet<string>;
 	createDraft: TreeCreateDraft | null;
 	vaultPath: string | null;
+	plazaEnabled: boolean;
 }): TreeRows {
 	const selectableOrder = useMemo(() => {
 		const out: string[] = [];
@@ -205,15 +207,17 @@ export function useTreeRows({
 		const out: FlatRow[] = [
 			{ key: "__library__", kind: "library" },
 			{ key: "__trash__", kind: "trash" },
-			{ key: "__plaza__", kind: "plaza" },
 		];
-		if (expanded.has(PLAZA_VIRTUAL_PATH)) {
-			for (const source of PLAZA_SOURCES) {
-				out.push({
-					key: `__plaza__${source.id}`,
-					kind: "plazaSource",
-					source,
-				});
+		if (plazaEnabled) {
+			out.push({ key: "__plaza__", kind: "plaza" });
+			if (expanded.has(PLAZA_VIRTUAL_PATH)) {
+				for (const source of PLAZA_SOURCES) {
+					out.push({
+						key: `__plaza__${source.id}`,
+						kind: "plazaSource",
+						source,
+					});
+				}
 			}
 		}
 		const draftAt = (parent: string) =>
@@ -254,7 +258,7 @@ export function useTreeRows({
 		};
 		walk(displayNodes, 0);
 		return out;
-	}, [displayNodes, expanded, createDraft, vaultPath]);
+	}, [displayNodes, expanded, createDraft, vaultPath, plazaEnabled]);
 
 	return { selectableOrder, flatRows };
 }

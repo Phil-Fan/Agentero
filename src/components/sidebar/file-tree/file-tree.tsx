@@ -9,6 +9,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { FileTree as AiFileTree } from "@/components/ai-elements/file-tree";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useSettings } from "@/hooks/use-app-stores";
 import { cn } from "@/lib/core/utils";
 import type {
 	PaperMetadata,
@@ -196,6 +197,7 @@ export const FileTree = memo(
 		ref,
 	) {
 		const { t } = useTranslation("sidebar");
+		const plazaEnabled = useSettings((s) => s.plazaEnabled);
 		const containerRef = useRef<HTMLDivElement>(null);
 
 		const {
@@ -226,6 +228,7 @@ export const FileTree = memo(
 			expanded: expansion.expanded,
 			createDraft,
 			vaultPath,
+			plazaEnabled,
 		});
 
 		const selection = useTreeSelection({
@@ -343,7 +346,7 @@ export const FileTree = memo(
 		);
 		const trashRow = <TrashRow />;
 		const plazaExpanded = expansion.expanded.has(PLAZA_VIRTUAL_PATH);
-		const plazaRows = (
+		const plazaRows = plazaEnabled ? (
 			<>
 				<PlazaRow expanded={plazaExpanded} />
 				{plazaExpanded
@@ -354,7 +357,7 @@ export const FileTree = memo(
 						))
 					: null}
 			</>
-		);
+		) : null;
 		const createRow =
 			createDraft && vaultPath ? (
 				<TreeCreateInput

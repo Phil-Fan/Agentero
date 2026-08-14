@@ -83,6 +83,10 @@
 		"networkProxy": {
 			"label": "Network proxy"
 		},
+		"plaza": {
+			"label": "Plaza",
+			"description": "Show discovery sources in the sidebar. Turn off to hide Plaza and skip loading it."
+		},
 		"connector": {
 			"label": "Zotero Connector compatibility",
 			"hint": "Quit local Zotero first",

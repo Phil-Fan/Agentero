@@ -142,6 +142,11 @@ export type AppSettings = {
 	 */
 	usageTrackingEnabled: boolean;
 	/**
+	 * Plaza discovery sources (Cool Papers, feeds, Skill picks) in the sidebar.
+	 * Default **on**. Off hides the node and does not mount Plaza panels.
+	 */
+	plazaEnabled: boolean;
+	/**
 	 * First-run setup wizard completed (welcome → theme → agent →
 	 * translate/layout → create vault / Zotero import). `false` shows the
 	 * onboarding overlay on the main window for fresh installs.
