@@ -13,7 +13,7 @@ This file is the L0 map for agents working in this Agentero research vault.
 
 ## Layout
 
-- `papers/` — paper folders (any depth). A **paper folder** is the minimal unit: it contains `NOTES.md`, optional `PAPER.md` / `marks/`, and `source/`.
+- `papers/` — paper folders (any depth). A **paper folder** is the minimal unit: `NOTES.md`, optional `<id>.pdf` / `PAPER.md` / `marks/` / `source/` / `assets/`. Supporting materials (supplement PDFs, slides, code repos) go in `{paper}/attachments/` — create that directory only when adding files; do not dump extras at the paper root or into `source/`.
 - `notes/` — free-form concept notes and ideas. Supports `[[wikilinks]]`, `![[embeds]]`, Mermaid diagrams, and Obsidian `> [!callout]` blocks.
 - `.agents/` — vault-local agent assets (e.g. `skills/<id>/SKILL.md` for Composer `$` skills).
 - `.agentero/catalog.sqlite` — paper **catalog** (collection + metadata). There is usually **no** root `PAPERS.md` or `library.bib` unless the user exports them.
@@ -34,6 +34,7 @@ For a paper folder, use the richest available source in this order:
 
 - Prefer short, structured notes (problem / method / results).
 - Keep original files under `source/` unchanged; treat `PAPER.md` as a derived, regenerable artifact.
+- Put extras in `{paper}/attachments/` (not the paper root, not `source/`). Do not create empty `attachments/` folders.
 - Do not invent facts, numbers, citations, or experimental conclusions. Mark uncertainty explicitly.
 - Keep `[[wikilinks]]` and `![[embeds]]` as written; do not rewrite them to plain URLs or inline text.
 - Preserve Mermaid fenced code blocks (` ```mermaid `); do not flatten diagrams to prose.
