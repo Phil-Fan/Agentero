@@ -94,6 +94,7 @@ macro_rules! common_commands {
             crate::features::catalog::commands::paper_rescan,
             crate::features::catalog::commands::paper_page_counts,
             crate::features::catalog::commands::paper_set_page_counts,
+            crate::features::catalog::commands::paper_reading_activity_batch,
             crate::features::search::commands::vault_search,
             crate::features::usage::commands::activity_record_events,
             crate::features::usage::commands::usage_list,

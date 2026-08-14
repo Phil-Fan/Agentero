@@ -52,6 +52,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { logger } from "@/lib/core/logger";
 import { cn } from "@/lib/core/utils";
 import { formatAuthorsShort, type PaperMetadata } from "@/lib/paper";
 import {
@@ -60,10 +61,13 @@ import {
 	savePaperPageCounts,
 } from "@/lib/paper/api";
 import {
+	aggregateReadingHeatmap,
 	heatmapCacheKey,
 	loadReadingHeatmaps,
+	type ReadingActivityPoint,
 	type ReadingHeatmap,
 } from "@/lib/paper/reading-heatmap";
+import { getPdfPageCount } from "@/lib/pdf/page-count";
 import {
 	DEFAULT_LIBRARY_COLUMNS,
 	type LibraryColumnKey,
@@ -71,6 +75,7 @@ import {
 	useUiScale,
 } from "@/lib/settings";
 import { type PaperTag, visiblePaperTags } from "@/lib/ui/tag-colors";
+import { joinVaultPath } from "@/lib/vault";
 
 export type PapersLibraryProps = {
 	/** Full catalog list (or pre-scoped); further filtered by `scopePath`. */
@@ -640,14 +645,29 @@ export function PapersLibrary({
 	);
 
 	/**
-	 * Heatmap cache survives re-renders and background catalog refreshes
-	 * (which replace `scopedPapers` identity without changing content).
-	 * Only refocusing the Library tab clears it to pick up fresh PDF activity.
+	 * Heatmap cache survives re-renders, tab switches, and background catalog
+	 * refreshes (which replace `scopedPapers` identity without changing
+	 * content). Refocusing the Library refreshes activity with one batch IPC
+	 * instead of clearing the cache; raw points and page counts stay warm so
+	 * re-activation never reopens PDFs (`getPdfPageCount` is expensive and
+	 * only runs lazily for visible rows below).
 	 */
 	const heatmapCacheRef = useRef<{
 		vault: string | null;
-		map: Map<string, ReadingHeatmap>;
-	}>({ vault: null, map: new Map() });
+		heatmaps: Map<string, ReadingHeatmap>;
+		/** Raw activity points — re-aggregated when a page count is discovered. */
+		points: Map<string, ReadingActivityPoint[]>;
+		/** Catalog-cached + freshly discovered page counts. */
+		pageCounts: Map<string, number>;
+		/** Keys where lazy page-count discovery already ran (no retry loop). */
+		pageCountTried: Set<string>;
+	}>({
+		vault: null,
+		heatmaps: new Map(),
+		points: new Map(),
+		pageCounts: new Map(),
+		pageCountTried: new Set(),
+	});
 	const wasActiveRef = useRef(false);
 
 	/** Load reading heatmaps for the current folder scope (full library or org folder). */
@@ -655,46 +675,60 @@ export function PapersLibrary({
 		const justActivated = active && !wasActiveRef.current;
 		wasActiveRef.current = active;
 		if (!active) return;
+		const cache = heatmapCacheRef.current;
+		if (cache.vault !== (vaultPath ?? null)) {
+			cache.vault = vaultPath ?? null;
+			cache.heatmaps = new Map();
+			cache.points = new Map();
+			cache.pageCounts = new Map();
+			cache.pageCountTried = new Set();
+		}
 		if (!vaultPath || !scopedPapers.length) {
 			setHeatmaps(new Map());
 			return;
 		}
-		const cache = heatmapCacheRef.current;
-		if (cache.vault !== vaultPath) {
-			cache.vault = vaultPath;
-			cache.map = new Map();
-		}
-		if (justActivated) cache.map.clear();
 
+		// Paint from cache immediately; the batch below refreshes in place.
 		const cachedNow = new Map<string, ReadingHeatmap>();
 		const missing: PaperMetadata[] = [];
 		for (const p of scopedPapers) {
 			const key = heatmapCacheKey(p);
-			const hit = cache.map.get(key);
+			const hit = cache.heatmaps.get(key);
 			if (hit) cachedNow.set(key, hit);
 			else missing.push(p);
 		}
 		if (cachedNow.size > 0) setHeatmaps(cachedNow);
-		if (!missing.length) return;
+
+		// Re-activation refreshes every scoped paper to pick up fresh PDF
+		// activity (2 IPC total); otherwise only papers not seen before.
+		const target = justActivated ? scopedPapers : missing;
+		if (!target.length) return;
 
 		let cancelled = false;
 		void (async () => {
-			// Persisted page counts skip the per-paper full-PDF read.
+			const startedAt = performance.now();
+			// Persisted page counts (catalog `pdf_page_counts`) normalize bins
+			// without opening any PDF.
 			const pageCounts = await listPaperPageCounts(vaultPath);
-			const { heatmaps, discoveredPageCounts } = await loadReadingHeatmaps(
+			if (cancelled) return;
+			for (const [key, count] of pageCounts) cache.pageCounts.set(key, count);
+			const { heatmaps: fresh, points } = await loadReadingHeatmaps(
 				vaultPath,
-				missing,
-				{ concurrency: 6, pageCounts },
+				target,
+				{ pageCounts: cache.pageCounts },
 			);
 			if (cancelled) return;
-			if (discoveredPageCounts.size > 0) {
-				void savePaperPageCounts(vaultPath, discoveredPageCounts);
-			}
-			for (const [key, heat] of heatmaps) cache.map.set(key, heat);
+			for (const [key, heat] of fresh) cache.heatmaps.set(key, heat);
+			for (const [key, pts] of points) cache.points.set(key, pts);
 			setHeatmaps((prev) => {
 				const next = new Map(prev);
-				for (const [key, heat] of heatmaps) next.set(key, heat);
+				for (const [key, heat] of fresh) next.set(key, heat);
 				return next;
+			});
+			logger.debug("library heatmap refresh", {
+				papers: target.length,
+				ipc: 2,
+				duration_ms: Math.round(performance.now() - startedAt),
 			});
 		})();
 		return () => {
@@ -782,6 +816,55 @@ export function PapersLibrary({
 		virtualRows.length > 0
 			? totalSize - virtualRows[virtualRows.length - 1].end
 			: 0;
+
+	/**
+	 * Lazy page-count discovery: opening a whole PDF just to count pages is
+	 * expensive, so it only runs for rows that are actually visible, have
+	 * reading activity, and lack a cached count (catalog `pdf_page_counts`).
+	 * Discovered counts persist to the catalog, so this is one-time per paper.
+	 * `pageCountTried` dedupes across overlapping scroll-triggered runs.
+	 */
+	useEffect(() => {
+		if (!active || !vaultPath) return;
+		const cache = heatmapCacheRef.current;
+		const targets: string[] = [];
+		for (const vr of virtualRows) {
+			const paper = rows[vr.index]?.paper;
+			if (!paper?.path) continue;
+			const key = heatmapCacheKey(paper);
+			if (cache.pageCounts.has(key) || cache.pageCountTried.has(key)) continue;
+			// Only papers with visible activity benefit from a real page extent
+			// (also re-triggers this effect once the batch load lands).
+			const heat = heatmaps.get(key);
+			if (!heat || heat.total <= 0) continue;
+			cache.pageCountTried.add(key);
+			targets.push(key);
+		}
+		if (!targets.length) return;
+		void (async () => {
+			for (const key of targets) {
+				// Cache identity outlives this effect; bail out on vault switch.
+				if (heatmapCacheRef.current.vault !== vaultPath) return;
+				const count = await getPdfPageCount(joinVaultPath(vaultPath, key));
+				if (count == null || count <= 0) continue;
+				cache.pageCounts.set(key, count);
+				void savePaperPageCounts(vaultPath, new Map([[key, count]]));
+				const points = cache.points.get(key);
+				if (!points?.length) continue;
+				const heat = aggregateReadingHeatmap(points, { pageCount: count });
+				cache.heatmaps.set(key, heat);
+				setHeatmaps((prev) => {
+					const next = new Map(prev);
+					next.set(key, heat);
+					return next;
+				});
+				logger.debug("library heatmap page count discovered", {
+					paper: key,
+					pages: count,
+				});
+			}
+		})();
+	}, [active, vaultPath, rows, virtualRows, heatmaps]);
 
 	const filtering = normalizedQuery.length > 0 || tagFilterSet.size > 0;
 	const tagFilterActive = tagFilterSet.size > 0;

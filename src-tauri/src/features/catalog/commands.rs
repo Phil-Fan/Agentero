@@ -8,6 +8,7 @@ use crate::core::blocking::run_blocking;
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::core::fs::sanitize_vault_rel;
 use crate::features::catalog::papers::{self, PaperRecord};
+use crate::features::catalog::reading_activity;
 use crate::features::catalog::{probe_paper_caps, CapsCache};
 use crate::features::wiki::models::WikiRenameResult;
 use crate::features::wiki::rename::run_local_rename_transaction;
@@ -495,6 +496,42 @@ pub async fn paper_page_counts(
             Ok(counts) => ApiResult::ok(counts),
             Err(e) => map_err(e),
         }
+    })
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperReadingActivityBatchArgs {
+    pub vault_path: String,
+    /// Vault-relative paper folder paths, e.g. `papers/1706.03762`.
+    pub paths: Vec<String>,
+}
+
+/// Batch-read reading activity (`marks/*.json` sidecars) for many papers in
+/// one IPC round-trip — replaces the Library heatmap's per-paper
+/// highlights/asks/translates fan-out (an IPC storm at 500+ papers).
+#[tauri::command]
+pub async fn paper_reading_activity_batch(
+    args: PaperReadingActivityBatchArgs,
+) -> ApiResult<std::collections::HashMap<String, Vec<reading_activity::ReadingActivityPoint>>> {
+    run_blocking(move || {
+        use crate::core::log_util::OpTimer;
+
+        let vault = PathBuf::from(args.vault_path.trim());
+        let op = OpTimer::start_with(
+            "paper_reading_activity_batch",
+            format!("papers={}", args.paths.len()),
+        );
+        if !vault.is_dir() {
+            let err = AppError::message("vault path is not a directory");
+            op.finish_err(&err);
+            return map_err(err);
+        }
+        let out = reading_activity::collect_reading_activity(&vault, &args.paths);
+        let points: usize = out.values().map(Vec::len).sum();
+        op.finish_ok_extra(format!("points={points}"));
+        ApiResult::ok(out)
     })
     .await
 }

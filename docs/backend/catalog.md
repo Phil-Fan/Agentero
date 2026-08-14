@@ -21,7 +21,8 @@
 - `paper_rescan`：盘上有、库内无则补齐
 - 删除：回收站快照；恢复 upsert
 - 连接启用 WAL + `busy_timeout`，写入不阻塞列表读取；每个 Vault 维护一条常驻连接（`schema.rs::with_catalog`，进程级缓存，Mutex 串行化 `spawn_blocking` 并发），PRAGMA/迁移只在首次打开执行；数据库文件被外部删除时自动丢弃旧句柄并重建
-- `pdf_page_counts`：PDF 页数缓存表（随移动/删除同步），阅读热力图不再整文件打开 PDF 数页
+- `pdf_page_counts`：PDF 页数缓存表（随移动/删除同步），阅读热力图不再整文件打开 PDF 数页；缺缓存时仅对可视行按需补数并回写
+- `paper_reading_activity_batch`：批量读取 `papers/<id>/marks/*.json` 侧车（highlight/ask/translate），一次 IPC 返回热力图所需最小活动点（kind/page/y/weight），替代前端逐论文 3 次 IPC 的读取风暴（`features/catalog/reading_activity.rs`）
 - 重复行检测与修复：`catalog::papers::find_duplicates` / `repair_duplicates`，并在 Vault Doctor 中暴露
 
 ## 命令（摘要）
@@ -33,6 +34,7 @@
 | `paper_rescan` | 盘 → 库 |
 | `paper_export` / `paper_import` | Bib 等 |
 | `paper_page_counts` / `paper_set_page_counts` | 页数缓存读写 |
+| `paper_reading_activity_batch` | 批量读 marks 活动点（热力图） |
 
 CLI：`agentero paper …` / `paper tag *`。
 

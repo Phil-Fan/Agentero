@@ -1,150 +1,88 @@
+import { invokeApi } from "@/lib/core/ipc";
+import { isTauri } from "@/lib/core/tauri";
 import {
 	aggregateReadingHeatmap,
 	emptyHeatmap,
-	meanRectY,
 } from "@/lib/paper/reading-heatmap/aggregate";
 import type {
 	ReadingActivityPoint,
 	ReadingHeatmap,
 } from "@/lib/paper/reading-heatmap/types";
-import { listPdfAskThreads } from "@/lib/pdf/ask/io";
-import { listPdfHighlights } from "@/lib/pdf/highlight/io";
-import { getPdfPageCount } from "@/lib/pdf/page-count";
-import { listPdfTranslates } from "@/lib/pdf/translate/io";
-import { joinVaultPath } from "@/lib/vault";
-
-/** Collect activity points for one paper folder (absolute path). */
-export async function loadReadingActivityPoints(
-	paperAbsPath: string,
-	cachedPageCount?: number,
-): Promise<{ points: ReadingActivityPoint[]; pageCount?: number }> {
-	if (!paperAbsPath) return { points: [] };
-
-	const [highlights, asks, translates, pageCount] = await Promise.all([
-		listPdfHighlights(paperAbsPath).catch(() => []),
-		listPdfAskThreads(paperAbsPath).catch(() => []),
-		listPdfTranslates(paperAbsPath).catch(() => []),
-		// Opening the whole PDF just to count pages is the expensive part —
-		// a persisted count (catalog `pdf_page_counts`) skips it entirely.
-		cachedPageCount != null && cachedPageCount > 0
-			? Promise.resolve(cachedPageCount)
-			: getPdfPageCount(paperAbsPath),
-	]);
-
-	const points: ReadingActivityPoint[] = [];
-
-	for (const h of highlights) {
-		points.push({
-			kind: "highlight",
-			page: h.page,
-			y: meanRectY(h.rects),
-			weight: 1,
-		});
-	}
-
-	for (const t of asks) {
-		// Dialogue intensity: at least 1; more turns → hotter at the same anchor.
-		const turns = t.messages.filter((m) => m.role !== "system").length;
-		points.push({
-			kind: "ask",
-			page: t.anchor.page,
-			y: meanRectY(t.anchor.rects),
-			weight: Math.max(1, turns),
-		});
-	}
-
-	for (const tr of translates) {
-		points.push({
-			kind: "translate",
-			page: tr.page,
-			y: meanRectY(tr.rects),
-			weight: 1,
-		});
-	}
-
-	return {
-		points,
-		pageCount: pageCount ?? undefined,
-	};
-}
-
-export async function loadReadingHeatmap(
-	paperAbsPath: string,
-	cachedPageCount?: number,
-): Promise<{ heatmap: ReadingHeatmap; discoveredPageCount?: number }> {
-	const { points, pageCount } = await loadReadingActivityPoints(
-		paperAbsPath,
-		cachedPageCount,
-	);
-	const heatmap =
-		!points.length && !pageCount
-			? emptyHeatmap()
-			: aggregateReadingHeatmap(points, { pageCount });
-	// Only report counts freshly read from the PDF (not cache echoes).
-	const discoveredPageCount =
-		cachedPageCount == null && pageCount != null ? pageCount : undefined;
-	return { heatmap, discoveredPageCount };
-}
 
 export type ReadingHeatmapBatch = {
 	heatmaps: Map<string, ReadingHeatmap>;
-	/** Page counts freshly read from PDFs — persist to the catalog cache. */
-	discoveredPageCounts: Map<string, number>;
+	/**
+	 * Raw activity points per key — cached by the caller so a later lazy
+	 * page-count discovery can re-aggregate without re-reading `marks/`.
+	 */
+	points: Map<string, ReadingActivityPoint[]>;
 };
 
 /**
- * Load heatmaps for many papers with bounded concurrency.
+ * One-IPC batch read of `marks/*.json` reading activity for many papers
+ * (Host `paper_reading_activity_batch`). Replaces the per-paper
+ * highlights/asks/translates fan-out (3 IPC × N papers).
+ * Non-Tauri and remote vaults resolve to empty activity (same as the old
+ * per-paper reads, which also returned nothing there).
+ */
+async function fetchReadingActivityBatch(
+	vaultPath: string,
+	rels: string[],
+): Promise<Record<string, ReadingActivityPoint[]>> {
+	if (!isTauri() || !rels.length) return {};
+	const { isRemoteVaultHandle } = await import(
+		"@/lib/vault/remote/remote-vault"
+	);
+	if (isRemoteVaultHandle(vaultPath)) return {};
+	try {
+		return await invokeApi<Record<string, ReadingActivityPoint[]>>(
+			"paper_reading_activity_batch",
+			{ args: { vaultPath, paths: rels } },
+			{ fallback: "paper_reading_activity_batch failed" },
+		);
+	} catch {
+		return {};
+	}
+}
+
+/**
+ * Load heatmaps for many papers with a single batch IPC.
  * Keys are vault-relative paper paths (or id when path missing).
- * `opts.pageCounts` (same keys) skips the per-paper full-PDF page read.
+ * `opts.pageCounts` (same keys) normalizes bins to the real document extent;
+ * papers without a cached count fall back to the max observed page — this
+ * function never opens a PDF (page counts are discovered lazily elsewhere).
  */
 export async function loadReadingHeatmaps(
 	vaultPath: string,
 	papers: ReadonlyArray<{ path?: string; id: string }>,
-	opts?: {
-		concurrency?: number;
-		pageCounts?: ReadonlyMap<string, number>;
-	},
+	opts?: { pageCounts?: ReadonlyMap<string, number> },
 ): Promise<ReadingHeatmapBatch> {
-	const out = new Map<string, ReadingHeatmap>();
-	const discovered = new Map<string, number>();
-	if (!vaultPath || !papers.length)
-		return { heatmaps: out, discoveredPageCounts: discovered };
+	const heatmaps = new Map<string, ReadingHeatmap>();
+	const points = new Map<string, ReadingActivityPoint[]>();
+	if (!vaultPath || !papers.length) return { heatmaps, points };
 
-	const concurrency = Math.max(1, opts?.concurrency ?? 6);
-	let i = 0;
-
-	async function worker() {
-		while (i < papers.length) {
-			const idx = i++;
-			const paper = papers[idx];
-			const rel = paper.path?.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-			const key = rel || paper.id;
-			if (!rel) {
-				out.set(key, emptyHeatmap());
-				continue;
-			}
-			const abs = joinVaultPath(vaultPath, rel);
-			try {
-				const { heatmap, discoveredPageCount } = await loadReadingHeatmap(
-					abs,
-					opts?.pageCounts?.get(key),
-				);
-				out.set(key, heatmap);
-				if (discoveredPageCount != null) {
-					discovered.set(key, discoveredPageCount);
-				}
-			} catch {
-				out.set(key, emptyHeatmap());
-			}
-		}
-	}
-
-	await Promise.all(
-		Array.from({ length: Math.min(concurrency, papers.length) }, () =>
-			worker(),
-		),
+	const keyed: Array<{ key: string; rel: string | null }> = papers.map(
+		(paper) => {
+			const rel =
+				paper.path?.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "") || null;
+			return { key: rel || paper.id, rel };
+		},
 	);
-	return { heatmaps: out, discoveredPageCounts: discovered };
+	const rels = [...new Set(keyed.flatMap((k) => (k.rel ? [k.rel] : [])))];
+	const activity = await fetchReadingActivityBatch(vaultPath, rels);
+
+	for (const { key, rel } of keyed) {
+		const pts = (rel ? activity[rel] : undefined) ?? [];
+		points.set(key, pts);
+		const pageCount = opts?.pageCounts?.get(key);
+		heatmaps.set(
+			key,
+			!pts.length && !pageCount
+				? emptyHeatmap()
+				: aggregateReadingHeatmap(pts, { pageCount }),
+		);
+	}
+	return { heatmaps, points };
 }
 
 export function heatmapCacheKey(paper: { path?: string; id: string }): string {

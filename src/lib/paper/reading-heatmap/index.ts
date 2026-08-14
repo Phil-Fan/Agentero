@@ -7,9 +7,8 @@ export {
 } from "@/lib/paper/reading-heatmap/aggregate";
 export {
 	heatmapCacheKey,
-	loadReadingActivityPoints,
-	loadReadingHeatmap,
 	loadReadingHeatmaps,
+	type ReadingHeatmapBatch,
 } from "@/lib/paper/reading-heatmap/load";
 export {
 	EMPTY_READING_HEATMAP,

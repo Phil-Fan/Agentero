@@ -5,6 +5,7 @@
 
 pub mod caps;
 pub mod papers;
+pub mod reading_activity;
 mod schema;
 
 pub use caps::{
