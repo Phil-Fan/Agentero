@@ -280,7 +280,7 @@ export function usePdfSelectionTranslate({
 								getAgentTranslateSessionId(paperKey, agentId, modelId) ??
 								undefined,
 							vaultPath: vaultPath ?? undefined,
-							workflow: "free",
+							workflow: "translate",
 							autoApprove: true,
 							hideFromChatHistory: true,
 						});

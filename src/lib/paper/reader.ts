@@ -2,10 +2,10 @@
  * paper-reader workflow: run the paper-reader skill against a paper folder,
  * surface progress via background tasks, mark catalog `is_read` on success.
  *
- * Skill activation syntax is provider-specific (Host also adapts):
- * - Codex: `$paper-reader`
- * - Claude ACP: `/paper-reader`
- * - others: Agentero injects SKILL.md body (no native $ / / trigger)
+ * Skill activation syntax is provider-specific and owned entirely by the Host
+ * (`skill_mention_style` + `paper_reader_skill_line`), which knows the resolved
+ * agent template. This module must not restate it, or the two halves of the same
+ * prompt can disagree about whether `$` / `/` activates anything.
  */
 import { invoke } from "@tauri-apps/api/core";
 import i18n from "@/i18n";
@@ -14,9 +14,7 @@ import {
 	type AgentPlanEntry,
 	type AgentPlanEvent,
 	type AgentResultPayload,
-	type AgentTemplate,
 	type AgentToolEvent,
-	listAgents,
 	listenAgentCompleted,
 	listenAgentFailed,
 	listenAgentPlan,
@@ -39,33 +37,6 @@ const PAPER_READER_SKILL_ID = "paper-reader";
 /** Prevent concurrent reads of the same paper (auto + Zap). */
 const inflightReads = new Set<string>();
 
-/** How this Agentero agent template expects skills to be named in the user prompt. */
-type SkillMentionStyle = "dollar" | "slash" | "injected";
-
-function skillMentionStyleForTemplate(
-	template: AgentTemplate | string | null | undefined,
-): SkillMentionStyle {
-	switch (template) {
-		case "claude-acp":
-		case "openclaw":
-		case "hermes":
-			return "slash";
-		default:
-			return "injected";
-	}
-}
-
-function formatSkillMention(skillId: string, style: SkillMentionStyle): string {
-	switch (style) {
-		case "dollar":
-			return `$${skillId}`;
-		case "slash":
-			return `/${skillId}`;
-		default:
-			return `skill:${skillId}`;
-	}
-}
-
 /**
  * Language line for paper-reader NOTES.md body, based on the resolved App
  * locale (`i18n.language` after settings load: `en` | `zh-CN`).
@@ -82,41 +53,22 @@ export function paperReaderLanguageInstruction(
 }
 
 /**
- * User-facing request body. Host will additionally prefix native triggers
- * (e.g. `$paper-reader` for Codex) and inject SKILL.md by style.
+ * User-facing request body: request facts only.
+ *
+ * Activation is Host-side — `build_prompt` states the syntax and
+ * `skill_activation_prefix` prepends the native `$` / `/` trigger.
  */
 export function buildPaperReaderUserPrompt(
 	paperRel: string,
-	style: SkillMentionStyle,
 	language: string = i18n.language,
 ): string {
-	const mention = formatSkillMention(PAPER_READER_SKILL_ID, style);
-	const skillLine =
-		style === "dollar"
-			? `Activate and follow ${mention} (this agent uses $skill-id syntax).`
-			: style === "slash"
-				? `Activate and follow ${mention} (this agent uses /skill-id syntax).`
-				: `Follow the paper-reader skill instructions Agentero injects into this prompt (${mention}). Do not wait for a separate $ or / command.`;
-
 	return [
-		skillLine,
 		`Paper folder (Vault-relative): \`${paperRel}\`.`,
 		"Prefer TeX under source/, else PAPER.md, else local PDF.",
 		`Write structured lecture notes into \`${paperRel}/NOTES.md\`.`,
 		paperReaderLanguageInstruction(language),
 		"Keep [[wikilinks]]. End with ## Sources listing Vault-relative paths you read.",
 	].join("\n");
-}
-
-async function resolveDefaultAgentTemplate(): Promise<AgentTemplate | null> {
-	try {
-		const list = await listAgents();
-		const id = list.defaultId;
-		if (!id) return list.agents[0]?.template ?? null;
-		return list.agents.find((a) => a.id === id)?.template ?? null;
-	} catch {
-		return null;
-	}
 }
 
 function planDetail(entries: AgentPlanEntry[]): string {
@@ -240,9 +192,7 @@ export async function runPaperReaderWorkflow(opts: {
 			async ({ id, signal, setDetail }) => {
 				setDetail(i18n.t("app:tasks.paperReadStarting"));
 
-				const template = await resolveDefaultAgentTemplate();
-				const skillStyle = skillMentionStyleForTemplate(template);
-				const userPrompt = buildPaperReaderUserPrompt(paperRel, skillStyle);
+				const userPrompt = buildPaperReaderUserPrompt(paperRel);
 
 				const accepted: RunOnceAccepted = await runOnce({
 					vaultPath: opts.vaultRoot,

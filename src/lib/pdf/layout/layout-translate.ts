@@ -577,7 +577,7 @@ async function resolveLayoutTranslateAgentOpts(options: {
 					modelId,
 					sessionId: cachedSessionId ?? undefined,
 					vaultPath: vaultPath ?? undefined,
-					workflow: "free",
+					workflow: "translate",
 					autoApprove: true,
 					hideFromChatHistory: true,
 				});

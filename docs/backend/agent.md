@@ -131,7 +131,8 @@ ACP **没有**统一的 ask-user tool 规范：各 harness 的字段名、挂载
 ## 工作流与 Skill
 
 - workflow：`summary` / `qa` / `related_work` 等（面板 chips 映射）。
-- Skill：Claude 倾向 `/id`；其它注入 `SKILL.md` 文本（`SkillMentionStyle`）。
+- `translate`：**不套 envelope**（无 `## Sources`、无 CLI 政策、不注入回答语言与个人偏好）。翻译 prompt 自己已指定目标语言并要求「只返回译文」，envelope 会与之冲突。
+- Skill：Claude 倾向 `/id`；其它注入 `SKILL.md` 文本（`SkillMentionStyle`）。激活语法**只由 Host 判定**（`skill_mention_style` + `paper_reader_skill_line`）；前端不得重复推断，否则同一条 prompt 的两半会互相矛盾。
 - paper-reader：写 NOTES + `paper_set_is_read`；前端任务条编排。
 - 输出约定：工作流要求 `## Sources`（相对 Vault 路径）；双链保留 `[[...]]`。
 - `AGENTS.md` 已作为 progressive disclosure 系统上下文注入所有工作流 prompt（优先级：Vault 根 `AGENTS.md` → 当前 paper `NOTES.md` → marks）。

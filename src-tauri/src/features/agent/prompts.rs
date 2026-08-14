@@ -18,6 +18,14 @@ pub fn build_prompt(
         .map(|t| format!("Target path (Vault-relative): `{t}`\n"))
         .unwrap_or_default();
 
+    // Translation is a closed transform: the caller's prompt already names the
+    // target language and demands "only the translation". Every envelope piece
+    // fights that — `## Sources` adds commentary, the CLI policy is irrelevant,
+    // and `language_directive` would override the requested target language.
+    if workflow == "translate" {
+        return format!("{target_line}{USER_REQUEST_MARKER}{user_prompt}");
+    }
+
     let skill_hint = skill_follow_hint(skill_style, skill_ids);
 
     let system = match workflow {
@@ -473,6 +481,25 @@ mod tests {
         assert!(p.contains("agentero import id <arxiv|doi|url> --json"));
         assert!(p.contains("agentero paper download <path|id> --json"));
         assert!(p.contains("agentero paper parse <path|id> --json"));
+    }
+
+    #[test]
+    fn translate_workflow_adds_no_conflicting_envelope() {
+        let p = build_prompt(
+            Some("translate"),
+            "Translate the text below into English. Return only the translation, without commentary.",
+            None,
+            SkillMentionStyle::InjectedOnly,
+            &[],
+            // A global response language must not override the requested target.
+            Some("zh-CN"),
+            Some("Prefer concise bullet points."),
+        );
+        assert!(p.contains("Return only the translation"));
+        assert!(!p.contains("## Sources"));
+        assert!(!p.contains("Agentero CLI policy"));
+        assert!(!p.contains("Simplified Chinese"));
+        assert!(!p.contains("User preference instructions"));
     }
 
     #[test]
