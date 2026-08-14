@@ -309,38 +309,25 @@ export function TrashRow() {
 /** 广场 parent row — collapsible, with the discovery sources as children. */
 export function PlazaRow({ expanded }: { expanded: boolean }) {
 	const { togglePath } = useFileTree();
-	const label = expanded ? "收起广场" : "展开广场";
 	return (
 		<FileTreeFile path={PLAZA_VIRTUAL_PATH} name="广场">
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<button
-						type="button"
-						aria-expanded={expanded}
-						aria-label={label}
-						className={cn(
-							"flex size-4 shrink-0 items-center justify-center rounded-sm",
-							"text-muted-foreground hover:bg-muted/80",
-							"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-						)}
-						onClick={(e) => {
-							e.stopPropagation();
-							e.preventDefault();
-							togglePath(PLAZA_VIRTUAL_PATH);
-						}}
-						onPointerDown={(e) => e.stopPropagation()}
-						onKeyDown={(e) => e.stopPropagation()}
-					>
-						<ChevronRight
-							className={cn(
-								"size-4 transition-transform",
-								expanded && "rotate-90",
-							)}
-						/>
-					</button>
-				</TooltipTrigger>
-				<TooltipContent side="right">{label}</TooltipContent>
-			</Tooltip>
+			<button
+				type="button"
+				aria-expanded={expanded}
+				aria-label={expanded ? "收起广场" : "展开广场"}
+				className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+				onClick={(e) => {
+					e.stopPropagation();
+					e.preventDefault();
+					togglePath(PLAZA_VIRTUAL_PATH);
+				}}
+				onPointerDown={(e) => e.stopPropagation()}
+				onKeyDown={(e) => e.stopPropagation()}
+			>
+				<ChevronRight
+					className={cn("size-4 transition-transform", expanded && "rotate-90")}
+				/>
+			</button>
 			<FileTreeIcon>
 				<Globe className="size-4 text-muted-foreground" />
 			</FileTreeIcon>
