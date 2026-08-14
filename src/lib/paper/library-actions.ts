@@ -285,32 +285,43 @@ export function openLibraryPaper(paper: PaperMetadata): void {
 	openPaper(joinVaultPath(vaultPath, paper.path));
 }
 
+/**
+ * Vault-relative catalog path for a paper, or `""` when it cannot be resolved.
+ * Prefers `meta.path`; projections may omit it, so fall back to the folder of
+ * the tab that has this paper open.
+ */
+export async function resolvePaperCatalogRel(
+	paperMeta: PaperMetadata,
+): Promise<string> {
+	const vaultPath = getVaultPath();
+	if (!vaultPath) return "";
+	const path = (paperMeta.path ?? "")
+		.replace(/\\/g, "/")
+		.replace(/^\/+|\/+$/g, "");
+	if (path) return path;
+	const matchingTab = workspaceStore
+		.getState()
+		.tabs.find((tab) => tab.paperMeta?.id === paperMeta.id);
+	const selectedPath = matchingTab?.path ?? null;
+	if (!selectedPath) return "";
+	let paperDir = paperDirFromPath(
+		selectedPath,
+		vaultStore.getState().paperFolders,
+	);
+	if (!paperDir && (await detectPaperDirectory(selectedPath))) {
+		paperDir = selectedPath.replace(/[\\/]+$/, "");
+	}
+	return paperCatalogPath(paperDir ?? "", vaultPath) ?? "";
+}
+
 /** Persist Paper Info tags for the displayed paper and sync library + open tabs. */
 export async function paperTagsChange(
 	paperMeta: PaperMetadata,
 	tags: PaperTag[],
 ): Promise<PaperMetadata | null> {
 	const vaultPath = getVaultPath();
-	const matchingTab = workspaceStore
-		.getState()
-		.tabs.find((tab) => tab.paperMeta?.id === paperMeta.id);
-	const selectedPath = matchingTab?.path ?? null;
 	if (!vaultPath) return null;
-	// Prefer catalog path on meta; projection may omit `path` — fall back to
-	// the open paper folder.
-	let path = (paperMeta.path ?? "")
-		.replace(/\\/g, "/")
-		.replace(/^\/+|\/+$/g, "");
-	if (!path && selectedPath) {
-		let paperDir = paperDirFromPath(
-			selectedPath,
-			vaultStore.getState().paperFolders,
-		);
-		if (!paperDir && (await detectPaperDirectory(selectedPath))) {
-			paperDir = selectedPath.replace(/[\\/]+$/, "");
-		}
-		path = paperCatalogPath(paperDir ?? "", vaultPath) ?? "";
-	}
+	const path = await resolvePaperCatalogRel(paperMeta);
 	if (!path) {
 		notifyError(i18n.t("sidebar:paperInfo.tagsSaveFailed"));
 		return null;

@@ -22,6 +22,7 @@ import {
 } from "@/hooks/use-app-stores";
 import type { PaperMetadata, PaperTag } from "@/lib/paper";
 import { resolvePapersParentDir } from "@/lib/paper";
+import { fetchCoolPapersNotes } from "@/lib/paper/coolpapers";
 import {
 	dropLocalPdfs,
 	importLocalPdf,
@@ -142,6 +143,11 @@ export function VaultSidebar() {
 		[displayedPaperMeta, vaultPath],
 	);
 
+	const onFetchNotes = useCallback(async () => {
+		if (!displayedPaperMeta) return;
+		await fetchCoolPapersNotes(displayedPaperMeta);
+	}, [displayedPaperMeta]);
+
 	const lookupParentDir = useMemo(
 		() => resolvePapersParentDir(vaultPath, treeSelectedPath, tree),
 		[vaultPath, treeSelectedPath, tree],
@@ -220,6 +226,7 @@ export function VaultSidebar() {
 				<PaperInfoPanel
 					meta={displayedPaperMeta}
 					onTagsChange={onPaperTagsChange}
+					onFetchNotes={onFetchNotes}
 				/>
 			) : null}
 		</>
