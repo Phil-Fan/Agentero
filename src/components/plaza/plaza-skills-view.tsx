@@ -129,7 +129,7 @@ export function PlazaSkillsView({ className }: { className?: string }) {
 						<h2 className="mb-2 font-medium text-muted-foreground text-xs">
 							{t(`plaza.skills.themes.${theme.id as SkillThemeId}`)}
 						</h2>
-						<div className="grid gap-2 sm:grid-cols-2">
+						<div className="grid grid-cols-3 gap-2">
 							{theme.repos.map((repo) => (
 								<RepoCard key={repo.url} repo={repo} />
 							))}
