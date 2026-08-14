@@ -32,9 +32,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, UNIX_EPOCH};
-#[cfg(not(target_os = "ios"))]
-use tauri::Manager;
-use tauri::{AppHandle, Emitter, EventId, Listener};
+use tauri::{AppHandle, Emitter, EventId, Listener, Manager};
 use tokio::sync::{mpsc, oneshot, watch};
 
 const PAIRING_TIMEOUT: Duration = Duration::from_secs(300);
