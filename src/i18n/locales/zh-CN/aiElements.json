@@ -53,7 +53,8 @@
 		"empty": "无附件"
 	},
 	"modelSelector": {
-		"label": "模型选择器"
+		"label": "模型选择器",
+		"providerLogo": "{{provider}} 标志"
 	},
 	"plan": {
 		"toggle": "切换计划",

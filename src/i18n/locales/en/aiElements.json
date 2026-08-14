@@ -53,7 +53,8 @@
 		"empty": "No attachments"
 	},
 	"modelSelector": {
-		"label": "Model Selector"
+		"label": "Model Selector",
+		"providerLogo": "{{provider}} logo"
 	},
 	"plan": {
 		"toggle": "Toggle plan",

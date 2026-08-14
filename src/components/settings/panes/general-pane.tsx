@@ -267,7 +267,7 @@ function ConnectorSettingsBlock({
 	settings: AppSettings;
 	patch: (p: Partial<AppSettings>) => void;
 }) {
-	const { t } = useTranslation("settings");
+	const { t } = useTranslation(["settings", "common"]);
 	const [status, setStatus] = useState<ConnectorStatus | null>(null);
 	const [busy, setBusy] = useState(false);
 
@@ -363,7 +363,7 @@ function ConnectorSettingsBlock({
 						{status?.listening ? (
 							<span
 								role="img"
-								aria-label="listening"
+								aria-label={t("common:listening")}
 								className="ml-1.5 inline-block size-2 rounded-full bg-emerald-500 align-middle"
 							/>
 						) : null}

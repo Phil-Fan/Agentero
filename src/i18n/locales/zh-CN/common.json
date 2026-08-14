@@ -6,5 +6,10 @@
 	"cancel": "取消",
 	"save": "保存",
 	"remove": "移除",
-	"open": "打开"
+	"open": "打开",
+	"loading": "加载中",
+	"previousSlide": "上一张",
+	"nextSlide": "下一张",
+	"steps": "步骤",
+	"listening": "监听中"
 }

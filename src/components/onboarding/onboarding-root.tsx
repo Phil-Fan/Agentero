@@ -30,9 +30,10 @@ import {
 const useOnboardingStepper = onboardingFlow.useStepper;
 
 function FlowDots({ index, labels }: { index: number; labels: string[] }) {
+	const { t } = useTranslation("common");
 	return (
 		<fieldset className="flex items-center gap-1.5">
-			<legend className="sr-only">Steps</legend>
+			<legend className="sr-only">{t("steps")}</legend>
 			{labels.map((label, i) => (
 				<span
 					key={label}

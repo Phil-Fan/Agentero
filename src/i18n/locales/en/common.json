@@ -6,5 +6,10 @@
 	"cancel": "Cancel",
 	"save": "Save",
 	"remove": "Remove",
-	"open": "Open"
+	"open": "Open",
+	"loading": "Loading",
+	"previousSlide": "Previous slide",
+	"nextSlide": "Next slide",
+	"steps": "Steps",
+	"listening": "listening"
 }
