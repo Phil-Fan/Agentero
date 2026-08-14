@@ -23,7 +23,7 @@ Settings → **翻译**：
 - PDF **全文翻译**（工具栏 Languages，在视觉批注旁）：
   - 依赖版面分析 + PDF 文字层；翻译 `text` / `abstract` / `header` / `figure_title`（图题·表题）区域（score ≥ 30%）。
   - **不翻译**：算法框及其内部文字；`reference` / `reference_content` 文献条目；“References / Bibliography / 参考文献” 标题；侧栏 `aside_text`。
-  - 按阅读顺序启动，并发 2；**每块完成立刻**在 bbox 上盖译文层（非整页等齐）。
+  - 按阅读顺序把段落**分批**翻译（`buildTranslateBatches`）：批内 payload ≤ 4500 字符（约一页双栏正文），用 `[[n]]` 编号拼成一次请求，让引擎看到上下文；译文按 `[[n]]` 标记切回、逐块写回原 bbox 位置。标记解析不一致时该批**回退为逐段翻译**，保证不丢块。并发 2（Agent 串行）；**每批完成立刻**在 bbox 上盖译文层（非整页等齐）。
   - 每页纸张右上角外侧常驻窄页签可只翻译本页；页签 hover 不弹出额外文字；本页已有可见译文时，页签切换为隐藏本页译文。隐藏只影响当前 UI 覆盖层，不删除磁盘缓存。
   - 译文按论文写入 `{paper}/source/layout-translate.json`。缓存命中需匹配 provider / 源语言 / 目标语言 / 非密钥服务配置，并逐块校验 region id + 原文；版面或目标语言变化时只复用仍匹配的块。
   - 单页翻译写缓存时按同一 cache key 增量合并，避免只翻译一页时覆盖其它页已经落盘的译文。

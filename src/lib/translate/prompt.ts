@@ -3,6 +3,11 @@
  * Generic surface + PDF selection variant.
  */
 
+/** True when `text` is a numbered batch payload (`[[1]] …`, `[[2]] …`). */
+function hasNumberedMarkers(text: string): boolean {
+	return /\[{2}\s*\d+\s*\]{2}/.test(text);
+}
+
 export function buildTranslatePrompt(opts: {
 	text: string;
 	targetLangName: string;
@@ -17,6 +22,13 @@ export function buildTranslatePrompt(opts: {
 	];
 	if (opts.surface === "pdf-selection" && opts.page != null) {
 		parts.push(`Source: research paper PDF, page ${opts.page}.`);
+	}
+	if (hasNumberedMarkers(text)) {
+		parts.push(
+			"The text contains several paragraphs, each prefixed with a [[n]] marker. " +
+				"Translate every paragraph and keep the same [[n]] markers and the same " +
+				"number of paragraphs in the output.",
+		);
 	}
 	parts.push("Text:", `> ${text}`);
 	return parts.join("\n\n");

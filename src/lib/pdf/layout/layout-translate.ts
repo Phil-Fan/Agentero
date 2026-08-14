@@ -41,6 +41,13 @@ export const LAYOUT_TRANSLATE_MAX_CHARS = 2500;
 /** Parallel free/commercial MT workers (order of *start* follows reading order). */
 export const LAYOUT_TRANSLATE_CONCURRENCY = 2;
 
+/**
+ * Soft cap on the summed payload per batch request. The Host rejects text over
+ * 5000 chars (`MAX_TEXT_CHARS`), so keep batches comfortably below it while
+ * still grouping ~one double-column page of paragraphs for shared context.
+ */
+export const LAYOUT_TRANSLATE_BATCH_CHARS = 4500;
+
 export const LAYOUT_TRANSLATE_SIDECAR_SCHEMA_VERSION = 1;
 export const LAYOUT_TRANSLATE_SIDECAR_FILE = "layout-translate.json";
 
@@ -613,8 +620,107 @@ async function resolveLayoutTranslateAgentOpts(options: {
 }
 
 /**
+ * Marker used to number paragraphs inside a batch payload, e.g. `[[1]] …`.
+ * Double brackets distinguish it from single-bracket citations (`[1]`) that the
+ * translation may legitimately contain.
+ */
+const TRANSLATE_BATCH_MARKER_RE = /(\[{2}|［{2})\s*(\d+)\s*(\]{2}|］{2})/g;
+
+/** Projected payload length of a batch (matches {@link buildNumberedPayload}). */
+function batchPayloadLength(batch: readonly LayoutTranslateItem[]): number {
+	if (batch.length === 0) return 0;
+	if (batch.length === 1) return batch[0]?.source.length ?? 0;
+	let total = 0;
+	batch.forEach((item, i) => {
+		total += `[[${i + 1}]] `.length + item.source.length;
+		if (i > 0) total += 2; // "\n\n"
+	});
+	return total;
+}
+
+/**
+ * Group pending items (already in reading order) into batches whose combined
+ * payload stays under {@link LAYOUT_TRANSLATE_BATCH_CHARS}. A single item always
+ * fits, so no item is dropped. Batches may span adjacent pages; results are
+ * mapped back per item id, so positions are unaffected.
+ */
+export function buildTranslateBatches(
+	items: readonly LayoutTranslateItem[],
+): LayoutTranslateItem[][] {
+	const batches: LayoutTranslateItem[][] = [];
+	let current: LayoutTranslateItem[] = [];
+	for (const item of items) {
+		if (item.status === "done" && item.translated?.trim()) continue;
+		const candidate = [...current, item];
+		if (
+			current.length > 0 &&
+			batchPayloadLength(candidate) > LAYOUT_TRANSLATE_BATCH_CHARS
+		) {
+			batches.push(current);
+			current = [item];
+		} else {
+			current = candidate;
+		}
+	}
+	if (current.length > 0) batches.push(current);
+	return batches;
+}
+
+/** Join a batch into one numbered payload; a lone item is sent as-is. */
+export function buildNumberedPayload(
+	batch: readonly LayoutTranslateItem[],
+): string {
+	if (batch.length === 1) return batch[0]?.source ?? "";
+	return batch.map((item, i) => `[[${i + 1}]] ${item.source}`).join("\n\n");
+}
+
+/**
+ * Split a numbered translation back into `expected` segments by `[[n]]` markers.
+ * Returns null when markers are missing/out of order or any segment is empty, so
+ * the caller can fall back to translating each paragraph individually.
+ */
+export function parseNumberedTranslation(
+	result: string,
+	expected: number,
+): string[] | null {
+	const trimmed = result.trim();
+	if (expected <= 1) return trimmed ? [trimmed] : null;
+	const markers: { n: number; start: number; end: number }[] = [];
+	const re = new RegExp(TRANSLATE_BATCH_MARKER_RE.source, "g");
+	let m = re.exec(trimmed);
+	while (m !== null) {
+		markers.push({
+			n: Number(m[2]),
+			start: m.index,
+			end: m.index + m[0].length,
+		});
+		m = re.exec(trimmed);
+	}
+	if (markers.length < expected) return null;
+	const chosen = markers.slice(0, expected);
+	for (let i = 0; i < expected; i++) {
+		if (chosen[i]?.n !== i + 1) return null;
+	}
+	const segments: string[] = [];
+	for (let i = 0; i < expected; i++) {
+		const cur = chosen[i];
+		if (!cur) return null;
+		const nextStart = i + 1 < expected ? chosen[i + 1]?.start : trimmed.length;
+		const seg = trimmed.slice(cur.end, nextStart ?? trimmed.length).trim();
+		if (!seg) return null;
+		segments.push(seg);
+	}
+	return segments;
+}
+
+/**
  * Translate regions with bounded concurrency. Invokes `onUpdate` after each
- * item settles so the UI can paint overlays progressively.
+ * batch settles so the UI can paint overlays progressively.
+ *
+ * Paragraphs are grouped into reading-order batches and translated in a single
+ * numbered request so the engine sees surrounding context; the result is split
+ * back by marker and written to each region's original position. On a parse
+ * mismatch the batch falls back to per-paragraph translation.
  */
 export async function runLayoutRegionTranslate(options: {
 	items: LayoutTranslateItem[];
@@ -635,59 +741,118 @@ export async function runLayoutRegionTranslate(options: {
 	);
 	const items = options.items.map((it) => ({ ...it }));
 	const signal = options.signal;
-	let nextIndex = 0;
+	const batches = buildTranslateBatches(items);
+	let nextBatch = 0;
 
 	const publish = () => options.onUpdate(items.map((it) => ({ ...it })));
+
+	const translateOne = async (item: LayoutTranslateItem): Promise<string> => {
+		const translated = await runTranslate(
+			{
+				text: item.source,
+				context: {
+					page: item.pageIndex + 1,
+					surface: "pdf-layout-bulk",
+				},
+			},
+			agentOpts,
+		);
+		return translated.trim();
+	};
+
+	const settleError = (item: LayoutTranslateItem, e: unknown) => {
+		if (signal?.aborted) {
+			item.status = "skipped";
+		} else {
+			item.status = "error";
+			item.error = e instanceof Error ? e.message : String(e);
+		}
+	};
 
 	const worker = async () => {
 		while (true) {
 			if (signal?.aborted) return;
-			const i = nextIndex;
-			nextIndex += 1;
-			if (i >= items.length) return;
-			const item = items[i];
-			if (!item) return;
-			if (item.status === "done" && item.translated?.trim()) continue;
-			item.status = "running";
+			const b = nextBatch;
+			nextBatch += 1;
+			if (b >= batches.length) return;
+			const batch = batches[b];
+			if (!batch || batch.length === 0) continue;
+			for (const item of batch) item.status = "running";
 			publish();
 			try {
 				if (signal?.aborted) {
-					item.status = "skipped";
+					for (const item of batch) item.status = "skipped";
 					publish();
 					return;
 				}
-				const translated = await runTranslate(
-					{
-						text: item.source,
-						context: {
-							page: item.pageIndex + 1,
-							surface: "pdf-layout-bulk",
-						},
-					},
-					agentOpts,
-				);
-				if (signal?.aborted) {
-					item.status = "skipped";
-					publish();
-					return;
-				}
-				item.translated = translated.trim();
-				item.status = item.translated ? "done" : "error";
-				if (!item.translated) item.error = "Empty translation result";
-			} catch (e) {
-				if (signal?.aborted) {
-					item.status = "skipped";
+				if (batch.length === 1) {
+					const item = batch[0];
+					if (!item) continue;
+					const translated = await translateOne(item);
+					if (signal?.aborted) {
+						item.status = "skipped";
+					} else if (translated) {
+						item.translated = translated;
+						item.status = "done";
+					} else {
+						item.status = "error";
+						item.error = "Empty translation result";
+					}
 				} else {
-					item.status = "error";
-					item.error = e instanceof Error ? e.message : String(e);
+					const payload = buildNumberedPayload(batch);
+					const result = await runTranslate(
+						{
+							text: payload,
+							context: {
+								page:
+									batch[0]?.pageIndex != null
+										? batch[0].pageIndex + 1
+										: undefined,
+								surface: "pdf-layout-bulk",
+							},
+						},
+						agentOpts,
+					);
+					const segments = parseNumberedTranslation(result, batch.length);
+					if (signal?.aborted) {
+						for (const item of batch) item.status = "skipped";
+					} else if (segments) {
+						batch.forEach((item, i) => {
+							item.translated = segments[i];
+							item.status = segments[i] ? "done" : "error";
+							if (!segments[i]) item.error = "Empty translation result";
+						});
+					} else {
+						// Marker split failed — fall back to per-paragraph translation.
+						for (const item of batch) {
+							if (signal?.aborted) {
+								item.status = "skipped";
+								continue;
+							}
+							try {
+								const translated = await translateOne(item);
+								if (translated) {
+									item.translated = translated;
+									item.status = "done";
+								} else {
+									item.status = "error";
+									item.error = "Empty translation result";
+								}
+							} catch (e) {
+								settleError(item, e);
+							}
+						}
+					}
 				}
+			} catch (e) {
+				for (const item of batch) settleError(item, e);
 			}
 			publish();
 		}
 	};
 
 	const pool = Array.from(
-		{ length: Math.min(concurrency, Math.max(1, items.length)) },
+		{ length: Math.min(concurrency, Math.max(1, batches.length)) },
 		() => worker(),
 	);
 	await Promise.all(pool);

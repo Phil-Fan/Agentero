@@ -824,11 +824,19 @@ async fn translate_openai_compatible(
             AppError::message("OpenAI-compatible requires model (Settings → Translate)")
         })?;
     let url = optional_endpoint(base_url, "https://api.openai.com/v1", "/chat/completions");
+    // Numbered batch payload ([[1]] …, [[2]] …): ask the model to keep the
+    // markers and paragraph count so the caller can split the result back.
+    let numbered_hint = if text.contains("[[1]]") {
+        " The text contains several paragraphs, each prefixed with a [[n]] marker. Translate every paragraph and keep the same [[n]] markers and the same number of paragraphs in the output."
+    } else {
+        ""
+    };
     let prompt =
         format!(
-        "Translate the following text from {} to {}. Return translation only, without notes.\n\n{}",
+        "Translate the following text from {} to {}. Return translation only, without notes.{}\n\n{}",
         if source == "auto" { "the source language" } else { source },
         target,
+        numbered_hint,
         text
     );
     let client = http_client(timeout)?;
