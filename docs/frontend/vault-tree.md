@@ -8,6 +8,7 @@
 |---|---|---|
 | Library | `agentero:library` | 打开全库表格；右键导出 BibTeX |
 | Recycle Bin | `agentero:trash` | 打开回收站视图；右键清空 |
+| 广场 | `agentero:plaza` | 外部发现入口；`Globe` 图标，chevron 与 Library / Trash 同为 `size-4` gutter |
 
 ## 建树
 

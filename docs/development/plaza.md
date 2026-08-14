@@ -23,8 +23,8 @@
 | Tab kind | `src/lib/workspace/tabs/types.ts` 的 `"plaza"` + `doc-view.tsx` 分支 |
 | 站点代理 | `src-tauri/src/features/coolpapers/proxy.rs` |
 
-> Kimi 解析没有走广场入库，而是作为论文侧的独立能力落在 Paper Info 面板的
-> 「获取笔记」按钮上（`paper_coolpapers_notes` → 追加 `NOTES.md`）。
+> Kimi 解析没有走广场入库，而是作为论文侧的独立能力落在 Markdown 工具栏的
+> 「获取 Kimi 笔记」按钮上（`paper_coolpapers_notes` → 追加 `NOTES.md`）。
 
 ## 1. 产品动机
 
@@ -73,7 +73,7 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 
 | 节点 | Lucide | en | zh-CN |
 |---|---|---|---|
-| 广场 | `Sparkles` | Plaza | 广场 |
+| 广场 | `Globe` | Plaza | 广场 |
 | Cool Papers | `Flame` 或自定义标 | Cool Papers | Cool Papers |
 | 播客 | `Podcast` | Podcasts | 播客 |
 | 推荐 | `Compass` | For You | 推荐 |

@@ -1,10 +1,10 @@
 import {
 	ChevronRight,
 	Download,
+	Globe,
 	Library,
 	Loader2,
 	ScrollText,
-	Sparkles,
 	Trash2,
 	Zap,
 } from "lucide-react";
@@ -319,7 +319,7 @@ export function PlazaRow({ expanded }: { expanded: boolean }) {
 						aria-expanded={expanded}
 						aria-label={label}
 						className={cn(
-							"flex size-5 shrink-0 items-center justify-center rounded-sm",
+							"flex size-4 shrink-0 items-center justify-center rounded-sm",
 							"text-muted-foreground hover:bg-muted/80",
 							"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 						)}
@@ -342,7 +342,7 @@ export function PlazaRow({ expanded }: { expanded: boolean }) {
 				<TooltipContent side="right">{label}</TooltipContent>
 			</Tooltip>
 			<FileTreeIcon>
-				<Sparkles className="size-4 text-muted-foreground" />
+				<Globe className="size-4 text-muted-foreground" />
 			</FileTreeIcon>
 			<FileTreeName className="min-w-0 flex-1 truncate">广场</FileTreeName>
 		</FileTreeFile>
