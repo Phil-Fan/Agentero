@@ -6,6 +6,7 @@
 |---|---|
 | 笔记、PDF、TeX、marks | Vault 普通文件 |
 | 论文集合与结构化 metadata | `.agentero/catalog.sqlite` |
+| 本机使用记录 | XDG `$XDG_DATA_HOME/agentero/usage.sqlite`（非 Vault） |
 | 双链索引 | 由 Markdown 重建（不落业务库） |
 
 `PAPERS.md` / `library.bib` **不**默认生成；需要时导出。

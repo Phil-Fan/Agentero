@@ -69,6 +69,7 @@ nav:
       - 远程 Vault: backend/remote.md
       - 搜索: backend/search.md
       - 设置: backend/settings.md
+      - 使用记录: backend/usage.md
       - 翻译: backend/translate.md
       - 运行日志: backend/logging.md
       - CLI: backend/cli.md

@@ -15,7 +15,7 @@
 
 | 分类 | 内容示例 |
 |---|---|
-| 通用 | Translator URL、Connector 开关、文件树标签/排序、打开行为、笔记导出默认水印 |
+| 通用 | Translator URL、Connector 开关、文件树标签/排序、打开行为、笔记导出默认水印、隐私（PostHog / 本地使用记录） |
 | Appearance | 明暗、`uiTheme`、`uiScale`；界面/正文/等宽字体；Markdown 字号 / 行距 / 工具栏 |
 | Agent | 目录两层检测（Agent CLI / ACP）、未装「安装」/ 缺 ACP「安装 ACP」/ 已装「升级」、已安装或已注册行「卸载」（Trash 按钮 → 确认对话框展示 logo 与清理项：npm 全局包、受管目录，或仅注册项）、默认 Agent、权限模式、自动精读、可选 **User-Agent**（Codex 中转亲和）、个人提示词、划词提问 Agent |
 | 翻译 | 默认服务选择、商用 API 配置、语言与 Agent 座 |

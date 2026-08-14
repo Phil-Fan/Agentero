@@ -214,6 +214,11 @@ enum Commands {
         #[command(subcommand)]
         cmd: commands::mark::MarkCmd,
     },
+    /// Device-local activity log (XDG usage.sqlite).
+    Usage {
+        #[command(subcommand)]
+        cmd: commands::usage::UsageCmd,
+    },
     /// Open a local directory as a Vault in the desktop App.
     ///
     /// Shorthand: bare `agentero <PATH>` rewrites to this when `<PATH>` looks like
@@ -344,6 +349,7 @@ fn command_label(cmd: &Commands) -> &'static str {
         Commands::Doctor { .. } => "cli.doctor",
         Commands::Layout { .. } => "cli.layout",
         Commands::Mark { .. } => "cli.mark",
+        Commands::Usage { .. } => "cli.usage",
         Commands::Open { .. } => "cli.open",
     }
 }
@@ -378,6 +384,7 @@ async fn run(command: Commands, globals: &GlobalOpts) -> Result<serde_json::Valu
         Commands::Doctor { cmd } => commands::doctor::run(cmd, globals),
         Commands::Layout { cmd } => commands::layout::run(cmd, globals),
         Commands::Mark { cmd } => commands::mark::run(cmd, globals).await,
+        Commands::Usage { cmd } => commands::usage::run(cmd, globals),
         Commands::Open { path } => commands::open::run(&path, globals),
     }
 }

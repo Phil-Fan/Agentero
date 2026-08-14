@@ -6,6 +6,7 @@
 | `settings_set` | 合并写入并广播 `settings:changed` |
 
 - 路径：`$XDG_CONFIG_HOME/agentero/settings.json`（macOS 通常 `~/.config/agentero/`）。
+- `usageTrackingEnabled`：是否写入 XDG `usage.sqlite`（见 [usage.md](usage.md)）。与 `telemetryEnabled`（PostHog）独立。
 - 旧 localStorage 键一次性迁移。
 - Agent 注册表等同目录管理。
 

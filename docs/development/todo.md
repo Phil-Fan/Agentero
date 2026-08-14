@@ -63,6 +63,9 @@
 
 ## 0.7+ — 体验与平台
 
+- [x] \#239 P0 存储：XDG `usage.sqlite` + `track()` 缓冲 + CLI `usage`（见 [../backend/usage.md](../backend/usage.md)）
+- [ ] \#239：翻译 / 版面 / 批注漏斗、UsageProfile、Agent 注入、PostHog 投影
+
 - [ ] Graph 全屏/聚焦、邻居高亮、节点搜索；边级增量索引
 - [ ] tab pin、命名工作区会话
 - [ ] PDF 无文本层降级；HTML 标注统一模型

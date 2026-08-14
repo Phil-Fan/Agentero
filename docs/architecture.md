@@ -92,6 +92,7 @@ Plate + `@platejs/markdown`。普通文本粘贴默认按 Markdown 解析。右�
 | 版面分析 | 原始 layout regions / 侧栏索引 | `{paper}/source/layout.json` / `layout-index.json` |
 | 引用解析 | 参考文献元数据 | `{paper}/source/agentero-cite.json` |
 | 设置 | UI/Agent 偏好 | XDG `~/.config/agentero/settings.json` |
+| 使用记录 | 打开 / 下载 / Agent 等 | XDG `~/.local/share/agentero/usage.sqlite` |
 | 索引 | 双链图（编辑器/反链） | 内存，可重建 |
 | 引用图 | 文献 cites（sidecar + localMatch） | 按需扫描 sidecar，可重建 |
 

@@ -10,7 +10,7 @@ use std::path::Path;
 /// Subcommand names accepted by the CLI (must stay in sync with `Commands`).
 const KNOWN_COMMANDS: &[&str] = &[
     "vault", "tree", "paper", "import", "export", "trash", "config", "wiki", "doctor", "layout",
-    "mark", "open", "help",
+    "mark", "usage", "open", "help",
 ];
 
 /// Rewrite `agentero <path>` into `agentero open <path>` when safe.
