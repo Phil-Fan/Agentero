@@ -2100,6 +2100,7 @@ snapshot 保存所有 Wiki target 的 size+mtime stat 指纹（不读文件内�
 |---|---|
 | 应用设置 | `$XDG_CONFIG_HOME/agentero/settings.json`（未设 env 时 Unix：`~/.config/agentero/settings.json`） |
 | Agent 注册表 | `$XDG_CONFIG_HOME/agentero/agents.json` |
+| 使用记录 | `$XDG_DATA_HOME/agentero/usage.sqlite`（见 [usage.md](usage.md)） |
 | 版面 ONNX | `$XDG_CACHE_HOME/agentero/models/pp-doclayoutv3.onnx`（见下节） |
 
 Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macOS 路径 `~/Library/Application Support/agentero/` 在首次启动时 **best-effort 复制** 到 XDG 路径。

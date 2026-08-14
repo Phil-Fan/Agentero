@@ -275,15 +275,17 @@ UI / Host 动作
 CREATE TABLE usage_events (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
   ts       TEXT    NOT NULL,
+  vault    TEXT,                  -- 打开时的绝对路径
   kind     TEXT    NOT NULL,
-  path     TEXT,
+  path     TEXT,                  -- vault 相对路径
   mode     TEXT,
   dur_ms   INTEGER,
-  extra    TEXT                 -- JSON：provider / type / trigger / skill_id 等
+  extra    TEXT                   -- JSON：provider / type / trigger / skill_id 等
 );
-CREATE INDEX idx_usage_events_ts   ON usage_events(ts);
-CREATE INDEX idx_usage_events_path ON usage_events(path, ts);
-CREATE INDEX idx_usage_events_kind ON usage_events(kind, ts);
+CREATE INDEX idx_usage_events_ts    ON usage_events(ts);
+CREATE INDEX idx_usage_events_vault ON usage_events(vault, ts);
+CREATE INDEX idx_usage_events_path  ON usage_events(path, ts);
+CREATE INDEX idx_usage_events_kind  ON usage_events(kind, ts);
 
 CREATE TABLE usage_daily (
   day    TEXT    NOT NULL,

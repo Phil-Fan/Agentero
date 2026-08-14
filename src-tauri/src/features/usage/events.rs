@@ -380,6 +380,7 @@ pub fn since_rfc3339_days(days: u32) -> String {
 }
 
 /// Used by Host commands that should never fail a user-facing mutation.
+#[cfg(feature = "desktop")]
 pub fn rename_path_best_effort(vault: &str, from: &str, to: &str) {
     match rename_path(&crate::features::usage::usage_db_path(), vault, from, to) {
         Ok(_) => {}
@@ -389,15 +390,18 @@ pub fn rename_path_best_effort(vault: &str, from: &str, to: &str) {
     }
 }
 
-/// Default-db wrapper used by Tauri / CLI.
+/// Default-db wrapper used by Tauri commands.
+#[cfg(feature = "desktop")]
 pub fn record_default(events: &[UsageRecord]) -> Result<usize, AppError> {
     record_events(&crate::features::usage::usage_db_path(), events)
 }
 
+#[cfg(feature = "desktop")]
 pub fn list_default(filter: &ListFilter) -> Result<Vec<UsageEvent>, AppError> {
     list_events(&crate::features::usage::usage_db_path(), filter)
 }
 
+#[cfg(feature = "desktop")]
 pub fn summarize_default(
     vault: Option<&str>,
     since: Option<&str>,
@@ -405,6 +409,7 @@ pub fn summarize_default(
     summarize(&crate::features::usage::usage_db_path(), vault, since)
 }
 
+#[cfg(feature = "desktop")]
 pub fn clear_default(vault: Option<&str>) -> Result<u64, AppError> {
     let path = crate::features::usage::usage_db_path();
     match vault.map(str::trim).filter(|s| !s.is_empty()) {
