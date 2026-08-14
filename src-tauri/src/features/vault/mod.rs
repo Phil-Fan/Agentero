@@ -66,9 +66,21 @@ pub const PAPER_READER_SKILL: &str =
 pub const EQUATION_ANNOTATION_SKILL: &str =
     include_str!("../../../../templates/vault/.agents/skills/equation-annotation/SKILL.md");
 
-/// Bundled agentero-cli skill (headless vault discover/import via CLI).
+/// Bundled agentero-cli skill (headless vault discover/import via CLI), POSIX variant.
 pub const AGENTERO_CLI_SKILL: &str =
     include_str!("../../../../templates/vault/.agents/skills/agentero-cli/SKILL.md");
+
+/// Bundled agentero-cli skill (headless vault discover/import via CLI), Windows variant.
+pub const AGENTERO_CLI_SKILL_WINDOWS: &str =
+    include_str!("../../../../templates/vault/.agents/skills/agentero-cli/SKILL-windows.md");
+
+/// Variant for the host platform: the skill id stays the same on every OS, but
+/// the body matches the binary name and shell the agent actually uses.
+pub const AGENTERO_CLI_SKILL_FOR_PLATFORM: &str = if cfg!(windows) {
+    AGENTERO_CLI_SKILL_WINDOWS
+} else {
+    AGENTERO_CLI_SKILL
+};
 
 /// Bundled vault-normalizer skill (directory migration into Agentero layout).
 pub const VAULT_NORMALIZER_SKILL: &str =
@@ -102,7 +114,12 @@ pub(crate) fn bundled_skill_files() -> &'static [(&'static str, &'static str)] {
             ".agents/skills/equation-annotation/SKILL.md",
             EQUATION_ANNOTATION_SKILL,
         ),
-        (".agents/skills/agentero-cli/SKILL.md", AGENTERO_CLI_SKILL),
+        // Same skill id on every platform; the body matches the host OS the
+        // CLI (and the agent consuming this skill) actually runs on.
+        (
+            ".agents/skills/agentero-cli/SKILL.md",
+            AGENTERO_CLI_SKILL_FOR_PLATFORM,
+        ),
         (
             ".agents/skills/vault-normalizer/SKILL.md",
             VAULT_NORMALIZER_SKILL,
@@ -525,6 +542,36 @@ mod tests {
         assert!(!r2.created.iter().any(|c| c == &onboarding_paths[0]));
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn agentero_cli_skill_matches_host_platform() {
+        let (_, content) = bundled_skill_files()
+            .iter()
+            .find(|(rel, _)| *rel == ".agents/skills/agentero-cli/SKILL.md")
+            .expect("agentero-cli skill bundled");
+        #[cfg(windows)]
+        {
+            assert!(
+                content.contains("agentero-cli.cmd"),
+                "Windows variant expected"
+            );
+            assert!(
+                content.contains("$env:AGENTERO_VAULT"),
+                "PowerShell recipe expected"
+            );
+        }
+        #[cfg(not(windows))]
+        {
+            assert!(
+                content.contains("~/.local/bin/agentero"),
+                "POSIX variant expected"
+            );
+            assert!(
+                content.contains("export AGENTERO_VAULT"),
+                "POSIX recipe expected"
+            );
+        }
     }
 
     #[test]

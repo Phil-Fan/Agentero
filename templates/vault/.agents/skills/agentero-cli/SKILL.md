@@ -1,6 +1,6 @@
 ---
 name: agentero-cli
-version: 4
+version: 5
 description: >-
   Use the Agentero CLI (bin `agentero`) to create, discover, and inspect a local
   research vault and catalog—list/get papers, import by id/URL, check wikilinks,
@@ -23,9 +23,10 @@ Design reference (repo): `docs/backend/cli.md`.
 
 ## Prerequisites
 
-- Binary name: POSIX 为 **`agentero`**，Windows 为 **`agentero-cli`**。Windows 下由
-  设置 → 关于 → 安装 CLI 写入 shim 并把安装目录自动加入用户 PATH；新开的终端可直接运行
-  `agentero-cli`（已运行的进程/终端需重启后才能看到新 PATH）。
+- Binary name: **`agentero`** (POSIX). Desktop: 设置 → 关于 → 安装 CLI writes the
+  `~/.local/bin/agentero` symlink and never edits shell rc. If `~/.local/bin` is
+  not on PATH, tell the user to add it to their shell rc and open a new terminal.
+  macOS also offers a Homebrew tap (`poco-ai/agentero`) for headless installs.
 - Prefer always passing **`--json`** for machine parsing (disables interactive
   prompts from `inquire`).
 - Destructive file deletes: pass **`-y` / `--yes`** under `--json` / non-TTY;

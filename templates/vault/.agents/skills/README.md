@@ -6,7 +6,7 @@ Create Vault seeds these when missing. Pick with `$` in Composer.
 | --- | --- |
 | `paper-reader` | 精读 → `{paper}/NOTES.md`，只创建可解析双链 |
 | `equation-annotation` | 公式与变量释义 → `{paper}/Annotation.md`（en / zh-CN 单语） |
-| `agentero-cli` | headless `agentero` CLI，含只读双链检查 |
+| `agentero-cli` | headless `agentero` CLI，含只读双链检查；按平台播种（POSIX `agentero` / Windows `agentero-cli`） |
 | `vault-normalizer` | 整理现有研究目录并对比迁移前后的双链诊断 |
 | `idea-evaluator` | 研究 idea 评审 |
 | `deep-research` | 综述级文献调研 |
