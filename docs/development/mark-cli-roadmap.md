@@ -393,4 +393,3 @@ M4 可选
 - [即时定位设计](mark-locate-eager.md)
 - [既有 CLI 说明](../backend/cli.md)
 - agentero-cli skill 模板：`templates/vault/.agents/skills/agentero-cli/SKILL.md`（仓库内种子，非文档站页面）
-- [TODO](todo.md) · [roadmap](roadmap.md)

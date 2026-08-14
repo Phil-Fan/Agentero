@@ -52,6 +52,7 @@ nav:
       - 命令面板: frontend/command-palette.md
       - 翻译: frontend/translate.md
       - 设置与主题: frontend/settings.md
+      - 新手引导: frontend/onboarding.md
       - 组件约定: frontend/components.md
 
   - 后端:
@@ -72,20 +73,19 @@ nav:
       - 使用记录: backend/usage.md
       - 翻译: backend/translate.md
       - 运行日志: backend/logging.md
+      - Vault Doctor: backend/doctor.md
+      - 遥测: backend/telemetry.md
       - CLI: backend/cli.md
       - API 全表: backend/api.md
 
   - 开发草稿:
       - 概览: development/index.md
-      - 路线图: development/roadmap.md
-      - TODO: development/todo.md
       - Word 引用集成: development/zotero-word-integration.md
       - 标注 CLI 路线 (#170): development/mark-cli-roadmap.md
       - 标注惰性定位: development/mark-locate-lazy.md
       - 标注即时定位: development/mark-locate-eager.md
       - 广场 Plaza: development/plaza.md
       - 使用记录总结 (#239): development/usage-analytics.md
-      - Bug 汇总: development/bug.md
 
   - 测试:
       - 概览: test/index.md
@@ -106,6 +106,14 @@ nav:
       - macOS 签名与公证: bug_fix/macos-signing.md
       - Gemini 登录弹窗循环: bug_fix/gemini-login-browser-loop.md
       - 导入 NOTES 摘要 MT 超时: bug_fix/import-abstract-mt-timeout.md
+      - CLI 导入后论文标题不刷新: bug_fix/cli-import-library-refresh.md
+      - Codex 历史恢复误用 session id: bug_fix/codex-history-runtime-session-id.md
+      - 导入 PDF 无法生成 PAPER.md: bug_fix/local-pdf-parse-missing-pdfium.md
+      - 组织目录被识别成单篇论文: bug_fix/paper-folder-marker-conflict.md
+      - 论文导入超时: bug_fix/paper-import-timeout.md
+      - 远程 Vault 无法新建文件: bug_fix/remote-create-folder-exists.md
+      - 远程删除后 list 报 NoSuchFile: bug_fix/remote-delete-list-nosuchfile.md
+      - 缩放时待办 checkbox 错位: bug_fix/todo-checkbox-scale-align.md
 
 markdown_extensions:
   - admonition

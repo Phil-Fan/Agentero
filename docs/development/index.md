@@ -2,26 +2,15 @@
 
 本目录只放：
 
-1. **路线图 / TODO / 发布**（工程规划）
+1. **工程规划**（版本切片、发布）
 2. **尚未实现**的功能设计稿
 
 已实现功能的说明在 [`../frontend/`](../frontend/index.md) 与 [`../backend/`](../backend/index.md)，按功能分篇。
-
-## 规划
-
-| 文档 | 说明 |
-|---|---|
-| [roadmap.md](roadmap.md) | 自 **0.6.0** 起的未来版本切片（无已实现清单） |
-| [todo.md](todo.md) | **仅未完成** backlog（按 0.3 / 0.4… 分组） |
-| [bug.md](bug.md) | 已知问题语料（精简） |
-| [interface-details-review.md](interface-details-review.md) | 界面细节审计（PDF 交互面）**已闭环**：修复记录 + 回归护栏（已达标表面，勿改坏）+ 交互改动自查清单 |
 
 ## 未实现草稿
 
 | 文档 | 主题 |
 |---|---|
-| [paper-pipeline-orchestration.md](paper-pipeline-orchestration.md) | 打开论文的三条时间轴（T0/T1/T2）、`paper_open_bundle` 聚合命令、内存 Job Center 与五条流水线（下载 / liteparse / 引用 / 图谱 / layout）编排；含 Operation/Job 判定、`auto`/`all` 类函数审计、依赖选型。零 schema 变更 |
-| [paper-behavior-dag.md](paper-behavior-dag.md) | 导入（identifier / Connector / 本地 PDF / BibTeX 四条入口）与打开论文的行为 DAG、现状不合理之处（`PAPER.md` 生成责任在前端、refs 重复 spawn、PDF/TeX 串行）与目标 DAG |
 | [plaza.md](plaza.md) | 广场（Cool Papers / 推荐 / 播客） |
 | [usage-analytics.md](usage-analytics.md) | \#239 Activity 总线。P0 存储已落地：XDG `usage.sqlite`（见 [../backend/usage.md](../backend/usage.md)） |
 | [zotero-word-integration.md](zotero-word-integration.md) | 官方 Zotero Word 插件 provider 兼容、文档迁移与平台实现评估 |

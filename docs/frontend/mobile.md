@@ -452,4 +452,4 @@ TestFlight 的签名、构建号和上传流程见
 
 - 调研来源：paseo `@getpaseo/{cli,server,relay}` 发行产物（§2 有函数/文件级证据）
 - [../backend/remote.md](../backend/remote.md) · [../backend/agent.md](../backend/agent.md) · [../backend/catalog.md](../backend/catalog.md)
-- [release.md](../test/release.md)（iPadOS/iOS 上架清单） · [roadmap.md](../development/roadmap.md)
+- [release.md](../test/release.md)（iPadOS/iOS 上架清单）

@@ -492,4 +492,4 @@ agentero --vault /tmp/agentero-cli-vault paper list --json
 5. 按范围 §12 / §13 / §6.4  
 6. §14 稳定性 → §15 矩阵勾选 → §17 签字  
 
-**相关**：[`../usage/index.md`](../usage/index.md) · [`../development/roadmap.md`](../development/roadmap.md)
+**相关**：[`../usage/index.md`](../usage/index.md)
