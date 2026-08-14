@@ -11,7 +11,7 @@
 
 | 文档 | 主题 |
 |---|---|
-| [plaza.md](plaza.md) | 广场（Cool Papers / 推荐 / 播客） |
+| [plaza.md](plaza.md) | 广场（Cool Papers / 推荐 / 播客）。**壳 + Cool Papers 浏览已落地**（含 `agentero-coolpapers` 站点代理）；推荐 / 播客仍为草稿 |
 | [usage-analytics.md](usage-analytics.md) | \#239 Activity 总线。P0 存储已落地：XDG `usage.sqlite`（见 [../backend/usage.md](../backend/usage.md)） |
 | [zotero-word-integration.md](zotero-word-integration.md) | 官方 Zotero Word 插件 provider 兼容、文档迁移与平台实现评估 |
 | [mark-cli-roadmap.md](mark-cli-roadmap.md) | \#170 阅读标注**内置进 CLI**（方案/命令面/边界）+ 基础→上层→Skill；与 [CLI 文档](../backend/cli.md) 分发衔接 |

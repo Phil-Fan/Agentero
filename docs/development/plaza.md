@@ -1,16 +1,29 @@
 # 广场（Plaza）— 外部来源发现
 
 > 范围：侧栏虚拟节点 **广场** 及其子来源（Cool Papers / 播客 / 论文推荐）；中间栏发现流。  
-> 相关：[`../frontend/vault-tree.md`](../frontend/vault-tree.md)、[`../backend/paper-import.md`](../backend/paper-import.md)。
+> 相关：[`../frontend/vault-tree.md`](../frontend/vault-tree.md)、[`../backend/paper-import.md`](../backend/paper-import.md)、[`../backend/index.md`](../backend/index.md)。
 
-## 0. 产品结论（2026-07-25）
+## 0. 产品结论（2026-07-25，2026-08-14 修订）
 
 | # | 议题 | 结论 |
 |---|---|---|
-| Q1 | 树位置 | **Library + Recycle Bin 下方、真实 Vault 根目录上方** |
-| Q2 | Cool Papers 呈现 | **内嵌 WebView** 打开 [papers.cool](https://papers.cool/) |
+| Q1 | 树位置 | **Library + Recycle Bin 下方、真实 Vault 根目录上方**（已实现） |
+| Q2 | Cool Papers 呈现 | **内嵌 iframe + Host 代理协议** `agentero-coolpapers://`（已实现；见 §3.2） |
 | Q3 | 入库 | **P0 不做入库**（不接魔棒 / `lookup_import`；后续迭代再开） |
-| Q4 | P0 范围 | **Cool Papers 可用（WebView 完整浏览）+ 推荐 v0**；播客仅占位 |
+| Q4 | P0 范围 | **已交付：广场壳 + Cool Papers 完整浏览**；播客 / 推荐尚未实现 |
+
+**已实现落点（2026-08-14）**
+
+| 区域 | 路径 |
+|---|---|
+| 来源注册表 | `src/lib/plaza/sources.ts`（新增来源 = 一条数组项） |
+| 中间栏 | `src/components/plaza/plaza-view.tsx`、`plaza-web-frame.tsx` |
+| 侧栏行 | `src/components/sidebar/file-tree/tree-rows.tsx`（`PlazaRow` / `PlazaSourceRow`） |
+| Tab kind | `src/lib/workspace/tabs/types.ts` 的 `"plaza"` + `doc-view.tsx` 分支 |
+| 站点代理 | `src-tauri/src/features/coolpapers/proxy.rs` |
+
+> Kimi 解析没有走广场入库，而是作为论文侧的独立能力落在 Paper Info 面板的
+> 「获取笔记」按钮上（`paper_coolpapers_notes` → 追加 `NOTES.md`）。
 
 ## 1. 产品动机
 
@@ -86,21 +99,39 @@ i18n：`sidebar:plaza.*`。
 
 ### 3.2 Cool Papers（P0，WebView）
 
-**主内容**：内嵌 **WebView / 受控 iframe 等价物**（Tauri 下优先 `webview` 或桌面 WebView 面板）加载 `https://papers.cool/`（或可配置起始分区 URL）。
+**主内容**：内嵌 iframe，经 Host 代理协议 `agentero-coolpapers://localhost`（Windows 为 `https://agentero-coolpapers.localhost`）加载 papers.cool。
 
 | 区域 | 行为 |
 |---|---|
-| 主体 | 全高 WebView；站点内导航、分区、搜索均由 papers.cool 负责 |
-| 顶条（Agentero chrome） | 后退 / 前进 / 刷新 / 主页（papers.cool）/「系统浏览器打开」 |
-| 地址 | 可选显示当前 URL（只读）；不暴露任意网址栏防滥用 |
-| 加载失败 | 空态 + 重试 + 外链打开 |
-| 入库 | **P0 不做**（顶条不放「加入 Library」；文档标明后续迭代） |
+| 主体 | 全高 iframe；站点内导航、分区、搜索均由 papers.cool 负责 |
+| 顶条（Agentero chrome） | 后退 / 前进 / 重新载入 / 当前路径（只读）/「系统浏览器打开」 |
+| 站内链接 | 在 iframe 内直接跳转 |
+| 站外链接 | 交给系统浏览器（arxiv.org 等一律拒绝被嵌套） |
+| 加载失败 | 代理返回 502 文案 |
+| 入库 | **P0 不做** |
 
-**工程注意（Tauri）**：
+**为什么要代理（`src-tauri/src/features/coolpapers/proxy.rs`）**
 
-- 使用应用内 webview 面板，而非无约束打开外部浏览器标签（外链为次要出口）。  
-- Cookie / 第三方脚本：最小权限；不注入用户 API Key。  
-- 与 PDF iframe 类似：若影响 dockview 拖拽，在拖拽期间 `pointer-events: none`（参考 HTML viewer 策略）。  
+papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页实测 238 处）。直接跨源嵌套时：
+
+- 链接要么弹出独立窗口、要么静默失效——**点了没反应**；
+- 跨源 iframe 的 `location` / `history` 都读不到，**无法实现后退**。
+
+因此改为在 Host 侧以自有 scheme 转发（沿用 `arxiv_proxy.rs` 的既有模式），同源后即可改写与观测：
+
+- `target="_blank"` → `_self`，站内链接原地跳转；
+- 绝对自链接 `https://papers.cool/…` → `/…`，导航不会掉出代理；
+- 注入桥接脚本：`postMessage` 上报每次导航路径（前端据此维护 Back/Forward 栈），并拦截跨源链接交给系统浏览器；
+- 上游 origin 在 Rust 侧**硬编码**，避免代理退化成任意 URL 中继（SSRF）。
+- **只对完整 HTML 文档注入**（首字节是 `<!doctype` / `<html`）。`togglePdf` / `toggleKimi` 用 XHR 取的是 **同样标着 `text/html` 的片段**——Kimi 解析是裸 `<p class="faq-q">`，`POST /star` 是裸计数——cool.js 直接把响应文本塞进 DOM，一旦注入就会把脚本源码和计数当文本显示出来（现象：点 PDF / Kimi 弹出一段 `<script>…</script>0`）。
+- **桥接脚本在嵌套 frame 内自我禁用**。pdf.js viewer 也是完整文档，会被一并注入；那里的 `parent` 是 papers.cool 页面而非应用，消息没人收，且点击拦截会把 PDF 内的链接 `preventDefault` 掉。判定方式：读 `parent.location.href`——面板自身的父窗口是跨源的应用会抛异常，嵌套 frame 的父窗口同源可读。
+
+**其它工程注意**
+
+- 前端不用 iframe 自身 history：一旦跳到第三方源就再次不可读；后退改为「按记录的路径重挂载 iframe」，因此也不会污染应用自身的 session history。
+- **只有 后退 / 前进 / 重新载入 可以改变 iframe 的 `key`**（用单独的 `epoch` 计数器）。若把 `key` 挂到「观测到的导航」状态上（如 history 长度 / 游标），站内每次点击都会重挂载并重新加载**挂载时那个旧路径**，表现为「点子页面闪回首页」。venue 尤其明显：`<a onclick="listVenueDetail('AAAI')">` 无 href（只做 show/hide + `pushState('/')`），但其中的年份 / 分组是真链接 `href="/venue/AAAI.2026"`。
+- sandbox 去掉 `allow-popups`，确保没有链接能逃到新窗口。
+- 与 PDF iframe 一样，拖拽期间置 `pointer-events: none`，否则 dockview 收不到 dragover。
 - 远程 Vault 会话下同样可用（广场不依赖 vault 文件 IO）。
 
 **后续（非 P0）**：从 URL 解析 arXiv id → 预览抽屉 / 批量入库；届时再增加 Agentero 侧列表层或桥接脚本（需合规评估）。
