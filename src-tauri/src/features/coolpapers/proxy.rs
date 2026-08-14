@@ -94,22 +94,30 @@ const NAV_BRIDGE: &str = r##"<style>
       var panels = (root || document).querySelectorAll(".panel.paper");
       for (var i = 0; i < panels.length; i++) decorate(panels[i]);
     };
-    decorateAll(document);
-
-    // Infinite scroll appends more rows.
-    var papers = document.querySelector(".papers");
-    if (papers && window.MutationObserver) {
-      new MutationObserver(function (records) {
-        for (var i = 0; i < records.length; i++) {
-          var added = records[i].addedNodes;
-          for (var j = 0; j < added.length; j++) {
-            var node = added[j];
-            if (node.nodeType !== 1) continue;
-            if (node.classList && node.classList.contains("paper")) decorate(node);
-            else decorateAll(node);
+    // Injected into <head>, so the body does not exist yet: sweeping now would
+    // find no rows and `.papers` would be null (observer never attaches).
+    var start = function () {
+      decorateAll(document);
+      // Infinite scroll appends more rows.
+      var papers = document.querySelector(".papers");
+      if (papers && window.MutationObserver) {
+        new MutationObserver(function (records) {
+          for (var i = 0; i < records.length; i++) {
+            var added = records[i].addedNodes;
+            for (var j = 0; j < added.length; j++) {
+              var node = added[j];
+              if (node.nodeType !== 1) continue;
+              if (node.classList && node.classList.contains("paper")) decorate(node);
+              else decorateAll(node);
+            }
           }
-        }
-      }).observe(papers, { childList: true });
+        }).observe(papers, { childList: true });
+      }
+    };
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", start);
+    } else {
+      start();
     }
 
     document.addEventListener("click", function (event) {
@@ -297,6 +305,14 @@ mod tests {
         assert!(out.contains("importPaper"));
         // Settled from the app so a row can show 已入库 / stay retryable.
         assert!(out.contains("agentero-plaza-host"));
+    }
+
+    /// The bridge lands in `<head>`, where the body does not exist yet: decorating
+    /// rows there finds nothing and leaves the scroll observer unattached.
+    #[test]
+    fn defers_row_decoration_until_the_dom_exists() {
+        assert!(NAV_BRIDGE.contains("DOMContentLoaded"));
+        assert!(NAV_BRIDGE.contains("document.readyState"));
     }
 
     #[test]
