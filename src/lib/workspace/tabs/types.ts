@@ -2,7 +2,7 @@ import type { PaperMetadata } from "@/lib/paper";
 import type { LinkFragment } from "@/lib/wiki";
 import type { CenterViewMode } from "@/lib/workspace/viewer";
 
-export type DocTabKind = "library" | "trash" | "paper" | "file";
+export type DocTabKind = "library" | "trash" | "plaza" | "paper" | "file";
 
 /**
  * One open document panel in the center Dockview workspace.
@@ -11,7 +11,7 @@ export type DocTabKind = "library" | "trash" | "paper" | "file";
 export type DocTab = {
 	/** Stable id derived from the normalized path (dedupe). */
 	id: string;
-	/** Absolute path, or the Library virtual path. */
+	/** Absolute path, or a virtual path (Library / Recycle Bin / Plaza). */
 	path: string;
 	kind: DocTabKind;
 	title: string;

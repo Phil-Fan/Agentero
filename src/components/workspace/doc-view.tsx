@@ -1,5 +1,6 @@
 import { lazy, memo, Suspense } from "react";
 import { PapersLibrary } from "@/components/library/papers-library";
+import { PlazaView } from "@/components/plaza/plaza-view";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { PdfViewerHandle } from "@/components/viewer";
 import { HtmlViewer, ImageViewer } from "@/components/viewer";
@@ -11,6 +12,7 @@ import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import type { LibraryColumnPref } from "@/lib/settings";
 import { isMarkdownPath, paperRelFromNotes } from "@/lib/vault";
 import type { WikiRenameHeadingRequest } from "@/lib/wiki";
+import { openPlazaSource } from "@/lib/workspace/actions";
 import { type DocTab, tabIsPaperNotes } from "@/lib/workspace/tabs";
 
 // Heavyweight viewers are lazy-loaded so the EmbedPDF (PDFium) and Plate
@@ -157,6 +159,17 @@ export const DocView = memo(function DocView({
 				active={active}
 				onChanged={onTrashChanged}
 				reloadSignal={trashReloadSignal}
+				className="bg-muted/20"
+			/>
+		);
+	}
+	if (tab.kind === "plaza") {
+		// Embedded remote site: don't mount (and don't start its requests) until active.
+		if (!active) return null;
+		return (
+			<PlazaView
+				path={tab.path}
+				onOpenSource={openPlazaSource}
 				className="bg-muted/20"
 			/>
 		);

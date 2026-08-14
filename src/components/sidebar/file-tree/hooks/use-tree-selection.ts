@@ -4,6 +4,11 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
+import {
+	isPlazaVirtualPath,
+	type PlazaSource,
+	plazaSourceForPath,
+} from "@/lib/plaza";
 import type { FileNode } from "@/lib/vault";
 import { isVirtualTreePath } from "../tree-helpers";
 import type { TreeCreateDraft, TreeRenameDraft } from "../types";
@@ -32,6 +37,8 @@ export function useTreeSelection({
 	onSelectFile,
 	onSelectLibrary,
 	onSelectTrash,
+	onSelectPlaza,
+	onSelectPlazaSource,
 	onDeletePath,
 	onDeletePaths,
 	onCutPaths,
@@ -46,6 +53,8 @@ export function useTreeSelection({
 	onSelectFile: (node: FileNode) => void;
 	onSelectLibrary?: () => void;
 	onSelectTrash?: () => void;
+	onSelectPlaza?: () => void;
+	onSelectPlazaSource?: (source: PlazaSource) => void;
 	onDeletePath?: (path: string) => void | Promise<void>;
 	onDeletePaths?: (paths: string[]) => void | Promise<void>;
 	onCutPaths?: (paths: string[]) => void;
@@ -76,13 +85,27 @@ export function useTreeSelection({
 				onSelectTrash?.();
 				return;
 			}
+			// Plaza paths are virtual: they have no FileNode to fall through to.
+			if (isPlazaVirtualPath(path)) {
+				const source = plazaSourceForPath(path);
+				if (source) onSelectPlazaSource?.(source);
+				else onSelectPlaza?.();
+				return;
+			}
 			const node = byPath.get(path);
 			if (!node) return;
 			// Files, paper folders, and org folders (e.g. papers/nlp/pretrain) —
 			// parent opens paper / scoped library via onSelectFile.
 			onSelectFile(node);
 		},
-		[byPath, onSelectFile, onSelectLibrary, onSelectTrash],
+		[
+			byPath,
+			onSelectFile,
+			onSelectLibrary,
+			onSelectTrash,
+			onSelectPlaza,
+			onSelectPlazaSource,
+		],
 	);
 
 	const handleSelectRow = useCallback(

@@ -1,3 +1,4 @@
+import type { PlazaSource } from "@/lib/plaza";
 import type { FileNode } from "@/lib/vault";
 
 export type TreeCreateKind = "file" | "folder";
@@ -19,6 +20,8 @@ export type TreeRenameDraft = {
 export type FlatRow =
 	| { key: string; kind: "library" }
 	| { key: string; kind: "trash" }
+	| { key: string; kind: "plaza" }
+	| { key: string; kind: "plazaSource"; source: PlazaSource }
 	| { key: string; kind: "create"; depth: number }
 	| {
 			key: string;

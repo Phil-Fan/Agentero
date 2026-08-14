@@ -15,6 +15,11 @@ import type {
 	PaperTreeLabelMode,
 	PaperTreeSortMode,
 } from "@/lib/paper";
+import {
+	PLAZA_SOURCES,
+	PLAZA_VIRTUAL_PATH,
+	type PlazaSource,
+} from "@/lib/plaza";
 import type { FileNode } from "@/lib/vault";
 import { useMovePicker } from "./hooks/use-move-picker";
 import { usePaperRowActions } from "./hooks/use-paper-row-actions";
@@ -28,7 +33,13 @@ import { MovePickerPopover } from "./move-picker-popover";
 import { TreeContextMenuPortal } from "./tree-context-menu";
 import { pathKey } from "./tree-helpers";
 import { TreeCreateInput } from "./tree-inputs";
-import { LibraryRow, LoadingRows, TrashRow } from "./tree-rows";
+import {
+	LibraryRow,
+	LoadingRows,
+	PlazaRow,
+	PlazaSourceRow,
+	TrashRow,
+} from "./tree-rows";
 import { TreeRowsViewport } from "./tree-rows-viewport";
 import { TreeSelectionBar } from "./tree-selection-bar";
 import type { TreeCreateDraft, TreeCreateKind, TreeRenameDraft } from "./types";
@@ -57,6 +68,10 @@ type FileTreeProps = {
 	onSelectLibrary?: () => void;
 	/** Virtual trash node → recycle bin view in center pane. */
 	onSelectTrash?: () => void;
+	/** Virtual 广场 node → discovery source overview in center pane. */
+	onSelectPlaza?: () => void;
+	/** Virtual 广场 child node → that source's page in center pane. */
+	onSelectPlazaSource?: (source: PlazaSource) => void;
 	/** Empty recycle bin (confirm + purge). From trash node context menu. */
 	onEmptyTrash?: () => void | Promise<void>;
 	/** Export library bibliography (Library node context menu). */
@@ -154,6 +169,8 @@ export const FileTree = memo(
 			onSelectFile,
 			onSelectLibrary,
 			onSelectTrash,
+			onSelectPlaza,
+			onSelectPlazaSource,
 			onEmptyTrash,
 			onExportLibrary,
 			libraryExportBusy = false,
@@ -221,6 +238,8 @@ export const FileTree = memo(
 			onSelectFile,
 			onSelectLibrary,
 			onSelectTrash,
+			onSelectPlaza,
+			onSelectPlazaSource,
 			onDeletePath,
 			onDeletePaths,
 			onCutPaths,
@@ -322,6 +341,19 @@ export const FileTree = memo(
 			/>
 		);
 		const trashRow = <TrashRow />;
+		const plazaExpanded = expansion.expanded.has(PLAZA_VIRTUAL_PATH);
+		const plazaRows = (
+			<>
+				<PlazaRow expanded={plazaExpanded} />
+				{plazaExpanded
+					? PLAZA_SOURCES.map((source) => (
+							<div key={source.id} className="pl-3">
+								<PlazaSourceRow source={source} />
+							</div>
+						))
+					: null}
+			</>
+		);
 		const createRow =
 			createDraft && vaultPath ? (
 				<TreeCreateInput
@@ -365,7 +397,7 @@ export const FileTree = memo(
 					>
 						{nodes.length === 0 && !createDraft ? (
 							<>
-								{/* Virtual library + trash always available (empty vault or no vault yet) */}
+								{/* Virtual library + trash + 广场 always available (empty vault or no vault yet) */}
 								<AiFileTree
 									selectedPath={treeSelectedPath}
 									selectedPaths={selection.selected}
@@ -376,6 +408,7 @@ export const FileTree = memo(
 								>
 									{libraryRow}
 									{trashRow}
+									{plazaRows}
 								</AiFileTree>
 								{vaultPath && loading ? (
 									<LoadingRows />

@@ -12,6 +12,7 @@ import {
 	paperAttachmentsNode,
 	sortFileTreeNodes,
 } from "@/lib/paper";
+import { PLAZA_SOURCES, PLAZA_VIRTUAL_PATH } from "@/lib/plaza";
 import type { FileNode } from "@/lib/vault";
 import { toVaultRelative } from "@/lib/wiki";
 import {
@@ -200,11 +201,21 @@ export function useTreeRows({
 	}, [displayNodes, expanded]);
 
 	const flatRows = useMemo<FlatRow[]>(() => {
-		// Virtual Library + Recycle Bin sit at the top (Library, then trash).
+		// Virtual rows sit at the top: Library, Recycle Bin, then 广场 + its sources.
 		const out: FlatRow[] = [
 			{ key: "__library__", kind: "library" },
 			{ key: "__trash__", kind: "trash" },
+			{ key: "__plaza__", kind: "plaza" },
 		];
+		if (expanded.has(PLAZA_VIRTUAL_PATH)) {
+			for (const source of PLAZA_SOURCES) {
+				out.push({
+					key: `__plaza__${source.id}`,
+					kind: "plazaSource",
+					source,
+				});
+			}
+		}
 		const draftAt = (parent: string) =>
 			Boolean(
 				createDraft && pathKey(createDraft.parentPath) === pathKey(parent),

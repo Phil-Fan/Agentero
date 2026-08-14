@@ -14,11 +14,17 @@ import {
 	paperHasVisibleAttachments,
 	paperNeedsRead,
 } from "@/lib/paper";
+import { PLAZA_VIRTUAL_PATH } from "@/lib/plaza";
 import type { FileNode } from "@/lib/vault";
 import type { PaperRowActions } from "./hooks/use-paper-row-actions";
 import { pathKey } from "./tree-helpers";
 import { TreeRenameInput } from "./tree-inputs";
-import { NodeTreeRow, PaperTreeRow } from "./tree-rows";
+import {
+	NodeTreeRow,
+	PaperTreeRow,
+	PlazaRow,
+	PlazaSourceRow,
+} from "./tree-rows";
 import type { FlatRow, TreeRenameDraft } from "./types";
 
 type RowContext = {
@@ -112,6 +118,9 @@ function RenameRow({
 function renderRow(row: FlatRow, props: TreeRowsViewportProps): ReactNode {
 	if (row.kind === "library") return props.libraryRow;
 	if (row.kind === "trash") return props.trashRow;
+	if (row.kind === "plaza")
+		return <PlazaRow expanded={props.expanded.has(PLAZA_VIRTUAL_PATH)} />;
+	if (row.kind === "plazaSource") return <PlazaSourceRow source={row.source} />;
 	if (row.kind === "create") return props.createRow;
 	// Paper folders are leaves and keep their action buttons while renaming.
 	if (props.renameDraft?.path === row.node.path) {
@@ -142,7 +151,11 @@ export function TreeRowsViewport(props: TreeRowsViewportProps) {
 				const row = flatRows[vi.index];
 				if (!row) return null;
 				const depth =
-					row.kind === "library" || row.kind === "trash" ? 0 : row.depth;
+					row.kind === "library" || row.kind === "trash" || row.kind === "plaza"
+						? 0
+						: row.kind === "plazaSource"
+							? 1
+							: row.depth;
 				return (
 					<div
 						key={row.key}

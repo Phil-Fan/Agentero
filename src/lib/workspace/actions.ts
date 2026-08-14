@@ -30,6 +30,12 @@ import {
 } from "@/lib/pdf/annotation-ref";
 import { removeTabAnnotations } from "@/lib/pdf/annotations-store";
 import {
+	isPlazaVirtualPath,
+	PLAZA_VIRTUAL_PATH,
+	type PlazaSource,
+	plazaSourceForPath,
+} from "@/lib/plaza";
+import {
 	type FileNode,
 	isMarkdownPath,
 	joinVaultPath,
@@ -967,6 +973,18 @@ export function selectTrash(): void {
 	openTab(TRASH_VIRTUAL_PATH);
 }
 
+/** Plaza tree node: the discovery-source overview. */
+export function selectPlaza(): void {
+	setTreeSelectedPath(PLAZA_VIRTUAL_PATH);
+	openTab(PLAZA_VIRTUAL_PATH);
+}
+
+/** Open one Plaza source panel (from its tree child row or a home card). */
+export function openPlazaSource(source: PlazaSource): void {
+	setTreeSelectedPath(source.path);
+	openTab(source.path);
+}
+
 /**
  * Org folder click: expand happens in the tree; center shows the same Library
  * tab filtered by path prefix — never opens a new tab for the folder.
@@ -987,7 +1005,7 @@ export function openFolderLibrary(folderAbs: string): void {
 	openTab(LIBRARY_VIRTUAL_PATH);
 }
 
-/** File-tree click dispatch: Library / Trash / paper dir / org dir / file. */
+/** File-tree click dispatch: Library / Trash / Plaza / paper dir / org dir / file. */
 export function selectFileNode(node: FileNode): void {
 	if (isLibraryVirtualPath(node.path)) {
 		selectLibrary();
@@ -995,6 +1013,12 @@ export function selectFileNode(node: FileNode): void {
 	}
 	if (isTrashVirtualPath(node.path)) {
 		selectTrash();
+		return;
+	}
+	if (isPlazaVirtualPath(node.path)) {
+		const source = plazaSourceForPath(node.path);
+		if (source) openPlazaSource(source);
+		else selectPlaza();
 		return;
 	}
 	if (node.kind === "directory" && isPaperDirectory(node.path, node.children)) {

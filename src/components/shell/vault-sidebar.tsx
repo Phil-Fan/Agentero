@@ -61,8 +61,10 @@ import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 import { loadDirChildren } from "@/lib/vault/store";
 import {
 	openPaperNotes,
+	openPlazaSource,
 	selectFileNode,
 	selectLibrary,
+	selectPlaza,
 	selectTrash,
 } from "@/lib/workspace/actions";
 
@@ -207,6 +209,8 @@ export function VaultSidebar() {
 					onSelectFile={selectFileNode}
 					onSelectLibrary={selectLibrary}
 					onSelectTrash={selectTrash}
+					onSelectPlaza={selectPlaza}
+					onSelectPlazaSource={openPlazaSource}
 					onEmptyTrash={onEmptyTrash}
 					onExportLibrary={onExportLibrary}
 					libraryExportBusy={ioBusy === "export"}

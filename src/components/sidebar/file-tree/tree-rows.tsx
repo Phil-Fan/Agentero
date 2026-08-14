@@ -4,6 +4,7 @@ import {
 	Library,
 	Loader2,
 	ScrollText,
+	Sparkles,
 	Trash2,
 	Zap,
 } from "lucide-react";
@@ -26,6 +27,7 @@ import {
 import { contextPathIcon } from "@/lib/agent/context-path-icon";
 import { cn } from "@/lib/core/utils";
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
+import { PLAZA_VIRTUAL_PATH, type PlazaSource } from "@/lib/plaza";
 import type { FileNode } from "@/lib/vault";
 import { DOWNLOAD_REASON_KEYS } from "./tree-helpers";
 
@@ -299,6 +301,64 @@ export function TrashRow() {
 			</FileTreeIcon>
 			<FileTreeName className="min-w-0 flex-1 truncate">
 				{t("recycleBin.title")}
+			</FileTreeName>
+		</FileTreeFile>
+	);
+}
+
+/** 广场 parent row — collapsible, with the discovery sources as children. */
+export function PlazaRow({ expanded }: { expanded: boolean }) {
+	const { togglePath } = useFileTree();
+	const label = expanded ? "收起广场" : "展开广场";
+	return (
+		<FileTreeFile path={PLAZA_VIRTUAL_PATH} name="广场">
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<button
+						type="button"
+						aria-expanded={expanded}
+						aria-label={label}
+						className={cn(
+							"flex size-5 shrink-0 items-center justify-center rounded-sm",
+							"text-muted-foreground hover:bg-muted/80",
+							"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+						)}
+						onClick={(e) => {
+							e.stopPropagation();
+							e.preventDefault();
+							togglePath(PLAZA_VIRTUAL_PATH);
+						}}
+						onPointerDown={(e) => e.stopPropagation()}
+						onKeyDown={(e) => e.stopPropagation()}
+					>
+						<ChevronRight
+							className={cn(
+								"size-4 transition-transform",
+								expanded && "rotate-90",
+							)}
+						/>
+					</button>
+				</TooltipTrigger>
+				<TooltipContent side="right">{label}</TooltipContent>
+			</Tooltip>
+			<FileTreeIcon>
+				<Sparkles className="size-4 text-muted-foreground" />
+			</FileTreeIcon>
+			<FileTreeName className="min-w-0 flex-1 truncate">广场</FileTreeName>
+		</FileTreeFile>
+	);
+}
+
+export function PlazaSourceRow({ source }: { source: PlazaSource }) {
+	const Icon = source.icon;
+	return (
+		<FileTreeFile path={source.path} name={source.label}>
+			<span className="size-4 shrink-0" />
+			<FileTreeIcon>
+				<Icon className="size-4" />
+			</FileTreeIcon>
+			<FileTreeName className="min-w-0 flex-1 truncate" title={source.label}>
+				{source.label}
 			</FileTreeName>
 		</FileTreeFile>
 	);

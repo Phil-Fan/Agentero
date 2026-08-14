@@ -23,6 +23,11 @@ import { enqueuePaperPdfParse } from "@/lib/paper/enqueue-paper-pdf-parse";
 import { downloadPaperAssets } from "@/lib/paper/lookup";
 import { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout";
 import {
+	isPlazaVirtualPath,
+	plazaSourceForPath,
+	plazaTitleForPath,
+} from "@/lib/plaza";
+import {
 	ensureLocalFsScope,
 	type FileNode,
 	isTextOpenable,
@@ -187,6 +192,22 @@ export async function loadTabResources(
 			paperMeta: null,
 			pdfUrl: null,
 			htmlUrl: null,
+			imageUrl: null,
+			notesPath: null,
+			notesSeed: "",
+			markdownSeed: "",
+			loaded: true,
+		};
+	}
+	// Plaza is virtual and remote-only: never probe the filesystem for it.
+	if (isPlazaVirtualPath(path)) {
+		return {
+			kind: "plaza",
+			title: plazaTitleForPath(path),
+			mode: "markdown",
+			paperMeta: null,
+			pdfUrl: null,
+			htmlUrl: plazaSourceForPath(path)?.url ?? null,
 			imageUrl: null,
 			notesPath: null,
 			notesSeed: "",

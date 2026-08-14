@@ -6,6 +6,7 @@ import {
 	paperNeedsAssetDownload,
 } from "@/lib/paper";
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
+import { isPlazaVirtualPath, PLAZA_VIRTUAL_PATH } from "@/lib/plaza";
 import type { FileNode } from "@/lib/vault";
 
 /** Paper folders that need Download (no PDF / no source / no PAPER.md). */
@@ -32,7 +33,11 @@ export const DOWNLOAD_REASON_KEYS = {
 } as const;
 
 export function isVirtualTreePath(path: string): boolean {
-	return path === LIBRARY_VIRTUAL_PATH || path === TRASH_VIRTUAL_PATH;
+	return (
+		path === LIBRARY_VIRTUAL_PATH ||
+		path === TRASH_VIRTUAL_PATH ||
+		isPlazaVirtualPath(path)
+	);
 }
 
 export function pathKey(path: string): string {
@@ -44,11 +49,13 @@ export function pathKey(path: string): string {
  * expand `papers/` and its first-level children (org folders) so papers one
  * level down are visible. Deeper nesting, `notes/`, etc. stay collapsed.
  * Paper folders stay collapsed even when they have attachments.
+ * 广场 also starts open so its sources are discoverable.
  */
 export function collectDefaultExpanded(
 	nodes: FileNode[],
 	into: Set<string>,
 ): void {
+	into.add(PLAZA_VIRTUAL_PATH);
 	for (const n of nodes) {
 		if (n.kind !== "directory" || !isPapersRoot(n.path)) continue;
 		into.add(n.path);

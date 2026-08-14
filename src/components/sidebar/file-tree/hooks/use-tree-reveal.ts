@@ -6,6 +6,7 @@ import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import { type RefObject, useEffect, useMemo, useRef } from "react";
 import { scrollBehavior } from "@/lib/core/motion";
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
+import { PLAZA_VIRTUAL_PATH } from "@/lib/plaza";
 import { useUiScale } from "@/lib/settings";
 import { isVirtualTreePath, pathKey } from "../tree-helpers";
 import type { FlatRow } from "../types";
@@ -22,6 +23,9 @@ function findRowIndex(rows: FlatRow[], target: string): number {
 		if (row.kind === "library")
 			return targetKey === pathKey(LIBRARY_VIRTUAL_PATH);
 		if (row.kind === "trash") return targetKey === pathKey(TRASH_VIRTUAL_PATH);
+		if (row.kind === "plaza") return targetKey === pathKey(PLAZA_VIRTUAL_PATH);
+		if (row.kind === "plazaSource")
+			return targetKey === pathKey(row.source.path);
 		if (row.kind === "node") return pathKey(row.node.path) === targetKey;
 		return false;
 	});
