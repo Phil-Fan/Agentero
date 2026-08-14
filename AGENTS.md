@@ -15,6 +15,28 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 
 架构总览：[docs/architecture.md](docs/architecture.md)
 
+## 论文单元
+
+`papers/<id>/` 是最小论文单元（语义对象，不是普通文件夹）。内部约定：
+
+```text
+papers/<id>/
+├── NOTES.md          # 人/Agent 笔记
+├── <id>.pdf          # 主 PDF（可选）
+├── PAPER.md          # 无 TeX 时的派生正文
+├── source/           # TeX / e-print（不要往这里塞附件）
+├── marks/            # 阅读标注
+├── assets/           # NOTES 内嵌图
+└── attachments/      # 支撑材料：补充 PDF、幻灯片、代码仓库
+```
+
+- 支撑材料**只**放 `{paper}/attachments/`，不要堆在论文根目录，也不要放进 `source/`。
+- 不要预建空的 `attachments/`；有文件再创建。
+- 文件树默认把论文当叶子。`attachments/` 非空时论文行才出 chevron，子项直接挂在论文下（不显示 `attachments` 桶本身，也不展开 `source/` / `marks/` 等内部文件）。
+- `attachments/` 不是论文身份 marker。
+
+布局细则：[docs/backend/data-model.md](docs/backend/data-model.md)；树交互：[docs/frontend/vault-tree.md](docs/frontend/vault-tree.md)。Vault 内 Agent 读的是盘上 `AGENTS.md`（创建时由 Host 模板写入）。
+
 ## 技术速览
 
 | 层 | 技术栈 | 关键能力 | 入口 |

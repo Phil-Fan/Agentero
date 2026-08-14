@@ -44,8 +44,11 @@ papers/<paper-id>/
 ├── NOTES.md              # 笔记壳（不覆盖你已有内容）
 ├── <paper-id>.pdf        # 能下到时
 ├── marks/                # 阅读标注目录
-└── source/               # arXiv TeX 等
+├── source/               # arXiv TeX 等
+└── attachments/          # 可选：补充 PDF、幻灯片、代码仓库（有文件才出现）
 ```
+
+支撑材料放在 `attachments/`，不要堆在论文根目录。文件树默认把论文当叶子；该目录非空时论文行才出现展开三角。
 
 ### 识别失败时
 

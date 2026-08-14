@@ -1,7 +1,7 @@
 ---
 name: vault-normalizer
-version: 1
-description: Normalize an existing research directory into an Agentero vault layout. Use when reorganizing files, papers, notes, PDFs, TeX sources, marks, assets, or legacy Zotero/Obsidian-style folders to match Agentero directory and catalog conventions.
+version: 2
+description: Normalize an existing research directory into an Agentero vault layout. Use when reorganizing files, papers, notes, PDFs, TeX sources, marks, assets, attachments, or legacy Zotero/Obsidian-style folders to match Agentero directory and catalog conventions.
 ---
 
 # Vault Normalizer
@@ -33,8 +33,9 @@ agentero-vault/
 │   │   ├── <id>.pdf
 │   │   ├── PAPER.md        # optional derived readable body
 │   │   ├── marks/          # optional JSON highlights / asks / translations
-│   │   ├── source/         # optional original TeX / source archive contents
-│   │   └── assets/         # optional note images or derived figures
+│   │   ├── source/         # optional original TeX / e-print
+│   │   ├── assets/         # optional note images or derived figures
+│   │   └── attachments/    # optional extras: supplement PDFs, slides, code repos
 │   └── <topic>/.../<paper-id-or-citekey>/
 ├── notes/
 ├── plans/
@@ -53,8 +54,9 @@ agentero-vault/
 - A paper folder is the smallest paper unit and is recognized by direct children such as `NOTES.md`, `PAPER.md`, `marks/`, `source/`, `assets/`, or transitional `metadata.json`.
 - A topic folder under `papers/` is not a paper unless it directly contains a paper marker.
 - Catalog identity is the Vault-relative paper folder path, e.g. `papers/nlp/transformers/1706.03762`, not just the leaf directory name.
-- Local PDFs for a paper should live at the paper folder root, not inside `source/`.
-- TeX, arXiv e-print contents, supplemental source trees, and original source archives belong in `{paper}/source/`.
+- Local PDFs for a paper should live at the paper folder root, not inside `source/`. Extra PDFs (supplement, slides, reviews) belong in `{paper}/attachments/`, not the paper root.
+- TeX, arXiv e-print contents, and original source archives belong in `{paper}/source/`. Do not put user extras there.
+- Supporting materials (code repos, datasets, extra PDFs) belong in `{paper}/attachments/`. Create that directory only when adding files; do not create empty `attachments/` folders. `attachments/` is not a paper-identity marker.
 - User notes about one paper belong in `{paper}/NOTES.md`.
 - For new organization, prefer `notes/` for concept notes and cross-paper notes, and `plans/` for research plans, TODOs, and drafts; do not force-move existing folders that already work for the user.
 - Markdown-embedded images belong beside the Markdown file in `./assets/` and should use relative links like `![alt](./assets/file.png)`.
@@ -87,6 +89,7 @@ agentero-vault/
    - Put each paper under `papers/<topic...>/<id-or-citekey>/`.
    - Put the main PDF at `{paper}/{id}.pdf` when identity is known; otherwise keep the original filename and record ambiguity.
    - Move TeX/source material to `{paper}/source/`.
+   - Move supplement PDFs, slides, and cloned code repos to `{paper}/attachments/`.
    - Merge existing notes into `{paper}/NOTES.md` only with user approval; otherwise preserve as separate Markdown files and report them.
 6. Normalize non-paper knowledge:
    - Recommend `notes/` for concept notes and literature maps, and `plans/` for plans/TODOs/drafts, but keep existing folder names when preserving them is clearer or safer.
@@ -131,6 +134,7 @@ same confirmation as moves or merges.
 | parsed full-text Markdown | `{paper}/PAPER.md` |
 | human reading notes for one paper | `{paper}/NOTES.md` |
 | highlights / annotation JSON | `{paper}/marks/*.json` |
+| supplement PDF / slides / cloned code | `{paper}/attachments/` |
 | cross-paper notes / idea docs | prefer `notes/*.md`, or keep existing folder if clearer |
 | research plans / TODO docs | prefer `plans/*.md`, or keep existing folder if clearer |
 | exported `PAPERS.md` / `library.bib` | keep as export only; do not edit as authority |

@@ -657,9 +657,9 @@ papers/
 └── [optional-subfolders/]
     └── <id>/
         ├── NOTES.md
-        └── source/
-            ├── {id}.pdf       # 默认下载
-            └── …              # arXiv：e-print 解压后的 .tex 工程
+        ├── <id>.pdf           # 默认下载到论文根
+        ├── source/            # arXiv：e-print 解压后的 .tex 工程
+        └── attachments/       # 可选；入库不预建。用户/Agent 的支撑材料
 # catalog.papers: path, title, pdf_url, html_url, …
 # 划词标注运行时写入 marks/*.json（非入库壳）
 ```

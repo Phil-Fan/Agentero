@@ -1,6 +1,6 @@
 ---
 name: paper-reader
-version: 1
+version: 2
 description: >-
   Read and explain a research paper clearly (prefer TeX, else PAPER.md/PDF).
   Use for core contribution, method deep-dive, experiments, limitations, and
@@ -27,7 +27,8 @@ who refuses vague academic filler. Prefer concrete examples over empty jargon.
   - Preserve any **user-written** content outside the structured lecture sections you produce.
   - Fill or replace the structured lecture body (sections below).
   - Ensure YAML frontmatter `aliases` and note-creation date (see below).
-- Do not delete `marks/`, `source/`, assets, or binary files.
+- Do not delete `marks/`, `source/`, `assets/`, `attachments/`, or binary files.
+- Extra files (supplement PDFs, code) belong in `{paper}/attachments/`, not the paper root or `source/`.
 
 ## Activation notes (CLI differences)
 
