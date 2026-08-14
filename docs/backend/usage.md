@@ -122,10 +122,6 @@ PRIMARY KEY (day, vault, kind, paper_path, facet)
 - `paper_move` / `wiki_move` 成功后改写 `path` 与 `paper_path` 前缀。
 - `usage_clear` 清事件 + 日聚合 + memories；指定 vault 时保留其它库。
 
-### 迁移
-
-新库直接建 v2。已有 v1 库打开时：加列、回填 `paper_path`、按论文夹折叠 `usage_daily`、从事件去重写入 `usage_vaults`。
-
 ## 命令
 
 | Command | 说明 |
