@@ -1,6 +1,6 @@
 ---
 name: agentero-cli
-version: 2
+version: 3
 description: >-
   Use the Agentero CLI (bin `agentero`) to create, discover, and inspect a local
   research vault and catalog—list/get papers, import by id/URL, check wikilinks,
@@ -19,11 +19,13 @@ You do **not** treat the CLI as a chat runtime: it has **no BYOA**, no ACP, no
 paper-reader. Reading and writing lecture-style `NOTES.md` is **your** job (or
 use the separate `paper-reader` skill / desktop Zap workflow).
 
-Design reference (repo): `docs/development/cli.md`.
+Design reference (repo): `docs/backend/cli.md`.
 
 ## Prerequisites
 
-- Binary name: **`agentero`** (crate lives at repo `cli/` when built).
+- Binary name: **`agentero`** — same on Windows: 设置 → 关于 → 安装 CLI 写入
+  `agentero`/`agentero.cmd` PATH shim。Windows 安装时需把安装目录加入系统环境变量
+  PATH（安装器不自动改 PATH，新环境变量对已运行的进程不生效）。
 - Prefer always passing **`--json`** for machine parsing (disables interactive
   prompts from `inquire`).
 - Destructive file deletes: pass **`-y` / `--yes`** under `--json` / non-TTY;
@@ -212,4 +214,3 @@ Agentero may inject this entire SKILL.md. Depending on the agent:
 - Never invent catalog metadata; trust CLI / files.
 - Never overwrite user-written NOTES without explicit request.
 - Prefer short tool loops: list → get → read files → answer.
-- If the binary is not built yet (dev: `cargo build -p agentero-cli`), report that and use filesystem + desktop app as fallback.
