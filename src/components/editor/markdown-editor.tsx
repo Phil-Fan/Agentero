@@ -359,7 +359,7 @@ export function MarkdownEditor({
 	const {
 		syncWikiLinkPresentation,
 		scheduleWikiLinkPresentationSync,
-		consumePresentationMarkdown,
+		consumePresentationChange,
 		handleWikiLinkBoundaryBeforeInput,
 		handleWikiLinkArrow,
 		handleWikiLinkBoundaryDelete,
@@ -367,7 +367,7 @@ export function MarkdownEditor({
 		handleWikiLinkCompositionStart,
 		handleWikiLinkCompositionEnd,
 		finalizeWikiLinkDrafts,
-	} = useWikilinkEditing({ editor, serialize, suppressNextEditorBreakRef });
+	} = useWikilinkEditing({ editor, suppressNextEditorBreakRef });
 
 	const handleKeyDown = useCallback(
 		(event: KeyboardEvent<HTMLDivElement>) => {
@@ -522,20 +522,21 @@ export function MarkdownEditor({
 	});
 
 	const handleEditorValueChange = useCallback(() => {
-		const presentationMarkdown = consumePresentationMarkdown();
-		if (presentationMarkdown !== null) {
+		// Presentation-only projection batch (wikilink source/display swap):
+		// keep the document clean — no dirty flag, no autosave — without
+		// serializing the whole document to find that out.
+		if (consumePresentationChange()) {
 			scheduleCompletionProbe();
 			scheduleWikiLinkPresentationSync();
-			if (serialize() === presentationMarkdown) return;
+			return;
 		}
 		handleChange();
 		scheduleWikiLinkPresentationSync();
 	}, [
-		consumePresentationMarkdown,
+		consumePresentationChange,
 		handleChange,
 		scheduleCompletionProbe,
 		scheduleWikiLinkPresentationSync,
-		serialize,
 	]);
 	const openExportDialog = useCallback(() => {
 		if (!isTauri()) {

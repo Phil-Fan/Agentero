@@ -35,10 +35,11 @@ export type WikilinkEditing = {
 	syncWikiLinkPresentation: (selection: PlateEditor["selection"]) => void;
 	scheduleWikiLinkPresentationSync: () => void;
 	/**
-	 * Markdown snapshot taken just before a presentation-only edit, cleared on
-	 * read. A value change matching it is projection, not a user edit.
+	 * True when the change batch being flushed only contains presentation
+	 * projections (source/display swaps), cleared on read. Such a batch is not
+	 * a user edit: it must not mark the document dirty nor trigger autosave.
 	 */
-	consumePresentationMarkdown: () => string | null;
+	consumePresentationChange: () => boolean;
 	handleWikiLinkBoundaryBeforeInput: (event: FormEvent<HTMLDivElement>) => void;
 	handleWikiLinkArrow: (event: KeyboardEvent<HTMLDivElement>) => boolean;
 	handleWikiLinkBoundaryDelete: (
@@ -58,21 +59,34 @@ export type WikilinkEditing = {
  * how the component projects it. That projection is what makes caret movement,
  * deletion and IME composition at the node boundary need explicit handling —
  * the visible text and the source text differ in length.
+ *
+ * Projection transforms are Markdown-invariant by construction: the serializer
+ * emits `wikiLinkNodeSource(node) || wikiLinkToMarkdown(node)`, so expanding a
+ * source child, committing parsed attributes or reifying a draft never changes
+ * the serialized document. A presentation-only change batch is therefore
+ * tracked with a boolean flag instead of comparing full-document serializations
+ * (which used to cost two whole-document serializes per caret move across a
+ * link). The only real edits that can share a batch with a projection are the
+ * explicit transforms at this hook's own call sites (insertText / insertBreak /
+ * delete), each of which clears the flag.
  */
 export function useWikilinkEditing({
 	editor,
-	serialize,
 	suppressNextEditorBreakRef,
 }: {
 	editor: PlateEditor;
-	serialize: () => string;
 	/** Swallow the `beforeinput` insertParagraph that follows slash Enter confirm. */
 	suppressNextEditorBreakRef: RefObject<boolean>;
 }): WikilinkEditing {
 	const syncingWikiLinkPresentationRef = useRef(false);
 	const composingWikiLinkDraftRef = useRef(false);
 	const wikiLinkPresentationFrameRef = useRef<number | null>(null);
-	const wikiLinkPresentationMarkdownRef = useRef<string | null>(null);
+	/**
+	 * Set just before a presentation-only transform, cleared on read (and by
+	 * the real-edit call sites below). A pending flag at value-change time means
+	 * the batch is projection, not a user edit.
+	 */
+	const presentationChangePendingRef = useRef(false);
 	/**
 	 * Selection seen by the previous `syncWikiLinkPresentation`. A draft can
 	 * only become "abandoned" when the selection moves, so the region it left
@@ -92,7 +106,7 @@ export function useWikilinkEditing({
 			let raw = wikiLinkNodeSource(entry[0]);
 			if (!raw) {
 				raw = wikiLinkToMarkdown(entry[0]);
-				wikiLinkPresentationMarkdownRef.current = serialize();
+				presentationChangePendingRef.current = true;
 				editor.tf.insertText(raw, {
 					at: { path: sourcePath, offset: 0 },
 				});
@@ -104,7 +118,7 @@ export function useWikilinkEditing({
 			editor.tf.select({ anchor: point, focus: point });
 			return true;
 		},
-		[editor, serialize],
+		[editor],
 	);
 
 	const isSelectionEditingWikiLinkDraft = useCallback(
@@ -149,7 +163,7 @@ export function useWikilinkEditing({
 			const parsed = parseWikiLinkMarkdown(raw);
 			if (parsed && wikiLinkNodeMatchesSource(entry[0], parsed)) return true;
 
-			wikiLinkPresentationMarkdownRef.current = serialize();
+			presentationChangePendingRef.current = true;
 			if (parsed) {
 				editor.tf.setNodes(
 					{
@@ -174,7 +188,7 @@ export function useWikilinkEditing({
 			if (selection) editor.tf.select(selection);
 			return false;
 		},
-		[editor, serialize],
+		[editor],
 	);
 
 	/**
@@ -204,7 +218,7 @@ export function useWikilinkEditing({
 						editor.selection.anchor.offset,
 					) ?? placement;
 			}
-			wikiLinkPresentationMarkdownRef.current = serialize();
+			presentationChangePendingRef.current = true;
 			const selectionRefs: { unref: () => typeof editor.selection }[] = [];
 			const linkRefs: { unref: () => number[] | null }[] = [];
 			editor.tf.withoutNormalizing(() => {
@@ -235,7 +249,7 @@ export function useWikilinkEditing({
 			if (cursor) editor.tf.select(cursor);
 			return true;
 		},
-		[editor, serialize],
+		[editor],
 	);
 
 	/**
@@ -436,6 +450,8 @@ export function useWikilinkEditing({
 			}
 			if (boundary.embed && boundary.placement === "after") {
 				editor.tf.insertBreak();
+				// The break is a real edit batched with the projection above.
+				presentationChangePendingRef.current = false;
 			}
 			return true;
 		},
@@ -498,6 +514,8 @@ export function useWikilinkEditing({
 			event.preventDefault();
 			event.stopPropagation();
 			editor.tf.insertText(text);
+			// The typed text is a real edit batched with the boundary projection.
+			presentationChangePendingRef.current = false;
 		},
 		[
 			editor,
@@ -584,6 +602,8 @@ export function useWikilinkEditing({
 					focus: caret,
 				},
 			});
+			// The delete is a real edit batched with the expand projection.
+			presentationChangePendingRef.current = false;
 			event.preventDefault();
 			return true;
 		},
@@ -613,6 +633,8 @@ export function useWikilinkEditing({
 				editor.tf.select(after);
 				event.preventDefault();
 				editor.tf.insertBreak();
+				// The break is a real edit batched with the node sync above.
+				presentationChangePendingRef.current = false;
 				return true;
 			}
 			const { end } = wikiLinkDraftEditableBounds(entry[0].text);
@@ -625,6 +647,8 @@ export function useWikilinkEditing({
 			if (!collapsed) return false;
 			event.preventDefault();
 			editor.tf.insertBreak();
+			// The break is a real edit batched with the draft reification above.
+			presentationChangePendingRef.current = false;
 			return true;
 		},
 		[
@@ -686,16 +710,16 @@ export function useWikilinkEditing({
 		scheduleWikiLinkPresentationSync();
 	}, [scheduleWikiLinkPresentationSync]);
 
-	const consumePresentationMarkdown = useCallback(() => {
-		const snapshot = wikiLinkPresentationMarkdownRef.current;
-		wikiLinkPresentationMarkdownRef.current = null;
-		return snapshot;
+	const consumePresentationChange = useCallback(() => {
+		const pending = presentationChangePendingRef.current;
+		presentationChangePendingRef.current = false;
+		return pending;
 	}, []);
 
 	return {
 		syncWikiLinkPresentation,
 		scheduleWikiLinkPresentationSync,
-		consumePresentationMarkdown,
+		consumePresentationChange,
 		handleWikiLinkBoundaryBeforeInput,
 		handleWikiLinkArrow,
 		handleWikiLinkBoundaryDelete,
