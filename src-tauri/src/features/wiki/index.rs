@@ -2,7 +2,7 @@
 
 use crate::features::wiki::cache::{
     discard_snapshot, fingerprint_files, load_snapshot, store_snapshot, wiki_cache_path,
-    WikiCacheLoad, WikiCacheSnapshot, WikiFileFingerprint,
+    WikiCacheLoad, WikiCacheSnapshot, WikiFileFingerprint, WikiSnapshotWrite,
 };
 use crate::features::wiki::embed::project_markdown;
 use crate::features::wiki::extract::extract_document;
@@ -12,8 +12,10 @@ use crate::features::wiki::models::{
     WikiCheckResult, WikiDocument, WikiEmbedContentKind, WikiEmbedResponse, WikiLinkEdge,
     WikiResolveResponse, WikiSearchCandidate, WikiSearchCandidateKind,
 };
-use crate::features::wiki::resolve::{normalize_rel, resolve_occurrence};
-use std::collections::{HashMap, HashSet};
+use crate::features::wiki::resolve::{
+    normalize_rel, resolve_occurrence, resolve_occurrence_with, DocumentLookup,
+};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -213,6 +215,47 @@ pub struct WikiIndex {
     files: Vec<String>,
     /// File metadata and anchors, rebuilt entirely from Markdown source.
     documents: Vec<WikiDocument>,
+    /// Stat fingerprints of the last successful build. A later rebuild reuses
+    /// the in-memory snapshot for every unchanged file instead of re-reading
+    /// the on-disk cache. Empty when the index was built without fingerprints
+    /// (tests, read-only diagnostics), which disables in-memory reuse.
+    fingerprints: Vec<WikiFileFingerprint>,
+    /// Whether the on-disk cache rows match the in-memory snapshot, so the
+    /// next persist may write only changed rows.
+    cache_synced: bool,
+    /// Result of the last install, returned verbatim by the fingerprint-equal
+    /// fast path.
+    last_result: Option<RebuildResult>,
+}
+
+/// Reusable parse products from the previous build (in-memory or on-disk).
+/// Only files whose stat fingerprint is unchanged are actually reused.
+struct PreviousIndexState {
+    fingerprints: Vec<WikiFileFingerprint>,
+    documents: Vec<WikiDocument>,
+    occurrences_by_source: HashMap<String, Vec<InternalLinkOccurrence>>,
+    /// True when the on-disk cache already holds this exact state, so the
+    /// persist step may rewrite only the changed rows.
+    incremental_store: bool,
+}
+
+impl PreviousIndexState {
+    fn from_snapshot(snapshot: WikiCacheSnapshot) -> Self {
+        let mut occurrences_by_source: HashMap<String, Vec<InternalLinkOccurrence>> =
+            HashMap::new();
+        for occurrence in snapshot.occurrences {
+            occurrences_by_source
+                .entry(occurrence.source.clone())
+                .or_default()
+                .push(occurrence);
+        }
+        Self {
+            fingerprints: snapshot.fingerprints,
+            documents: snapshot.documents,
+            occurrences_by_source,
+            incremental_store: true,
+        }
+    }
 }
 
 impl WikiIndex {
@@ -291,18 +334,59 @@ impl WikiIndex {
                 return self.rebuild_from(vault_path, root, files, Vec::new(), None, None);
             }
         };
+        // In-memory reuse: when this index already describes the same vault,
+        // the previous build is the freshest possible snapshot — no need to
+        // re-read and re-decode the on-disk cache on every watcher rebuild.
+        if restore
+            && self.vault_path.as_deref() == Some(vault_path)
+            && !self.fingerprints.is_empty()
+        {
+            if self.fingerprints == fingerprints {
+                if let Some(result) = self.last_result.clone() {
+                    return Ok(result);
+                }
+            } else {
+                let previous = self.take_previous();
+                return self.rebuild_from(
+                    vault_path,
+                    root,
+                    files,
+                    fingerprints,
+                    Some(previous),
+                    Some(cache_path),
+                );
+            }
+        }
         let previous = if restore {
             match load_snapshot(cache_path, root) {
                 WikiCacheLoad::Hit(snapshot) => {
                     if snapshot.fingerprints == fingerprints {
-                        return Ok(self.install_snapshot(
+                        let WikiCacheSnapshot {
+                            fingerprints,
+                            documents,
+                            occurrences,
+                        } = snapshot;
+                        // The cache stores parse products only; resolution is
+                        // always recomputed against the full document set so a
+                        // restored index cannot carry stale link statuses.
+                        let edges = {
+                            let lookup = DocumentLookup::new(&documents);
+                            occurrences
+                                .into_iter()
+                                .map(|occurrence| resolve_occurrence_with(occurrence, &lookup))
+                                .collect()
+                        };
+                        let result = self.install_snapshot(
                             vault_path,
                             files,
-                            snapshot.documents,
-                            snapshot.edges,
-                        ));
+                            documents,
+                            edges,
+                            fingerprints,
+                        );
+                        self.cache_synced = true;
+                        return Ok(result);
                     }
-                    Some(snapshot)
+                    Some(PreviousIndexState::from_snapshot(snapshot))
                 }
                 WikiCacheLoad::Miss => None,
                 WikiCacheLoad::Stale => {
@@ -336,17 +420,36 @@ impl WikiIndex {
         )
     }
 
-    /// Rebuild the index, reusing parsed documents and occurrences from a prior
-    /// snapshot for every file whose stat fingerprint is unchanged. Only changed
-    /// or new Markdown files are read from disk; link resolution always runs
-    /// against the complete document set.
+    /// Move the current build out of this index as a reusable previous state.
+    fn take_previous(&mut self) -> PreviousIndexState {
+        let mut occurrences_by_source: HashMap<String, Vec<InternalLinkOccurrence>> =
+            HashMap::new();
+        for edge in std::mem::take(&mut self.edges) {
+            occurrences_by_source
+                .entry(edge.occurrence.source.clone())
+                .or_default()
+                .push(edge.occurrence);
+        }
+        PreviousIndexState {
+            fingerprints: std::mem::take(&mut self.fingerprints),
+            documents: std::mem::take(&mut self.documents),
+            occurrences_by_source,
+            incremental_store: self.cache_synced,
+        }
+    }
+
+    /// Rebuild the index, reusing parsed documents and occurrences from the
+    /// previous state for every file whose stat fingerprint is unchanged. Only
+    /// changed or new Markdown files are read from disk; link resolution always
+    /// runs against the complete document set. The persist step rewrites only
+    /// changed rows when the on-disk cache already matches the previous state.
     fn rebuild_from(
         &mut self,
         vault_path: &str,
         root: &Path,
         files: Vec<String>,
         fingerprints: Vec<WikiFileFingerprint>,
-        previous: Option<WikiCacheSnapshot>,
+        previous: Option<PreviousIndexState>,
         cache_path: Option<&Path>,
     ) -> Result<RebuildResult, String> {
         let current: HashMap<&str, &WikiFileFingerprint> = fingerprints
@@ -355,31 +458,39 @@ impl WikiIndex {
             .collect();
         let mut prev_documents = HashMap::new();
         let mut prev_occurrences: HashMap<String, Vec<InternalLinkOccurrence>> = HashMap::new();
-        if let Some(snapshot) = previous {
-            let unchanged: HashSet<String> = snapshot
+        let mut previous_paths: Vec<String> = Vec::new();
+        let mut incremental_store = false;
+        if let Some(previous) = previous {
+            incremental_store = previous.incremental_store;
+            let unchanged: HashSet<String> = previous
+                .fingerprints
+                .iter()
+                .filter(|stored| {
+                    current.get(stored.relative_path.as_str()).copied() == Some(*stored)
+                })
+                .map(|stored| stored.relative_path.clone())
+                .collect();
+            previous_paths = previous
                 .fingerprints
                 .into_iter()
-                .filter(|stored| current.get(stored.relative_path.as_str()) == Some(&stored))
                 .map(|stored| stored.relative_path)
                 .collect();
-            for document in snapshot.documents {
+            for document in previous.documents {
                 if unchanged.contains(&document.path) {
                     prev_documents.insert(document.path.clone(), document);
                 }
             }
-            for edge in snapshot.edges {
-                if unchanged.contains(&edge.occurrence.source) {
-                    prev_occurrences
-                        .entry(edge.occurrence.source.clone())
-                        .or_default()
-                        .push(edge.occurrence);
+            for (source, occurrences) in previous.occurrences_by_source {
+                if unchanged.contains(&source) {
+                    prev_occurrences.insert(source, occurrences);
                 }
             }
         }
 
         let mut documents = Vec::new();
         let mut occurrences = Vec::new();
-        let mut cacheable = cache_path.is_some();
+        let mut changed: BTreeSet<String> = BTreeSet::new();
+        let mut failed_reads: HashSet<String> = HashSet::new();
         for rel in &files {
             if let Some(document) = prev_documents.remove(rel) {
                 documents.push(document);
@@ -388,6 +499,7 @@ impl WikiIndex {
                 }
                 continue;
             }
+            changed.insert(rel.clone());
             if !is_markdown(Path::new(rel)) {
                 documents.push(WikiDocument {
                     path: rel.clone(),
@@ -400,7 +512,7 @@ impl WikiIndex {
             let bytes = match fs::read(root.join(rel)) {
                 Ok(bytes) => bytes,
                 Err(_) => {
-                    cacheable = false;
+                    failed_reads.insert(rel.clone());
                     continue;
                 }
             };
@@ -414,26 +526,57 @@ impl WikiIndex {
             }
         }
 
-        let edges = occurrences
+        let file_set: HashSet<&str> = files.iter().map(String::as_str).collect();
+        let removed: BTreeSet<String> = previous_paths
             .into_iter()
-            .map(|occurrence| resolve_occurrence(occurrence, &documents))
+            .filter(|path| !file_set.contains(path.as_str()))
             .collect();
 
-        let result = self.install_snapshot(vault_path, files, documents, edges);
+        let edges: Vec<ResolvedLink> = {
+            let lookup = DocumentLookup::new(&documents);
+            occurrences
+                .into_iter()
+                .map(|occurrence| resolve_occurrence_with(occurrence, &lookup))
+                .collect()
+        };
+
+        // A failed read leaves that file unindexed; drop its fingerprint so the
+        // next rebuild retries it, and skip persisting the partial snapshot.
+        let cacheable = cache_path.is_some() && failed_reads.is_empty();
+        let kept_fingerprints = if failed_reads.is_empty() {
+            fingerprints
+        } else {
+            fingerprints
+                .into_iter()
+                .filter(|fingerprint| !failed_reads.contains(&fingerprint.relative_path))
+                .collect()
+        };
+
+        let result = self.install_snapshot(vault_path, files, documents, edges, kept_fingerprints);
+        self.cache_synced = false;
         if cacheable {
             if let Some(cache_path) = cache_path {
-                if let Err(error) = store_snapshot(
+                let write = if incremental_store {
+                    WikiSnapshotWrite::Incremental { changed, removed }
+                } else {
+                    WikiSnapshotWrite::Full
+                };
+                match store_snapshot(
                     cache_path,
                     root,
-                    &fingerprints,
+                    &self.fingerprints,
                     &self.documents,
                     &self.edges,
+                    &write,
                 ) {
-                    log::warn!(
-                        target: "agentero::wiki",
-                        "could not persist Wiki cache {}: {error}",
-                        cache_path.display()
-                    );
+                    Ok(()) => self.cache_synced = true,
+                    Err(error) => {
+                        log::warn!(
+                            target: "agentero::wiki",
+                            "could not persist Wiki cache {}: {error}",
+                            cache_path.display()
+                        );
+                    }
                 }
             }
         }
@@ -446,6 +589,7 @@ impl WikiIndex {
         files: Vec<String>,
         documents: Vec<WikiDocument>,
         edges: Vec<ResolvedLink>,
+        fingerprints: Vec<WikiFileFingerprint>,
     ) -> RebuildResult {
         let mut reverse: HashMap<String, Vec<ResolvedLink>> = HashMap::new();
         let mut nodes = files.iter().cloned().collect::<HashSet<_>>();
@@ -474,6 +618,8 @@ impl WikiIndex {
         self.reverse = reverse;
         self.files = files;
         self.documents = documents;
+        self.fingerprints = fingerprints;
+        self.last_result = Some(result.clone());
 
         result
     }
@@ -1584,6 +1730,195 @@ mod tests {
 
         fs::remove_file(blocker).expect("remove cache blocker");
         cleanup_cache_fixture(&root, &unused_cache_path);
+    }
+
+    #[test]
+    fn hot_index_rebuild_is_incremental_and_keeps_the_disk_cache_equivalent() {
+        let (root, cache_path) = cache_fixture();
+        let vault = root.to_str().expect("utf-8 cache fixture path").to_string();
+        let mut hot = WikiIndex::default();
+        rebuild_with_test_cache(&mut hot, &root, &cache_path);
+
+        // Change (different size), add, and remove files, then rebuild the
+        // same in-memory index: the previous build is reused for unchanged
+        // files and the on-disk cache receives only the changed rows.
+        fs::write(
+            root.join("notes/Target.md"),
+            "# Root\n## Renamed heading\nTarget block ^focus\n",
+        )
+        .expect("change target");
+        fs::write(root.join("notes/Extra.md"), "[[Target#Renamed heading]]\n")
+            .expect("add extra source");
+        fs::remove_file(root.join("assets/figure.png")).expect("remove image");
+        let result = rebuild_with_test_cache(&mut hot, &root, &cache_path);
+        assert_eq!(result.indexed_files, 3);
+        assert_eq!(
+            hot.document("notes/Target.md")
+                .expect("changed target")
+                .headings[1]
+                .text,
+            "Renamed heading"
+        );
+        let extra = hot.get_outgoing(&vault, "notes/Extra.md");
+        assert_eq!(extra.outgoing.len(), 1);
+        assert_eq!(extra.outgoing[0].status, LinkResolutionStatus::Resolved);
+        assert!(hot.document("assets/figure.png").is_none());
+
+        // A cold process restoring the incrementally-updated cache must be
+        // indistinguishable from a full re-read of the vault.
+        let mut restored = WikiIndex::default();
+        rebuild_with_test_cache(&mut restored, &root, &cache_path);
+        let mut fresh = WikiIndex::default();
+        fresh.rebuild_read_only(&vault).expect("read-only rebuild");
+        assert_eq!(restored.documents, fresh.documents);
+        assert_eq!(restored.edges, fresh.edges);
+        assert_eq!(restored.reverse, fresh.reverse);
+        assert_eq!(restored.files, fresh.files);
+
+        cleanup_cache_fixture(&root, &cache_path);
+    }
+
+    #[test]
+    fn warm_restore_reflects_resolution_changes_caused_by_other_files() {
+        let root = test_vault();
+        fs::write(root.join("notes/Source.md"), "[[FutureTarget]]\n").expect("write source");
+        let cache_path =
+            std::env::temp_dir().join(format!("agentero-wiki-cache-{}.sqlite", Uuid::new_v4()));
+        let mut hot = WikiIndex::default();
+        rebuild_with_test_cache(&mut hot, &root, &cache_path);
+        assert_eq!(hot.edges[0].status, LinkResolutionStatus::Missing);
+
+        // Creating the target changes the resolution of the *unchanged*
+        // Source.md. The incremental persist stores only parse products, so a
+        // later warm restore must still re-resolve to the new state.
+        fs::write(root.join("notes/FutureTarget.md"), "# Future\n").expect("write target");
+        rebuild_with_test_cache(&mut hot, &root, &cache_path);
+        assert_eq!(hot.edges[0].status, LinkResolutionStatus::Resolved);
+
+        let mut restored = WikiIndex::default();
+        rebuild_with_test_cache(&mut restored, &root, &cache_path);
+        assert_eq!(restored.edges[0].status, LinkResolutionStatus::Resolved);
+        assert_eq!(
+            restored.edges[0].target_path.as_deref(),
+            Some("notes/FutureTarget.md")
+        );
+
+        cleanup_cache_fixture(&root, &cache_path);
+    }
+
+    #[test]
+    fn unchanged_fingerprints_return_the_last_result_without_breaking_queries() {
+        let (root, cache_path) = cache_fixture();
+        let vault = root.to_str().expect("utf-8 cache fixture path").to_string();
+        let mut hot = WikiIndex::default();
+        let first = rebuild_with_test_cache(&mut hot, &root, &cache_path);
+        let second = rebuild_with_test_cache(&mut hot, &root, &cache_path);
+        assert_eq!(second.indexed_files, first.indexed_files);
+        assert_eq!(second.edges, first.edges);
+        assert_eq!(second.nodes, first.nodes);
+        let backlinks = hot.get_backlinks(&vault, "notes/Target.md");
+        assert_eq!(backlinks.backlinks.len(), 2);
+        assert!(!hot.search("Target").is_empty());
+
+        cleanup_cache_fixture(&root, &cache_path);
+    }
+
+    /// Release-mode benchmark for the production rebuild paths:
+    /// `cargo test -p agentero --release --lib -- --ignored bench_wiki_rebuild --nocapture`
+    #[test]
+    #[ignore = "perf benchmark; run manually in release mode"]
+    fn bench_wiki_rebuild_scenarios() {
+        use std::fmt::Write as _;
+        use std::time::Instant;
+
+        let root = std::env::temp_dir().join(format!("agentero-wiki-bench-{}", Uuid::new_v4()));
+        fs::create_dir_all(root.join("notes")).expect("create bench vault");
+        let file_count = 1000usize;
+        for i in 0..file_count {
+            let mut content =
+                format!("# Note {i}\n\n## Section {i}\n\nBody text for note {i}.\n\n");
+            for j in 0..5usize {
+                let target = (i * 7 + j * 131 + 1) % file_count;
+                let _ = writeln!(content, "Link to [[note-{target:04}]] in this line.");
+            }
+            fs::write(root.join(format!("notes/note-{i:04}.md")), content)
+                .expect("write bench note");
+        }
+        let cache_path = std::env::temp_dir().join(format!(
+            "agentero-wiki-bench-cache-{}.sqlite",
+            Uuid::new_v4()
+        ));
+        let vault = root.to_str().expect("utf-8 bench vault").to_string();
+        let rebuild = |index: &mut WikiIndex| {
+            let files = collect_wiki_target_files(&root).expect("collect bench files");
+            index
+                .rebuild_with_cache_path(&vault, &root, files, &cache_path, true)
+                .expect("bench rebuild")
+        };
+
+        // Scenario A: cold start, no cache on disk.
+        let mut index = WikiIndex::default();
+        let started = Instant::now();
+        let cold = rebuild(&mut index);
+        eprintln!(
+            "A  cold rebuild + store          {:>10.3?}  ({} files, {} edges)",
+            started.elapsed(),
+            cold.indexed_files,
+            cold.edges
+        );
+
+        // Scenario A2: process restart, cache on disk, nothing changed.
+        let mut warm = WikiIndex::default();
+        let started = Instant::now();
+        rebuild(&mut warm);
+        eprintln!(
+            "A2 warm disk restore             {:>10.3?}",
+            started.elapsed()
+        );
+
+        // Scenario B: one file changed, index already hot in memory.
+        fs::write(
+            root.join("notes/note-0100.md"),
+            "# Note changed\n\nLink to [[note-0002]] plus fresh text that changes the size.\n",
+        )
+        .expect("change bench note");
+        let started = Instant::now();
+        rebuild(&mut warm);
+        eprintln!(
+            "B  one-file-changed hot rebuild  {:>10.3?}",
+            started.elapsed()
+        );
+
+        // Scenario B2: watcher fired but nothing actually changed.
+        let started = Instant::now();
+        rebuild(&mut warm);
+        eprintln!(
+            "B2 no-change hot rebuild         {:>10.3?}",
+            started.elapsed()
+        );
+
+        // Scenario C: production-like rename transaction (pre-check rebuild,
+        // plan, execute, post rebuild) against a hot index.
+        let started = Instant::now();
+        rebuild(&mut warm);
+        let transaction = crate::features::wiki::rename::WikiRenameTransaction::plan(
+            &root,
+            &warm,
+            "notes/note-0001.md",
+            "notes/renamed-0001.md",
+        )
+        .expect("plan bench rename");
+        transaction
+            .execute(|| Ok(()))
+            .expect("execute bench rename");
+        rebuild(&mut warm);
+        eprintln!(
+            "C  rename transaction total      {:>10.3?}",
+            started.elapsed()
+        );
+
+        let _ = discard_snapshot(&cache_path);
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

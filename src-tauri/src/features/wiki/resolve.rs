@@ -4,6 +4,7 @@ use crate::features::wiki::models::{
     BlockAnchor, HeadingAnchor, InternalLinkOccurrence, InternalLinkSyntax, LinkFragment,
     LinkResolutionStatus, ResolvedLink, WikiDocument,
 };
+use std::collections::HashMap;
 use std::path::Path;
 
 /// Normalize a Vault-relative forward-slash path without allowing it to escape the root.
@@ -83,14 +84,78 @@ fn unique(mut candidates: Vec<String>) -> Result<String, Vec<String>> {
     }
 }
 
+/// Precomputed lookup tables over one document set.
+///
+/// Rebuilding the index resolves every occurrence against the same documents;
+/// these maps replace the previous per-occurrence linear scans (O(E×D)) with
+/// hash lookups (~O(E)) while preserving `resolve_document` semantics exactly:
+/// the same priority order (exact path → case-insensitive path → path suffix →
+/// stem → alias) and the same candidate lists for ambiguous results.
+pub(crate) struct DocumentLookup<'a> {
+    by_path: HashMap<&'a str, &'a WikiDocument>,
+    by_path_lower: HashMap<String, Vec<&'a WikiDocument>>,
+    /// Every segment-boundary suffix of every path, including the full path.
+    /// `documents.path.ends_with("/{candidate}") || path == candidate` is
+    /// exactly membership of `candidate` in this suffix set.
+    by_suffix: HashMap<&'a str, Vec<&'a WikiDocument>>,
+    by_stem: HashMap<String, Vec<&'a WikiDocument>>,
+    by_alias: HashMap<String, Vec<&'a WikiDocument>>,
+}
+
+impl<'a> DocumentLookup<'a> {
+    pub(crate) fn new(documents: &'a [WikiDocument]) -> Self {
+        let mut by_path: HashMap<&str, &WikiDocument> = HashMap::with_capacity(documents.len());
+        let mut by_path_lower: HashMap<String, Vec<&WikiDocument>> =
+            HashMap::with_capacity(documents.len());
+        let mut by_suffix: HashMap<&str, Vec<&WikiDocument>> = HashMap::new();
+        let mut by_stem: HashMap<String, Vec<&WikiDocument>> =
+            HashMap::with_capacity(documents.len());
+        let mut by_alias: HashMap<String, Vec<&WikiDocument>> = HashMap::new();
+        for document in documents {
+            let path = document.path.as_str();
+            by_path.entry(path).or_insert(document);
+            by_path_lower
+                .entry(path.to_ascii_lowercase())
+                .or_default()
+                .push(document);
+            by_suffix.entry(path).or_default().push(document);
+            let mut rest = path;
+            while let Some(position) = rest.find('/') {
+                rest = &rest[position + 1..];
+                by_suffix.entry(rest).or_default().push(document);
+            }
+            by_stem
+                .entry(normalize_key(&stem_of(path)))
+                .or_default()
+                .push(document);
+            for alias in &document.aliases {
+                by_alias
+                    .entry(normalize_key(alias))
+                    .or_default()
+                    .push(document);
+            }
+        }
+        Self {
+            by_path,
+            by_path_lower,
+            by_suffix,
+            by_stem,
+            by_alias,
+        }
+    }
+
+    pub(crate) fn document(&self, path: &str) -> Option<&'a WikiDocument> {
+        self.by_path.get(path).copied()
+    }
+}
+
 fn resolve_document(
     occurrence: &InternalLinkOccurrence,
-    documents: &[WikiDocument],
+    lookup: &DocumentLookup<'_>,
 ) -> Result<String, Vec<String>> {
     if occurrence.target_raw.trim().is_empty() {
-        return documents
-            .iter()
-            .find(|document| document.path == occurrence.source)
+        return lookup
+            .document(&occurrence.source)
             .map(|document| document.path.clone())
             .ok_or_else(Vec::new);
     }
@@ -117,36 +182,28 @@ fn resolve_document(
     }
     exact_candidates.extend(add_extensions(raw));
     for candidate in &exact_candidates {
-        let hits = documents
-            .iter()
-            .filter(|document| document.path == *candidate)
-            .map(|document| document.path.clone())
-            .collect::<Vec<_>>();
-        if !hits.is_empty() {
-            return unique(hits);
+        if let Some(document) = lookup.document(candidate) {
+            return Ok(document.path.clone());
         }
     }
     for candidate in &exact_candidates {
-        let hits = documents
-            .iter()
-            .filter(|document| document.path.eq_ignore_ascii_case(candidate))
-            .map(|document| document.path.clone())
-            .collect::<Vec<_>>();
-        if !hits.is_empty() {
-            return unique(hits);
+        if let Some(documents) = lookup.by_path_lower.get(&candidate.to_ascii_lowercase()) {
+            return unique(
+                documents
+                    .iter()
+                    .map(|document| document.path.clone())
+                    .collect(),
+            );
         }
     }
 
     let suffixes = add_extensions(raw);
-    let suffix_hits = documents
-        .iter()
-        .filter(|document| {
-            suffixes.iter().any(|candidate| {
-                document.path == *candidate || document.path.ends_with(&format!("/{candidate}"))
-            })
-        })
-        .map(|document| document.path.clone())
-        .collect::<Vec<_>>();
+    let mut suffix_hits = Vec::new();
+    for candidate in &suffixes {
+        if let Some(documents) = lookup.by_suffix.get(candidate.as_str()) {
+            suffix_hits.extend(documents.iter().map(|document| document.path.clone()));
+        }
+    }
     match unique(suffix_hits) {
         Ok(path) => return Ok(path),
         Err(candidates) if candidates.len() > 1 => return Err(candidates),
@@ -154,12 +211,16 @@ fn resolve_document(
     }
 
     if Path::new(raw).extension().is_none() {
-        let wanted_stem = normalize_key(&stem_of(raw));
-        let stem_hits = documents
-            .iter()
-            .filter(|document| normalize_key(&stem_of(&document.path)) == wanted_stem)
-            .map(|document| document.path.clone())
-            .collect::<Vec<_>>();
+        let stem_hits = lookup
+            .by_stem
+            .get(&normalize_key(&stem_of(raw)))
+            .map(|documents| {
+                documents
+                    .iter()
+                    .map(|document| document.path.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
         match unique(stem_hits) {
             Ok(path) => return Ok(path),
             Err(candidates) if candidates.len() > 1 => return Err(candidates),
@@ -167,17 +228,16 @@ fn resolve_document(
         }
     }
 
-    let wanted_alias = normalize_key(raw);
-    let alias_hits = documents
-        .iter()
-        .filter(|document| {
-            document
-                .aliases
+    let alias_hits = lookup
+        .by_alias
+        .get(&normalize_key(raw))
+        .map(|documents| {
+            documents
                 .iter()
-                .any(|alias| normalize_key(alias) == wanted_alias)
+                .map(|document| document.path.clone())
+                .collect()
         })
-        .map(|document| document.path.clone())
-        .collect::<Vec<_>>();
+        .unwrap_or_default();
     unique(alias_hits)
 }
 
@@ -230,7 +290,16 @@ pub fn resolve_occurrence(
     occurrence: InternalLinkOccurrence,
     documents: &[WikiDocument],
 ) -> ResolvedLink {
-    let path = match resolve_document(&occurrence, documents) {
+    resolve_occurrence_with(occurrence, &DocumentLookup::new(documents))
+}
+
+/// Resolve one occurrence against a prebuilt document lookup. Bulk callers
+/// (index rebuild) build the lookup once and reuse it for every occurrence.
+pub(crate) fn resolve_occurrence_with(
+    occurrence: InternalLinkOccurrence,
+    lookup: &DocumentLookup<'_>,
+) -> ResolvedLink {
+    let path = match resolve_document(&occurrence, lookup) {
         Ok(path) => path,
         Err(candidates) if candidates.is_empty() => {
             return ResolvedLink {
@@ -268,7 +337,7 @@ pub fn resolve_occurrence(
                 candidates: Vec::new(),
             };
         }
-        let document = documents.iter().find(|document| document.path == path);
+        let document = lookup.document(&path);
         let candidates: Vec<String> = document
             .map(|document| {
                 fragment_anchors(document, fragment)
@@ -595,6 +664,184 @@ mod tests {
                 case.link
             );
             assert_eq!(resolved.target_path, case.path, "{}", case.link);
+        }
+    }
+
+    /// Byte-for-byte port of the pre-`DocumentLookup` linear resolver. It exists
+    /// only to prove that the hash-map lookup preserves resolution semantics.
+    fn reference_resolve_document(
+        occurrence: &InternalLinkOccurrence,
+        documents: &[WikiDocument],
+    ) -> Result<String, Vec<String>> {
+        if occurrence.target_raw.trim().is_empty() {
+            return documents
+                .iter()
+                .find(|document| document.path == occurrence.source)
+                .map(|document| document.path.clone())
+                .ok_or_else(Vec::new);
+        }
+
+        let raw = occurrence.target_raw.trim();
+        let mut exact_candidates = Vec::new();
+        let wiki_explicit_relative = raw == "." || raw.starts_with("./") || raw.starts_with("../");
+        let try_relative = !raw.starts_with('/')
+            && (matches!(occurrence.syntax, InternalLinkSyntax::Markdown)
+                || wiki_explicit_relative);
+        if try_relative {
+            let relative = source_relative(&occurrence.source, raw);
+            if relative == ".." || relative.starts_with("../") {
+                return Err(Vec::new());
+            }
+            exact_candidates.extend(add_extensions(&relative));
+        }
+        exact_candidates.extend(add_extensions(raw));
+        for candidate in &exact_candidates {
+            let hits = documents
+                .iter()
+                .filter(|document| document.path == *candidate)
+                .map(|document| document.path.clone())
+                .collect::<Vec<_>>();
+            if !hits.is_empty() {
+                return unique(hits);
+            }
+        }
+        for candidate in &exact_candidates {
+            let hits = documents
+                .iter()
+                .filter(|document| document.path.eq_ignore_ascii_case(candidate))
+                .map(|document| document.path.clone())
+                .collect::<Vec<_>>();
+            if !hits.is_empty() {
+                return unique(hits);
+            }
+        }
+
+        let suffixes = add_extensions(raw);
+        let suffix_hits = documents
+            .iter()
+            .filter(|document| {
+                suffixes.iter().any(|candidate| {
+                    document.path == *candidate || document.path.ends_with(&format!("/{candidate}"))
+                })
+            })
+            .map(|document| document.path.clone())
+            .collect::<Vec<_>>();
+        match unique(suffix_hits) {
+            Ok(path) => return Ok(path),
+            Err(candidates) if candidates.len() > 1 => return Err(candidates),
+            Err(_) => {}
+        }
+
+        if Path::new(raw).extension().is_none() {
+            let wanted_stem = normalize_key(&stem_of(raw));
+            let stem_hits = documents
+                .iter()
+                .filter(|document| normalize_key(&stem_of(&document.path)) == wanted_stem)
+                .map(|document| document.path.clone())
+                .collect::<Vec<_>>();
+            match unique(stem_hits) {
+                Ok(path) => return Ok(path),
+                Err(candidates) if candidates.len() > 1 => return Err(candidates),
+                Err(_) => {}
+            }
+        }
+
+        let wanted_alias = normalize_key(raw);
+        let alias_hits = documents
+            .iter()
+            .filter(|document| {
+                document
+                    .aliases
+                    .iter()
+                    .any(|alias| normalize_key(alias) == wanted_alias)
+            })
+            .map(|document| document.path.clone())
+            .collect::<Vec<_>>();
+        unique(alias_hits)
+    }
+
+    #[test]
+    fn lookup_resolution_matches_the_linear_reference_scan() {
+        fn doc(path: &str, aliases: &[&str]) -> WikiDocument {
+            WikiDocument {
+                path: path.into(),
+                aliases: aliases.iter().map(|alias| alias.to_string()).collect(),
+                headings: Vec::new(),
+                blocks: Vec::new(),
+            }
+        }
+
+        let documents = vec![
+            doc("notes/Target.md", &["Alpha", "Short  name"]),
+            doc("references/target.md", &[]),
+            doc("notes/sub/Target.md", &[]),
+            doc("notes/Unique.md", &["共享别名"]),
+            doc("papers/demo/PAPER.md", &[]),
+            doc("papers/demo/NOTES.md", &["共享别名"]),
+            doc("assets/figure.png", &[]),
+            doc("assets/deep/figure.png", &[]),
+            doc("assets/paper.pdf", &[]),
+            doc("notes/中文笔记.md", &[]),
+            doc("notes/Case.md", &[]),
+            doc("other/case.md", &[]),
+            doc("Fara-1.5.md", &[]),
+            doc("notes/source.md", &[]),
+            doc("folder/source.md", &[]),
+            doc("folder/Target.md", &[]),
+        ];
+
+        let raws = [
+            "",
+            "Target",
+            "target",
+            "Target.md",
+            "TARGET.MD",
+            "notes/Target",
+            "notes/Target.md",
+            "sub/Target",
+            "./Target",
+            "./Target.md",
+            "../notes/Target.md",
+            "../../Target.md",
+            "/Target",
+            "Unique",
+            "unique",
+            "Alpha",
+            "alpha",
+            "Short name",
+            "short  NAME",
+            "共享别名",
+            "figure.png",
+            "deep/figure.png",
+            "paper.pdf",
+            "paper",
+            "中文笔记",
+            "Case",
+            "case",
+            "Fara-1.5",
+            "Missing",
+            "demo/PAPER",
+            "papers/demo/NOTES",
+            "NOTES",
+            "does/not/exist.md",
+            ".",
+            "source",
+        ];
+
+        for source in ["notes/source.md", "folder/source.md", "missing/source.md"] {
+            for syntax in [InternalLinkSyntax::Wikilink, InternalLinkSyntax::Markdown] {
+                for raw in raws {
+                    let mut probe = occurrence(source, raw, None);
+                    probe.syntax = syntax.clone();
+                    let reference = reference_resolve_document(&probe, &documents);
+                    let lookup = DocumentLookup::new(&documents);
+                    let optimized = resolve_document(&probe, &lookup);
+                    assert_eq!(
+                        optimized, reference,
+                        "raw={raw:?} source={source:?} syntax={syntax:?}"
+                    );
+                }
+            }
         }
     }
 }
