@@ -335,7 +335,11 @@ export function PlazaSourceRow({ source }: { source: PlazaSource }) {
 	const { t } = useTranslation("sidebar");
 	const Icon = source.icon;
 	const label =
-		source.id === "skills" ? t("plaza.skills.title") : source.label;
+		source.id === "skills"
+			? t("plaza.skills.title")
+			: source.id === "modelscope"
+				? t("plaza.modelscope")
+				: source.label;
 	return (
 		<FileTreeFile path={source.path} name={label}>
 			<span className="size-4 shrink-0" />

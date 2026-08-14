@@ -6,12 +6,10 @@
 //! frame same-origin, so we can retarget links to navigate in place and report
 //! each navigation to the panel for a real history stack.
 //!
-//! The upstream origin is hardcoded: this proxy must never become an open relay.
+//! Request plumbing lives in [`crate::features::site_proxy`]; only the site's own
+//! HTML rewrite and injected bridge are here.
 
-use tauri::http::{header, Response, StatusCode};
-
-const ORIGIN: &str = "https://papers.cool";
-const USER_AGENT: &str = "agentero/0.6 (+https://github.com/poco-ai/agentero)";
+use crate::features::site_proxy::SiteProxy;
 
 /// Reports navigations to the panel (for Back / Forward), hands off links that
 /// leave our origin, and adds an `[入库]` action to every paper row.
@@ -191,104 +189,28 @@ const NAV_BRIDGE: &str = r##"<style>
 })();
 </script>"##;
 
-fn response(status: StatusCode, content_type: &str, body: Vec<u8>) -> Response<Vec<u8>> {
-    Response::builder()
-        .status(status)
-        .header(header::CONTENT_TYPE, content_type)
-        .body(body)
-        .expect("valid cool papers proxy response")
-}
-
-/// Whether a body is a full page rather than an XHR fragment.
-///
-/// `togglePdf` / `toggleKimi` fetch fragments that are *also* `text/html` (the
-/// Kimi analysis, and the bare star counter) and write the response text
-/// straight into the DOM. Injecting into those renders the bridge source as
-/// visible text, so only real documents may be touched.
-fn looks_like_document(body: &str) -> bool {
-    let head: String = body
-        .trim_start_matches('\u{feff}')
-        .trim_start()
-        .chars()
-        .take(16)
-        .collect::<String>()
-        .to_ascii_lowercase();
-    head.starts_with("<!doctype") || head.starts_with("<html")
-}
-
 /// Keep every click inside the frame and keep internal links on this scheme.
 fn rewrite_html(html: &str) -> String {
     let retargeted = html
         .replace("target=\"_blank\"", "target=\"_self\"")
         .replace("target='_blank'", "target='_self'")
         // Absolute self-links would leave the proxy scheme behind.
-        .replace("https://papers.cool/", "/");
+        .replace(&format!("{}/", super::ORIGIN), "/");
     match retargeted.find("</head>") {
         Some(_) => retargeted.replacen("</head>", &format!("{NAV_BRIDGE}</head>"), 1),
         None => format!("{NAV_BRIDGE}{retargeted}"),
     }
 }
 
+static SITE: SiteProxy = SiteProxy {
+    label: "Cool Papers",
+    origin: super::ORIGIN,
+    user_agent: super::USER_AGENT,
+    rewrite: rewrite_html,
+};
+
 pub fn handle(request: tauri::http::Request<Vec<u8>>, responder: tauri::UriSchemeResponder) {
-    let path = request.uri().path().to_string();
-    if !path.starts_with('/') || path.contains("..") {
-        responder.respond(response(
-            StatusCode::BAD_REQUEST,
-            "text/plain",
-            b"invalid cool papers path".to_vec(),
-        ));
-        return;
-    }
-    let query = request
-        .uri()
-        .query()
-        .map(|q| format!("?{q}"))
-        .unwrap_or_default();
-    let url = format!("{ORIGIN}{path}{query}");
-
-    tauri::async_runtime::spawn(async move {
-        let result = async {
-            let client = crate::features::network::client_builder()
-                .user_agent(USER_AGENT)
-                .redirect(reqwest::redirect::Policy::limited(5))
-                .build()?;
-            let remote = client.get(url).send().await?;
-            let status =
-                StatusCode::from_u16(remote.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-            let content_type = remote
-                .headers()
-                .get(reqwest::header::CONTENT_TYPE)
-                .and_then(|value| value.to_str().ok())
-                .unwrap_or("application/octet-stream")
-                .to_string();
-            let bytes = remote.bytes().await?;
-            let body = if content_type.starts_with("text/html") {
-                match String::from_utf8(bytes.to_vec()) {
-                    Ok(text) if looks_like_document(&text) => rewrite_html(&text).into_bytes(),
-                    // XHR fragments (Kimi analysis, star counter) go through as-is.
-                    _ => bytes.to_vec(),
-                }
-            } else {
-                bytes.to_vec()
-            };
-            Ok::<_, reqwest::Error>((status, content_type, body))
-        }
-        .await;
-
-        match result {
-            Ok((status, content_type, body)) => {
-                responder.respond(response(status, &content_type, body))
-            }
-            Err(error) => {
-                log::warn!(target: "agentero::coolpapers", "cool papers proxy request failed: {error}");
-                responder.respond(response(
-                    StatusCode::BAD_GATEWAY,
-                    "text/plain",
-                    b"Cool Papers unavailable".to_vec(),
-                ));
-            }
-        }
-    });
+    crate::features::site_proxy::handle(&SITE, request, responder);
 }
 
 #[cfg(test)]
@@ -359,27 +281,5 @@ mod tests {
         // Feeds and same-origin handoffs reopen upstream, not on our scheme.
         assert!(NAV_BRIDGE.contains("isFeed"));
         assert!(NAV_BRIDGE.contains("externalPath"));
-    }
-
-    #[test]
-    fn treats_full_pages_as_documents() {
-        assert!(looks_like_document("<!DOCTYPE html>\n<html>\n<head>"));
-        assert!(looks_like_document("\n  <!doctype html><html>"));
-        assert!(looks_like_document("<html lang=\"en\">"));
-    }
-
-    /// `toggleKimi` writes this body into the DOM; a bridge here shows as text.
-    #[test]
-    fn treats_kimi_fragment_as_non_document() {
-        let fragment = "<p class=\"faq-q\"><strong>Q1</strong>: 试图解决什么问题？</p>\n\n<div class=\"faq-a\">\n\n答案\n\n</div>";
-        assert!(!looks_like_document(fragment));
-    }
-
-    /// `POST /star` answers with a bare count — the stray `0` users saw.
-    #[test]
-    fn treats_star_counter_as_non_document() {
-        assert!(!looks_like_document("1060"));
-        assert!(!looks_like_document("0"));
-        assert!(!looks_like_document(""));
     }
 }

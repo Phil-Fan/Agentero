@@ -145,6 +145,8 @@
 		"comingSoon": "Coming soon",
 		"comingSoonFor": "{{label}} is coming soon.",
 		"arxivDescription": "Browse daily arXiv updates and conference papers",
+		"modelscope": "ModelScope Papers",
+		"modelscopeDescription": "Browse ModelScope daily papers and Chinese interpretations",
 		"skillsDescription": "Curated GitHub Skill repos for research — click to import",
 		"skills": {
 			"title": "Skill picks",

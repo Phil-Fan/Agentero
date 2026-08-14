@@ -26,6 +26,8 @@ pub mod jobs;
 pub mod layout_model;
 #[cfg(feature = "desktop")]
 pub mod layout_remote;
+#[cfg(feature = "desktop")]
+pub mod modelscope_proxy;
 pub mod network;
 pub mod open_request;
 pub mod refs;
@@ -35,6 +37,8 @@ pub mod remote;
 pub mod search;
 #[cfg(feature = "desktop")]
 pub mod settings;
+#[cfg(feature = "desktop")]
+pub mod site_proxy;
 #[cfg(all(
     feature = "desktop",
     not(any(target_os = "android", target_os = "ios"))

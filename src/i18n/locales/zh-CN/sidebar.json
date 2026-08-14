@@ -145,6 +145,8 @@
 		"comingSoon": "即将推出",
 		"comingSoonFor": "{{label}} 即将推出。",
 		"arxivDescription": "浏览 arXiv 日更与会议论文流",
+		"modelscope": "ModelScope 论文",
+		"modelscopeDescription": "浏览魔搭每日读论文与中文解读",
 		"skillsDescription": "按科研流程精选的 GitHub Skill 仓库，一点即可导入",
 		"skills": {
 			"title": "Skill 推荐",

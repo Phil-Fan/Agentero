@@ -1,7 +1,8 @@
 # 广场（Plaza）— 外部来源发现
 
-> 范围：侧栏虚拟节点 **广场** 及其子来源（Cool Papers / ModelScope 论文 / 播客 / 论文推荐）；中间栏发现流。  
-> 相关：[`../frontend/vault-tree.md`](../frontend/vault-tree.md)、[`../backend/paper-import.md`](../backend/paper-import.md)、[`../backend/index.md`](../backend/index.md)。
+> 范围：侧栏虚拟节点 **广场** 及其子来源（Cool Papers / ModelScope 论文 / Skill 推荐 / 订阅 / 播客 / 论文推荐）；中间栏发现流。  
+> 相关：[`../frontend/vault-tree.md`](../frontend/vault-tree.md)、[`../backend/paper-import.md`](../backend/paper-import.md)、[`../backend/index.md`](../backend/index.md)。  
+> 订阅 MVP（未实现）：[`plaza-feeds.md`](plaza-feeds.md)。
 
 ## 0. 产品结论（2026-07-25，2026-08-14 修订）
 
@@ -12,6 +13,7 @@
 | Q3 | 入库 | **已实现**：每行注入 `[入库]`，复用现成魔棒（见 §3.2.1） |
 | Q4 | P0 范围 | **已交付：广场壳 + Cool Papers 浏览入库 + Skill 推荐**；播客 / 论文推荐尚未实现 |
 | Q5 | ModelScope 论文 | **已实现**：同一代理模式，但站点是 SPA，另有取舍（见 §3.5） |
+| Q6 | 订阅 | **未实现**：广场下单一原生节点，本地 RSS/Atom；见 [`plaza-feeds.md`](plaza-feeds.md) |
 
 **已实现落点（2026-08-14）**
 
@@ -47,8 +49,9 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 1. **Cool Papers**（[papers.cool](https://papers.cool/)）— P0：内嵌站点浏览。  
 2. **ModelScope 论文**（[modelscope.cn/papers](https://modelscope.cn/papers)）— 内嵌站点浏览；魔搭每日读论文带中文摘要与评分。  
 3. **Skill 推荐** — 原生面板：按论文阅读 / 写作 / 绘图 / 复现 / 投稿精选 GitHub Skill 仓库；点卡片走魔棒 Skill 导入。  
-4. **播客** — 占位，后续。  
-5. **论文推荐** — P0 v0：基于本地库的轻量推荐列表（无云端上传）。
+4. **订阅** — 未实现：用户自己的 RSS / Atom / JSON Feed；论文条目入库。规格见 [`plaza-feeds.md`](plaza-feeds.md)。  
+5. **播客** — 占位，后续。  
+6. **论文推荐** — P0 v0：基于本地库的轻量推荐列表（无云端上传）。
 
 ## 2. 侧栏信息架构
 
@@ -60,6 +63,7 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 │   ├── ✨ Cool Papers         agentero:plaza/cool-papers
 │   ├── ✨ ModelScope 论文      agentero:plaza/modelscope
 │   ├── ✨ Skill 推荐           agentero:plaza/skills
+│   ├── 📡 订阅                 agentero:plaza/feeds         ← 未实现，见 plaza-feeds.md
 │   ├── 🎙️ 播客                 agentero:plaza/podcasts      ← 占位
 │   └── 🧭 推荐                 agentero:plaza/recommend
 ├── papers/
@@ -84,6 +88,7 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 | Cool Papers | `Flame` 或自定义标 | Cool Papers | Cool Papers |
 | ModelScope 论文 | 自定义标（魔搭 favicon） | ModelScope papers | ModelScope 论文 |
 | Skill 推荐 | `Sparkles` | Skill picks | Skill 推荐 |
+| 订阅 | `Rss` | Feeds | 订阅 |
 | 播客 | `Podcast` | Podcasts | 播客 |
 | 推荐 | `Compass` | For You | 推荐 |
 
@@ -218,12 +223,46 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 
 > 说明：P0 推荐是「本地库导读」，不是 Cool Papers 式外网发现。外网推荐留待入库打通之后。
 
+### 3.5 ModelScope 论文（已实现）
+
+**主内容**：内嵌 iframe，经 `agentero-modelscope://localhost` 加载 [modelscope.cn/papers](https://modelscope.cn/papers)。顶条 chrome、拖拽护盾、Back / Forward 全部复用 `PlazaWebFrame`，前端只多了 `PLAZA_SOURCES` 一条。
+
+**必须代理**：站点回 `X-Frame-Options: SAMEORIGIN`，直接 iframe 会被拒。代理重建响应时只保留 `Content-Type`，XFO 顺带被丢掉。
+
+**与 Cool Papers 的四处不同（都因为它是 umi 3.5.26 SPA）**
+
+| 差异 | 后果 |
+|---|---|
+| 列表走 `PUT /api/v1/dolphin/papers`（JSON body，匿名可用） | 代理原本只发 GET 且丢 body，页面会渲染成空壳。请求管道抽到 `site_proxy.rs` 并**转发 method + body**（顺带修好 papers.cool 的 `POST /star`）。只转发 `Content-Type` / `Accept` / `Accept-Language`——`Cookie`、`Origin`、`Referer` 一律不带 |
+| 外壳资源全是协议相对 `//g.alicdn.com/…`，含 `window.publicPath` | 在自有 scheme 下会解析成 `agentero-modelscope://g.alicdn.com/…`，应用根本不启动。`rewrite_html` 把 `="//` / `='//` / `= "//` 一律改成 `https://`。CDN 资源**不经代理**，否则等于给代理开一批额外上游主机（SSRF 面） |
+| 路由是 `history.pushState`，点卡片不产生真实导航 | 桥接必须包装 `pushState` / `replaceState` 并监听 `popstate` 才能上报路径，否则顶条路径和 Back / Forward 永远不动 |
+| 页面是 React，被拒绝的点击不能只 `preventDefault` | umi 的 `Link` 自己就会 `preventDefault` 然后照样路由，必须在捕获阶段 `stopImmediatePropagation`，让事件根本到不了 React 根容器 |
+
+**只允许 `/papers*` 原地浏览。** 其余同域路径（`/models`、`/datasets`、`/docs`…）与站外链接一律 handoff 到系统浏览器；同域的走 `externalPath` 换算回上游 origin。登录一族（`/login`、`/register`、`/reset`、`/binding`）是另一套独立应用，本就不该在代理里跑——我们不注入任何登录态（§7）。
+
+**隐藏站点 header**（`header.antd5-layout-header`）。面板是论文流，不是浏览器：全局导航只提供「走出去」的入口，还带登录按钮。隐去之后页面自带的搜索框、`本周热门 / 最新推荐 / 全部论文` 排序 tab 与卡片栅格都还在，面板反而更干净。
+
+**入库**：`/papers/<arxivId>` 本身就是全部所需身份，所以列表卡片和详情页注入的「入库」都只发 `{ id, branch: "arxiv", url: "https://arxiv.org/abs/<id>" }`，直接落到 §3.2.1 的 arXiv 路线（能多拿 `arxiv_id` 与 LaTeX 源码）。**没有新增任何 Rust 入库命令，前端 `import.ts` 零改动。**
+
+两处都是带 Agentero 标的按钮，一眼能认出是我们的动作而不是站点自己的：
+
+- **列表**：绝对定位在卡片右下角，与统计行同高；自带边框/圆角/中性灰底，浅色深色主题都成立。
+- **列表**：只装饰真正排布出盒子的卡片（`offsetWidth`/`offsetHeight` 阈值）。零宽的 `/papers/` 锚点会让绝对定位的按钮甩到容器边缘，露在卡片外面。
+- **详情页**：插在站点那排 `arXiv 原文 / PDF / Git` 的最左侧，并**在运行时借用 `arXiv 原文` 的 className**，所以尺寸与外观完全一致。定位靠那颗 arXiv favicon（`img[src*="arxiv.org"]`）——那排的类名是哈希的、文案是本地化的，图标 src 两者都不是。
+- **图标**：品牌标缩到只剩那副铜色眼镜。完整的插画式 logo 在 14px（站点图标尺寸）下糊成一团。
+- **必须在链接拦截器之前注册点击处理并整体吞掉事件**——卡片按钮就长在卡片自己的 `<a>` 里面，否则入库的同时会被路由带走。
+- 文案挂在子 `span.agentero-import-label` 上，落态只改它，图标与借来的结构不会被 `textContent` 抹掉。
+- 站点的 Emotion 类名（`acss-*`）每次发版重新哈希，**只能**用 `header.antd5-layout-header`、`a[href^="/papers/"]`、arXiv favicon 这类结构化钩子。
+- React 重渲染会抹掉注入节点，`MutationObserver` 挂 `document.body` 补回来（debounce 100ms，避免自触发抖动）。
+- 回执按 `data-paper-id` 遍历匹配：arXiv id 带 `.`，不能用 id 选择器。
+
 ## 4. 与其它模块
 
 | 模块 | 关系 |
 |---|---|
 | Library | 推荐 v0 只读 `paper_list` / 热力；不改 catalog schema |
-| 魔棒 / 入库 | **已复用** `lookup_import_batch`：喂上游 URL，见 §3.2.1 |
+| 魔棒 / 入库 | **已复用** `lookup_import_batch`：喂上游 URL，见 §3.2.1。订阅论文卡走同一条 |
+| 订阅 | 独立 XDG `feeds.sqlite`，不进 catalog；见 [`plaza-feeds.md`](plaza-feeds.md) |
 | PDF\|NOTES | 推荐打开本地论文时走现有阅读布局 |
 | Agent | P0 不强制；P1 可做「解释为何推荐」 |
 | 命令面板 | P1：`Plaza: Cool Papers` 等 |
@@ -256,12 +295,13 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 | **P0d 播客** | 占位页 | 可进入、文案清晰 |
 | **P1** | 入库（解析 arXiv / 魔棒管线）、预览抽屉、批量加入 Library | 与魔棒语义一致 |
 | **P2** | 播客实体、Agent 推荐、命令面板、@ 广场条目 | — |
+| **订阅 MVP** | 原生面板 + 本地 RSS + 论文入库 | 见 [`plaza-feeds.md`](plaza-feeds.md) M1–M4 |
 
 ## 7. 明确不做（P0）
 
 - 广场 → Vault **批量入库**（单条已实现，见 §3.2.1）。  
-- 把 feed 写入 catalog。  
-- 播客播放器 / 订阅管理。  
+- 把 feed 写入 catalog（订阅条目缓存走 XDG，见 [`plaza-feeds.md`](plaza-feeds.md)）。  
+- 播客播放器。订阅管理按 [`plaza-feeds.md`](plaza-feeds.md) 另做，不进本篇 P0。  
 - 云端协同过滤或上传本地库。  
 - 注入脚本只做导航上报与 `[入库]`；**不注入任何凭据 / API Key / 登录态**。
 
@@ -269,13 +309,13 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 
 | 区域 | 路径 |
 |---|---|
-| 设计 | `docs/development/plaza.md`（本文） |
-| UI 规范摘录 | `docs/frontend/shell.md` § 广场 |
-| 虚拟 path | `src/lib/paper/api.ts` 或 `src/lib/plaza/` |
+| 设计 | `docs/development/plaza.md`（本文，UI 规范也在此，`docs/frontend/shell.md` 没有广场小节） |
+| 虚拟 path | `src/lib/plaza/sources.ts` |
 | 文件树 | `src/components/sidebar/file-tree/` |
 | 中间栏 | `src/components/plaza/*` + `doc-view` |
-| Cool Papers WebView | `src/components/plaza/cool-papers-view.tsx`（Tauri webview 封装） |
+| 站点内嵌 | `src/components/plaza/plaza-web-frame.tsx`（代理 iframe，两个站点来源共用；没有 Tauri 子 webview 封装） |
 | 推荐 | `src/lib/plaza/recommend.ts` + `src/components/plaza/recommend-view.tsx` |
+| 订阅 | [`plaza-feeds.md`](plaza-feeds.md) §6 |
 | i18n | `sidebar` / 独立 `plaza` ns |
 | Roadmap / Todo | 增加「广场 P0」条目 |
 
@@ -283,9 +323,11 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 
 | 风险 | 缓解 |
 |---|---|
-| papers.cool 改版 / 禁止嵌入 | 检测 `X-Frame-Options`；失败则全页降级为「系统浏览器打开」 |
-| WebView 体积与内存 | 仅在 plaza cool-papers panel 挂载；关 tab 销毁 |
-| 推荐过冷启动 | 空态文案；阈值阈值（如 &lt; 3 篇不估标签组） |
+| 站点改版 / 禁止嵌入 | 代理已丢弃 `X-Frame-Options`；仍失败则把该来源降级为 `embedOrigin: null` + 「系统浏览器打开」 |
+| ModelScope 换 API 形状或 header 类名 | 只依赖结构化钩子（`antd5-*`、`a[href^="/papers/"]`）；列表接口变了表现为空列表，代理无需改动 |
+| alicdn 资源的 CORS | `crossorigin="anonymous"` 的几个脚本需要上游回 `*`；被拦时兜底是在 `rewrite_html` 里去掉 `crossorigin`（无 `integrity`，降级为经典脚本） |
+| WebView 体积与内存 | 仅在对应 plaza panel 挂载；关 tab 销毁 |
+| 推荐过冷启动 | 空态文案；阈值（如 &lt; 3 篇不估标签组） |
 
 **仍可再确认（非阻塞 P0a）**：
 
@@ -296,3 +338,5 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 
 *修订：2026-07-25 — 采纳 WebView、不做入库、P0 含推荐 v0、树位置在 Library/Trash 下。*
 *修订：2026-08-14 — 改为代理协议嵌入；壳 + Cool Papers 浏览 + 单条入库已落地；推荐 / 播客未实现。*
+*修订：2026-08-15 — 新增 ModelScope 论文来源；请求管道抽到 `site_proxy.rs` 并转发 method + body。*  
+*修订：2026-08-15 — 订阅列为广场来源，规格拆到 [`plaza-feeds.md`](plaza-feeds.md)。*

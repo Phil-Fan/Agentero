@@ -27,7 +27,11 @@ function SourceCard({
 	const Icon = source.icon;
 	const available = Boolean(source.url || source.panel);
 	const label =
-		source.id === "skills" ? t("plaza.skills.title") : source.label;
+		source.id === "skills"
+			? t("plaza.skills.title")
+			: source.id === "modelscope"
+				? t("plaza.modelscope")
+				: source.label;
 	return (
 		<button
 			type="button"
@@ -71,6 +75,13 @@ export function PlazaView({
 }) {
 	const { t } = useTranslation("sidebar");
 	const source = plazaSourceForPath(path);
+	const sourceLabel = source
+		? source.id === "skills"
+			? t("plaza.skills.title")
+			: source.id === "modelscope"
+				? t("plaza.modelscope")
+				: source.label
+		: "";
 
 	if (source?.panel === "skills") {
 		return <PlazaSkillsView className={className} />;
@@ -81,7 +92,7 @@ export function PlazaView({
 			<PlazaWebFrame
 				homeUrl={source.url}
 				embedOrigin={source.embedOrigin?.() ?? null}
-				title={source.label}
+				title={sourceLabel}
 				className={className}
 			/>
 		);
@@ -95,7 +106,7 @@ export function PlazaView({
 					className,
 				)}
 			>
-				{t("plaza.comingSoonFor", { label: source.label })}
+				{t("plaza.comingSoonFor", { label: sourceLabel })}
 			</div>
 		);
 	}

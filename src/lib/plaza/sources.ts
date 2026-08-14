@@ -12,6 +12,7 @@ import type { ParseKeys } from "i18next";
 import { Sparkles } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { CoolPapersIcon } from "@/components/icons/cool-papers-icon";
+import { ModelScopeIcon } from "@/components/icons/modelscope-icon";
 import i18n from "@/i18n";
 
 /** Virtual tree/tab path for the Plaza parent node. */
@@ -66,6 +67,15 @@ export const PLAZA_SOURCES: readonly PlazaSource[] = [
 		icon: CoolPapersIcon,
 	},
 	{
+		id: "modelscope",
+		path: sourcePath("modelscope"),
+		label: "ModelScope Papers",
+		description: "plaza.modelscopeDescription",
+		url: "https://modelscope.cn/papers",
+		embedOrigin: () => schemeOrigin("agentero-modelscope"),
+		icon: ModelScopeIcon,
+	},
+	{
 		id: "skills",
 		path: sourcePath("skills"),
 		label: "Skill picks",
@@ -102,6 +112,9 @@ export function plazaTitleForPath(path: string): string {
 	const source = plazaSourceForPath(path);
 	if (source?.id === "skills") {
 		return i18n.t("sidebar:plaza.skills.title");
+	}
+	if (source?.id === "modelscope") {
+		return i18n.t("sidebar:plaza.modelscope");
 	}
 	return source?.label ?? i18n.t("sidebar:plaza.plaza");
 }
