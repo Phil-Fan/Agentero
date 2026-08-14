@@ -8,8 +8,10 @@
 
 use crate::core::error::AppError;
 use rusqlite::Connection;
+use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 
 /// Current catalog schema version written to `schema_meta`.
 pub const SCHEMA_VERSION: i32 = 5;
@@ -126,6 +128,93 @@ pub fn ensure_catalog(vault_root: &Path) -> Result<Connection, AppError> {
 
     migrate(&conn)?;
     Ok(conn)
+}
+
+/// Process-wide cache of one persistent catalog connection per vault.
+///
+/// Every catalog API used to call [`ensure_catalog`], paying a fresh
+/// `Connection::open` + 4 PRAGMAs + full `migrate()` walk per call — a real
+/// cost on Windows/NTFS where opening `catalog.sqlite` stats the file and
+/// replays the WAL. Commands run on the `spawn_blocking` pool, so the shared
+/// connection is guarded by a `Mutex`; WAL + `busy_timeout` are already set at
+/// open. Keyed by canonicalized vault root so `/vault` and its symlinked
+/// aliases share one handle.
+type ConnCache = HashMap<PathBuf, Arc<Mutex<Connection>>>;
+
+static CONN_CACHE: OnceLock<Mutex<ConnCache>> = OnceLock::new();
+/// Physical opens per vault key (diagnostics; asserted by perf tests).
+static OPEN_COUNTS: OnceLock<Mutex<HashMap<PathBuf, u64>>> = OnceLock::new();
+
+fn conn_cache() -> &'static Mutex<ConnCache> {
+    CONN_CACHE.get_or_init(Default::default)
+}
+
+fn conn_cache_key(vault_root: &Path) -> PathBuf {
+    fs::canonicalize(vault_root).unwrap_or_else(|_| vault_root.to_path_buf())
+}
+
+/// How many times `with_catalog` physically opened the catalog for this vault.
+/// Test-only observer; the counter itself is always maintained.
+#[cfg(test)]
+pub fn catalog_open_count(vault_root: &Path) -> u64 {
+    let key = conn_cache_key(vault_root);
+    let counts = OPEN_COUNTS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    counts.get(&key).copied().unwrap_or(0)
+}
+
+/// Drop the cached connection for a vault (e.g. before deleting the vault, or
+/// after an operation reported the handle as broken).
+pub fn evict_catalog_conn(vault_root: &Path) {
+    let key = conn_cache_key(vault_root);
+    let mut cache = conn_cache().lock().unwrap_or_else(|p| p.into_inner());
+    cache.remove(&key);
+}
+
+/// Run `f` against the vault's persistent catalog connection.
+///
+/// Opens (and migrates) the database only on the first call per vault; later
+/// calls reuse the cached handle. If the database file disappeared since the
+/// handle was cached — vault deleted or recreated externally — the stale
+/// handle is dropped and a fresh one is opened, re-running `ensure_catalog`.
+/// A failing statement while the file is gone also evicts the handle so the
+/// next call recovers instead of failing forever.
+pub fn with_catalog<T>(
+    vault_root: &Path,
+    f: impl FnOnce(&Connection) -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    let key = conn_cache_key(vault_root);
+    let conn = {
+        let mut cache = conn_cache().lock().unwrap_or_else(|p| p.into_inner());
+        // Stale handle: the file was deleted (vault removed / recreated). WAL
+        // keeps the unlinked inode alive, so without this check writes would
+        // silently go to a ghost database.
+        if cache.contains_key(&key) && !catalog_db_path(vault_root).is_file() {
+            cache.remove(&key);
+        }
+        match cache.get(&key) {
+            Some(conn) => Arc::clone(conn),
+            None => {
+                let conn = Arc::new(Mutex::new(ensure_catalog(vault_root)?));
+                cache.insert(key.clone(), Arc::clone(&conn));
+                let mut counts = OPEN_COUNTS
+                    .get_or_init(Default::default)
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner());
+                *counts.entry(key.clone()).or_insert(0) += 1;
+                conn
+            }
+        }
+    };
+    let guard = conn.lock().unwrap_or_else(|p| p.into_inner());
+    let result = f(&guard);
+    drop(guard);
+    if result.is_err() && !catalog_db_path(vault_root).is_file() {
+        evict_catalog_conn(vault_root);
+    }
+    result
 }
 
 fn migrate(conn: &Connection) -> Result<(), AppError> {

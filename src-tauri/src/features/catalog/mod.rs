@@ -11,7 +11,10 @@ pub use caps::{
     find_local_pdf, has_local_pdf, has_local_tex, has_paper_md, probe_paper_caps, CapsCache,
     PaperCaps,
 };
-pub use schema::{catalog_db_path, ensure_catalog, schema_version, SCHEMA_VERSION};
+pub use schema::{
+    catalog_db_path, ensure_catalog, evict_catalog_conn, schema_version, with_catalog,
+    SCHEMA_VERSION,
+};
 
 #[cfg(feature = "desktop")]
 pub mod commands;
