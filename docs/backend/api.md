@@ -2230,12 +2230,14 @@ CLI 对照：`agentero usage which|timeline|summary|clear`（见 [cli.md](cli.md
 
 | Command | 说明 |
 |---|---|
-| `feeds_list` | 订阅列表 |
+| `feeds_list` | 订阅列表（置顶在前） |
 | `feeds_add` | 添加（HTML 自动发现 + 首拉） |
 | `feeds_remove` / `feeds_rename` | 删除 / 改显示名 |
+| `feeds_set_pinned` | `{ id, pinned }` 钉到列表最上 |
 | `feeds_refresh` | `{ id?, staleOnly? }` 拉源 |
 | `feeds_items` | 时间线；`filter`: all / paper / other |
 | `feeds_mark_imported` | 标记本机已入库 |
+| `feeds_resolve_body` | 打开详情时抓全文 → Markdown |
 
 ### 3.11 界面与本地化（UI / i18n）
 

@@ -16,6 +16,8 @@ export type FeedSub = {
 	lastFetchedAt: string | null;
 	lastError: string | null;
 	itemCount: number;
+	pinned: boolean;
+	pinnedAt: string | null;
 };
 
 export type FeedItem = {
@@ -29,6 +31,7 @@ export type FeedItem = {
 	contentHtml: string | null;
 	paperUrl: string | null;
 	importedAt: string | null;
+	bodyMarkdown: string | null;
 };
 
 export type FeedFilter = "all" | "paper" | "other";
@@ -149,6 +152,33 @@ export async function feedsMarkImported(id: string): Promise<FeedItem> {
 		{ args: { id } },
 		{ fallback: "feeds.markFailed" },
 	);
+}
+
+export async function feedsSetPinned(
+	id: string,
+	pinned: boolean,
+): Promise<FeedSub> {
+	return invokeApi<FeedSub>(
+		"feeds_set_pinned",
+		{ args: { id, pinned } },
+		{ fallback: "feeds.pinFailed" },
+	);
+}
+
+export async function feedsResolveBody(id: string): Promise<FeedItem> {
+	return invokeApi<FeedItem>(
+		"feeds_resolve_body",
+		{ args: { id } },
+		{ fallback: "feeds.resolveFailed" },
+	);
+}
+
+export function compareFeedSubs(a: FeedSub, b: FeedSub): number {
+	if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+	if (a.pinned && b.pinned) {
+		return (b.pinnedAt ?? "").localeCompare(a.pinnedAt ?? "");
+	}
+	return a.addedAt.localeCompare(b.addedAt);
 }
 
 /** Import via the magic wand. Resolves true when the paper is in the library. */

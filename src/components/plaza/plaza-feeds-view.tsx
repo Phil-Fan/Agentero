@@ -6,7 +6,7 @@
 
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TFunction } from "i18next";
-import { Plus, RefreshCw } from "lucide-react";
+import { Pin, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -40,6 +40,7 @@ import { cn } from "@/lib/core/utils";
 import {
 	ARXIV_FEED_CHIPS,
 	arxivFeedUrl,
+	compareFeedSubs,
 	type FeedItem,
 	type FeedSub,
 	feedsAdd,
@@ -48,6 +49,7 @@ import {
 	feedsRefresh,
 	feedsRemove,
 	feedsRename,
+	feedsSetPinned,
 	hostErrorKey,
 } from "@/lib/plaza/feeds";
 
@@ -195,7 +197,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 			try {
 				const next = await feedsList();
 				if (cancelled) return;
-				setSubs(next);
+				setSubs([...next].sort(compareFeedSubs));
 				const rows = await feedsItems({ filter: "all" });
 				if (!cancelled) setItems(rows);
 			} catch (error) {
@@ -220,7 +222,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 			try {
 				const result = await feedsRefresh({ staleOnly: true });
 				if (cancelled) return;
-				setSubs(result.subscriptions);
+				setSubs([...result.subscriptions].sort(compareFeedSubs));
 				await loadItems(selectedIdRef.current);
 			} catch {
 				/* stale refresh is best-effort */
@@ -240,7 +242,9 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 			try {
 				const sub = await feedsAdd(url);
 				setSubs((prev) =>
-					prev.some((row) => row.id === sub.id) ? prev : [...prev, sub],
+					prev.some((row) => row.id === sub.id)
+						? prev
+						: [...prev, sub].sort(compareFeedSubs),
 				);
 				setSelectedId(sub.id);
 				await loadItems(sub.id);
@@ -262,7 +266,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 			const result = await feedsRefresh({
 				id: selectedId ?? undefined,
 			});
-			setSubs(result.subscriptions);
+			setSubs([...result.subscriptions].sort(compareFeedSubs));
 			await loadItems(selectedId);
 		} catch (error) {
 			toastHostError(error instanceof Error ? error.message : String(error), t);
@@ -292,13 +296,40 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		[loadItems, selectedId, t],
 	);
 
+	const applySub = useCallback((next: FeedSub) => {
+		setSubs((prev) =>
+			prev
+				.map((row) => (row.id === next.id ? next : row))
+				.sort(compareFeedSubs),
+		);
+	}, []);
+
+	const applyItem = useCallback((next: FeedItem) => {
+		setItems((prev) => prev.map((row) => (row.id === next.id ? next : row)));
+		setOpenItem(next);
+	}, []);
+
+	const onPin = useCallback(
+		async (id: string, pinned: boolean) => {
+			try {
+				applySub(await feedsSetPinned(id, pinned));
+			} catch (error) {
+				toastHostError(
+					error instanceof Error ? error.message : String(error),
+					t,
+				);
+			}
+		},
+		[applySub, t],
+	);
+
 	const onRename = useCallback(async () => {
 		if (!renameTarget) return;
 		const title = renameTitle.trim();
 		if (!title) return;
 		try {
 			const next = await feedsRename(renameTarget.id, title);
-			setSubs((prev) => prev.map((row) => (row.id === next.id ? next : row)));
+			applySub(next);
 			setItems((prev) =>
 				prev.map((row) =>
 					row.subscriptionId === next.id
@@ -310,7 +341,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		} catch (error) {
 			toastHostError(error instanceof Error ? error.message : String(error), t);
 		}
-	}, [renameTarget, renameTitle, t]);
+	}, [applySub, renameTarget, renameTitle, t]);
 
 	const virtualizer = useVirtualizer({
 		count: items.length,
@@ -396,7 +427,15 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 													: "hover:bg-muted/60",
 											)}
 										>
-											<span className="truncate text-sm">{sub.title}</span>
+											<span className="flex min-w-0 items-center gap-1">
+												{sub.pinned ? (
+													<Pin
+														className="size-3 shrink-0 text-muted-foreground"
+														aria-hidden
+													/>
+												) : null}
+												<span className="truncate text-sm">{sub.title}</span>
+											</span>
 											{sub.lastError ? (
 												<span className="truncate text-destructive text-xs">
 													{formatHostError(sub.lastError, t)}
@@ -425,15 +464,27 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 										<ContextMenuItem
 											onSelect={() =>
 												void feedsRefresh({ id: sub.id }).then((result) => {
-													setSubs(result.subscriptions);
+													setSubs(
+														[...result.subscriptions].sort(compareFeedSubs),
+													);
 													void loadItems(selectedId);
 												})
 											}
 										>
 											{t("plaza.feeds.refreshOne")}
 										</ContextMenuItem>
+										<ContextMenuItem
+											onSelect={() => void onPin(sub.id, !sub.pinned)}
+										>
+											{sub.pinned
+												? t("plaza.feeds.unpin")
+												: t("plaza.feeds.pin")}
+										</ContextMenuItem>
 										<ContextMenuSeparator />
-										<ContextMenuItem onSelect={() => void onRemove(sub.id)}>
+										<ContextMenuItem
+											className="text-destructive focus:text-destructive"
+											onSelect={() => void onRemove(sub.id)}
+										>
 											{t("plaza.feeds.remove")}
 										</ContextMenuItem>
 									</ContextMenuContent>
@@ -447,12 +498,8 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 								item={openItem}
 								hideSource={selectedId !== null}
 								onBack={() => setOpenItem(null)}
-								onImported={(next) => {
-									setItems((prev) =>
-										prev.map((row) => (row.id === next.id ? next : row)),
-									);
-									setOpenItem(next);
-								}}
+								onImported={applyItem}
+								onResolved={applyItem}
 							/>
 						) : emptyItems ? (
 							<div className="flex flex-1 items-center justify-center p-6 text-center text-muted-foreground text-sm">

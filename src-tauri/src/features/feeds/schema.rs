@@ -6,7 +6,7 @@ use rusqlite::Connection;
 use std::fs;
 use std::path::Path;
 
-pub const SCHEMA_VERSION: i32 = 1;
+pub const SCHEMA_VERSION: i32 = 2;
 pub const ITEMS_PER_FEED: i64 = 200;
 
 const DDL_V1: &str = r#"
@@ -45,6 +45,12 @@ CREATE INDEX IF NOT EXISTS items_timeline
   ON items (published_at DESC, first_seen_at DESC);
 "#;
 
+const MIGRATE_V1_TO_V2: &str = r#"
+ALTER TABLE subscriptions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE subscriptions ADD COLUMN pinned_at TEXT;
+ALTER TABLE items ADD COLUMN body_markdown TEXT;
+"#;
+
 pub fn feeds_db_path() -> std::path::PathBuf {
     paths::feeds_db_path()
 }
@@ -80,7 +86,27 @@ fn migrate(conn: &Connection) -> Result<(), AppError> {
     if version < 1 {
         conn.execute_batch(DDL_V1)
             .map_err(|e| AppError::message(format!("feeds migrate v1: {e}")))?;
-        set_schema_version(conn, SCHEMA_VERSION)?;
+        set_schema_version(conn, 1)?;
+    }
+    let version = schema_version(conn).unwrap_or(0);
+    if version < 2 {
+        for stmt in MIGRATE_V1_TO_V2.split(';') {
+            let s = stmt.trim();
+            if s.is_empty() {
+                continue;
+            }
+            match conn.execute_batch(&format!("{s};")) {
+                Ok(()) => {}
+                Err(e) => {
+                    let msg = e.to_string();
+                    if msg.contains("duplicate column name") {
+                        continue;
+                    }
+                    return Err(AppError::message(format!("feeds migrate v2: {e}")));
+                }
+            }
+        }
+        set_schema_version(conn, 2)?;
     }
     Ok(())
 }
@@ -128,6 +154,48 @@ mod tests {
         drop(conn);
         let conn2 = ensure_feeds_at(&db).expect("reopen");
         assert_eq!(schema_version(&conn2).unwrap(), SCHEMA_VERSION);
+        conn2
+            .execute_batch(
+                "SELECT pinned, pinned_at FROM subscriptions; SELECT body_markdown FROM items;",
+            )
+            .expect("v2 columns");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn migrates_v1_to_v2() {
+        let dir = std::env::temp_dir().join(format!(
+            "agentero-feeds-schema-v1-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("feeds.sqlite");
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(DDL_V1).unwrap();
+            conn.execute(
+                "INSERT INTO schema_meta(key, value) VALUES('schema_version', '1')",
+                [],
+            )
+            .unwrap();
+        }
+        let conn = ensure_feeds_at(&db).expect("migrate");
+        assert_eq!(schema_version(&conn).unwrap(), 2);
+        conn.execute(
+            "INSERT INTO subscriptions (id, url, title, added_at, pinned) VALUES ('a', 'https://ex.com/f', 't', 'now', 1)",
+            [],
+        )
+        .unwrap();
+        let pinned: i64 = conn
+            .query_row("SELECT pinned FROM subscriptions WHERE id = 'a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(pinned, 1);
         let _ = fs::remove_dir_all(&dir);
     }
 }

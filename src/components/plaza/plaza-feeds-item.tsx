@@ -11,8 +11,9 @@ import {
 	ExternalLink,
 	Loader2,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { MessageResponse } from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -21,11 +22,11 @@ import {
 } from "@/components/ui/tooltip";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { cn } from "@/lib/core/utils";
-import { sanitizeEmbeddedHtml } from "@/lib/markdown/html-sanitize";
 import {
 	cleanFeedSummary,
 	type FeedItem,
 	feedsMarkImported,
+	feedsResolveBody,
 	importFeedPaper,
 } from "@/lib/plaza/feeds";
 
@@ -135,25 +136,44 @@ export function PlazaFeedItemDetail({
 	hideSource,
 	onBack,
 	onImported,
+	onResolved,
 }: {
 	item: FeedItem;
 	hideSource: boolean;
 	onBack: () => void;
 	onImported: (next: FeedItem) => void;
+	onResolved: (next: FeedItem) => void;
 }) {
 	const { t, i18n } = useTranslation("sidebar");
 	const [busy, setBusy] = useState(false);
+	const [resolving, setResolving] = useState(!item.bodyMarkdown);
 	const when = formatFeedWhen(item.publishedAt, i18n.language);
-	const summary = cleanFeedSummary(item.summaryText);
 	const href = item.url ?? item.paperUrl;
 	const imported = Boolean(item.importedAt);
 	const isPaper = Boolean(item.paperUrl);
-	const html = useMemo(() => {
-		if (!item.contentHtml) return "";
-		const cleaned = cleanFeedSummary(item.contentHtml);
-		if (cleaned.length <= summary.length + 20) return "";
-		return sanitizeEmbeddedHtml(item.contentHtml);
-	}, [item.contentHtml, summary.length]);
+	const body = item.bodyMarkdown?.trim() || cleanFeedSummary(item.summaryText);
+
+	useEffect(() => {
+		if (item.bodyMarkdown?.trim()) {
+			setResolving(false);
+			return;
+		}
+		let cancelled = false;
+		setResolving(true);
+		void feedsResolveBody(item.id)
+			.then((next) => {
+				if (!cancelled) onResolved(next);
+			})
+			.catch(() => {
+				/* keep the RSS excerpt already on screen */
+			})
+			.finally(() => {
+				if (!cancelled) setResolving(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [item.bodyMarkdown, item.id, onResolved]);
 
 	const importPaper = useCallback(async () => {
 		if (busy || imported || !item.paperUrl) return;
@@ -232,7 +252,17 @@ export function PlazaFeedItemDetail({
 				) : null}
 			</div>
 			<div className="agentero-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4">
-				<h1 className="font-medium text-base leading-snug">{item.title}</h1>
+				<div className="flex items-start gap-2">
+					<h1 className="min-w-0 flex-1 font-medium text-base leading-snug">
+						{item.title}
+					</h1>
+					{resolving ? (
+						<Loader2
+							className="mt-1 size-3.5 shrink-0 animate-spin text-muted-foreground"
+							aria-label={t("plaza.feeds.loadingBody")}
+						/>
+					) : null}
+				</div>
 				{(when || (!hideSource && item.subscriptionTitle)) && (
 					<p className="mt-1 text-muted-foreground text-xs">
 						{hideSource
@@ -240,16 +270,10 @@ export function PlazaFeedItemDetail({
 							: [item.subscriptionTitle, when].filter(Boolean).join(" · ")}
 					</p>
 				)}
-				{html ? (
-					<div
-						className="prose prose-sm dark:prose-invert mt-4 max-w-none text-sm leading-relaxed"
-						// biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized above
-						dangerouslySetInnerHTML={{ __html: html }}
-					/>
-				) : summary ? (
-					<p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed">
-						{summary}
-					</p>
+				{body ? (
+					<MessageResponse className="prose prose-sm dark:prose-invert mt-4 max-w-none text-sm leading-relaxed">
+						{body}
+					</MessageResponse>
 				) : null}
 			</div>
 		</div>

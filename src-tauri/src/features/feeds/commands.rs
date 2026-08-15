@@ -1,8 +1,8 @@
 //! Tauri commands for plaza feed subscriptions.
 
 use super::{
-    add_and_fetch, items as list_items, list, mark_imported, refresh, remove, rename, FeedItem,
-    FeedItemsPage, FeedList, FeedRefreshResult, FeedSub,
+    add_and_fetch, items as list_items, list, mark_imported, refresh, remove, rename, resolve_body,
+    set_pinned, FeedItem, FeedItemsPage, FeedList, FeedRefreshResult, FeedSub,
 };
 use crate::core::error::{map_err, ApiResult};
 use serde::Deserialize;
@@ -111,6 +111,29 @@ pub async fn feeds_items(args: FeedsItemsArgs) -> ApiResult<FeedItemsPage> {
 #[tauri::command]
 pub async fn feeds_mark_imported(args: FeedsIdArgs) -> ApiResult<FeedItem> {
     match mark_imported(&args.id) {
+        Ok(data) => ApiResult::ok(data),
+        Err(e) => map_err(e),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedsSetPinnedArgs {
+    pub id: String,
+    pub pinned: bool,
+}
+
+#[tauri::command]
+pub async fn feeds_set_pinned(args: FeedsSetPinnedArgs) -> ApiResult<FeedSub> {
+    match set_pinned(&args.id, args.pinned) {
+        Ok(data) => ApiResult::ok(data),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+pub async fn feeds_resolve_body(args: FeedsIdArgs) -> ApiResult<FeedItem> {
+    match resolve_body(&args.id).await {
         Ok(data) => ApiResult::ok(data),
         Err(e) => map_err(e),
     }

@@ -4,6 +4,7 @@
 //!
 //! @see docs/development/plaza-feeds.md
 
+mod body;
 mod parse;
 mod schema;
 
@@ -12,6 +13,10 @@ pub mod commands;
 
 use crate::core::error::AppError;
 use crate::features::network;
+use body::{
+    extract_article_html, html_to_markdown, is_fetchable_http_url, is_paper_landing_url,
+    looks_truncated, strip_leading_title,
+};
 use chrono::Utc;
 use parse::{
     discover_feed_href, looks_like_html, normalize_feed_url, parse_feed_bytes, resolve_href,
@@ -39,6 +44,8 @@ pub struct FeedSub {
     pub last_fetched_at: Option<String>,
     pub last_error: Option<String>,
     pub item_count: i64,
+    pub pinned: bool,
+    pub pinned_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -54,6 +61,7 @@ pub struct FeedItem {
     pub content_html: Option<String>,
     pub paper_url: Option<String>,
     pub imported_at: Option<String>,
+    pub body_markdown: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -130,6 +138,15 @@ async fn http_get(
     etag: Option<&str>,
     last_modified: Option<&str>,
 ) -> Result<RawFetch, AppError> {
+    http_get_accept(url, etag, last_modified, None).await
+}
+
+async fn http_get_accept(
+    url: &str,
+    etag: Option<&str>,
+    last_modified: Option<&str>,
+    accept: Option<&str>,
+) -> Result<RawFetch, AppError> {
     let client = http_client()?;
     let mut req = client.get(url);
     if let Some(tag) = etag.filter(|s| !s.is_empty()) {
@@ -137,6 +154,9 @@ async fn http_get(
     }
     if let Some(lm) = last_modified.filter(|s| !s.is_empty()) {
         req = req.header(reqwest::header::IF_MODIFIED_SINCE, lm);
+    }
+    if let Some(accept) = accept.filter(|s| !s.is_empty()) {
+        req = req.header(reqwest::header::ACCEPT, accept);
     }
     let res = req
         .send()
@@ -237,22 +257,28 @@ async fn fetch_and_parse_inner(
 fn list_subs(conn: &Connection) -> Result<Vec<FeedSub>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT s.id, s.url, s.title, s.added_at, s.last_fetched_at, s.last_error,
-                (SELECT COUNT(*) FROM items i WHERE i.subscription_id = s.id)
+                (SELECT COUNT(*) FROM items i WHERE i.subscription_id = s.id),
+                s.pinned, s.pinned_at
          FROM subscriptions s
-         ORDER BY s.added_at ASC",
+         ORDER BY s.pinned DESC, s.pinned_at DESC, s.added_at ASC",
     )?;
-    let rows = stmt.query_map([], |row| {
-        Ok(FeedSub {
-            id: row.get(0)?,
-            url: row.get(1)?,
-            title: row.get(2)?,
-            added_at: row.get(3)?,
-            last_fetched_at: row.get(4)?,
-            last_error: row.get(5)?,
-            item_count: row.get(6)?,
-        })
-    })?;
+    let rows = stmt.query_map([], map_feed_sub)?;
     rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
+}
+
+fn map_feed_sub(row: &rusqlite::Row<'_>) -> rusqlite::Result<FeedSub> {
+    let pinned_raw: i64 = row.get(7)?;
+    Ok(FeedSub {
+        id: row.get(0)?,
+        url: row.get(1)?,
+        title: row.get(2)?,
+        added_at: row.get(3)?,
+        last_fetched_at: row.get(4)?,
+        last_error: row.get(5)?,
+        item_count: row.get(6)?,
+        pinned: pinned_raw != 0,
+        pinned_at: row.get(8)?,
+    })
 }
 
 fn get_sub(conn: &Connection, id: &str) -> Result<FeedSub, AppError> {
@@ -350,7 +376,11 @@ fn upsert_items(conn: &Connection, sub_id: &str, items: &[ParsedItem]) -> Result
                 published_at = excluded.published_at,
                 summary_text = excluded.summary_text,
                 content_html = excluded.content_html,
-                paper_url = excluded.paper_url",
+                paper_url = excluded.paper_url,
+                body_markdown = CASE
+                    WHEN items.url IS excluded.url THEN items.body_markdown
+                    ELSE NULL
+                END",
             params![
                 Uuid::new_v4().to_string(),
                 sub_id,
@@ -446,7 +476,7 @@ fn query_items(
 ) -> Result<Vec<FeedItem>, AppError> {
     let mut sql = String::from(
         "SELECT i.id, i.subscription_id, s.title, i.title, i.url, i.published_at,
-                i.summary_text, i.content_html, i.paper_url, i.imported_at
+                i.summary_text, i.content_html, i.paper_url, i.imported_at, i.body_markdown
          FROM items i
          JOIN subscriptions s ON s.id = i.subscription_id
          WHERE 1=1",
@@ -471,20 +501,7 @@ fn query_items(
 
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt
-        .query_map(rusqlite::params_from_iter(binds), |row| {
-            Ok(FeedItem {
-                id: row.get(0)?,
-                subscription_id: row.get(1)?,
-                subscription_title: row.get(2)?,
-                title: row.get(3)?,
-                url: row.get(4)?,
-                published_at: row.get(5)?,
-                summary_text: row.get(6)?,
-                content_html: row.get(7)?,
-                paper_url: row.get(8)?,
-                imported_at: row.get(9)?,
-            })
-        })?
+        .query_map(rusqlite::params_from_iter(binds), map_item_row)?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
 }
@@ -536,29 +553,167 @@ pub fn mark_imported(id: &str) -> Result<FeedItem, AppError> {
     if n == 0 {
         return Err(AppError::message("feeds.not_found"));
     }
+    get_item(&conn, id)
+}
+
+fn map_item_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<FeedItem> {
+    Ok(FeedItem {
+        id: row.get(0)?,
+        subscription_id: row.get(1)?,
+        subscription_title: row.get(2)?,
+        title: row.get(3)?,
+        url: row.get(4)?,
+        published_at: row.get(5)?,
+        summary_text: row.get(6)?,
+        content_html: row.get(7)?,
+        paper_url: row.get(8)?,
+        imported_at: row.get(9)?,
+        body_markdown: row.get(10)?,
+    })
+}
+
+fn get_item(conn: &Connection, id: &str) -> Result<FeedItem, AppError> {
     conn.query_row(
         "SELECT i.id, i.subscription_id, s.title, i.title, i.url, i.published_at,
-                i.summary_text, i.content_html, i.paper_url, i.imported_at
+                i.summary_text, i.content_html, i.paper_url, i.imported_at, i.body_markdown
          FROM items i JOIN subscriptions s ON s.id = i.subscription_id
          WHERE i.id = ?1",
         [id],
-        |row| {
-            Ok(FeedItem {
-                id: row.get(0)?,
-                subscription_id: row.get(1)?,
-                subscription_title: row.get(2)?,
-                title: row.get(3)?,
-                url: row.get(4)?,
-                published_at: row.get(5)?,
-                summary_text: row.get(6)?,
-                content_html: row.get(7)?,
-                paper_url: row.get(8)?,
-                imported_at: row.get(9)?,
-            })
-        },
+        map_item_row,
     )
     .optional()?
     .ok_or_else(|| AppError::message("feeds.not_found"))
+}
+
+pub fn set_pinned(id: &str, pinned: bool) -> Result<FeedSub, AppError> {
+    let conn = ensure_feeds()?;
+    let n = if pinned {
+        conn.execute(
+            "UPDATE subscriptions SET pinned = 1, pinned_at = ?1 WHERE id = ?2",
+            params![now_rfc3339(), id],
+        )?
+    } else {
+        conn.execute(
+            "UPDATE subscriptions SET pinned = 0, pinned_at = NULL WHERE id = ?1",
+            [id],
+        )?
+    };
+    if n == 0 {
+        return Err(AppError::message("feeds.not_found"));
+    }
+    get_sub(&conn, id)
+}
+
+fn markdown_from_rss(item: &FeedItem) -> String {
+    if let Some(html) = item
+        .content_html
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let md = html_to_markdown(html);
+        if !md.is_empty() {
+            return strip_leading_title(&md, &item.title);
+        }
+    }
+    item.summary_text.trim().to_string()
+}
+
+fn item_with_body(mut item: FeedItem, body: String) -> FeedItem {
+    item.body_markdown = Some(body);
+    item
+}
+
+fn persist_body(conn: &Connection, id: &str, body: &str) -> Result<FeedItem, AppError> {
+    conn.execute(
+        "UPDATE items SET body_markdown = ?1 WHERE id = ?2",
+        params![body, id],
+    )?;
+    get_item(conn, id)
+}
+
+async fn fetch_article_markdown(url: &str, title: &str) -> Result<String, AppError> {
+    let raw = http_get_accept(
+        url,
+        None,
+        None,
+        Some("text/html,application/xhtml+xml;q=0.9,*/*;q=0.8"),
+    )
+    .await?;
+    if !(200..300).contains(&raw.status) {
+        return Err(AppError::message(format!("feeds.http:{}", raw.status)));
+    }
+    let body = String::from_utf8_lossy(&raw.body);
+    if looks_like_html(&raw.content_type, &body) {
+        let article = extract_article_html(&body);
+        let md = html_to_markdown(&article);
+        if md.trim().is_empty() {
+            return Err(AppError::message("feeds.body"));
+        }
+        return Ok(strip_leading_title(&md, title));
+    }
+    let text = body.trim();
+    if text.is_empty() {
+        return Err(AppError::message("feeds.body"));
+    }
+    Ok(text.to_string())
+}
+
+/// Resolve a full article body for the detail page. RSS often only ships an
+/// excerpt ending in `[...]`; opening the item fetches `item.url` and converts
+/// HTML → Markdown. Cached in `items.body_markdown`.
+pub async fn resolve_body(id: &str) -> Result<FeedItem, AppError> {
+    let existing = {
+        let conn = ensure_feeds()?;
+        get_item(&conn, id)?
+    };
+    if let Some(md) = existing
+        .body_markdown
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    {
+        return Ok(item_with_body(existing, md));
+    }
+    let rss = markdown_from_rss(&existing);
+    let skip_fetch = is_paper_landing_url(existing.url.as_deref());
+    let need_fetch = !skip_fetch
+        && existing.url.as_deref().is_some_and(is_fetchable_http_url)
+        && (looks_truncated(&rss) || rss.chars().count() < 400);
+    if !need_fetch {
+        let body = if rss.is_empty() {
+            existing.summary_text.clone()
+        } else {
+            rss
+        };
+        let conn = ensure_feeds()?;
+        return persist_body(&conn, id, &body);
+    }
+    let url = existing.url.clone().unwrap_or_default();
+    match fetch_article_markdown(&url, &existing.title).await {
+        Ok(article) if !article.trim().is_empty() => {
+            let chosen = if article.chars().count() + 40 >= rss.chars().count() {
+                article
+            } else {
+                rss
+            };
+            let conn = ensure_feeds()?;
+            persist_body(&conn, id, &chosen)
+        }
+        Ok(_) | Err(_) => {
+            let fallback = if rss.is_empty() {
+                existing.summary_text.clone()
+            } else {
+                rss
+            };
+            if looks_truncated(&fallback) {
+                return Ok(item_with_body(existing, fallback));
+            }
+            let conn = ensure_feeds()?;
+            persist_body(&conn, id, &fallback)
+        }
+    }
 }
 
 pub fn items(
@@ -702,6 +857,18 @@ mod tests {
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].id, id);
         assert_eq!(listed[0].title, "Example");
+        assert!(!listed[0].pinned);
+
+        let later = insert_subscription(&conn, "https://example.com/later.xml", "Later").unwrap();
+        conn.execute(
+            "UPDATE subscriptions SET pinned = 1, pinned_at = ?1 WHERE id = ?2",
+            params!["2026-08-15T00:00:00Z", later],
+        )
+        .unwrap();
+        let listed = list_subs(&conn).unwrap();
+        assert_eq!(listed[0].id, later);
+        assert!(listed[0].pinned);
+        assert_eq!(listed[1].id, id);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

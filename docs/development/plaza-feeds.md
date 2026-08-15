@@ -72,7 +72,7 @@
 
 | 区域 | 行为 |
 |---|---|
-| 左栏 | 有订阅后才出现：固定 `w-52`（约 13rem）。「全部」+ 订阅列表；选中过滤右栏。右键：重命名 / 删除 / 复制 URL / 立即刷新 |
+| 左栏 | 有订阅后才出现：固定 `w-52`（约 13rem）。「全部」+ 订阅列表；选中过滤右栏。右键：重命名 / 复制 URL / 立即刷新 / 置顶 / **删除**。置顶的源钉在列表最上 |
 | 右栏 | 时间倒序。`@tanstack/react-virtual` 窗口化。MVP 不做未读徽章，也**不做**「全部 / 论文 / 其它」顶栏 |
 | 顶条 | 有订阅后：全宽输入 + 添加 + 刷新。无订阅：输入与芯片画在中间空态，不占顶栏 |
 | 空态（无订阅） | 居中添加框 + arXiv 芯片 + 一句提示；点芯片即订阅 |
@@ -97,12 +97,12 @@ MVP **不做**：`@handle` 展开、OPML、登录态、RSSHub 拼接。
 | 卡片 | 判定 | 展示 | 主操作 |
 |---|---|---|---|
 | **列表卡** | 全部条目 | 标题；「全部」下显示来源+日期，单源下日期与标题同行。摘要去掉 arXiv 编号 / Announce Type | 点卡片进详情 |
-| **详情** | 同上 | 全文摘要；入库 / 打开原文在详情顶栏 | 返回列表 |
+| **详情** | 同上 | 打开时解析全文（RSS 摘要不够则抓 `item.url` → HTML→Markdown），用 `MessageResponse` 渲染标题 / 公式；入库 / 打开原文在详情顶栏 | 返回列表 |
 
 - 入库复用 `importPlazaPaper` / `lookupSubmit`：arXiv 喂 `https://arxiv.org/abs/{id}`；DOI 喂 `https://doi.org/{doi}`。`openImported: false`。
 - 入库中按钮 busy；成功 Toast + 该行变为「已入库」（本机缓存记 `importedAt`，刷新不丢）。
 - 失败 `notifyError`，不在侧栏挂错误条。
-- 摘要若来自 HTML：Host 存原文，前端渲染走 `sanitizeEmbeddedHtml`；卡片默认只示纯文本 3 行，不展开全文阅读器。
+- 列表卡摘要只示纯文本 3 行。详情打开时走 `feeds_resolve_body`：已缓存 `bodyMarkdown` 则直接用；否则若 RSS 已是全文（或 arXiv / DOI 落地页）转 Markdown；博客摘要带 `[...]` 则抓原文 HTML，抽 `<article>` / 常见正文容器后 `htmd` 成 Markdown。渲染复用 `MessageResponse`（Streamdown + `$…$`）。
 - 点标题 = 主操作。另给一个外链图标，论文卡也可打开原文。
 
 不做第三种「提醒卡」、图墙、视频墙、全文阅读栏（经典三栏的第三栏）。
@@ -131,7 +131,9 @@ CREATE TABLE subscriptions (
   last_fetched_at TEXT,
   last_error    TEXT,
   etag          TEXT,
-  last_modified TEXT
+  last_modified TEXT,
+  pinned        INTEGER NOT NULL DEFAULT 0,
+  pinned_at     TEXT
 );
 
 CREATE TABLE items (
@@ -146,6 +148,7 @@ CREATE TABLE items (
   paper_url     TEXT,               -- 抽出的 arXiv abs / doi.org，可空
   imported_at   TEXT,               -- 本机入库成功时间，可空
   first_seen_at TEXT NOT NULL,
+  body_markdown TEXT,               -- 详情页全文（打开时解析，可空）
   UNIQUE (subscription_id, guid)
 );
 
@@ -183,15 +186,17 @@ CREATE INDEX items_timeline ON items (published_at DESC, first_seen_at DESC);
 
 | Command | 入参 | 出参 | 说明 |
 |---|---|---|---|
-| `feeds_list` | — | `{ subscriptions: FeedSub[] }` | 含 `lastError` / `lastFetchedAt` / `itemCount` |
+| `feeds_list` | — | `{ subscriptions: FeedSub[] }` | 含 `lastError` / `lastFetchedAt` / `itemCount` / `pinned`；置顶在前 |
 | `feeds_add` | `{ url, title? }` | `FeedSub` | 归一化 URL；必要时做 HTML 自动发现；插入后拉一次 |
 | `feeds_remove` | `{ id }` | — | CASCADE 删条目 |
 | `feeds_rename` | `{ id, title }` | `FeedSub` | 只改显示名 |
+| `feeds_set_pinned` | `{ id, pinned }` | `FeedSub` | 钉到列表最上；再钉的排在已钉的前面 |
 | `feeds_refresh` | `{ id?, staleOnly? }` | `{ subscriptions, fetched, failed }` | `id` 空 = 全部（并发 4）；`staleOnly` 只拉超过 15 分钟的源 |
 | `feeds_items` | `{ subscriptionId?, filter?: "all"\|"paper"\|"other", limit?, beforePublishedAt?, beforeId? }` | `{ items: FeedItem[] }` | 游标为 `(published_at, id)`；默认 limit 100 |
 | `feeds_mark_imported` | `{ id }` | `FeedItem` | 写入 `importedAt`，刷新不丢 |
+| `feeds_resolve_body` | `{ id }` | `FeedItem` | 打开详情时解析全文，写入 `bodyMarkdown` |
 
-`FeedItem` 至少：`id, subscriptionId, subscriptionTitle, title, url, publishedAt, summaryText, paperUrl, importedAt`。`contentHtml` 列表接口不返回（卡片用不到）。
+`FeedItem` 至少：`id, subscriptionId, subscriptionTitle, title, url, publishedAt, summaryText, paperUrl, importedAt, bodyMarkdown`。`contentHtml` 留给 Host 转 Markdown，卡片不用。
 
 远程 Vault 会话同样可用（不碰 Vault IO）。
 
@@ -216,7 +221,7 @@ UI 约束（与广场其它面板一致）：
 
 - 图标按钮有 aria-label + Tooltip。
 - 无常驻解释文案；空态那几行是唯一例外。
-- 不引 AI Elements 对话件，不用 Library 表格。
+- 详情正文复用 `MessageResponse`（只当 Markdown 渲染，不当对话件）。不用 Library 表格。
 - `prefers-reduced-motion` 下虚拟列表瞬间定位。
 
 ## 7. 分阶段（本篇 = MVP）
