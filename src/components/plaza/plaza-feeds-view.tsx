@@ -6,7 +6,7 @@
 
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TFunction } from "i18next";
-import { Pin, Plus, RefreshCw } from "lucide-react";
+import { EllipsisVertical, Pin, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -14,13 +14,6 @@ import {
 	PlazaFeedItemRow,
 } from "@/components/plaza/plaza-feeds-item";
 import { Button } from "@/components/ui/button";
-import {
-	ContextMenu,
-	ContextMenuContent,
-	ContextMenuItem,
-	ContextMenuSeparator,
-	ContextMenuTrigger,
-} from "@/components/ui/context-menu";
 import {
 	Dialog,
 	DialogContent,
@@ -34,6 +27,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ViewportFloating } from "@/components/ui/viewport-floating";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { notifyError } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
@@ -63,6 +57,135 @@ function toastHostError(message: string, t: TFunction<"sidebar">): void {
 function formatHostError(message: string, t: TFunction<"sidebar">): string {
 	const key = hostErrorKey(message);
 	return key ? t(key) : message;
+}
+
+type FeedSubMenuState = { sub: FeedSub; x: number; y: number };
+
+const MENU_ITEM_CLASS =
+	"flex w-full cursor-default items-center rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground";
+
+function openFeedSubMenu(
+	sub: FeedSub,
+	event: {
+		preventDefault(): void;
+		stopPropagation(): void;
+		clientX: number;
+		clientY: number;
+	},
+	setMenu: (next: FeedSubMenuState) => void,
+): void {
+	event.preventDefault();
+	event.stopPropagation();
+	setMenu({ sub, x: event.clientX, y: event.clientY });
+}
+
+function FeedSubMenu({
+	menu,
+	onClose,
+	onRename,
+	onCopyUrl,
+	onRefresh,
+	onPin,
+	onRemove,
+}: {
+	menu: FeedSubMenuState;
+	onClose: () => void;
+	onRename: (sub: FeedSub) => void;
+	onCopyUrl: (sub: FeedSub) => void;
+	onRefresh: (sub: FeedSub) => void;
+	onPin: (sub: FeedSub) => void;
+	onRemove: (sub: FeedSub) => void;
+}) {
+	const { t } = useTranslation("sidebar");
+	const menuRef = useRef<HTMLDivElement>(null);
+
+	// Re-bind when the menu opens at a new point so the opening click
+	// does not immediately dismiss it (same pattern as the file tree).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+	useEffect(() => {
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key === "Escape") onClose();
+		};
+		const onPointer = (event: PointerEvent) => {
+			const el = menuRef.current;
+			if (el && event.target instanceof Node && el.contains(event.target)) {
+				return;
+			}
+			onClose();
+		};
+		const timer = window.setTimeout(() => {
+			window.addEventListener("pointerdown", onPointer, true);
+			window.addEventListener("keydown", onKey, true);
+			window.addEventListener("scroll", onClose, true);
+			window.addEventListener("resize", onClose);
+		}, 0);
+		return () => {
+			window.clearTimeout(timer);
+			window.removeEventListener("pointerdown", onPointer, true);
+			window.removeEventListener("keydown", onKey, true);
+			window.removeEventListener("scroll", onClose, true);
+			window.removeEventListener("resize", onClose);
+		};
+	}, [menu, onClose]);
+
+	const run = (action: (sub: FeedSub) => void) => {
+		action(menu.sub);
+		onClose();
+	};
+
+	return (
+		<ViewportFloating
+			floatingRef={menuRef}
+			point={{ x: menu.x, y: menu.y }}
+			role="menu"
+			className="z-[2000] min-w-40 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+		>
+			<button
+				type="button"
+				role="menuitem"
+				className={MENU_ITEM_CLASS}
+				onClick={() => run(onRename)}
+			>
+				{t("plaza.feeds.rename")}
+			</button>
+			<button
+				type="button"
+				role="menuitem"
+				className={MENU_ITEM_CLASS}
+				onClick={() => run(onCopyUrl)}
+			>
+				{t("plaza.feeds.copyUrl")}
+			</button>
+			<button
+				type="button"
+				role="menuitem"
+				className={MENU_ITEM_CLASS}
+				onClick={() => run(onRefresh)}
+			>
+				{t("plaza.feeds.refreshOne")}
+			</button>
+			<button
+				type="button"
+				role="menuitem"
+				className={MENU_ITEM_CLASS}
+				onClick={() => run(onPin)}
+			>
+				{menu.sub.pinned ? t("plaza.feeds.unpin") : t("plaza.feeds.pin")}
+			</button>
+			<div className="-mx-1 my-1 h-px bg-border" />
+			<button
+				type="button"
+				role="menuitem"
+				className={cn(
+					MENU_ITEM_CLASS,
+					"text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10 focus:text-destructive",
+				)}
+				onClick={() => run(onRemove)}
+			>
+				{t("plaza.feeds.remove")}
+			</button>
+		</ViewportFloating>
+	);
 }
 
 function AddForm({
@@ -167,7 +290,9 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const [renameTarget, setRenameTarget] = useState<FeedSub | null>(null);
 	const [renameTitle, setRenameTitle] = useState("");
 	const [openItem, setOpenItem] = useState<FeedItem | null>(null);
+	const [subMenu, setSubMenu] = useState<FeedSubMenuState | null>(null);
 	const listRef = useRef<HTMLDivElement>(null);
+	const closeSubMenu = useCallback(() => setSubMenu(null), []);
 
 	const loadItems = useCallback(
 		async (subscriptionId: string | null) => {
@@ -411,84 +536,64 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 								{t("plaza.feeds.all")}
 							</button>
 							{subs.map((sub) => (
-								<ContextMenu key={sub.id}>
-									<ContextMenuTrigger asChild>
-										<button
-											type="button"
-											onClick={() => {
-												setSelectedId(sub.id);
-												void loadItems(sub.id);
-											}}
-											className={cn(
-												"mt-0.5 flex w-full flex-col rounded-md px-2 py-1.5 text-left",
-												"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-												selectedId === sub.id
-													? "bg-muted text-foreground"
-													: "hover:bg-muted/60",
-											)}
-										>
-											<span className="flex min-w-0 items-center gap-1">
-												{sub.pinned ? (
-													<Pin
-														className="size-3 shrink-0 text-muted-foreground"
-														aria-hidden
-													/>
-												) : null}
-												<span className="truncate text-sm">{sub.title}</span>
-											</span>
-											{sub.lastError ? (
-												<span className="truncate text-destructive text-xs">
-													{formatHostError(sub.lastError, t)}
-												</span>
+								<div key={sub.id} className="group/feed relative mt-0.5">
+									<button
+										type="button"
+										onClick={() => {
+											setSelectedId(sub.id);
+											void loadItems(sub.id);
+										}}
+										onContextMenu={(event) =>
+											openFeedSubMenu(sub, event, setSubMenu)
+										}
+										className={cn(
+											"flex w-full flex-col rounded-md py-1.5 pr-7 pl-2 text-left",
+											"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+											selectedId === sub.id
+												? "bg-muted text-foreground"
+												: "hover:bg-muted/60",
+										)}
+									>
+										<span className="flex min-w-0 items-center gap-1">
+											{sub.pinned ? (
+												<Pin
+													className="size-3 shrink-0 text-muted-foreground"
+													aria-hidden
+												/>
 											) : null}
-										</button>
-									</ContextMenuTrigger>
-									<ContextMenuContent>
-										<ContextMenuItem
-											onSelect={() => {
-												setRenameTarget(sub);
-												setRenameTitle(sub.title);
-											}}
-										>
-											{t("plaza.feeds.rename")}
-										</ContextMenuItem>
-										<ContextMenuItem
-											onSelect={() =>
-												void copyTextToClipboard(sub.url, {
-													successMessage: t("plaza.feeds.copiedUrl"),
-												})
-											}
-										>
-											{t("plaza.feeds.copyUrl")}
-										</ContextMenuItem>
-										<ContextMenuItem
-											onSelect={() =>
-												void feedsRefresh({ id: sub.id }).then((result) => {
-													setSubs(
-														[...result.subscriptions].sort(compareFeedSubs),
-													);
-													void loadItems(selectedId);
-												})
-											}
-										>
-											{t("plaza.feeds.refreshOne")}
-										</ContextMenuItem>
-										<ContextMenuItem
-											onSelect={() => void onPin(sub.id, !sub.pinned)}
-										>
-											{sub.pinned
-												? t("plaza.feeds.unpin")
-												: t("plaza.feeds.pin")}
-										</ContextMenuItem>
-										<ContextMenuSeparator />
-										<ContextMenuItem
-											className="text-destructive focus:text-destructive"
-											onSelect={() => void onRemove(sub.id)}
-										>
-											{t("plaza.feeds.remove")}
-										</ContextMenuItem>
-									</ContextMenuContent>
-								</ContextMenu>
+											<span className="truncate text-sm">{sub.title}</span>
+										</span>
+										{sub.lastError ? (
+											<span className="truncate text-destructive text-xs">
+												{formatHostError(sub.lastError, t)}
+											</span>
+										) : null}
+									</button>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-sm"
+												className="absolute top-1 right-0.5 size-6 opacity-0 group-hover/feed:opacity-100 focus-visible:opacity-100"
+												aria-label={t("plaza.feeds.more")}
+												onClick={(event) => {
+													event.stopPropagation();
+													const rect =
+														event.currentTarget.getBoundingClientRect();
+													setSubMenu({
+														sub,
+														x: rect.right,
+														y: rect.bottom,
+													});
+												}}
+											>
+												<EllipsisVertical className="size-3.5" aria-hidden />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent>{t("plaza.feeds.more")}</TooltipContent>
+									</Tooltip>
+								</div>
 							))}
 						</div>
 					</nav>
@@ -542,6 +647,30 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 					</div>
 				</div>
 			)}
+
+			{subMenu ? (
+				<FeedSubMenu
+					menu={subMenu}
+					onClose={closeSubMenu}
+					onRename={(sub) => {
+						setRenameTarget(sub);
+						setRenameTitle(sub.title);
+					}}
+					onCopyUrl={(sub) =>
+						void copyTextToClipboard(sub.url, {
+							successMessage: t("plaza.feeds.copiedUrl"),
+						})
+					}
+					onRefresh={(sub) =>
+						void feedsRefresh({ id: sub.id }).then((result) => {
+							setSubs([...result.subscriptions].sort(compareFeedSubs));
+							void loadItems(selectedId);
+						})
+					}
+					onPin={(sub) => void onPin(sub.id, !sub.pinned)}
+					onRemove={(sub) => void onRemove(sub.id)}
+				/>
+			) : null}
 
 			<Dialog
 				open={renameTarget !== null}
