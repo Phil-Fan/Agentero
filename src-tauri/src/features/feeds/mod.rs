@@ -51,6 +51,7 @@ pub struct FeedItem {
     pub url: Option<String>,
     pub published_at: Option<String>,
     pub summary_text: String,
+    pub content_html: Option<String>,
     pub paper_url: Option<String>,
     pub imported_at: Option<String>,
 }
@@ -445,7 +446,7 @@ fn query_items(
 ) -> Result<Vec<FeedItem>, AppError> {
     let mut sql = String::from(
         "SELECT i.id, i.subscription_id, s.title, i.title, i.url, i.published_at,
-                i.summary_text, i.paper_url, i.imported_at
+                i.summary_text, i.content_html, i.paper_url, i.imported_at
          FROM items i
          JOIN subscriptions s ON s.id = i.subscription_id
          WHERE 1=1",
@@ -479,8 +480,9 @@ fn query_items(
                 url: row.get(4)?,
                 published_at: row.get(5)?,
                 summary_text: row.get(6)?,
-                paper_url: row.get(7)?,
-                imported_at: row.get(8)?,
+                content_html: row.get(7)?,
+                paper_url: row.get(8)?,
+                imported_at: row.get(9)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -536,7 +538,7 @@ pub fn mark_imported(id: &str) -> Result<FeedItem, AppError> {
     }
     conn.query_row(
         "SELECT i.id, i.subscription_id, s.title, i.title, i.url, i.published_at,
-                i.summary_text, i.paper_url, i.imported_at
+                i.summary_text, i.content_html, i.paper_url, i.imported_at
          FROM items i JOIN subscriptions s ON s.id = i.subscription_id
          WHERE i.id = ?1",
         [id],
@@ -549,8 +551,9 @@ pub fn mark_imported(id: &str) -> Result<FeedItem, AppError> {
                 url: row.get(4)?,
                 published_at: row.get(5)?,
                 summary_text: row.get(6)?,
-                paper_url: row.get(7)?,
-                imported_at: row.get(8)?,
+                content_html: row.get(7)?,
+                paper_url: row.get(8)?,
+                imported_at: row.get(9)?,
             })
         },
     )
@@ -625,12 +628,54 @@ pub async fn add_and_fetch(url: String, title: Option<String>) -> Result<FeedSub
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .unwrap_or_else(|| title_from_url(&url));
-    let id = {
-        let conn = ensure_feeds()?;
-        insert_subscription(&conn, &url, &fallback)?
-    };
     let outcome = fetch_and_parse(&url, None, None, &fallback).await;
-    apply_add_fetch(&id, outcome)
+    match outcome {
+        FetchOutcome::Failed(err) => Err(AppError::message(err)),
+        FetchOutcome::NotModified { .. } => Err(AppError::message("feeds.empty")),
+        FetchOutcome::Body {
+            url: final_url,
+            etag,
+            last_modified,
+            parsed,
+        } => {
+            if parsed.items.is_empty() {
+                return Err(AppError::message("feeds.empty"));
+            }
+            let title = if fallback == title_from_url(&url) {
+                parsed.title.clone()
+            } else {
+                fallback
+            };
+            let id = {
+                let conn = ensure_feeds()?;
+                insert_subscription(&conn, &final_url, &title)?
+            };
+            apply_add_fetch(
+                &id,
+                FetchOutcome::Body {
+                    url: final_url,
+                    etag,
+                    last_modified,
+                    parsed,
+                },
+            )
+        }
+    }
+}
+
+pub fn remove_by_ref(target: &str) -> Result<FeedSub, AppError> {
+    let conn = ensure_feeds()?;
+    let trimmed = target.trim();
+    let sub = list_subs(&conn)?.into_iter().find(|row| {
+        row.id == trimmed
+            || row.url == trimmed
+            || normalize_feed_url(trimmed).ok().as_deref() == Some(row.url.as_str())
+    });
+    let Some(sub) = sub else {
+        return Err(AppError::message("feeds.not_found"));
+    };
+    conn.execute("DELETE FROM subscriptions WHERE id = ?1", [&sub.id])?;
+    Ok(sub)
 }
 
 #[cfg(test)]

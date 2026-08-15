@@ -28,6 +28,7 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 | `layout` | 侧栏同构版面索引：`list` / `get`（figure / table / algorithm / formula） |
 | `mark` | 阅读标注：`list` / `get` / `add --region` / `delete`（区域锚点优先） |
 | `usage` | 本机活动日志：`which` / `timeline` / `summary` / `clear`（XDG `usage.sqlite`） |
+| `feed` | 广场订阅：`add` / `list` / `remove`（XDG `feeds.sqlite`，与 UI 共用） |
 
 稳定 `--json` 输出，供脚本与外部 Agent 组合。
 

@@ -9,7 +9,10 @@ import type { TFunction } from "i18next";
 import { Plus, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { PlazaFeedItemRow } from "@/components/plaza/plaza-feeds-item";
+import {
+	PlazaFeedItemDetail,
+	PlazaFeedItemRow,
+} from "@/components/plaza/plaza-feeds-item";
 import { Button } from "@/components/ui/button";
 import {
 	ContextMenu,
@@ -161,6 +164,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const [refreshing, setRefreshing] = useState(false);
 	const [renameTarget, setRenameTarget] = useState<FeedSub | null>(null);
 	const [renameTitle, setRenameTitle] = useState("");
+	const [openItem, setOpenItem] = useState<FeedItem | null>(null);
 	const listRef = useRef<HTMLDivElement>(null);
 
 	const loadItems = useCallback(
@@ -170,6 +174,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 					subscriptionId: subscriptionId ?? undefined,
 				});
 				setItems(rows);
+				setOpenItem(null);
 			} catch (error) {
 				toastHostError(
 					error instanceof Error ? error.message : String(error),
@@ -437,7 +442,19 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 						</div>
 					</nav>
 					<div className="flex min-h-0 min-w-0 flex-1 flex-col">
-						{emptyItems ? (
+						{openItem ? (
+							<PlazaFeedItemDetail
+								item={openItem}
+								hideSource={selectedId !== null}
+								onBack={() => setOpenItem(null)}
+								onImported={(next) => {
+									setItems((prev) =>
+										prev.map((row) => (row.id === next.id ? next : row)),
+									);
+									setOpenItem(next);
+								}}
+							/>
+						) : emptyItems ? (
 							<div className="flex flex-1 items-center justify-center p-6 text-center text-muted-foreground text-sm">
 								{selected?.lastError
 									? formatHostError(selected.lastError, t)
@@ -466,13 +483,8 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 											>
 												<PlazaFeedItemRow
 													item={item}
-													onImported={(next) =>
-														setItems((prev) =>
-															prev.map((row) =>
-																row.id === next.id ? next : row,
-															),
-														)
-													}
+													hideSource={selectedId !== null}
+													onOpen={setOpenItem}
 												/>
 											</div>
 										);

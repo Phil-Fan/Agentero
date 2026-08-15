@@ -2,6 +2,7 @@ pub mod completion;
 pub mod config_cmd;
 pub mod doctor;
 pub mod export;
+pub mod feed;
 pub mod import;
 pub mod layout;
 pub mod mark;

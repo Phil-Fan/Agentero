@@ -6,8 +6,6 @@ use feed_rs::model::{Entry, Feed};
 use feed_rs::parser;
 use url::Url;
 
-const MAX_SUMMARY_CHARS: usize = 400;
-
 #[derive(Debug, Clone)]
 pub struct ParsedFeed {
     pub title: String,
@@ -146,7 +144,7 @@ fn parse_entry(entry: Entry) -> Option<ParsedItem> {
         .map(|t| t.content.as_str())
         .or(content_html.as_deref())
         .unwrap_or("");
-    let summary_text = truncate(&strip_html(summary_src), MAX_SUMMARY_CHARS);
+    let summary_text = clean_summary_text(summary_src);
     let paper_url = extract_paper_url(&[
         url.as_deref().unwrap_or(""),
         &entry.id,
@@ -242,6 +240,67 @@ fn find_doi(text: &str) -> Option<String> {
     }
 }
 
+/// Drop arXiv RSS boilerplate (`arXiv:…`, `Announce Type:`, `Abstract:`) so
+/// the card/detail show the actual abstract.
+pub fn clean_summary_text(input: &str) -> String {
+    let mut rest = strip_html(input);
+    loop {
+        let trimmed = rest.trim();
+        if trimmed.is_empty() {
+            return String::new();
+        }
+        let lower = trimmed.to_ascii_lowercase();
+        if let Some(next) = strip_labeled_prefix(trimmed, &lower, "arxiv:") {
+            rest = next;
+            continue;
+        }
+        if let Some(next) = strip_labeled_prefix(trimmed, &lower, "announce type:") {
+            rest = next;
+            continue;
+        }
+        if let Some(next) = strip_labeled_prefix(trimmed, &lower, "comments:") {
+            rest = next;
+            continue;
+        }
+        if let Some(next) = strip_labeled_prefix(trimmed, &lower, "subjects:") {
+            rest = next;
+            continue;
+        }
+        if let Some(next) = strip_labeled_prefix(trimmed, &lower, "journal-ref:") {
+            rest = next;
+            continue;
+        }
+        if let Some(next) = strip_labeled_prefix(trimmed, &lower, "report-no:") {
+            rest = next;
+            continue;
+        }
+        if let Some(next) = strip_labeled_prefix(trimmed, &lower, "license:") {
+            rest = next;
+            continue;
+        }
+        if let Some(next) = strip_labeled_prefix(trimmed, &lower, "abstract:") {
+            rest = next;
+            continue;
+        }
+        break;
+    }
+    rest.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn strip_labeled_prefix(orig: &str, lower: &str, label: &str) -> Option<String> {
+    if !lower.starts_with(label) {
+        return None;
+    }
+    let after = orig.get(label.len()..)?.trim_start();
+    if label == "abstract:" {
+        return Some(after.to_string());
+    }
+    let skip = after
+        .find(|c: char| c.is_whitespace())
+        .unwrap_or(after.len());
+    Some(after[skip..].trim_start().to_string())
+}
+
 pub fn strip_html(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut in_tag = false;
@@ -268,15 +327,6 @@ fn decode_entities(s: &str) -> String {
         .replace("&quot;", "\"")
         .replace("&#39;", "'")
         .replace("&apos;", "'")
-}
-
-fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        return s.to_string();
-    }
-    let mut out: String = s.chars().take(max.saturating_sub(1)).collect();
-    out.push('…');
-    out
 }
 
 fn rel_is_alternate(tag_lower: &str) -> bool {
@@ -366,6 +416,21 @@ mod tests {
         assert_eq!(
             strip_html("<p>Hello&nbsp;<b>world</b> &amp; friends</p>"),
             "Hello world & friends"
+        );
+    }
+
+    #[test]
+    fn strips_arxiv_rss_boilerplate() {
+        let raw = "arXiv:1706.03762\nAnnounce Type: new\nAbstract: The dominant sequence transduction models.";
+        assert_eq!(
+            clean_summary_text(raw),
+            "The dominant sequence transduction models."
+        );
+        assert_eq!(
+            clean_summary_text(
+                "arXiv:2608.08516 Announce Type: replace Abstract: We study transformers."
+            ),
+            "We study transformers."
         );
     }
 

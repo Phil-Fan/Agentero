@@ -26,6 +26,7 @@ export type FeedItem = {
 	url: string | null;
 	publishedAt: string | null;
 	summaryText: string;
+	contentHtml: string | null;
 	paperUrl: string | null;
 	importedAt: string | null;
 };
@@ -42,6 +43,35 @@ export const ARXIV_FEED_CHIPS = [
 
 export function arxivFeedUrl(cat: string): string {
 	return `https://rss.arxiv.org/rss/${cat}`;
+}
+
+const META_PREFIXES = [
+	"arxiv:",
+	"announce type:",
+	"comments:",
+	"subjects:",
+	"journal-ref:",
+	"report-no:",
+	"license:",
+	"abstract:",
+] as const;
+
+/** Drop arXiv RSS headers so cards show the abstract, not the id / type. */
+export function cleanFeedSummary(raw: string): string {
+	let rest = raw.replace(/<[^>]+>/g, " ").trim();
+	for (;;) {
+		const lower = rest.toLowerCase();
+		const hit = META_PREFIXES.find((prefix) => lower.startsWith(prefix));
+		if (!hit) break;
+		const after = rest.slice(hit.length).trimStart();
+		if (hit === "abstract:") {
+			rest = after;
+			continue;
+		}
+		const skip = after.search(/\s/);
+		rest = (skip === -1 ? "" : after.slice(skip)).trimStart();
+	}
+	return rest.replace(/\s+/g, " ").trim();
 }
 
 const SETTLE_TIMEOUT_MS = 120_000;
@@ -158,6 +188,7 @@ const FEED_ERROR_KEYS = {
 	duplicate: "plaza.feeds.errors.duplicate",
 	not_found: "plaza.feeds.errors.not_found",
 	empty_title: "plaza.feeds.errors.empty_title",
+	empty: "plaza.feeds.errors.empty",
 	no_feed: "plaza.feeds.errors.no_feed",
 	too_large: "plaza.feeds.errors.too_large",
 	parse: "plaza.feeds.errors.parse",

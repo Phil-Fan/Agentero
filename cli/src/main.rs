@@ -231,6 +231,11 @@ enum Commands {
         #[command(subcommand)]
         cmd: commands::usage::UsageCmd,
     },
+    /// Plaza RSS / Atom subscriptions (XDG feeds.sqlite).
+    Feed {
+        #[command(subcommand)]
+        cmd: commands::feed::FeedCmd,
+    },
     /// Open a local directory as a Vault in the desktop App.
     ///
     /// Shorthand: bare `agentero <PATH>` rewrites to this when `<PATH>` looks like
@@ -418,6 +423,7 @@ fn command_label(cmd: &Commands) -> &'static str {
         Commands::Layout { .. } => "cli.layout",
         Commands::Mark { .. } => "cli.mark",
         Commands::Usage { .. } => "cli.usage",
+        Commands::Feed { .. } => "cli.feed",
         Commands::Open { .. } => "cli.open",
         Commands::Completion { .. } => "cli.completion",
     }
@@ -454,6 +460,7 @@ async fn run(command: Commands, globals: &GlobalOpts) -> Result<serde_json::Valu
         Commands::Layout { cmd } => commands::layout::run(cmd, globals),
         Commands::Mark { cmd } => commands::mark::run(cmd, globals).await,
         Commands::Usage { cmd } => commands::usage::run(cmd, globals),
+        Commands::Feed { cmd } => commands::feed::run(cmd, globals).await,
         Commands::Open { path } => commands::open::run(&path, globals),
         Commands::Completion { .. } => unreachable!("handled before async runtime"),
     }

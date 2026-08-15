@@ -88,7 +88,7 @@
 - 标题默认用 feed `<title>`；用户可随后重命名。
 - **arXiv 芯片**（输入框下方）：`cs.AI` `cs.CL` `cs.LG` `cs.CV` `stat.ML` → `https://rss.arxiv.org/rss/{cat}`。不是新源类型，只是填 URL。
 - 重复 URL（归一化后）拒绝并 Toast，不建第二条。
-- 添加成功后立即拉一次；失败仍保存订阅，行上显示错误，不回滚。
+- 添加时先拉源：解析失败或 **0 条条目** 则不写入订阅，前端 Toast（`feeds.empty` / `feeds.fetch`）。
 
 MVP **不做**：`@handle` 展开、OPML、登录态、RSSHub 拼接。
 
@@ -96,8 +96,8 @@ MVP **不做**：`@handle` 展开、OPML、登录态、RSSHub 拼接。
 
 | 卡片 | 判定 | 展示 | 主操作 |
 |---|---|---|---|
-| **论文卡** | Host 从 link / title / summary 抽出 arXiv 或 DOI | 标题、来源名、日期、可选一行摘要 | **入库**（不自动打开论文） |
-| **短讯卡** | 其余 | 标题、来源名、日期、最多 3 行纯文本摘要 | **打开原文**（`openExternalUrl`） |
+| **列表卡** | 全部条目 | 标题；「全部」下显示来源+日期，单源下日期与标题同行。摘要去掉 arXiv 编号 / Announce Type | 点卡片进详情 |
+| **详情** | 同上 | 全文摘要；入库 / 打开原文在详情顶栏 | 返回列表 |
 
 - 入库复用 `importPlazaPaper` / `lookupSubmit`：arXiv 喂 `https://arxiv.org/abs/{id}`；DOI 喂 `https://doi.org/{doi}`。`openImported: false`。
 - 入库中按钮 busy；成功 Toast + 该行变为「已入库」（本机缓存记 `importedAt`，刷新不丢）。

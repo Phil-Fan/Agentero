@@ -1,9 +1,17 @@
 /**
- * One feed timeline row: paper card (import) or short card (open original).
+ * Feed timeline card + in-panel detail. Click opens the item; import lives
+ * on the detail page so a truncated abstract is never treated as the whole
+ * paper.
  */
 
-import { Check, Download, ExternalLink, Loader2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import {
+	ArrowLeft,
+	Check,
+	Download,
+	ExternalLink,
+	Loader2,
+} from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,13 +21,15 @@ import {
 } from "@/components/ui/tooltip";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { cn } from "@/lib/core/utils";
+import { sanitizeEmbeddedHtml } from "@/lib/markdown/html-sanitize";
 import {
+	cleanFeedSummary,
 	type FeedItem,
 	feedsMarkImported,
 	importFeedPaper,
 } from "@/lib/plaza/feeds";
 
-function formatWhen(iso: string | null, locale: string): string {
+export function formatFeedWhen(iso: string | null, locale: string): string {
 	if (!iso) return "";
 	const date = new Date(iso);
 	if (Number.isNaN(date.getTime())) return "";
@@ -38,16 +48,112 @@ function formatWhen(iso: string | null, locale: string): string {
 
 export function PlazaFeedItemRow({
 	item,
+	hideSource,
+	onOpen,
+}: {
+	item: FeedItem;
+	hideSource: boolean;
+	onOpen: (item: FeedItem) => void;
+}) {
+	const { t, i18n } = useTranslation("sidebar");
+	const when = formatFeedWhen(item.publishedAt, i18n.language);
+	const summary = cleanFeedSummary(item.summaryText);
+	const href = item.url ?? item.paperUrl;
+
+	return (
+		<div
+			className={cn(
+				"group relative rounded-lg border bg-background p-2.5",
+				"transition-colors hover:border-foreground/20 hover:bg-muted/50",
+			)}
+		>
+			<button
+				type="button"
+				onClick={() => onOpen(item)}
+				className={cn(
+					"w-full min-w-0 pr-8 text-left",
+					"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+				)}
+			>
+				{hideSource ? (
+					<div className="flex items-baseline gap-2">
+						<span className="min-w-0 truncate font-medium text-sm">
+							{item.title}
+						</span>
+						{when ? (
+							<span className="shrink-0 text-muted-foreground text-xs">
+								{when}
+							</span>
+						) : null}
+					</div>
+				) : (
+					<>
+						<div className="truncate font-medium text-sm">{item.title}</div>
+						<div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">
+							<span className="truncate">{item.subscriptionTitle}</span>
+							{when ? (
+								<>
+									<span aria-hidden>·</span>
+									<span className="shrink-0">{when}</span>
+								</>
+							) : null}
+						</div>
+					</>
+				)}
+				{summary ? (
+					<p className="mt-1 line-clamp-3 text-muted-foreground text-xs leading-snug">
+						{summary}
+					</p>
+				) : null}
+			</button>
+			{href ? (
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+							aria-label={t("plaza.feeds.openOriginal")}
+							onClick={(event) => {
+								event.stopPropagation();
+								openExternalUrl(href);
+							}}
+						>
+							<ExternalLink className="size-3.5" aria-hidden />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent>{t("plaza.feeds.openOriginal")}</TooltipContent>
+				</Tooltip>
+			) : null}
+		</div>
+	);
+}
+
+export function PlazaFeedItemDetail({
+	item,
+	hideSource,
+	onBack,
 	onImported,
 }: {
 	item: FeedItem;
+	hideSource: boolean;
+	onBack: () => void;
 	onImported: (next: FeedItem) => void;
 }) {
 	const { t, i18n } = useTranslation("sidebar");
 	const [busy, setBusy] = useState(false);
-	const isPaper = Boolean(item.paperUrl);
+	const when = formatFeedWhen(item.publishedAt, i18n.language);
+	const summary = cleanFeedSummary(item.summaryText);
+	const href = item.url ?? item.paperUrl;
 	const imported = Boolean(item.importedAt);
-	const when = formatWhen(item.publishedAt, i18n.language);
+	const isPaper = Boolean(item.paperUrl);
+	const html = useMemo(() => {
+		if (!item.contentHtml) return "";
+		const cleaned = cleanFeedSummary(item.contentHtml);
+		if (cleaned.length <= summary.length + 20) return "";
+		return sanitizeEmbeddedHtml(item.contentHtml);
+	}, [item.contentHtml, summary.length]);
 
 	const importPaper = useCallback(async () => {
 		if (busy || imported || !item.paperUrl) return;
@@ -60,52 +166,45 @@ export function PlazaFeedItemRow({
 		}
 	}, [busy, imported, item, onImported]);
 
-	const openOriginal = useCallback(() => {
-		const href = item.url ?? item.paperUrl;
-		if (href) openExternalUrl(href);
-	}, [item.paperUrl, item.url]);
-
-	const primary = isPaper && !imported ? importPaper : openOriginal;
-
 	return (
-		<div
-			className={cn(
-				"group flex items-start gap-3 rounded-lg border bg-background p-2.5",
-				"transition-colors hover:border-foreground/20 hover:bg-muted/50",
-				busy && "pointer-events-none opacity-70",
-			)}
-		>
-			<div className="min-w-0 flex-1">
-				<button
-					type="button"
-					disabled={busy}
-					onClick={() => void primary()}
-					className={cn(
-						"w-full truncate text-left font-medium text-sm",
-						"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-					)}
-				>
-					{item.title}
-				</button>
-				<div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">
-					<span className="truncate">{item.subscriptionTitle}</span>
-					{when ? (
-						<>
-							<span aria-hidden>·</span>
-							<span className="shrink-0">{when}</span>
-						</>
-					) : null}
-				</div>
-				{item.summaryText ? (
-					<p className="mt-1 line-clamp-3 text-muted-foreground text-xs leading-snug">
-						{item.summaryText}
-					</p>
+		<div className="flex h-full min-h-0 flex-col">
+			<div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							aria-label={t("plaza.feeds.back")}
+							onClick={onBack}
+						>
+							<ArrowLeft className="size-3.5" aria-hidden />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent>{t("plaza.feeds.back")}</TooltipContent>
+				</Tooltip>
+				<span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
+					{hideSource ? null : item.subscriptionTitle}
+				</span>
+				{href ? (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-sm"
+								aria-label={t("plaza.feeds.openOriginal")}
+								onClick={() => openExternalUrl(href)}
+							>
+								<ExternalLink className="size-3.5" aria-hidden />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>{t("plaza.feeds.openOriginal")}</TooltipContent>
+					</Tooltip>
 				) : null}
-			</div>
-			<div className="flex shrink-0 items-center gap-0.5">
 				{isPaper ? (
 					imported ? (
-						<span className="inline-flex items-center gap-0.5 text-muted-foreground text-xs">
+						<span className="inline-flex items-center gap-0.5 pr-1 text-muted-foreground text-xs">
 							<Check className="size-3" aria-hidden />
 							{t("plaza.feeds.imported")}
 						</span>
@@ -131,21 +230,26 @@ export function PlazaFeedItemRow({
 						</Tooltip>
 					)
 				) : null}
-				{item.url || item.paperUrl ? (
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-sm"
-								aria-label={t("plaza.feeds.openOriginal")}
-								onClick={openOriginal}
-							>
-								<ExternalLink className="size-3.5" aria-hidden />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent>{t("plaza.feeds.openOriginal")}</TooltipContent>
-					</Tooltip>
+			</div>
+			<div className="agentero-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4">
+				<h1 className="font-medium text-base leading-snug">{item.title}</h1>
+				{(when || (!hideSource && item.subscriptionTitle)) && (
+					<p className="mt-1 text-muted-foreground text-xs">
+						{hideSource
+							? when
+							: [item.subscriptionTitle, when].filter(Boolean).join(" · ")}
+					</p>
+				)}
+				{html ? (
+					<div
+						className="prose prose-sm dark:prose-invert mt-4 max-w-none text-sm leading-relaxed"
+						// biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized above
+						dangerouslySetInnerHTML={{ __html: html }}
+					/>
+				) : summary ? (
+					<p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed">
+						{summary}
+					</p>
 				) : null}
 			</div>
 		</div>
