@@ -194,7 +194,6 @@
 		},
 		"skills": {
 			"title": "Skill picks",
-			"blurb": "Curated GitHub Skill repos for research. Click a card to import via the magic wand.",
 			"openGithub": "Open on GitHub",
 			"import": "Import skills from {{name}}",
 			"themes": {

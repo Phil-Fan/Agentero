@@ -138,9 +138,6 @@ export function PlazaSkillsView({ className }: { className?: string }) {
 			className={cn("agentero-scroll h-full overflow-y-auto p-4", className)}
 		>
 			<h1 className="font-medium text-sm">{t("plaza.skills.title")}</h1>
-			<p className="mt-1 text-muted-foreground text-xs">
-				{t("plaza.skills.blurb")}
-			</p>
 			<div className="mt-4 space-y-6">
 				{SKILL_THEMES.map((theme) => (
 					<section key={theme.id}>

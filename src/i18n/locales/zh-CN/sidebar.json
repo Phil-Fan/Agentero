@@ -194,7 +194,6 @@
 		},
 		"skills": {
 			"title": "Skill 推荐",
-			"blurb": "按科研流程精选的 GitHub Skill 仓库。点击卡片即走魔棒导入。",
 			"openGithub": "在 GitHub 打开",
 			"import": "导入 {{name}} 的 Skill",
 			"themes": {
