@@ -1,5 +1,6 @@
 import {
 	Bot,
+	CloudUpload,
 	Info,
 	Keyboard,
 	Languages,
@@ -54,6 +55,7 @@ const PANE_LOADERS = {
 	keyboard: () => import("@/components/settings/panes/keyboard-pane"),
 	"remote-access": () =>
 		import("@/components/settings/panes/remote-access-pane"),
+	sync: () => import("@/components/settings/panes/sync-pane"),
 	about: () => import("@/components/settings/panes/about-pane"),
 } satisfies Record<SettingsSection, () => Promise<unknown>>;
 
@@ -95,6 +97,9 @@ const RemoteAccessPane = lazy(() =>
 		default: m.RemoteAccessPane,
 	})),
 );
+const SyncPane = lazy(() =>
+	PANE_LOADERS.sync().then((m) => ({ default: m.SyncPane })),
+);
 const AboutPane = lazy(() =>
 	PANE_LOADERS.about().then((m) => ({ default: m.AboutPane })),
 );
@@ -110,6 +115,7 @@ const NAV: {
 	{ id: "translate", icon: Languages },
 	{ id: "layout", icon: LayoutTemplate },
 	{ id: "remote-access", icon: MonitorSmartphone },
+	{ id: "sync", icon: CloudUpload },
 	{ id: "doctor", icon: Stethoscope, dividerBefore: true },
 	{ id: "keyboard", icon: Keyboard },
 	{ id: "about", icon: Info },
@@ -365,6 +371,13 @@ export function SettingsContent({
 						<div hidden={section !== "remote-access"}>
 							<Suspense fallback={<PaneFallback />}>
 								<RemoteAccessPane vaultPath={vaultPath} />
+							</Suspense>
+						</div>
+					)}
+					{visitedSections.includes("sync") && (
+						<div hidden={section !== "sync"}>
+							<Suspense fallback={<PaneFallback />}>
+								<SyncPane vaultPath={vaultPath} />
 							</Suspense>
 						</div>
 					)}

@@ -1,0 +1,310 @@
+//! Minimal S3-compatible client — exactly what sync needs and nothing more:
+//! GET / PUT (with conditional writes) / ListObjectsV2, signed with SigV4.
+//!
+//! Hand-rolled on reqwest + sha2 to avoid the AWS SDK dependency tree. The
+//! whole sync protocol relies on `If-Match` / `If-None-Match` PUTs, which
+//! S3, R2 and MinIO all support.
+
+use crate::core::error::AppError;
+use crate::features::network;
+use crate::features::sync::config::SyncBackendConfig;
+use chrono::Utc;
+use sha2::{Digest, Sha256};
+
+pub struct S3Client {
+    http: reqwest::Client,
+    /// `scheme://host[:port]` after bucket placement (virtual-host or path style).
+    base_url: String,
+    host: String,
+    /// `/bucket` for path style, `` for virtual-host style.
+    base_path: String,
+    /// Normalized `prefix/` (or empty) prepended to every object key.
+    key_prefix: String,
+    region: String,
+    access_key: String,
+    secret_key: String,
+}
+
+pub enum PutCondition {
+    /// Create-only (`If-None-Match: *`).
+    IfNoneMatch,
+    /// Replace-only when unchanged (`If-Match: <etag>`).
+    IfMatch(String),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum PutOutcome {
+    Ok,
+    /// The conditional write lost a race (412) — caller decides how to retry.
+    PreconditionFailed,
+}
+
+impl S3Client {
+    pub fn new(cfg: &SyncBackendConfig) -> Result<Self, AppError> {
+        let url = url::Url::parse(&cfg.endpoint)
+            .map_err(|e| AppError::message(format!("invalid endpoint: {e}")))?;
+        let scheme = url.scheme().to_string();
+        let mut host = url
+            .host_str()
+            .ok_or_else(|| AppError::message("endpoint has no host"))?
+            .to_string();
+        if let Some(port) = url.port() {
+            host = format!("{host}:{port}");
+        }
+        let base_path = if cfg.force_path_style {
+            format!("/{}", cfg.bucket)
+        } else {
+            host = format!("{}.{host}", cfg.bucket);
+            String::new()
+        };
+        let key_prefix = if cfg.prefix.is_empty() {
+            String::new()
+        } else {
+            format!("{}/", cfg.prefix)
+        };
+        Ok(Self {
+            http: network::client_builder()
+                .build()
+                .map_err(|e| AppError::message(e.to_string()))?,
+            base_url: format!("{scheme}://{host}"),
+            host,
+            base_path,
+            key_prefix,
+            region: cfg.region.clone(),
+            access_key: cfg.access_key.clone(),
+            secret_key: cfg.secret_key.clone(),
+        })
+    }
+
+    /// GET an object. `None` on 404; otherwise `(body, etag)`.
+    pub async fn get(&self, key: &str) -> Result<Option<(Vec<u8>, String)>, AppError> {
+        let resp = self.send("GET", key, &[], None, Vec::new()).await?;
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        let resp = check(resp, "GET", key).await?;
+        let etag = etag_of(&resp);
+        let body = resp
+            .bytes()
+            .await
+            .map_err(|e| AppError::message(format!("GET {key}: {e}")))?;
+        Ok(Some((body.to_vec(), etag)))
+    }
+
+    pub async fn put(
+        &self,
+        key: &str,
+        body: Vec<u8>,
+        condition: PutCondition,
+    ) -> Result<PutOutcome, AppError> {
+        let cond = match &condition {
+            PutCondition::IfNoneMatch => ("If-None-Match", "*".to_string()),
+            PutCondition::IfMatch(etag) => ("If-Match", etag.clone()),
+        };
+        let resp = self.send("PUT", key, &[], Some(cond), body).await?;
+        if resp.status() == reqwest::StatusCode::PRECONDITION_FAILED
+            || resp.status() == reqwest::StatusCode::CONFLICT
+        {
+            return Ok(PutOutcome::PreconditionFailed);
+        }
+        check(resp, "PUT", key).await?;
+        Ok(PutOutcome::Ok)
+    }
+
+    /// List up to `max` keys under `prefix` (relative to the configured
+    /// prefix). Used as the connection test and by GC.
+    pub async fn list(&self, prefix: &str, max: u32) -> Result<Vec<String>, AppError> {
+        let full_prefix = format!("{}{prefix}", self.key_prefix);
+        let query = [
+            ("list-type".to_string(), "2".to_string()),
+            ("max-keys".to_string(), max.to_string()),
+            ("prefix".to_string(), full_prefix.clone()),
+        ];
+        let resp = self.send("GET", "", &query, None, Vec::new()).await?;
+        let resp = check(resp, "LIST", &full_prefix).await?;
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| AppError::message(e.to_string()))?;
+        // Keys are our own ASCII-safe layout; a full XML parser is overkill.
+        let mut keys = Vec::new();
+        let mut rest = body.as_str();
+        while let Some(start) = rest.find("<Key>") {
+            let tail = &rest[start + 5..];
+            let Some(end) = tail.find("</Key>") else {
+                break;
+            };
+            keys.push(tail[..end].to_string());
+            rest = &tail[end..];
+        }
+        Ok(keys)
+    }
+
+    /// Sign and send one request. `key` empty → bucket-level request.
+    async fn send(
+        &self,
+        method: &str,
+        key: &str,
+        query: &[(String, String)],
+        extra_header: Option<(&str, String)>,
+        body: Vec<u8>,
+    ) -> Result<reqwest::Response, AppError> {
+        let uri = if key.is_empty() {
+            format!("{}/", self.base_path)
+        } else {
+            format!("{}/{}{key}", self.base_path, self.key_prefix)
+        };
+        let now = Utc::now();
+        let amz_date = now.format("%Y%m%dT%H%M%SZ").to_string();
+        let date = now.format("%Y%m%d").to_string();
+        let payload_hash = hex::encode(Sha256::digest(&body));
+
+        let mut sorted_query: Vec<(String, String)> = query.to_vec();
+        sorted_query.sort();
+        let canonical_query = sorted_query
+            .iter()
+            .map(|(k, v)| format!("{}={}", uri_encode(k), uri_encode(v)))
+            .collect::<Vec<_>>()
+            .join("&");
+
+        let canonical_request = format!(
+            "{method}\n{uri}\n{canonical_query}\nhost:{}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n\nhost;x-amz-content-sha256;x-amz-date\n{payload_hash}",
+            self.host
+        );
+        let scope = format!("{date}/{}/s3/aws4_request", self.region);
+        let string_to_sign = format!(
+            "AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{}",
+            hex::encode(Sha256::digest(canonical_request.as_bytes()))
+        );
+        let k_date = hmac_sha256(
+            format!("AWS4{}", self.secret_key).as_bytes(),
+            date.as_bytes(),
+        );
+        let k_region = hmac_sha256(&k_date, self.region.as_bytes());
+        let k_service = hmac_sha256(&k_region, b"s3");
+        let k_signing = hmac_sha256(&k_service, b"aws4_request");
+        let signature = hex::encode(hmac_sha256(&k_signing, string_to_sign.as_bytes()));
+        let authorization = format!(
+            "AWS4-HMAC-SHA256 Credential={}/{scope}, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={signature}",
+            self.access_key
+        );
+
+        let url = if canonical_query.is_empty() {
+            format!("{}{uri}", self.base_url)
+        } else {
+            format!("{}{uri}?{canonical_query}", self.base_url)
+        };
+        let mut req = self
+            .http
+            .request(
+                method
+                    .parse::<reqwest::Method>()
+                    .map_err(|e| AppError::message(e.to_string()))?,
+                url,
+            )
+            .header("x-amz-date", amz_date)
+            .header("x-amz-content-sha256", payload_hash)
+            .header("authorization", authorization);
+        if let Some((name, value)) = extra_header {
+            req = req.header(name, value);
+        }
+        if !body.is_empty() || method == "PUT" {
+            req = req.body(body);
+        }
+        req.send()
+            .await
+            .map_err(|e| AppError::message(format!("{method} {key}: {e}")))
+    }
+}
+
+async fn check(
+    resp: reqwest::Response,
+    op: &str,
+    key: &str,
+) -> Result<reqwest::Response, AppError> {
+    if resp.status().is_success() {
+        return Ok(resp);
+    }
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    let detail: String = body.chars().take(300).collect();
+    Err(AppError::message(format!("{op} {key}: {status} {detail}")))
+}
+
+fn etag_of(resp: &reqwest::Response) -> String {
+    resp.headers()
+        .get("etag")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// AWS canonical URI encoding (unreserved chars pass through).
+fn uri_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+/// HMAC-SHA256 (RFC 2104). Hand-rolled to reuse the crate's sha2 without
+/// pulling a digest-version-matched `hmac` dependency.
+fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
+    let mut k = [0u8; 64];
+    if key.len() > 64 {
+        k[..32].copy_from_slice(&Sha256::digest(key));
+    } else {
+        k[..key.len()].copy_from_slice(key);
+    }
+    let mut ipad = [0x36u8; 64];
+    let mut opad = [0x5cu8; 64];
+    for i in 0..64 {
+        ipad[i] ^= k[i];
+        opad[i] ^= k[i];
+    }
+    let mut inner = Sha256::new();
+    inner.update(ipad);
+    inner.update(data);
+    let inner = inner.finalize();
+    let mut outer = Sha256::new();
+    outer.update(opad);
+    outer.update(inner);
+    outer.finalize().into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// RFC 4231 test case 2 (short key, "what do ya want for nothing?").
+    #[test]
+    fn hmac_sha256_matches_rfc_4231() {
+        let out = hmac_sha256(b"Jefe", b"what do ya want for nothing?");
+        assert_eq!(
+            hex::encode(out),
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+        );
+    }
+
+    /// RFC 4231 test case 3 (key/data of 0xaa/0xdd bytes).
+    #[test]
+    fn hmac_sha256_matches_rfc_4231_binary() {
+        let out = hmac_sha256(&[0xaa; 20], &[0xdd; 50]);
+        assert_eq!(
+            hex::encode(out),
+            "773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe"
+        );
+    }
+
+    #[test]
+    fn uri_encode_escapes_reserved() {
+        assert_eq!(uri_encode("a-b_c.d~e"), "a-b_c.d~e");
+        assert_eq!(uri_encode("a b/c"), "a%20b%2Fc");
+    }
+}

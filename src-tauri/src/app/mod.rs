@@ -93,6 +93,7 @@ pub fn run() {
         .manage(WikiIndexState::new())
         .manage(crate::features::doctor::DoctorDirtyPathsState::default())
         .manage(ExternalRenameRepairStore::new())
+        .manage(crate::features::sync::SyncService::default())
         .manage(crate::features::open_request::PendingVaultOpen::new());
 
     #[cfg(not(target_os = "ios"))]

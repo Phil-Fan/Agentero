@@ -5,7 +5,7 @@
 | 数据 | 权威 |
 |---|---|
 | 笔记、PDF、TeX、marks | Vault 普通文件 |
-| 论文集合与结构化 metadata | `.agentero/catalog.sqlite` |
+| 论文集合与结构化 metadata | `.agentero/catalog.sqlite`（权威字段同步投影到 `papers/<id>/metadata.json` sidecar，rescan 可据此重建，见 [sync.md](sync.md)） |
 | 本机使用记录 | XDG `$XDG_DATA_HOME/agentero/usage.sqlite`（非 Vault） |
 | 双链索引 | 由 Markdown 重建（不落业务库） |
 

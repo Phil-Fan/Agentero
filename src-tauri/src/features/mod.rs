@@ -40,6 +40,8 @@ pub mod search;
 pub mod settings;
 #[cfg(feature = "desktop")]
 pub mod site_proxy;
+#[cfg(feature = "desktop")]
+pub mod sync;
 #[cfg(all(
     feature = "desktop",
     not(any(target_os = "android", target_os = "ios"))

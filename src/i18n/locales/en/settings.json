@@ -14,7 +14,8 @@
 		"keyboard": "Keyboard",
 		"remote-access": "Remote access",
 		"about": "About",
-		"quickSetup": "Quick setup wizard"
+		"quickSetup": "Quick setup wizard",
+		"sync": "Sync"
 	},
 	"remoteAccess": {
 		"title": "Remote access",
@@ -511,6 +512,35 @@
 			"label": "First-run setup",
 			"description": "Replay the theme, agent and translation setup wizard in the main window",
 			"reopen": "Reopen setup wizard"
+		}
+	},
+	"sync": {
+		"title": "Cloud sync",
+		"intro": "Sync this vault across devices via any S3-compatible object storage (Cloudflare R2, MinIO, AWS S3, …).",
+		"localVaultOnly": "Cloud sync is available for local vaults only.",
+		"endpoint": "Endpoint",
+		"region": "Region",
+		"bucket": "Bucket",
+		"prefix": "Key prefix",
+		"prefixHint": "Optional. Lets multiple vaults share one bucket.",
+		"accessKey": "Access key ID",
+		"secretKey": "Secret access key",
+		"pathStyle": "Path-style addressing",
+		"pathStyleHint": "Keep on for R2 / MinIO; turn off for bucket subdomains.",
+		"saveAndTest": "Save & test connection",
+		"saved": "Sync configured",
+		"disconnect": "Disconnect",
+		"syncNow": "Sync now",
+		"lastSync": "Last synced {{time}} · version {{version}}",
+		"neverSynced": "Not synced yet.",
+		"done": "Sync complete: {{up}} uploaded, {{down}} downloaded",
+		"conflicts": "{{count}} conflict copy(ies) saved next to the originals",
+		"phase": {
+			"scan": "Scanning vault…",
+			"pull": "Fetching remote state…",
+			"download": "Downloading {{current}}/{{total}}…",
+			"upload": "Uploading {{current}}/{{total}}…",
+			"finalize": "Finalizing…"
 		}
 	}
 }

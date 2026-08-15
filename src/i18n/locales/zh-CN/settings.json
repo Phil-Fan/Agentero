@@ -14,7 +14,8 @@
 		"keyboard": "快捷键",
 		"remote-access": "远程访问",
 		"about": "关于",
-		"quickSetup": "快速配置向导"
+		"quickSetup": "快速配置向导",
+		"sync": "同步"
 	},
 	"remoteAccess": {
 		"title": "远程访问",
@@ -511,6 +512,35 @@
 			"label": "首次运行引导",
 			"description": "在主窗口重放主题、Agent 与翻译的设置向导",
 			"reopen": "重新打开引导向导"
+		}
+	},
+	"sync": {
+		"title": "云同步",
+		"intro": "通过任意 S3 兼容对象存储（Cloudflare R2、MinIO、AWS S3 等）在多设备间同步此 Vault。",
+		"localVaultOnly": "云同步仅支持本地 Vault。",
+		"endpoint": "Endpoint",
+		"region": "区域",
+		"bucket": "Bucket",
+		"prefix": "键前缀",
+		"prefixHint": "可选。多个 Vault 可共用一个 Bucket。",
+		"accessKey": "Access Key ID",
+		"secretKey": "Secret Access Key",
+		"pathStyle": "Path-style 寻址",
+		"pathStyleHint": "R2 / MinIO 保持开启；使用 Bucket 子域名时关闭。",
+		"saveAndTest": "保存并测试连接",
+		"saved": "同步已配置",
+		"disconnect": "解绑",
+		"syncNow": "立即同步",
+		"lastSync": "上次同步 {{time}} · 版本 {{version}}",
+		"neverSynced": "尚未同步。",
+		"done": "同步完成：上传 {{up}}，下载 {{down}}",
+		"conflicts": "已在原文件旁保存 {{count}} 个冲突副本",
+		"phase": {
+			"scan": "正在扫描 Vault…",
+			"pull": "正在获取远端状态…",
+			"download": "下载中 {{current}}/{{total}}…",
+			"upload": "上传中 {{current}}/{{total}}…",
+			"finalize": "正在收尾…"
 		}
 	}
 }
