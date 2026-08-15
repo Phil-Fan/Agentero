@@ -31,6 +31,8 @@
 
 > Kimi 解析没有走广场入库，而是作为论文侧的独立能力落在 Markdown 工具栏的
 > 「获取 Cool Paper 笔记」按钮上（`paper_coolpapers_notes` → 追加 `NOTES.md`）。
+> 解析顺序：`source_url` 上的 papers.cool 链接 → venue 形 catalog id（`38818@AAAI`）
+> → arXiv id → 标题（允许搜索结果截断后的长前缀）。
 
 ## 1. 产品动机
 

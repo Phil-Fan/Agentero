@@ -1,9 +1,9 @@
 /**
  * Cool Papers (papers.cool) note fetch.
  *
- * The Host resolves the paper (arXiv id, else exact title match), pulls its Kimi
- * analysis and appends it to `NOTES.md`. The NOTES editor toolbar triggers this
- * and reseeds the open editor.
+ * The Host resolves the paper (Cool Papers URL / venue catalog id, then arXiv
+ * id, then title), pulls its Kimi analysis and appends it to `NOTES.md`. The
+ * NOTES editor toolbar triggers this and reseeds the open editor.
  */
 
 import i18n from "@/i18n";
@@ -43,9 +43,11 @@ export async function fetchCoolPapersNotes(meta: PaperMetadata): Promise<void> {
 		notifyError(i18n.t("app:coolPapers.resolveFailed"));
 		return;
 	}
+	const catalogId = meta.id?.trim() || null;
+	const sourceUrl = meta.source_url?.trim() || null;
 	const arxivId = meta.arxiv_id ? (arxivUrls(meta.arxiv_id)?.id ?? null) : null;
 	const title = meta.title?.trim() || null;
-	if (!arxivId && !title) {
+	if (!catalogId && !sourceUrl && !arxivId && !title) {
 		notifyWarning(i18n.t("app:coolPapers.missingIdentifier"));
 		return;
 	}
@@ -60,7 +62,16 @@ export async function fetchCoolPapersNotes(meta: PaperMetadata): Promise<void> {
 			() =>
 				invokeApi<CoolPapersNotes>(
 					"paper_coolpapers_notes",
-					{ args: { vaultPath, path: rel, arxivId, title } },
+					{
+						args: {
+							vaultPath,
+							path: rel,
+							catalogId,
+							sourceUrl,
+							arxivId,
+							title,
+						},
+					},
 					{ fallback: i18n.t("app:coolPapers.fetchFailed") },
 				),
 		);

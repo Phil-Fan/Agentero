@@ -5,6 +5,11 @@
 //! - `GET /{branch}/search?query=…` → list page carrying `id` + title per hit
 //! - `GET /{branch}/kimi?paper={id}` → the analysis, as an HTML/Markdown hybrid
 //!
+//! Venue rows imported from the plaza already store the Cool Papers id
+//! (`38818@AAAI`) and `https://papers.cool/venue/…` as `source_url`. Note fetch
+//! must use those first: search-result titles are truncated, so exact-title
+//! lookup misses long venue papers.
+//!
 //! An unknown paper id answers `200` with an empty body, so "no content" is the
 //! not-found signal.
 //!
@@ -57,7 +62,7 @@ pub struct CoolPapersNotes {
     pub paper_id: Option<String>,
     /// Public page for the resolved paper.
     pub url: Option<String>,
-    /// `"arxivId"` or `"title"`.
+    /// `"sourceUrl"`, `"catalogId"`, `"arxivId"`, or `"title"`.
     pub matched_by: Option<String>,
 }
 
@@ -159,11 +164,86 @@ fn parse_search_hits(html: &str) -> Vec<(String, String)> {
     out
 }
 
-/// Exact-title lookup across branches.
+/// papers.cool venue ids look like `38818@AAAI` or `2024.acl-long.290@ACL`.
+fn venue_catalog_id(raw: &str) -> Option<&str> {
+    let id = raw.trim();
+    if id.is_empty() || !id.contains('@') {
+        return None;
+    }
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '@' | '.' | '_' | '-'))
+    {
+        return None;
+    }
+    Some(id)
+}
+
+/// `https://papers.cool/{arxiv|venue}/{id}` (query / fragment ignored).
+fn parse_coolpapers_url(raw: &str) -> Option<(String, String)> {
+    let raw = raw.trim();
+    let after = raw
+        .strip_prefix("https://papers.cool/")
+        .or_else(|| raw.strip_prefix("http://papers.cool/"))
+        .or_else(|| raw.strip_prefix("https://www.papers.cool/"))
+        .or_else(|| raw.strip_prefix("http://www.papers.cool/"))?;
+    let path = after.split(['?', '#']).next().unwrap_or(after);
+    let mut segs = path.split('/').filter(|s| !s.is_empty());
+    let branch = segs.next()?;
+    if branch != "arxiv" && branch != "venue" {
+        return None;
+    }
+    let next = segs.next().unwrap_or("");
+    if next == "kimi" {
+        let query = after.split_once('?')?.1;
+        for pair in query.split('&') {
+            let (k, v) = pair.split_once('=')?;
+            if k == "paper" {
+                let id = urlencoding::decode(v).ok()?;
+                let id = id.trim();
+                if !id.is_empty() {
+                    return Some((branch.to_string(), id.to_string()));
+                }
+            }
+        }
+        return None;
+    }
+    if next.is_empty() || next == "search" {
+        return None;
+    }
+    let id = urlencoding::decode(next).ok()?;
+    let id = id.trim();
+    if id.is_empty() {
+        return None;
+    }
+    Some((branch.to_string(), id.to_string()))
+}
+
+/// Search-result titles are often clipped. Accept exact keys, or a long prefix.
+fn titles_compatible(want: &str, hit: &str) -> bool {
+    const MIN_PREFIX: usize = 24;
+    let want = title_key(want);
+    let hit = title_key(hit);
+    if want.is_empty() || hit.is_empty() {
+        return false;
+    }
+    if want == hit {
+        return true;
+    }
+    let (short, long) = if want.len() <= hit.len() {
+        (want, hit)
+    } else {
+        (hit, want)
+    };
+    long.starts_with(&short) && short.len() >= MIN_PREFIX
+}
+
+/// Title lookup across branches.
 ///
 /// Never trust rank: papers.cool reports a constant `Total: 1000` and a
-/// wrong-branch query still answers with plausible but unrelated papers, so
-/// only an exact normalized title match counts.
+/// wrong-branch query still answers with plausible but unrelated papers.
+/// Prefer an exact normalized title; fall back to a unique long-prefix match
+/// because list rows truncate.
 async fn resolve_by_title(title: &str) -> Option<(String, String)> {
     let query = search_query(title);
     if query.is_empty() {
@@ -181,11 +261,36 @@ async fn resolve_by_title(title: &str) -> Option<(String, String)> {
         let Ok(html) = get_text(&url).await else {
             continue;
         };
-        for (id, hit) in parse_search_hits(&html) {
-            if title_key(&hit) == want {
-                return Some((branch.to_string(), id));
-            }
+        let hits = parse_search_hits(&html);
+        if let Some((id, _)) = hits.iter().find(|(_, hit)| title_key(hit) == want) {
+            return Some((branch.to_string(), id.clone()));
         }
+        let prefix: Vec<&(String, String)> = hits
+            .iter()
+            .filter(|(_, hit)| titles_compatible(title, hit))
+            .collect();
+        if prefix.len() == 1 {
+            return Some((branch.to_string(), prefix[0].0.clone()));
+        }
+    }
+    None
+}
+
+fn resolve_ref(
+    catalog_id: Option<&str>,
+    source_url: Option<&str>,
+    arxiv_id: Option<&str>,
+) -> Option<(String, String, &'static str)> {
+    if let Some(raw) = source_url {
+        if let Some((branch, id)) = parse_coolpapers_url(raw) {
+            return Some((branch, id, "sourceUrl"));
+        }
+    }
+    if let Some(id) = catalog_id.and_then(venue_catalog_id) {
+        return Some(("venue".to_string(), id.to_string(), "catalogId"));
+    }
+    if let Some(id) = arxiv_id.and_then(bare_arxiv_id) {
+        return Some(("arxiv".to_string(), id, "arxivId"));
     }
     None
 }
@@ -310,6 +415,9 @@ pub struct FetchNotesRequest<'a> {
     pub vault: &'a Path,
     /// Vault-relative paper folder.
     pub paper_rel: &'a str,
+    /// Catalog id. Venue imports store the Cool Papers row id here.
+    pub catalog_id: Option<&'a str>,
+    pub source_url: Option<&'a str>,
     pub arxiv_id: Option<&'a str>,
     pub title: Option<&'a str>,
 }
@@ -328,10 +436,10 @@ pub async fn fetch_notes(req: FetchNotesRequest<'_>) -> Result<CoolPapersNotes, 
 
     let _permit = permit().await;
 
-    let direct = req.arxiv_id.and_then(bare_arxiv_id);
-    let (branch, paper_id, matched_by) = match direct {
-        Some(id) => ("arxiv".to_string(), id, "arxivId"),
-        None => {
+    let (branch, paper_id, matched_by) =
+        if let Some(hit) = resolve_ref(req.catalog_id, req.source_url, req.arxiv_id) {
+            hit
+        } else {
             let title = req.title.map(str::trim).filter(|s| !s.is_empty());
             let Some(title) = title else {
                 return Ok(CoolPapersNotes::not_found());
@@ -340,8 +448,7 @@ pub async fn fetch_notes(req: FetchNotesRequest<'_>) -> Result<CoolPapersNotes, 
                 Some((branch, id)) => (branch, id, "title"),
                 None => return Ok(CoolPapersNotes::not_found()),
             }
-        }
-    };
+        };
 
     let encoded = urlencoding::encode(&paper_id);
     let kimi_url = format!("{ORIGIN}/{branch}/kimi?paper={encoded}");
@@ -444,5 +551,63 @@ mod tests {
     #[test]
     fn empty_kimi_body_yields_empty_markdown() {
         assert!(kimi_html_to_markdown("").is_empty());
+    }
+
+    #[test]
+    fn venue_catalog_id_accepts_cool_papers_row_ids() {
+        assert_eq!(venue_catalog_id("38818@AAAI"), Some("38818@AAAI"));
+        assert_eq!(
+            venue_catalog_id("2024.acl-long.290@ACL"),
+            Some("2024.acl-long.290@ACL")
+        );
+        assert_eq!(venue_catalog_id("1706.03762"), None);
+        assert_eq!(venue_catalog_id("not an id"), None);
+    }
+
+    #[test]
+    fn parses_cool_papers_page_and_kimi_urls() {
+        assert_eq!(
+            parse_coolpapers_url("https://papers.cool/venue/38818@AAAI"),
+            Some(("venue".into(), "38818@AAAI".into()))
+        );
+        assert_eq!(
+            parse_coolpapers_url("https://papers.cool/venue/kimi?paper=38818%40AAAI"),
+            Some(("venue".into(), "38818@AAAI".into()))
+        );
+        assert_eq!(
+            parse_coolpapers_url("https://papers.cool/arxiv/2608.13558"),
+            Some(("arxiv".into(), "2608.13558".into()))
+        );
+        assert_eq!(
+            parse_coolpapers_url("https://arxiv.org/abs/2608.13558"),
+            None
+        );
+    }
+
+    #[test]
+    fn resolve_ref_prefers_source_url_then_venue_id() {
+        let hit = resolve_ref(
+            Some("38818@AAAI"),
+            Some("https://papers.cool/venue/38818@AAAI"),
+            Some("2608.13558"),
+        )
+        .expect("resolved");
+        assert_eq!(hit.0, "venue");
+        assert_eq!(hit.1, "38818@AAAI");
+        assert_eq!(hit.2, "sourceUrl");
+
+        let hit = resolve_ref(Some("38818@AAAI"), None, Some("2608.13558")).expect("resolved");
+        assert_eq!(hit.2, "catalogId");
+        assert_eq!(hit.1, "38818@AAAI");
+    }
+
+    #[test]
+    fn titles_compatible_allows_truncated_search_hit() {
+        let full = "TripLe: Revisiting Pretrained Model Reuse and Progressive Learning for Efficient Vision Transformer Scaling and Searching";
+        let clipped = "TripLe: Revisiting Pretrained Model Reuse and Progressive Learning for Efficient Vision Transformer Scaling and Searchin";
+        assert!(titles_compatible(full, clipped));
+        assert!(titles_compatible(full, full));
+        assert!(!titles_compatible(full, "TripLe"));
+        assert!(!titles_compatible("Segment Anything", "Segment Anything 2"));
     }
 }
