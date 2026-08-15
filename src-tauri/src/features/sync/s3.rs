@@ -194,27 +194,68 @@ impl S3Client {
         } else {
             format!("{}{uri}?{canonical_query}", self.base_url)
         };
-        let mut req = self
-            .http
-            .request(
-                method
-                    .parse::<reqwest::Method>()
-                    .map_err(|e| AppError::message(e.to_string()))?,
-                url,
-            )
-            .header("x-amz-date", amz_date)
-            .header("x-amz-content-sha256", payload_hash)
-            .header("authorization", authorization);
-        if let Some((name, value)) = extra_header {
-            req = req.header(name, value);
+        let method = method
+            .parse::<reqwest::Method>()
+            .map_err(|e| AppError::message(e.to_string()))?;
+
+        // Every sync operation is idempotent (content-addressed blobs with
+        // If-None-Match, CAS'd HEAD), so transient transport errors — stale
+        // pooled connections, momentary container/port blips — are retried
+        // instead of failing the whole pass.
+        let mut last_err = None;
+        let extra = extra_header.map(|(name, value)| (name, value.clone()));
+        for attempt in 0..3u32 {
+            if attempt > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(200 * attempt as u64)).await;
+            }
+            let mut req = self
+                .http
+                .request(method.clone(), url.clone())
+                .header("x-amz-date", amz_date.clone())
+                .header("x-amz-content-sha256", payload_hash.clone())
+                .header("authorization", authorization.clone());
+            if let Some((name, value)) = &extra {
+                req = req.header(*name, value.clone());
+            }
+            if !body.is_empty() || method == reqwest::Method::PUT {
+                req = req.body(body.clone());
+            }
+            match req.send().await {
+                Ok(resp) => return Ok(resp),
+                Err(e) if e.is_connect() || e.is_request() => {
+                    log::warn!(
+                        target: "agentero::sync",
+                        "{method} {key} attempt {}: {e}",
+                        attempt + 1
+                    );
+                    last_err = Some(e);
+                }
+                Err(e) => {
+                    return Err(AppError::message(format!(
+                        "{method} {key}: {}",
+                        error_chain(&e)
+                    )));
+                }
+            }
         }
-        if !body.is_empty() || method == "PUT" {
-            req = req.body(body);
-        }
-        req.send()
-            .await
-            .map_err(|e| AppError::message(format!("{method} {key}: {e}")))
+        let e = last_err.expect("loop sets last_err before exiting");
+        Err(AppError::message(format!(
+            "{method} {key}: {}",
+            error_chain(&e)
+        )))
     }
+}
+
+/// reqwest's `Display` stops at the first source; walk the chain so transport
+/// failures surface their real cause (connection reset, timeout, …).
+fn error_chain(err: &reqwest::Error) -> String {
+    let mut out = err.to_string();
+    let mut source = std::error::Error::source(err);
+    while let Some(s) = source {
+        out.push_str(&format!(": {s}"));
+        source = s.source();
+    }
+    out
 }
 
 async fn check(
