@@ -5,7 +5,7 @@ export function PageTitle({
 	title,
 	actions,
 }: {
-	title: string;
+	title: ReactNode;
 	actions?: ReactNode;
 }) {
 	if (!actions) {

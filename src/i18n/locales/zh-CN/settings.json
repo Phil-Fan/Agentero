@@ -516,6 +516,7 @@
 	},
 	"sync": {
 		"title": "云同步",
+		"advanced": "高级",
 		"intro": "通过任意 S3 兼容对象存储（Cloudflare R2、MinIO、AWS S3 等）在多设备间同步此 Vault。",
 		"localVaultOnly": "云同步仅支持本地 Vault。",
 		"endpoint": "Endpoint",
@@ -527,11 +528,10 @@
 		"secretKey": "Secret Access Key",
 		"pathStyle": "Path-style 寻址",
 		"pathStyleHint": "R2 / MinIO 保持开启；使用 Bucket 子域名时关闭。",
-		"saveAndTest": "保存并测试连接",
 		"saved": "同步已配置",
 		"disconnect": "解绑",
 		"syncNow": "立即同步",
-		"lastSync": "上次同步 {{time}} · 版本 {{version}}",
+		"lastSync": "上次同步 {{time}}",
 		"neverSynced": "尚未同步。",
 		"done": "同步完成：上传 {{up}}，下载 {{down}}",
 		"conflicts": "已在原文件旁保存 {{count}} 个冲突副本",
@@ -541,6 +541,11 @@
 			"download": "下载中 {{current}}/{{total}}…",
 			"upload": "上传中 {{current}}/{{total}}…",
 			"finalize": "正在收尾…"
-		}
+		},
+		"connect": "连接",
+		"save": "保存",
+		"autoSync": "自动同步",
+		"interval": "同步间隔",
+		"intervalMinutes": "{{count}} 分钟"
 	}
 }
