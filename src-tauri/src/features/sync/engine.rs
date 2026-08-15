@@ -31,6 +31,8 @@ pub const FORMAT_VERSION: u32 = 1;
 const HEAD_KEY: &str = "HEAD";
 const VAULT_KEY: &str = "vault.json";
 const MAX_CAS_RETRIES: usize = 5;
+/// Decompressed manifest cap; a vault of 1M files serializes to ~150MB.
+const MAX_MANIFEST_BYTES: u64 = 256 * 1024 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -101,7 +103,10 @@ pub async fn sync_vault(
                 let (bytes, _) = client.get(&ptr.manifest_key).await?.ok_or_else(|| {
                     AppError::message(format!("manifest {} missing", ptr.manifest_key))
                 })?;
-                serde_json::from_slice::<Manifest>(&gunzip(&bytes)?)?.files
+                let manifest: Manifest =
+                    serde_json::from_slice(&gunzip_limited(&bytes, MAX_MANIFEST_BYTES)?)?;
+                validate_manifest(&manifest)?;
+                manifest.files
             }
             None => BTreeMap::new(),
         };
@@ -246,6 +251,36 @@ async fn ensure_remote_identity(vault: &Path, client: &S3Client) -> Result<Strin
     }
 }
 
+/// Remote manifests are untrusted input: paths feed `vault.join` for
+/// write/delete and hashes feed `blob_key`, so reject anything that could
+/// escape the vault or index outside `blobs/`.
+fn validate_manifest(manifest: &Manifest) -> Result<(), AppError> {
+    for (rel, entry) in &manifest.files {
+        if rel.is_empty()
+            || rel.starts_with('/')
+            || rel.contains('\\')
+            || rel
+                .split('/')
+                .any(|c| c.is_empty() || c == ".." || c == ".")
+        {
+            return Err(AppError::message(format!(
+                "remote manifest has an unsafe path: {rel}"
+            )));
+        }
+        if entry.hash.len() != 64
+            || !entry
+                .hash
+                .bytes()
+                .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        {
+            return Err(AppError::message(format!(
+                "remote manifest has an invalid hash for {rel}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 struct MergePlan {
     merged: BTreeMap<String, FileEntry>,
     downloads: Vec<(String, FileEntry)>,
@@ -363,7 +398,7 @@ async fn apply_local(
             .get(&blob_key(&entry.hash))
             .await?
             .ok_or_else(|| AppError::message(format!("blob missing for {rel}")))?;
-        let raw = gunzip(&bytes)?;
+        let raw = gunzip_limited(&bytes, entry.size.saturating_add(1 << 20))?;
         if snapshot::hash_bytes(&raw) != entry.hash {
             return Err(AppError::message(format!("blob corrupt for {rel}")));
         }
@@ -431,9 +466,18 @@ fn gzip(raw: &[u8]) -> Result<Vec<u8>, AppError> {
     Ok(enc.finish()?)
 }
 
-fn gunzip(bytes: &[u8]) -> Result<Vec<u8>, AppError> {
+/// Decompress with an output cap; reading `limit + 1` bytes detects overflow
+/// without allocating it.
+fn gunzip_limited(bytes: &[u8], limit: u64) -> Result<Vec<u8>, AppError> {
     let mut out = Vec::new();
-    GzDecoder::new(bytes).read_to_end(&mut out)?;
+    let n = GzDecoder::new(bytes)
+        .take(limit + 1)
+        .read_to_end(&mut out)?;
+    if n as u64 > limit {
+        return Err(AppError::message(format!(
+            "decompressed data exceeds the {limit} byte limit"
+        )));
+    }
     Ok(out)
 }
 
@@ -509,6 +553,53 @@ mod tests {
         let plan = merge(&base, &local, &remote);
         assert_eq!(plan.merged["k.md"].hash, "hr");
         assert_eq!(plan.downloads.len(), 1);
+    }
+
+    #[test]
+    fn validate_manifest_rejects_unsafe_paths_and_hashes() {
+        let ok_hash = "a".repeat(64);
+        let valid = Manifest {
+            version: 1,
+            files: map(&[("papers/x/NOTES.md", entry(&ok_hash, 1))]),
+        };
+        assert!(validate_manifest(&valid).is_ok());
+
+        for bad in [
+            "../evil.md",
+            "/abs.md",
+            "a\\b.md",
+            "a//b.md",
+            "a/./b.md",
+            "a/../b.md",
+            "",
+        ] {
+            let m = Manifest {
+                version: 1,
+                files: map(&[(bad, entry(&ok_hash, 1))]),
+            };
+            assert!(
+                validate_manifest(&m).is_err(),
+                "path {bad:?} must be rejected"
+            );
+        }
+
+        for bad_hash in ["", "abc", &"A".repeat(64), &"g".repeat(64), &"a".repeat(63)] {
+            let m = Manifest {
+                version: 1,
+                files: map(&[("n.md", entry(bad_hash, 1))]),
+            };
+            assert!(
+                validate_manifest(&m).is_err(),
+                "hash {bad_hash:?} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn gunzip_limited_enforces_cap() {
+        let packed = gzip(&vec![0u8; 4096]).unwrap();
+        assert_eq!(gunzip_limited(&packed, 4096).unwrap().len(), 4096);
+        assert!(gunzip_limited(&packed, 4095).is_err());
     }
 
     /// Full two-device round trip against a live S3 endpoint.

@@ -1,6 +1,6 @@
 # 云同步（S3）
 
-多设备间同步整个 Vault 到 S3 兼容对象存储（R2 / MinIO / AWS S3 / OSS / B2）。设计草稿与分期：[../development/cloud-sync-s3.md](../development/cloud-sync-s3.md)。当前已落地 Phase 0–1（sidecar 化 + 手动同步 MVP）。
+多设备间同步整个 Vault 到 S3 兼容对象存储（R2 / MinIO / AWS S3 / OSS / B2）。设计草稿与分期：[../development/cloud-sync-s3.md](../development/cloud-sync-s3.md)。当前已落地 Phase 0–1 与 Phase 2 的自动同步（状态栏指示、GC、multipart 除外）。
 
 ## 模块
 
@@ -41,6 +41,15 @@
 ## 自动同步
 
 配置项 `autoSync`（默认开）与 `intervalMinutes`（15/30/60，默认 30）随凭据存 `sync.json`。调度任务在 `sync_configure` 后（重新）启动、`sync_disconnect` 时停止、应用启动时按配置恢复；每次触发都重读凭据，改配置无需重启。触发器：调度启动即同步一次（≈打开 Vault）、Vault 改动静置 30s、定时间隔兜底；`RunEvent::Exit` 时对所有自动同步 Vault 尽力推送（超时 5s/Vault）。
+
+## 安全约束
+
+远端对象视为不可信输入，引擎在应用前统一校验：
+
+- **manifest 路径净化**（`engine.rs` `validate_manifest`）：relPath 必须非空、非绝对、仅 `/` 分隔、无空段 / `.` / `..`，否则整个 pass 失败——杜绝经 `vault.join` 越界写/删文件。
+- **hash 校验**：manifest 中 hash 必须是 64 位小写 hex（sha256），防止畸形 key  panic 或索引到 `blobs/` 之外。
+- **解压限流**：blob 解压上限为 manifest 声明 size + 1MiB（sha256 校验兜底），manifest 解压上限 256MiB，防 gzip bomb。
+- **强制 TLS**：`validate()` 要求 endpoint 为 https；仅 loopback（`localhost` / `127.0.0.1` / `::1`）放行 http（本地 MinIO 测试场景），避免 SigV4 凭据明文传输。
 
 ## 边界（后续分期）
 

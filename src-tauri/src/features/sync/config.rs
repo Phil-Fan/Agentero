@@ -63,6 +63,17 @@ impl SyncBackendConfig {
                 "endpoint, bucket, access key and secret key are required",
             ));
         }
+        let url = url::Url::parse(self.endpoint.trim())
+            .map_err(|_| AppError::message("endpoint is not a valid URL"))?;
+        let host = url.host_str().unwrap_or_default();
+        let loopback = host == "localhost"
+            || host == "127.0.0.1"
+            || host.trim_start_matches('[').trim_end_matches(']') == "::1";
+        if url.scheme() != "https" && !(url.scheme() == "http" && loopback) {
+            return Err(AppError::message(
+                "endpoint must use https (plain http is only allowed for localhost)",
+            ));
+        }
         Ok(())
     }
 
@@ -189,5 +200,25 @@ mod tests {
         assert_eq!(cfg.endpoint, "http://x");
         cfg.interval_minutes = 60;
         assert_eq!(cfg.normalized().interval_minutes, 60);
+    }
+
+    #[test]
+    fn validate_requires_https_except_loopback() {
+        let mut cfg = SyncBackendConfig {
+            endpoint: "https://example.r2.cloudflarestorage.com".into(),
+            bucket: "b".into(),
+            access_key: "a".into(),
+            secret_key: "s".into(),
+            ..SyncBackendConfig::default()
+        };
+        assert!(cfg.validate().is_ok());
+        cfg.endpoint = "http://example.com".into();
+        assert!(cfg.validate().is_err());
+        cfg.endpoint = "http://127.0.0.1:9000".into();
+        assert!(cfg.validate().is_ok());
+        cfg.endpoint = "http://localhost:9000".into();
+        assert!(cfg.validate().is_ok());
+        cfg.endpoint = "not a url".into();
+        assert!(cfg.validate().is_err());
     }
 }
