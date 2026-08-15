@@ -91,10 +91,14 @@ pub async fn sync_get_status(
 
 /// Validate + connection-test + persist the S3 binding for a vault.
 #[tauri::command]
-pub async fn sync_configure(args: SyncConfigureArgs) -> ApiResult<SyncStatus> {
+pub async fn sync_configure(
+    app: AppHandle,
+    service: State<'_, SyncService>,
+    args: SyncConfigureArgs,
+) -> Result<ApiResult<SyncStatus>, String> {
+    let key = args.vault_path.trim().to_string();
     let inner = async {
         let dir = vault_dir(&args.vault_path)?;
-        let key = args.vault_path.trim().to_string();
         let mut cfg = args.config.normalized();
         cfg.merge_mask(config::get(&key).as_ref());
         cfg.validate()?;
@@ -109,52 +113,53 @@ pub async fn sync_configure(args: SyncConfigureArgs) -> ApiResult<SyncStatus> {
             last_version: meta.last_version,
         })
     };
-    match inner.await {
+    let result = inner.await;
+    if result.is_ok() {
+        service.restart_scheduler(&app, &key);
+    }
+    Ok(match result {
         Ok(status) => ApiResult::ok(status),
         Err(e) => map_err(e),
-    }
+    })
 }
 
 /// Remove the binding and local sync state (remote data stays untouched).
 #[tauri::command]
-pub async fn sync_disconnect(args: SyncVaultArgs) -> ApiResult<()> {
+pub async fn sync_disconnect(
+    service: State<'_, SyncService>,
+    args: SyncVaultArgs,
+) -> Result<ApiResult<()>, String> {
+    let key = args.vault_path.trim().to_string();
     let inner = || {
         let dir = vault_dir(&args.vault_path)?;
-        config::remove(args.vault_path.trim())?;
+        config::remove(&key)?;
         local::clear(&dir);
         Ok::<_, AppError>(())
     };
-    match inner() {
-        Ok(()) => ApiResult::ok(()),
+    Ok(match inner() {
+        Ok(()) => {
+            service.stop_scheduler(&key);
+            ApiResult::ok(())
+        }
         Err(e) => map_err(e),
-    }
+    })
 }
 
-/// One full sync pass (scan → merge → apply → publish).
-#[tauri::command]
-pub async fn sync_now(
-    app: AppHandle,
-    service: State<'_, SyncService>,
-    args: SyncVaultArgs,
-) -> Result<ApiResult<SyncOutcome>, String> {
-    use crate::core::log_util::OpTimer;
-
-    let vault_key = args.vault_path.trim().to_string();
-    let dir = match vault_dir(&args.vault_path) {
-        Ok(dir) => dir,
-        Err(e) => return Ok(map_err(e)),
-    };
-    let Some(cfg) = config::get(&vault_key) else {
-        return Ok(map_err(AppError::message("sync is not configured")));
-    };
-    if !service.try_begin(&vault_key) {
-        return Ok(map_err(AppError::message("sync already running")));
+/// One full sync pass shared by the `sync_now` command and the auto-sync
+/// scheduler (scan → merge → apply → publish).
+pub async fn perform_sync(
+    app: &AppHandle,
+    service: &SyncService,
+    vault_key: &str,
+) -> Result<SyncOutcome, AppError> {
+    let dir = vault_dir(vault_key)?;
+    let cfg = config::get(vault_key).ok_or_else(|| AppError::message("sync is not configured"))?;
+    if !service.try_begin(vault_key) {
+        return Err(AppError::message("sync already running"));
     }
-
-    let op = OpTimer::start_with("sync_now", format!("vault={vault_key}"));
-    emit_state(&app, &vault_key, "syncing", None);
+    emit_state(app, vault_key, "syncing", None);
     let progress_app = app.clone();
-    let progress_key = vault_key.clone();
+    let progress_key = vault_key.to_string();
     let progress = move |phase: &str, current: usize, total: usize| {
         let _ = progress_app.emit(
             "sync:progress",
@@ -167,11 +172,32 @@ pub async fn sync_now(
         );
     };
     let result = engine::sync_vault(&dir, &cfg, &progress).await;
-    service.end(&vault_key);
-
-    Ok(match result {
+    service.end(vault_key);
+    match result {
         Ok(outcome) => {
-            emit_state(&app, &vault_key, "idle", None);
+            emit_state(app, vault_key, "idle", None);
+            Ok(outcome)
+        }
+        Err(e) => {
+            emit_state(app, vault_key, "error", Some(e.to_string()));
+            Err(e)
+        }
+    }
+}
+
+/// One full sync pass (manual trigger from the settings pane).
+#[tauri::command]
+pub async fn sync_now(
+    app: AppHandle,
+    service: State<'_, SyncService>,
+    args: SyncVaultArgs,
+) -> Result<ApiResult<SyncOutcome>, String> {
+    use crate::core::log_util::OpTimer;
+
+    let vault_key = args.vault_path.trim().to_string();
+    let op = OpTimer::start_with("sync_now", format!("vault={vault_key}"));
+    match perform_sync(&app, &service, &vault_key).await {
+        Ok(outcome) => {
             op.finish_ok_extra(format!(
                 "version={} up={} down={} conflicts={}",
                 outcome.version,
@@ -179,14 +205,13 @@ pub async fn sync_now(
                 outcome.downloaded,
                 outcome.conflict_copies.len()
             ));
-            ApiResult::ok(outcome)
+            Ok(ApiResult::ok(outcome))
         }
         Err(e) => {
-            emit_state(&app, &vault_key, "error", Some(e.to_string()));
             op.finish_err(&e);
-            map_err(e)
+            Ok(map_err(e))
         }
-    })
+    }
 }
 
 fn emit_state(app: &AppHandle, vault_path: &str, status: &str, error: Option<String>) {

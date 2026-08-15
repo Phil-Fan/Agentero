@@ -9,15 +9,18 @@ pub mod config;
 pub mod engine;
 pub mod local;
 mod s3;
+mod scheduler;
 pub mod snapshot;
 
 use std::collections::HashSet;
 use std::sync::Mutex;
 
-/// Serializes sync passes per vault (managed tauri state).
+/// Serializes sync passes per vault and owns the auto-sync scheduler tasks
+/// (managed tauri state).
 #[derive(Default)]
 pub struct SyncService {
     running: Mutex<HashSet<String>>,
+    schedulers: Mutex<scheduler::SchedulerMap>,
 }
 
 impl SyncService {

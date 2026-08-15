@@ -1,6 +1,6 @@
 # 云同步（S3）设计草稿
 
-> 状态：Phase 0–1 已落地（实现说明见 [../backend/sync.md](../backend/sync.md)），Phase 2+ 为草稿。多设备间同步整个 Vault，存储后端只做 S3 兼容对象存储（AWS S3 / Cloudflare R2 / 阿里 OSS / MinIO / B2）。同一套引擎同时服务两种模式：用户自带 bucket（BYO）与将来的官方托管服务。
+> 状态：Phase 0–2（自动同步部分）已落地（实现说明见 [../backend/sync.md](../backend/sync.md)），Phase 2+ 为草稿。多设备间同步整个 Vault，存储后端只做 S3 兼容对象存储（AWS S3 / Cloudflare R2 / 阿里 OSS / MinIO / B2）。同一套引擎同时服务两种模式：用户自带 bucket（BYO）与将来的官方托管服务。
 
 ## 目标与非目标
 
@@ -148,7 +148,7 @@ watcher、vault、import、remote 均不改。
 |---|---|---|
 | 0 ✅ | catalog sidecar 化 + `.agentero/vault.json` UUID | 删库后 rescan 能恢复 tags/is_read |
 | 1 ✅ | sync 模块 MVP：配置 UI、手动同步、manifest/blob/CAS、冲突副本 | 两台设备经 MinIO/R2 双向同步收敛 |
-| 2 | 自动同步（debounce+定时）、状态栏指示、GC、multipart | 日常使用无感同步 |
+| 2 🚧 | 自动同步 ✅（打开/静置 30s/定时 + 退出尽力推送）；状态栏指示、GC、multipart 未做 | 日常使用无感同步 |
 | 3 | E2EE（口令派生密钥、blob/manifest 加密） | 远端只见密文 |
 | 4 | 官方托管：控制面（账号/配额/临时凭据签发）+ `Managed` provider | 应用侧仅新增 provider，engine 不动 |
 

@@ -17,6 +17,9 @@ export type SyncBackendConfig = {
 	/** Masked (`***`) on the way out; send the mask back to keep the secret. */
 	secretKey: string;
 	forcePathStyle: boolean;
+	/** Background sync: on open, after 30s quiet, and every intervalMinutes. */
+	autoSync: boolean;
+	intervalMinutes: number;
 };
 
 export type SyncStatus = {
@@ -57,7 +60,12 @@ export const emptySyncConfig = (): SyncBackendConfig => ({
 	accessKey: "",
 	secretKey: "",
 	forcePathStyle: true,
+	autoSync: true,
+	intervalMinutes: 30,
 });
+
+/** Interval choices shared with the Host (`config::INTERVAL_CHOICES`). */
+export const SYNC_INTERVAL_CHOICES = [15, 30, 60];
 
 export function syncGetStatus(vaultPath: string): Promise<SyncStatus> {
 	return invokeApi("sync_get_status", { args: { vaultPath } });

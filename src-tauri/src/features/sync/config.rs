@@ -29,6 +29,12 @@ pub struct SyncBackendConfig {
     /// Path style works with R2 / MinIO / AWS alike, so it is the default.
     #[serde(default = "default_true")]
     pub force_path_style: bool,
+    /// Automatic background sync: once on scheduler start (vault open), after
+    /// 30s of vault quiet, and every `interval_minutes`.
+    #[serde(default = "default_true")]
+    pub auto_sync: bool,
+    #[serde(default = "default_interval_minutes")]
+    pub interval_minutes: u32,
 }
 
 fn default_region() -> String {
@@ -38,6 +44,13 @@ fn default_region() -> String {
 fn default_true() -> bool {
     true
 }
+
+fn default_interval_minutes() -> u32 {
+    30
+}
+
+/// Interval choices offered by the settings UI; anything else snaps to 30.
+pub const INTERVAL_CHOICES: &[u32] = &[15, 30, 60];
 
 impl SyncBackendConfig {
     pub fn validate(&self) -> Result<(), AppError> {
@@ -63,6 +76,9 @@ impl SyncBackendConfig {
         self.prefix = self.prefix.trim().trim_matches('/').to_string();
         self.access_key = self.access_key.trim().to_string();
         self.secret_key = self.secret_key.trim().to_string();
+        if !INTERVAL_CHOICES.contains(&self.interval_minutes) {
+            self.interval_minutes = default_interval_minutes();
+        }
         self
     }
 
@@ -105,6 +121,11 @@ fn read_all() -> HashMap<String, SyncBackendConfig> {
     }
 }
 
+/// All configured vaults (used at app start / exit to drive auto sync).
+pub fn list_all() -> HashMap<String, SyncBackendConfig> {
+    read_all()
+}
+
 fn write_all(vaults: HashMap<String, SyncBackendConfig>) -> Result<(), AppError> {
     let path = config_path();
     if let Some(parent) = path.parent() {
@@ -139,4 +160,34 @@ pub fn remove(vault_path: &str) -> Result<(), AppError> {
         write_all(all)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_config_without_auto_sync_fields_gets_defaults() {
+        let cfg: SyncBackendConfig = serde_json::from_str(
+            r#"{"endpoint":"http://x","region":"r","bucket":"b","prefix":"",
+                "accessKey":"a","secretKey":"s","forcePathStyle":true}"#,
+        )
+        .unwrap();
+        assert!(cfg.auto_sync);
+        assert_eq!(cfg.interval_minutes, 30);
+    }
+
+    #[test]
+    fn normalized_snaps_unknown_interval_to_default() {
+        let mut cfg = SyncBackendConfig {
+            endpoint: "http://x/".into(),
+            interval_minutes: 7,
+            ..SyncBackendConfig::default()
+        };
+        cfg = cfg.normalized();
+        assert_eq!(cfg.interval_minutes, 30);
+        assert_eq!(cfg.endpoint, "http://x");
+        cfg.interval_minutes = 60;
+        assert_eq!(cfg.normalized().interval_minutes, 60);
+    }
 }

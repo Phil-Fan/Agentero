@@ -536,6 +536,8 @@ mod tests {
             access_key: "testkey".into(),
             secret_key: "testsecret".into(),
             force_path_style: true,
+            auto_sync: false,
+            interval_minutes: 30,
         };
         let noop: &(dyn Fn(&str, usize, usize) + Send + Sync) = &|_, _, _| {};
 

@@ -222,6 +222,10 @@ pub fn run() {
             });
         }
 
+        // Auto sync: resume background schedulers for configured vaults.
+        app.state::<crate::features::sync::SyncService>()
+            .start_all(app.handle());
+
         Ok(())
     });
 
@@ -290,6 +294,11 @@ pub fn run() {
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 app.state::<Arc<crate::features::telemetry::Telemetry>>()
                     .shutdown();
+            }
+            // Best-effort final push (bounded); only on Exit so it runs once.
+            if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<crate::features::sync::SyncService>()
+                    .flush_on_exit();
             }
         });
 }

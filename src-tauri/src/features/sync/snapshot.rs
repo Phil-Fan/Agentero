@@ -29,7 +29,7 @@ pub struct FileEntry {
 /// Directories never entered and files never synced.
 /// Must stay a superset of the watcher's ignore rules so sync state and
 /// catalog SQLite never travel through the blob store.
-fn is_ignored_name(name: &str) -> bool {
+pub(crate) fn is_ignored_name(name: &str) -> bool {
     matches!(name, ".agentero" | ".git" | "node_modules" | ".DS_Store") || name.ends_with(".tmp")
 }
 
