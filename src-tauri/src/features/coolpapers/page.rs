@@ -120,6 +120,8 @@ pub async fn import_page(args: ImportPageArgs<'_>) -> Result<PaperCommitResult, 
     let url = format!("{ORIGIN}/{branch}/{}", urlencoding::encode(id));
     let res = http_client()?
         .get(&url)
+        .timeout(std::time::Duration::from_secs(60))
+        .header(reqwest::header::USER_AGENT, super::USER_AGENT)
         .send()
         .await
         .map_err(|e| AppError::message(format!("cool papers request failed: {e}")))?;

@@ -154,6 +154,7 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 - sandbox 去掉 `allow-popups`，确保没有链接能逃到新窗口。
 - 与 PDF iframe 一样，拖拽期间置 `pointer-events: none`，否则 dockview 收不到 dragover。
 - 远程 Vault 会话下同样可用（广场不依赖 vault 文件 IO）。
+- Host 用进程级复用的 HTTP 客户端转发（`network::shared_client`），否则每张图 / 每段 JS 都要重新握手代理 TLS，papers.cool 会明显卡。
 
 ### 3.2.1 入库（已实现）
 

@@ -77,13 +77,12 @@ pub fn handle(
 
     tauri::async_runtime::spawn(async move {
         let result = async {
-            let client = crate::features::network::client_builder()
-                .user_agent(site.user_agent)
-                .redirect(reqwest::redirect::Policy::limited(5))
-                .build()?;
+            let client = crate::features::network::shared_client().map_err(|e| e.to_string())?;
             let method = reqwest::Method::from_bytes(parts.method.as_str().as_bytes())
                 .unwrap_or(reqwest::Method::GET);
-            let mut outgoing = client.request(method, url);
+            let mut outgoing = client
+                .request(method, url)
+                .header(reqwest::header::USER_AGENT, site.user_agent);
             for (name, value) in parts.headers.iter() {
                 if is_forwardable(name.as_str()) {
                     outgoing = outgoing.header(name.as_str(), value.as_bytes());
@@ -94,7 +93,7 @@ pub fn handle(
             if !body.is_empty() {
                 outgoing = outgoing.body(body);
             }
-            let remote = outgoing.send().await?;
+            let remote = outgoing.send().await.map_err(|e| e.to_string())?;
             let status =
                 StatusCode::from_u16(remote.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
             let content_type = remote
@@ -103,7 +102,7 @@ pub fn handle(
                 .and_then(|value| value.to_str().ok())
                 .unwrap_or("application/octet-stream")
                 .to_string();
-            let bytes = remote.bytes().await?;
+            let bytes = remote.bytes().await.map_err(|e| e.to_string())?;
             let body = if content_type.starts_with("text/html") {
                 match String::from_utf8(bytes.to_vec()) {
                     Ok(text) if looks_like_document(&text) => (site.rewrite)(&text).into_bytes(),
@@ -113,7 +112,7 @@ pub fn handle(
             } else {
                 bytes.to_vec()
             };
-            Ok::<_, reqwest::Error>((status, content_type, body))
+            Ok::<_, String>((status, content_type, body))
         }
         .await;
 

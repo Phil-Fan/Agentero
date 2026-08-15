@@ -80,17 +80,14 @@ impl CoolPapersNotes {
 }
 
 pub(crate) fn http_client() -> Result<reqwest::Client, AppError> {
-    crate::features::network::client_builder()
-        .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
-        .user_agent(USER_AGENT)
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .build()
-        .map_err(|e| AppError::message(format!("cool papers http client: {e}")))
+    crate::features::network::shared_client()
 }
 
 async fn get_text(url: &str) -> Result<String, AppError> {
     let res = http_client()?
         .get(url)
+        .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+        .header(reqwest::header::USER_AGENT, USER_AGENT)
         .send()
         .await
         .map_err(|e| AppError::message(format!("cool papers request failed: {e}")))?;
@@ -318,7 +315,13 @@ pub(crate) fn decode_entities(input: &str) -> String {
     while let Some(amp) = rest.find('&') {
         out.push_str(&rest[..amp]);
         let tail = &rest[amp..];
-        let Some(semi) = tail[..tail.len().min(12)].find(';') else {
+        // Named / numeric entities are short. Scan by char so a bare `&`
+        // in front of CJK (e.g. `R&D返回`) cannot slice mid-codepoint.
+        let Some(semi) = tail
+            .char_indices()
+            .take(32)
+            .find_map(|(i, c)| (c == ';').then_some(i))
+        else {
             out.push('&');
             rest = &tail[1..];
             continue;
@@ -536,6 +539,9 @@ mod tests {
         assert_eq!(decode_entities("a &lt;b&gt; c"), "a <b> c");
         // A bare ampersand is left alone.
         assert_eq!(decode_entities("Q&A"), "Q&A");
+        // `&` + CJK used to panic: `tail[..12]` split a 3-byte char (`返`).
+        assert_eq!(decode_entities("R&D返回首页"), "R&D返回首页");
+        assert_eq!(decode_entities("A&测试&amp;B"), "A&测试&B");
     }
 
     #[test]
