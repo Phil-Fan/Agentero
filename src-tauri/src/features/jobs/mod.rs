@@ -213,18 +213,39 @@ struct JobCenterInner {
     /// Number of currently `Running` jobs per kind, used to enforce the
     /// per-kind concurrency caps from paper-pipeline-orchestration.md §7.3.
     running_by_kind: HashMap<JobKind, usize>,
+    /// `LayoutAnalyze` cap: 1 for local ONNX, unlimited for the remote API.
+    layout_analyze_cap: LayoutAnalyzeCap,
+}
+
+/// Default local-ONNX cap. `Default` on `usize` would be 0 and stall the queue.
+#[derive(Debug, Clone, Copy)]
+struct LayoutAnalyzeCap(usize);
+
+impl Default for LayoutAnalyzeCap {
+    fn default() -> Self {
+        Self(1)
+    }
 }
 
 /// Per-kind concurrency cap (§7.3). `usize::MAX` = uncapped at the JobCenter
 /// level (the kind is either not yet scheduled here or throttled elsewhere).
-fn kind_concurrency(kind: JobKind) -> usize {
+fn kind_concurrency(inner: &JobCenterInner, kind: JobKind) -> usize {
     match kind {
         JobKind::ParseBody => 1,
-        JobKind::LayoutAnalyze => 1,
+        JobKind::LayoutAnalyze => inner.layout_analyze_cap.0,
         JobKind::ParseRefs => 2,
         JobKind::DownloadAssets => 3,
         JobKind::LayoutTranslate => 2,
         JobKind::PageCount | JobKind::WikiReindex => usize::MAX,
+    }
+}
+
+/// Remote Paddle jobs are just HTTP; they must not share the ONNX cap of 1.
+pub fn layout_analyze_concurrency(backend: &str) -> usize {
+    if backend.trim().eq_ignore_ascii_case("paddle") {
+        usize::MAX
+    } else {
+        1
     }
 }
 
@@ -328,6 +349,24 @@ impl JobCenter {
 
     pub fn handle(&self) -> Self {
         self.clone()
+    }
+
+    /// Seed the layout-analyze cap from the current settings backend.
+    pub fn with_layout_backend(backend: &str) -> Self {
+        let center = Self::new();
+        if let Ok(mut inner) = center.inner.try_lock() {
+            inner.layout_analyze_cap = LayoutAnalyzeCap(layout_analyze_concurrency(backend));
+        }
+        center
+    }
+
+    pub async fn set_layout_analyze_cap(&self, cap: usize) {
+        self.inner.lock().await.layout_analyze_cap = LayoutAnalyzeCap(cap.max(1));
+    }
+
+    pub async fn apply_layout_backend(&self, backend: &str) {
+        self.set_layout_analyze_cap(layout_analyze_concurrency(backend))
+            .await;
     }
 
     pub async fn enqueue_parse_refs(
@@ -636,7 +675,7 @@ impl JobCenter {
                     return StartOutcome::Waiting;
                 };
                 let running = inner.running_by_kind.get(&kind).copied().unwrap_or(0);
-                if running >= kind_concurrency(kind) {
+                if running >= kind_concurrency(&inner, kind) {
                     // Kind is at its concurrency cap; stay queued until a slot
                     // frees and the post-finish drain re-tries this job.
                     return StartOutcome::Waiting;
@@ -910,6 +949,10 @@ impl JobCenter {
                             self.spawn_runner(&app, started);
                         }
                     }
+                    let backend = app
+                        .state::<crate::features::settings::AppSettingsStore>()
+                        .layout_backend();
+                    self.apply_layout_backend(&backend).await;
                     let lsnap = self
                         .enqueue_layout_analyze(&vault, &path, JobLane::Normal, false)
                         .await;
@@ -990,7 +1033,7 @@ impl JobCenter {
                         }
                         let kind = job.kind;
                         let running = inner.running_by_kind.get(&kind).copied().unwrap_or(0);
-                        if running >= kind_concurrency(kind) {
+                        if running >= kind_concurrency(&inner, kind) {
                             continue;
                         }
                         if deps_readiness(&inner, job) != DepsReadiness::Ready {
@@ -1834,6 +1877,40 @@ mod tests {
         match center.try_start(&b.id).await {
             StartOutcome::Started(..) => {}
             other => panic!("expected Started after slot freed, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn layout_analyze_paddle_backend_has_no_concurrency_cap() {
+        let center = JobCenter::new();
+        center.apply_layout_backend("paddle").await;
+        let a = center
+            .enqueue_layout_analyze(vault("paddle-a"), "papers/a", JobLane::Normal, false)
+            .await;
+        let b = center
+            .enqueue_layout_analyze(vault("paddle-b"), "papers/b", JobLane::Normal, false)
+            .await;
+
+        match center.try_start(&a.id).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected first Started, got {other:?}"),
+        }
+        match center.try_start(&b.id).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected paddle jobs to start in parallel, got {other:?}"),
+        }
+        assert_eq!(
+            center.running_count_for_test(JobKind::LayoutAnalyze).await,
+            2
+        );
+
+        center.apply_layout_backend("local").await;
+        let c = center
+            .enqueue_layout_analyze(vault("paddle-c"), "papers/c", JobLane::Normal, false)
+            .await;
+        match center.try_start(&c.id).await {
+            StartOutcome::Waiting => {}
+            other => panic!("expected local cap to apply after switch, got {other:?}"),
         }
     }
 

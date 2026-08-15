@@ -20,7 +20,9 @@
         │  实现：`enqueue-paper-layout.ts` + `headless-analyze.ts`
         │
 打开论文 PDF（含非 active 的已挂载 tab）→ enqueue 到后台任务队列
-        │  多篇并行打开：都进左下角任务列表；ONNX 串行（JobCenter layoutAnalyze cap=1）避免抢模型
+        │  多篇并行打开：都进左下角任务列表
+        │  本地 ONNX：JobCenter layoutAnalyze cap=1（避免抢模型）
+        │  Paddle API：无 JobCenter 并发上限（远端排队）；进度事件用 requestId 隔离
         │  实现：viewer mount 调 `enqueuePaperLayoutAnalysis`（与入库后同一路径）
         │  终态 `job_report` / 取消必须释放该 cap，否则后续任务会一直排队
         │  后台 ONNX 不依赖当前 active 论文窗口：headless EmbedPDF 独立打开本地 PDF
@@ -121,7 +123,7 @@ Paddle 后端流程（`src/lib/pdf/layout/paddle.ts` + `run-analysis.ts` 的 `st
 
 - 标签词表与本地一致（PP-DocLayoutV3 `id2label`），`labels.ts` 映射直接复用；阈值同为 0.3。
 - sidecar `source.mode` 记为 `paddle-layout`（本地为 `embedpdf-layout`），两者均可被解析。
-- 进度 / 取消沿用 `LayoutTask` 形状（`PaddleLayoutTask`）；JobCenter `layoutAnalyze` 任务无需改动。
+- 进度 / 取消沿用 `LayoutTask` 形状（`PaddleLayoutTask`）。JobCenter 对 Paddle **不设并发上限**；`layout-remote:progress` 带 `requestId`，并行任务互不串进度。
 - 无 paper 目录（拿不到 PDF 字节）或页数未知时自动回退本地 ONNX。
 - 端点固定为 `https://paddleocr.aistudio-app.com/api/v2/ocr/jobs`；API Key 在 [AI Studio PaddleOCR 任务页](https://aistudio.baidu.com/paddleocr/task/new) 获取。
 

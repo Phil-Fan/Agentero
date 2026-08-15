@@ -1,7 +1,7 @@
 /**
  * Enqueue post-download / post-import layout analysis as a JobCenter task.
- * The renderer registers as the executor and runs the ONNX model when Rust
- * emits `job:offer` for a `layoutAnalyze` job.
+ * The renderer registers as the executor and runs local ONNX or the Paddle
+ * API when Rust emits `job:offer` for a `layoutAnalyze` job.
  */
 
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";

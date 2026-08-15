@@ -408,6 +408,15 @@ impl AppSettingsStore {
         }
     }
 
+    pub fn layout_backend(&self) -> String {
+        self.inner
+            .lock()
+            .ok()
+            .map(|guard| guard.layout.backend.clone())
+            .filter(|backend| !backend.trim().is_empty())
+            .unwrap_or_else(default_layout_backend)
+    }
+
     /// Resolve a layout-provider API key by provider id (e.g. `paddle`).
     /// Used by the layout_remote commands so the WebView never needs the key.
     pub fn layout_api_key(&self, provider: &str) -> Option<String> {

@@ -8,7 +8,7 @@
 
 ## 根因
 
-`layoutAnalyze` 的并发上限是 1。前端 executor 跑完 ONNX 后通过 `job_report(state: succeeded|failed|cancelled)` 上报终态；Rust runner 用 `wait_for_terminal` 看到终态再调 `finish()`。
+`layoutAnalyze` 本地 ONNX 的并发上限是 1（Paddle API 不设上限）。前端 executor 跑完后通过 `job_report(state: succeeded|failed|cancelled)` 上报终态；Rust runner 用 `wait_for_terminal` 看到终态再调 `finish()`。
 
 `job_report` 以前只改 `job.state`，**不释放** `running_by_kind`。`finish()` 见到已经是终态就直接返回，避免覆盖用户取消，也因此**不会补释放槽位**。第一篇一结束，计数永远停在 1，后续全部 `Waiting`。
 

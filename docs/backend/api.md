@@ -2155,10 +2155,12 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 
 整份 PDF 的 **异步** PP-StructureV3 解析（无同步逐页接口）：
 
-- **参数**：`{ args: { pdfBase64, fileName?, apiKey? } }`
+- **参数**：`{ args: { pdfBase64, fileName?, apiKey?, requestId? } }`
   - 端点固定为 `https://paddleocr.aistudio-app.com/api/v2/ocr/jobs`；`apiKey` 为空 / 掩码时由 Host 从设置注入（WebView 不持有明文）。
+  - `requestId` 用于并行任务把 `layout-remote:progress` 对回调用方。
 - **流程**：multipart 提交任务 `POST /api/v2/ocr/jobs`（`model: PP-StructureV3`，`Authorization: bearer <token>`）→ 每 3s 轮询 `GET /api/v2/ocr/jobs/{jobId}`（总时限 10 分钟）→ 完成后下载 `resultUrl.jsonUrl`（JSONL）并提取每页 `prunedResult.layout_det_res.boxes`。
-- **进度**：轮询期间 emit `layout-remote:progress`，payload `{ phase, extractedPages, totalPages }`（phase：`uploading` / `pending` / `running` / `downloading` / `done`）。
+- **进度**：轮询期间 emit `layout-remote:progress`，payload `{ phase, extractedPages, totalPages, requestId? }`（phase：`uploading` / `pending` / `running` / `downloading` / `done`）。
+- **并发**：`settings.layout.backend === "paddle"` 时 JobCenter `layoutAnalyze` **无并发上限**；本地 ONNX 仍 cap=1。
 - **返回**：`{ pages: [{ boxes: [{ clsId, label, score, coordinate }], widthPx, heightPx }] }`；渲染像素尺寸优先取 `dataInfo` / `inputImage` JPEG 头，缺失为 `null`（前端按 200 DPI 估算）。
 - **超时 / 代理**：单请求 120s；走 Host 全局代理（`network::client_builder`）。
 - 实现：`src-tauri/src/features/layout_remote/`；前端 `src/lib/pdf/layout/paddle.ts`。

@@ -288,7 +288,8 @@ export function usePdfLayoutRun({
 	startLayoutAnalysisRef.current = startLayoutAnalysis;
 
 	// Any open paper (active or not) → headless queue so multi-tab can all
-	// land in the background-tasks panel. ONNX still serial (concurrency:1).
+	// land in the background-tasks panel. Local ONNX stays serial (cap 1);
+	// the Paddle API backend is uncapped at JobCenter.
 	useEffect(() => {
 		if (!paperAbsPath) return;
 		enqueuePaperLayoutAnalysis({ paperAbsPath });

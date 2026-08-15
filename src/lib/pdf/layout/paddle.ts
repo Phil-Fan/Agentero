@@ -38,6 +38,8 @@ export type LayoutRemoteProgressPayload = {
 	phase: string;
 	extractedPages: number | null;
 	totalPages: number | null;
+	/** Present when several API jobs run in parallel; omit on older Hosts. */
+	requestId?: string | null;
 };
 
 /** Match the local PP-DocLayoutV3 plugin threshold. */
@@ -55,12 +57,14 @@ export async function invokeLayoutRemoteAnalyzePdf(args: {
 	pdfBase64: string;
 	fileName?: string;
 	apiKey?: string;
+	requestId?: string;
 }): Promise<LayoutRemoteAnalyzePdfResult> {
 	return invokeApi<LayoutRemoteAnalyzePdfResult>("layout_remote_analyze_pdf", {
 		args: {
 			pdfBase64: args.pdfBase64,
 			fileName: args.fileName ?? null,
 			apiKey: args.apiKey ?? null,
+			requestId: args.requestId ?? null,
 		},
 	});
 }

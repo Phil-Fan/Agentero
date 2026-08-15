@@ -830,6 +830,7 @@ function startPaddleLayoutAnalysis(
 			if (!buffer) throw new Error("Failed to read paper PDF");
 			assertDocumentOpen(options.isDocumentOpen);
 
+			const requestId = `layout-remote-${documentId}`;
 			// Host emits job progress (upload → pending/running → download).
 			if (isTauri()) {
 				const { listen } = await import("@tauri-apps/api/event");
@@ -837,6 +838,7 @@ function startPaddleLayoutAnalysis(
 					LAYOUT_REMOTE_PROGRESS_EVENT,
 					(event) => {
 						const p = event.payload;
+						if (p.requestId && p.requestId !== requestId) return;
 						const known =
 							typeof p.totalPages === "number" && p.totalPages > 0
 								? p.totalPages
@@ -877,6 +879,7 @@ function startPaddleLayoutAnalysis(
 			const res = await invokeLayoutRemoteAnalyzePdf({
 				pdfBase64: arrayBufferToBase64(buffer),
 				fileName: pdfPath.split(/[/\\]/).pop() || "paper.pdf",
+				requestId,
 			});
 			unlisten?.();
 			unlisten = null;

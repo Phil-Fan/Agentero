@@ -8,6 +8,20 @@ use crate::features::settings::{AppSettings, AppSettingsStore, SettingsGetResult
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
+fn apply_layout_analyze_cap(
+    app: &AppHandle,
+    center: &crate::features::jobs::JobCenter,
+    backend: &str,
+) {
+    let app = app.clone();
+    let center = center.clone();
+    let backend = backend.to_string();
+    tauri::async_runtime::spawn(async move {
+        center.apply_layout_backend(&backend).await;
+        center.drain_and_spawn(&app).await;
+    });
+}
+
 #[tauri::command]
 pub fn settings_get(store: State<'_, AppSettingsStore>) -> ApiResult<SettingsGetResult> {
     match store.get() {
@@ -65,6 +79,7 @@ pub fn settings_set(
     store: State<'_, AppSettingsStore>,
     agents: State<'_, crate::features::agent::AgentRegistry>,
     connector: State<'_, Arc<ConnectorController>>,
+    center: State<'_, crate::features::jobs::JobCenter>,
     settings: AppSettings,
 ) -> ApiResult<AppSettings> {
     if let Err(e) = crate::features::network::configure_proxy(
@@ -84,6 +99,7 @@ pub fn settings_set(
             tauri::async_runtime::spawn(async move {
                 let _ = ctrl.set_port(port).await;
             });
+            apply_layout_analyze_cap(&app, &center, &s.layout.backend);
             // Keep every window's settings cache fresh (settings window, main windows).
             let _ = app.emit("settings:changed", &s);
             ApiResult::ok(s)
@@ -100,6 +116,7 @@ pub fn settings_set(
     app: AppHandle,
     store: State<'_, AppSettingsStore>,
     agents: State<'_, crate::features::agent::AgentRegistry>,
+    center: State<'_, crate::features::jobs::JobCenter>,
     settings: AppSettings,
 ) -> ApiResult<AppSettings> {
     if let Err(e) = crate::features::network::configure_proxy(
@@ -111,6 +128,7 @@ pub fn settings_set(
     match store.set(settings) {
         Ok(s) => {
             let _ = agents.set_proxy(s.network_proxy_enabled, s.network_proxy_url.clone());
+            apply_layout_analyze_cap(&app, &center, &s.layout.backend);
             let _ = app.emit("settings:changed", &s);
             ApiResult::ok(s)
         }

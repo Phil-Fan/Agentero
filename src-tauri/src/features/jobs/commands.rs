@@ -1,7 +1,7 @@
 use crate::core::error::{map_err, ApiResult};
 use serde::Deserialize;
 use std::path::PathBuf;
-use tauri::State;
+use tauri::{Manager, State};
 
 use super::{
     emit_job_changed, parse_lane, validate_job_paper, JobCenter, JobLane, JobSnapshot, JobState,
@@ -304,6 +304,10 @@ pub async fn job_layout_analyze_enqueue(
         Ok(valid) => valid,
         Err(e) => return Ok(map_err(e)),
     };
+    let backend = app
+        .state::<crate::features::settings::AppSettingsStore>()
+        .layout_backend();
+    center.apply_layout_backend(&backend).await;
     let snapshot = center
         .enqueue_layout_analyze(&vault, &path, parse_lane(args.lane), args.force)
         .await;

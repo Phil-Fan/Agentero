@@ -78,8 +78,10 @@ pub fn run() {
         builder = builder.plugin(tauri_plugin_shell::init());
     }
 
+    let settings_store = AppSettingsStore::load();
+    let layout_backend = settings_store.layout_backend();
     builder = builder
-        .manage(AppSettingsStore::load())
+        .manage(settings_store)
         .manage(AgentRegistry::load())
         .manage(AgentRunController::new())
         .manage(crate::features::agent::AgentWarmGate::new())
@@ -88,7 +90,9 @@ pub fn run() {
         .manage(crate::features::agent::AskUserGate::new())
         .manage(crate::features::bridge::BridgeController::new())
         .manage(crate::features::bridge::BridgeClientController::new())
-        .manage(crate::features::jobs::JobCenter::new())
+        .manage(crate::features::jobs::JobCenter::with_layout_backend(
+            &layout_backend,
+        ))
         .manage(crate::features::catalog::CapsCache::new())
         .manage(WikiIndexState::new())
         .manage(crate::features::doctor::DoctorDirtyPathsState::default())

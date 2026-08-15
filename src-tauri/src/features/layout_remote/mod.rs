@@ -75,6 +75,9 @@ pub struct LayoutRemoteAnalyzePdfArgs {
     /// Access-token override (probe flow); normally resolved from settings.
     #[serde(default)]
     pub api_key: Option<String>,
+    /// Correlates `layout-remote:progress` when several API jobs run at once.
+    #[serde(default)]
+    pub request_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -102,6 +105,8 @@ struct CloudProgressPayload {
     phase: String,
     extracted_pages: Option<u64>,
     total_pages: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request_id: Option<String>,
 }
 
 /// Decode a base64 JPEG and read its SOF dimensions (best effort).
@@ -312,6 +317,7 @@ pub async fn analyze_pdf(
         .build()
         .map_err(|e| AppError::message(format!("http client: {e}")))?;
 
+    let request_id = args.request_id.clone();
     let emit_progress = |phase: &str, extracted: Option<u64>, total: Option<u64>| {
         let _ = app.emit(
             CLOUD_PROGRESS_EVENT,
@@ -319,6 +325,7 @@ pub async fn analyze_pdf(
                 phase: phase.to_string(),
                 extracted_pages: extracted,
                 total_pages: total,
+                request_id: request_id.clone(),
             },
         );
     };
