@@ -39,12 +39,7 @@ pub async fn run(cmd: FeedCmd, globals: &GlobalOpts) -> Result<Value, CliError> 
             let lines: Vec<String> = data
                 .subscriptions
                 .iter()
-                .map(|row| {
-                    format!(
-                        "{}  {}  {} items",
-                        row.title, row.url, row.item_count
-                    )
-                })
+                .map(|row| format!("{}  {}  {} items", row.title, row.url, row.item_count))
                 .collect();
             Ok(json!({ "subscriptions": data.subscriptions, "lines": lines }))
         }
