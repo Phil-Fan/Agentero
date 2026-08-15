@@ -25,6 +25,7 @@ import { cn } from "@/lib/core/utils";
 import {
 	cleanFeedSummary,
 	type FeedItem,
+	feedDetailMarkdown,
 	feedsMarkImported,
 	feedsResolveBody,
 	importFeedPaper,
@@ -151,7 +152,7 @@ export function PlazaFeedItemDetail({
 	const href = item.url ?? item.paperUrl;
 	const imported = Boolean(item.importedAt);
 	const isPaper = Boolean(item.paperUrl);
-	const body = item.bodyMarkdown?.trim() || cleanFeedSummary(item.summaryText);
+	const markdown = feedDetailMarkdown(item);
 
 	useEffect(() => {
 		if (item.bodyMarkdown?.trim()) {
@@ -204,8 +205,16 @@ export function PlazaFeedItemDetail({
 					<TooltipContent>{t("plaza.feeds.back")}</TooltipContent>
 				</Tooltip>
 				<span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
-					{hideSource ? null : item.subscriptionTitle}
+					{[hideSource ? null : item.subscriptionTitle, when]
+						.filter(Boolean)
+						.join(" · ")}
 				</span>
+				{resolving ? (
+					<Loader2
+						className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+						aria-label={t("plaza.feeds.loadingBody")}
+					/>
+				) : null}
 				{href ? (
 					<Tooltip>
 						<TooltipTrigger asChild>
@@ -252,27 +261,9 @@ export function PlazaFeedItemDetail({
 				) : null}
 			</div>
 			<div className="agentero-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4">
-				<div className="flex items-start gap-2">
-					<h1 className="min-w-0 flex-1 font-medium text-base leading-snug">
-						{item.title}
-					</h1>
-					{resolving ? (
-						<Loader2
-							className="mt-1 size-3.5 shrink-0 animate-spin text-muted-foreground"
-							aria-label={t("plaza.feeds.loadingBody")}
-						/>
-					) : null}
-				</div>
-				{(when || (!hideSource && item.subscriptionTitle)) && (
-					<p className="mt-1 text-muted-foreground text-xs">
-						{hideSource
-							? when
-							: [item.subscriptionTitle, when].filter(Boolean).join(" · ")}
-					</p>
-				)}
-				{body ? (
-					<MessageResponse className="prose prose-sm dark:prose-invert mt-4 max-w-none text-sm leading-relaxed">
-						{body}
+				{markdown ? (
+					<MessageResponse className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&_h1]:mt-0 [&_h1]:mb-3 [&_h1]:font-medium [&_h1]:text-base [&_h1]:leading-snug">
+						{markdown}
 					</MessageResponse>
 				) : null}
 			</div>

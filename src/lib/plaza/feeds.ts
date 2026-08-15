@@ -74,7 +74,39 @@ export function cleanFeedSummary(raw: string): string {
 		const skip = after.search(/\s/);
 		rest = (skip === -1 ? "" : after.slice(skip)).trimStart();
 	}
-	return rest.replace(/\s+/g, " ").trim();
+	return stripTrailingEllipsis(rest.replace(/\s+/g, " ").trim());
+}
+
+/** Drop RSS teaser tails (`[...]`, `…`) from cards and the detail body. */
+export function stripTrailingEllipsis(text: string): string {
+	let rest = text.trim();
+	for (;;) {
+		const lower = rest.toLowerCase();
+		let next = rest;
+		if (lower.endsWith("[...]")) next = rest.slice(0, -5);
+		else if (rest.endsWith("[…]")) next = rest.slice(0, -"[…]".length);
+		else if (lower.endsWith("[..]")) next = rest.slice(0, -4);
+		else if (rest.endsWith("...")) next = rest.slice(0, -3);
+		else if (rest.endsWith("…")) next = rest.slice(0, -1);
+		else break;
+		rest = next.trimEnd();
+	}
+	return rest;
+}
+
+/** One Markdown document: `# Title` plus body, for `MessageResponse`. */
+export function feedDetailMarkdown(item: FeedItem): string {
+	const raw = item.bodyMarkdown?.trim() || cleanFeedSummary(item.summaryText);
+	const body = stripTrailingEllipsis(raw);
+	const title = item.title.trim();
+	if (!title) return body;
+	const first = body.split("\n")[0]?.trim() ?? "";
+	const firstText = first.replace(/^#+\s*/, "").trim();
+	const rest = body.split("\n").slice(1).join("\n").trim();
+	if (firstText.toLowerCase() === title.toLowerCase()) {
+		return rest ? `# ${title}\n\n${rest}` : `# ${title}`;
+	}
+	return body ? `# ${title}\n\n${body}` : `# ${title}`;
 }
 
 const SETTLE_TIMEOUT_MS = 120_000;

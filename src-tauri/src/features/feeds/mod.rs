@@ -14,8 +14,8 @@ pub mod commands;
 use crate::core::error::AppError;
 use crate::features::network;
 use body::{
-    extract_article_html, html_to_markdown, is_fetchable_http_url, is_paper_landing_url,
-    looks_truncated, strip_leading_title,
+    ensure_heading, extract_article_html, html_to_markdown, is_fetchable_http_url,
+    is_paper_landing_url, looks_truncated, strip_trailing_ellipsis,
 };
 use chrono::Utc;
 use parse::{
@@ -613,7 +613,7 @@ fn markdown_from_rss(item: &FeedItem) -> String {
     {
         let md = html_to_markdown(html);
         if !md.is_empty() {
-            return strip_leading_title(&md, &item.title);
+            return md;
         }
     }
     item.summary_text.trim().to_string()
@@ -650,13 +650,13 @@ async fn fetch_article_markdown(url: &str, title: &str) -> Result<String, AppErr
         if md.trim().is_empty() {
             return Err(AppError::message("feeds.body"));
         }
-        return Ok(strip_leading_title(&md, title));
+        return Ok(ensure_heading(&md, title));
     }
     let text = body.trim();
     if text.is_empty() {
         return Err(AppError::message("feeds.body"));
     }
-    Ok(text.to_string())
+    Ok(ensure_heading(text, title))
 }
 
 /// Resolve a full article body for the detail page. RSS often only ships an
@@ -682,11 +682,7 @@ pub async fn resolve_body(id: &str) -> Result<FeedItem, AppError> {
         && existing.url.as_deref().is_some_and(is_fetchable_http_url)
         && (looks_truncated(&rss) || rss.chars().count() < 400);
     if !need_fetch {
-        let body = if rss.is_empty() {
-            existing.summary_text.clone()
-        } else {
-            rss
-        };
+        let body = ensure_heading(&strip_trailing_ellipsis(&rss), &existing.title);
         let conn = ensure_feeds()?;
         return persist_body(&conn, id, &body);
     }
@@ -699,15 +695,15 @@ pub async fn resolve_body(id: &str) -> Result<FeedItem, AppError> {
                 rss
             };
             let conn = ensure_feeds()?;
-            persist_body(&conn, id, &chosen)
+            persist_body(
+                &conn,
+                id,
+                &ensure_heading(&strip_trailing_ellipsis(&chosen), &existing.title),
+            )
         }
         Ok(_) | Err(_) => {
-            let fallback = if rss.is_empty() {
-                existing.summary_text.clone()
-            } else {
-                rss
-            };
-            if looks_truncated(&fallback) {
+            let fallback = ensure_heading(&strip_trailing_ellipsis(&rss), &existing.title);
+            if looks_truncated(&rss) {
                 return Ok(item_with_body(existing, fallback));
             }
             let conn = ensure_feeds()?;

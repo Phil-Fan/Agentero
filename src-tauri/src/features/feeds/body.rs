@@ -86,20 +86,59 @@ pub fn extract_article_html(html: &str) -> String {
     extract_element(&cleaned, "body").unwrap_or(cleaned)
 }
 
-pub fn strip_leading_title(md: &str, title: &str) -> String {
+/// Drop RSS “read more” tails (`[...]`, `…`) so the detail page is not a teaser.
+pub fn strip_trailing_ellipsis(text: &str) -> String {
+    let mut t = text.trim().to_string();
+    loop {
+        let lower = t.to_ascii_lowercase();
+        let cut = if lower.ends_with("[...]") {
+            t.len().checked_sub(5)
+        } else if t.ends_with("[…]") {
+            t.len().checked_sub("[…]".len())
+        } else if lower.ends_with("[..]") {
+            t.len().checked_sub(4)
+        } else if t.ends_with("...") {
+            t.len().checked_sub(3)
+        } else if t.ends_with('…') {
+            t.len().checked_sub('…'.len_utf8())
+        } else if lower.ends_with("read more") {
+            t.len().checked_sub("read more".len())
+        } else if lower.ends_with("continue reading") {
+            t.len().checked_sub("continue reading".len())
+        } else {
+            None
+        };
+        let Some(end) = cut.filter(|&n| t.is_char_boundary(n)) else {
+            break;
+        };
+        t = t[..end].trim_end().to_string();
+    }
+    t
+}
+
+/// Make the article start with `# Title` so the detail page can render as one
+/// Markdown document (no separate HTML heading).
+pub fn ensure_heading(md: &str, title: &str) -> String {
     let title = title.trim();
+    let md = strip_trailing_ellipsis(md);
     if title.is_empty() {
-        return md.to_string();
+        return md;
+    }
+    let heading = format!("# {title}");
+    if md.is_empty() {
+        return heading;
     }
     let mut lines = md.lines();
-    let Some(first) = lines.next() else {
-        return md.to_string();
-    };
-    let heading = first.trim().trim_start_matches('#').trim();
-    if heading.eq_ignore_ascii_case(title) {
-        return lines.collect::<Vec<_>>().join("\n").trim().to_string();
+    let first = lines.next().unwrap_or("").trim();
+    let first_text = first.trim_start_matches('#').trim();
+    if first_text.eq_ignore_ascii_case(title) {
+        let rest = lines.collect::<Vec<_>>().join("\n").trim().to_string();
+        if rest.is_empty() {
+            return heading;
+        }
+        return format!("{heading}\n\n{rest}");
     }
-    md.to_string()
+    format!("{heading}\n\n{md}")
 }
 
 fn strip_noise_tags(html: &str) -> String {
@@ -331,11 +370,27 @@ mod tests {
     }
 
     #[test]
-    fn strips_duplicate_title() {
-        let md = "# The Geometry of Truth\n\n## The Setup\n\nHello.";
+    fn strips_trailing_ellipsis() {
+        assert_eq!(strip_trailing_ellipsis("Hello world [...]"), "Hello world");
+        assert_eq!(strip_trailing_ellipsis("Hello world…"), "Hello world");
         assert_eq!(
-            strip_leading_title(md, "The Geometry of Truth"),
-            "## The Setup\n\nHello."
+            strip_trailing_ellipsis("Complete sentence."),
+            "Complete sentence."
+        );
+    }
+
+    #[test]
+    fn prefixes_markdown_title() {
+        assert_eq!(
+            ensure_heading("## The Setup\n\nHello [...]", "The Geometry of Truth"),
+            "# The Geometry of Truth\n\n## The Setup\n\nHello"
+        );
+        assert_eq!(
+            ensure_heading(
+                "# The Geometry of Truth\n\n## The Setup",
+                "The Geometry of Truth"
+            ),
+            "# The Geometry of Truth\n\n## The Setup"
         );
     }
 }
