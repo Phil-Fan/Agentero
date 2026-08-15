@@ -13,6 +13,9 @@ import {
 	cancelBackgroundTask,
 	completeBackgroundTask,
 	failBackgroundTask,
+	getBackgroundTasksSnapshot,
+	isFinishedBackgroundTask,
+	registerBackgroundTaskCancelHandler,
 	registerBackgroundTaskCancellation,
 	releaseBackgroundTaskCancellation,
 	startBackgroundTask,
@@ -211,18 +214,33 @@ const wiredJobCancels = new Set<string>();
 export function startJobTaskProjection(): void {
 	if (projectionUnlisten || projectionStarting) return;
 	projectionStarting = true;
-	void listen<{ job: JobChangedSnapshot }>("job:changed", (event) => {
-		projectJobToBackgroundTask(event.payload.job);
-	})
-		.then((unlisten) => {
-			projectionUnlisten = unlisten;
-		})
-		.finally(() => {
+	void (async () => {
+		try {
+			projectionUnlisten = await listen<{ job: JobChangedSnapshot }>(
+				"job:changed",
+				(event) => {
+					projectJobToBackgroundTask(event.payload.job);
+				},
+			);
+			const jobs = await invokeApi<JobChangedSnapshot[]>(
+				"job_list",
+				{ args: {} },
+				{ fallback: "job list failed" },
+			);
+			for (const job of jobs ?? []) {
+				projectJobToBackgroundTask(job);
+			}
+		} catch (error) {
+			logger.warn("job task projection failed to start", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		} finally {
 			projectionStarting = false;
-		});
+		}
+	})();
 }
 
-function projectJobToBackgroundTask(job: JobChangedSnapshot): void {
+export function projectJobToBackgroundTask(job: JobChangedSnapshot): void {
 	const taskKind = projectedTaskKind(job.kind);
 	if (!taskKind) return;
 	const title = jobPanelTitle(job.kind);
@@ -230,6 +248,15 @@ function projectJobToBackgroundTask(job: JobChangedSnapshot): void {
 	switch (job.state) {
 		case "queued":
 		case "running": {
+			const existing = getBackgroundTasksSnapshot().tasks.find(
+				(task) => task.id === job.id,
+			);
+			// A late progress event must not revive a row the user already
+			// cancelled (or that already completed). That made Cancel look
+			// like a no-op and hid the real JobCenter slot leak.
+			if (existing && isFinishedBackgroundTask(existing)) {
+				return;
+			}
 			startBackgroundTask({
 				id: job.id,
 				kind: taskKind,
@@ -266,26 +293,24 @@ function projectJobToBackgroundTask(job: JobChangedSnapshot): void {
 	}
 }
 
+function requestJobCancel(jobId: string): void {
+	void invokeApi<boolean>(
+		"job_cancel",
+		{ jobId },
+		{ fallback: "job cancellation failed" },
+	).catch((error) =>
+		logger.warn("job cancellation failed", {
+			jobId,
+			error: error instanceof Error ? error.message : String(error),
+		}),
+	);
+}
+
 function wireJobCancellation(jobId: string): void {
 	if (wiredJobCancels.has(jobId)) return;
 	wiredJobCancels.add(jobId);
-	const signal = registerBackgroundTaskCancellation(jobId);
-	signal.addEventListener(
-		"abort",
-		() => {
-			void invokeApi<boolean>(
-				"job_cancel",
-				{ jobId },
-				{ fallback: "job cancellation failed" },
-			).catch((error) =>
-				logger.warn("job cancellation failed", {
-					jobId,
-					error: error instanceof Error ? error.message : String(error),
-				}),
-			);
-		},
-		{ once: true },
-	);
+	registerBackgroundTaskCancellation(jobId);
+	registerBackgroundTaskCancelHandler(jobId, () => requestJobCancel(jobId));
 }
 
 function releaseJobCancellation(jobId: string): void {

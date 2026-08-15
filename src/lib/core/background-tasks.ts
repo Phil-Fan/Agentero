@@ -112,6 +112,7 @@ export const backgroundTasksStore = createStore<Store>(() => ({
 }));
 
 const controllers = new Map<string, AbortController>();
+const cancelHandlers = new Map<string, () => void>();
 
 /** Stable cancel message; keep in sync with {@link notifyError} filter. */
 export const BACKGROUND_TASK_CANCELLED_MESSAGE = "background task cancelled";
@@ -282,6 +283,10 @@ export function cancelBackgroundTask(id: string): void {
 	const task = store().tasks.find((item) => item.id === id);
 	if (!task || (task.status !== "queued" && task.status !== "running")) return;
 	controllers.get(id)?.abort();
+	// JobCenter (and similar) cancel hooks must fire on every click. A once
+	// abort listener is consumed after the first attempt, so a resurrected
+	// row would otherwise only flip the UI and never reach Host.
+	cancelHandlers.get(id)?.();
 	updateBackgroundTask(id, {
 		status: "cancelled",
 		detail: i18n.t("app:tasks.cancelled"),
@@ -302,8 +307,16 @@ export function registerBackgroundTaskCancellation(id: string): AbortSignal {
 	return controller.signal;
 }
 
+export function registerBackgroundTaskCancelHandler(
+	id: string,
+	handler: () => void,
+): void {
+	cancelHandlers.set(id, handler);
+}
+
 export function releaseBackgroundTaskCancellation(id: string): void {
 	controllers.delete(id);
+	cancelHandlers.delete(id);
 }
 
 type BackgroundTaskFn<T> = (ctx: {

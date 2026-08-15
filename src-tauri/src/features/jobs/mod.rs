@@ -228,6 +228,19 @@ fn kind_concurrency(kind: JobKind) -> usize {
     }
 }
 
+fn is_terminal_state(state: JobState) -> bool {
+    matches!(
+        state,
+        JobState::Succeeded | JobState::Failed | JobState::Cancelled | JobState::Skipped
+    )
+}
+
+fn release_running_slot(inner: &mut JobCenterInner, kind: JobKind) {
+    if let Some(n) = inner.running_by_kind.get_mut(&kind) {
+        *n = n.saturating_sub(1);
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DepsReadiness {
     Ready,
@@ -563,9 +576,7 @@ impl JobCenter {
                 // liteparse worker polls this flag; the layout executor aborts
                 // on the `job:changed(cancelled)` event emitted by the caller.
                 let task_id = job.task_id.clone().unwrap_or_else(|| job.id.0.clone());
-                if let Some(n) = inner.running_by_kind.get_mut(&kind) {
-                    *n = n.saturating_sub(1);
-                }
+                release_running_slot(&mut inner, kind);
                 crate::features::agent::background_tasks::cancel(&task_id);
                 release_active_key(&mut inner, &id);
                 true
@@ -964,7 +975,7 @@ impl JobCenter {
     /// Start any `Queued` job whose dependencies are ready and whose kind has
     /// a free concurrency slot, spawning its runner. Runs after every finish so
     /// a freed slot progresses the queue (lane order: focus, normal, idle).
-    async fn drain_and_spawn(&self, app: &tauri::AppHandle) {
+    pub async fn drain_and_spawn(&self, app: &tauri::AppHandle) {
         loop {
             let candidate = {
                 let inner = self.inner.lock().await;
@@ -1032,15 +1043,18 @@ impl JobCenter {
         let snapshot = job.snapshot();
         release_active_key(&mut inner, &id);
         if was_running {
-            if let Some(n) = inner.running_by_kind.get_mut(&kind) {
-                *n = n.saturating_sub(1);
-            }
+            release_running_slot(&mut inner, kind);
         }
         Some(snapshot)
     }
 
     /// Apply a progress or terminal-state report from the renderer executor.
     /// Returns the updated snapshot when the job exists and is still running.
+    ///
+    /// A terminal `state` (succeeded / failed / cancelled) must free the kind's
+    /// concurrency slot here. The runner then sees the terminal state via
+    /// `wait_for_terminal` and `finish()` is a no-op; if we left the slot held,
+    /// every later job of that kind would stay queued forever.
     pub async fn job_report(
         &self,
         job_id: &str,
@@ -1051,23 +1065,38 @@ impl JobCenter {
     ) -> Option<JobSnapshot> {
         let mut inner = self.inner.lock().await;
         let id = JobId(job_id.to_string());
-        let job = inner.jobs.get_mut(&id)?;
-        if job.state != JobState::Running {
-            return None;
+        let (snapshot, terminal_kind) = {
+            let job = inner.jobs.get_mut(&id)?;
+            if job.state != JobState::Running {
+                return None;
+            }
+            if let Some(p) = progress {
+                job.progress = Some(p);
+            }
+            if let Some(phase) = phase {
+                job.phase = Some(phase);
+            }
+            if let Some(error) = error {
+                job.error = Some(error);
+            }
+            let terminal_kind = match state {
+                Some(next) if is_terminal_state(next) => {
+                    job.state = next;
+                    Some(job.kind)
+                }
+                Some(next) => {
+                    job.state = next;
+                    None
+                }
+                None => None,
+            };
+            (job.snapshot(), terminal_kind)
+        };
+        if let Some(kind) = terminal_kind {
+            release_active_key(&mut inner, &id);
+            release_running_slot(&mut inner, kind);
         }
-        if let Some(p) = progress {
-            job.progress = Some(p);
-        }
-        if let Some(phase) = phase {
-            job.phase = Some(phase);
-        }
-        if let Some(error) = error {
-            job.error = Some(error);
-        }
-        if let Some(state) = state {
-            job.state = state;
-        }
-        Some(job.snapshot())
+        Some(snapshot)
     }
 
     async fn wait_for_terminal(
@@ -1155,6 +1184,17 @@ impl JobCenter {
     async fn state_for_test(&self, job_id: &str) -> Option<JobState> {
         let inner = self.inner.lock().await;
         inner.jobs.get(&JobId(job_id.to_string())).map(|j| j.state)
+    }
+
+    #[cfg(test)]
+    async fn running_count_for_test(&self, kind: JobKind) -> usize {
+        self.inner
+            .lock()
+            .await
+            .running_by_kind
+            .get(&kind)
+            .copied()
+            .unwrap_or(0)
     }
 }
 
@@ -1599,6 +1639,65 @@ mod tests {
             .expect("terminal report returned snapshot");
         assert_eq!(terminal.state, JobState::Succeeded);
         assert_eq!(terminal.progress, Some(100.0));
+    }
+
+    #[tokio::test]
+    async fn layout_analyze_job_report_terminal_frees_concurrency_slot() {
+        let center = JobCenter::new();
+        let a = center
+            .enqueue_layout_analyze(vault("report-free-a"), "papers/a", JobLane::Normal, false)
+            .await;
+        let b = center
+            .enqueue_layout_analyze(vault("report-free-b"), "papers/b", JobLane::Normal, false)
+            .await;
+
+        match center.try_start(&a.id).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected first Started, got {other:?}"),
+        }
+        match center.try_start(&b.id).await {
+            StartOutcome::Waiting => {}
+            other => panic!("expected second Waiting at cap, got {other:?}"),
+        }
+        assert_eq!(
+            center.running_count_for_test(JobKind::LayoutAnalyze).await,
+            1
+        );
+
+        // Production path: the renderer reports succeeded, then the runner
+        // calls finish(). finish() must not be the only place that frees the slot.
+        center
+            .job_report(
+                &a.id,
+                Some(100.0),
+                Some("completed".into()),
+                None,
+                Some(JobState::Succeeded),
+            )
+            .await
+            .expect("terminal report");
+        assert_eq!(
+            center.running_count_for_test(JobKind::LayoutAnalyze).await,
+            0
+        );
+
+        center
+            .finish(
+                &a.id,
+                JobState::Succeeded,
+                Some(100.0),
+                Some("completed"),
+                None,
+            )
+            .await;
+        assert_eq!(
+            center.running_count_for_test(JobKind::LayoutAnalyze).await,
+            0
+        );
+        match center.try_start(&b.id).await {
+            StartOutcome::Started(..) => {}
+            other => panic!("expected Started after terminal report freed the slot, got {other:?}"),
+        }
     }
 
     #[tokio::test]

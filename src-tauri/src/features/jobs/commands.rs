@@ -381,6 +381,9 @@ pub async fn job_cancel(
         if let Some(snapshot) = center.snapshot(&job_id).await {
             emit_job_changed(&app, snapshot);
         }
+        // Don't wait for the cancelled runner's wait_for_terminal loop: a
+        // freed slot should start the next queued job of that kind now.
+        center.drain_and_spawn(&app).await;
     }
     Ok(ApiResult::ok(cancelled))
 }
@@ -403,6 +406,12 @@ pub async fn job_report(
     {
         Some(snapshot) => {
             emit_job_changed(&app, snapshot.clone());
+            if matches!(
+                snapshot.state,
+                JobState::Succeeded | JobState::Failed | JobState::Cancelled | JobState::Skipped
+            ) {
+                center.drain_and_spawn(&app).await;
+            }
             Ok(ApiResult::ok(snapshot))
         }
         None => Ok(map_err(crate::core::error::AppError::message(
