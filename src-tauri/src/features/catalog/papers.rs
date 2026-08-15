@@ -98,6 +98,9 @@ fn normalize_color(color: Option<&str>) -> Option<String> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaperRecord {
     /// Vault-relative paper folder path (primary key).
+    /// Defaults empty so sidecar files without `path` still parse; readers
+    /// overwrite it with the on-disk location.
+    #[serde(default)]
     pub path: String,
     pub id: String,
     #[serde(rename = "type")]
@@ -176,9 +179,10 @@ pub struct PaperRecord {
     pub updated_at: String,
 }
 
-/// Upsert paper row to catalog.
+/// Upsert paper row to catalog and project it into the paper's sidecar.
 pub fn upsert_paper(vault_root: &Path, record: &PaperRecord) -> Result<PaperRecord, AppError> {
     with_catalog(vault_root, |conn| upsert_conn(conn, record))?;
+    super::sidecar::write_sidecar(vault_root, record);
     Ok(record.clone())
 }
 
@@ -579,9 +583,11 @@ pub fn repair_duplicates(vault_root: &Path) -> Result<DuplicateRepairResult, App
     })
 }
 
-/// Rebuild missing catalog rows by scanning `papers/` on disk.
-/// Detects paper folders by NOTES.md presence. Idempotent — existing rows
-/// are refreshed and disk-only papers are re-added. Returns the count imported.
+/// Rebuild catalog rows by scanning `papers/` on disk.
+/// Detects paper folders by NOTES.md / metadata.json presence. Idempotent —
+/// disk-only papers are re-added (sidecar metadata preferred over a minimal
+/// folder-name record) and rows whose sidecar is newer are refreshed.
+/// Returns the count of rows written.
 pub fn rebuild_from_disk(vault_root: &Path) -> Result<usize, AppError> {
     let papers_dir = vault_root.join("papers");
     if !papers_dir.is_dir() {
@@ -591,70 +597,26 @@ pub fn rebuild_from_disk(vault_root: &Path) -> Result<usize, AppError> {
         let mut count = 0usize;
         let mut stack = vec![papers_dir];
         while let Some(dir) = stack.pop() {
-            if dir.join("NOTES.md").is_file() {
-                // A paper folder is a leaf: create minimal record and do not descend.
+            if dir.join("NOTES.md").is_file() || dir.join(super::sidecar::SIDECAR_FILE).is_file() {
+                // A paper folder is a leaf: reconcile and do not descend.
                 let rel = dir
                     .strip_prefix(vault_root)
                     .ok()
                     .and_then(|p| p.to_str())
                     .map(|s| s.replace('\\', "/").trim_matches('/').to_string());
-                if let Some(rel_path) = rel {
-                    if !rel_path.is_empty() {
-                        // Check if already in catalog
-                        if get_conn(conn, &rel_path).ok().flatten().is_none() {
-                            // Create minimal record from folder name
-                            let folder_name = dir
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or(&rel_path)
-                                .to_string();
-                            let now = chrono::Utc::now()
-                                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-                            let record = PaperRecord {
-                                path: rel_path,
-                                id: folder_name.clone(),
-                                paper_type: "pdf".to_string(),
-                                title: folder_name,
-                                authors: vec![],
-                                creators: None,
-                                year: None,
-                                date: None,
-                                abstract_text: None,
-                                tags: vec![],
-                                arxiv_id: None,
-                                doi: None,
-                                isbn: None,
-                                issn: None,
-                                pmid: None,
-                                publication: None,
-                                volume: None,
-                                issue: None,
-                                pages: None,
-                                publisher: None,
-                                place: None,
-                                series: None,
-                                language: None,
-                                pdf_url: None,
-                                html_url: None,
-                                source_url: None,
-                                body_source: None,
-                                body_quality: None,
-                                bibtex_key: None,
-                                citation_count: None,
-                                zotero_item_type: None,
-                                meta_source: None,
-                                extra: None,
-                                summary: None,
-                                status: "completed".to_string(),
-                                is_read: false,
-                                zotero_item_id: None,
-                                zotero_last_synced: None,
-                                added_at: now.clone(),
-                                updated_at: now,
-                            };
-                            if upsert_conn(conn, &record).is_ok() {
-                                count += 1;
-                            }
+                if let Some(rel_path) = rel.filter(|r| !r.is_empty()) {
+                    let existing = get_conn(conn, &rel_path).ok().flatten();
+                    let sidecar = super::sidecar::read_sidecar(vault_root, &rel_path);
+                    let next = match (existing, sidecar) {
+                        // Sidecar newer than the row (e.g. pulled in by sync).
+                        (Some(row), Some(sc)) if sc.updated_at > row.updated_at => Some(sc),
+                        (Some(_), _) => None,
+                        (None, Some(sc)) => Some(sc),
+                        (None, None) => Some(minimal_record_for(&dir, &rel_path)),
+                    };
+                    if let Some(record) = next {
+                        if upsert_conn(conn, &record).is_ok() {
+                            count += 1;
                         }
                     }
                 }
@@ -671,6 +633,58 @@ pub fn rebuild_from_disk(vault_root: &Path) -> Result<usize, AppError> {
         }
         Ok(count)
     })
+}
+
+/// Fallback record when a paper folder has no sidecar: folder name as id/title.
+fn minimal_record_for(dir: &Path, rel_path: &str) -> PaperRecord {
+    let folder_name = dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(rel_path)
+        .to_string();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    PaperRecord {
+        path: rel_path.to_string(),
+        id: folder_name.clone(),
+        paper_type: "pdf".to_string(),
+        title: folder_name,
+        authors: vec![],
+        creators: None,
+        year: None,
+        date: None,
+        abstract_text: None,
+        tags: vec![],
+        arxiv_id: None,
+        doi: None,
+        isbn: None,
+        issn: None,
+        pmid: None,
+        publication: None,
+        volume: None,
+        issue: None,
+        pages: None,
+        publisher: None,
+        place: None,
+        series: None,
+        language: None,
+        pdf_url: None,
+        html_url: None,
+        source_url: None,
+        body_source: None,
+        body_quality: None,
+        bibtex_key: None,
+        citation_count: None,
+        zotero_item_type: None,
+        meta_source: None,
+        extra: None,
+        summary: None,
+        status: "completed".to_string(),
+        is_read: false,
+        zotero_item_id: None,
+        zotero_last_synced: None,
+        added_at: now.clone(),
+        updated_at: now,
+    }
 }
 
 /// Set `is_read` for a paper path; returns the updated row.
@@ -1354,15 +1368,23 @@ mod tests {
             updated_at: "t".into(),
         };
         upsert_paper(&dir, &record).unwrap();
-        // Simulate a lost catalog row (folder + NOTES.md stay on disk).
+        // Simulate a lost catalog row (folder + NOTES.md + sidecar stay on disk).
         delete_under_path(&dir, "papers/x").unwrap();
         assert!(get_by_path(&dir, "papers/x").unwrap().is_none());
 
-        // Rescan re-adds a minimal row from the folder (title = folder name).
+        // Rescan restores the full row from the metadata.json sidecar.
         assert_eq!(rebuild_from_disk(&dir).unwrap(), 1);
         let row = get_by_path(&dir, "papers/x").unwrap().unwrap();
         assert_eq!(row.path, "papers/x");
         assert_eq!(row.id, "x");
+        assert_eq!(row.title, "Attention");
+        assert_eq!(row.year, Some(2017));
+
+        // Without a sidecar, rescan falls back to a minimal folder-name row.
+        fs::remove_file(dir.join("papers/x/metadata.json")).unwrap();
+        delete_under_path(&dir, "papers/x").unwrap();
+        assert_eq!(rebuild_from_disk(&dir).unwrap(), 1);
+        let row = get_by_path(&dir, "papers/x").unwrap().unwrap();
         assert_eq!(row.title, "x");
         assert_eq!(row.year, None);
 

@@ -7,6 +7,7 @@ pub mod caps;
 pub mod papers;
 pub mod reading_activity;
 mod schema;
+pub mod sidecar;
 
 pub use caps::{
     find_local_pdf, has_local_pdf, has_local_tex, has_paper_md, probe_paper_caps, CapsCache,
