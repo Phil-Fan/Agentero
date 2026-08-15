@@ -7,6 +7,7 @@
 mod parse;
 mod schema;
 
+#[cfg(feature = "desktop")]
 pub mod commands;
 
 use crate::core::error::AppError;
