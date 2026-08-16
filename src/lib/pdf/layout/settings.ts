@@ -5,12 +5,13 @@
  */
 
 /** Layout provider ids with remote credentials. */
-export const LAYOUT_PROVIDER_IDS = ["paddle"] as const;
+export const LAYOUT_PROVIDER_IDS = ["paddle", "mineru"] as const;
 export type LayoutProviderId = (typeof LAYOUT_PROVIDER_IDS)[number];
 
 /**
  * - `local`: on-device PP-DocLayoutV3 (ONNX in the renderer).
  * - `paddle`: remote PP-StructureV3 async job API (`/api/v2/ocr/jobs`).
+ * - `mineru`: remote MinerU batch extract API (`/api/v4/file-urls/batch`).
  */
 export const LAYOUT_BACKENDS = ["local", ...LAYOUT_PROVIDER_IDS] as const;
 export type LayoutBackend = (typeof LAYOUT_BACKENDS)[number];
@@ -36,6 +37,7 @@ export const LAYOUT_PADDLE_JOBS_URL =
 /** Docs / console pages for obtaining keys (settings UI external link). */
 export const LAYOUT_PROVIDER_DOCS_URLS: Record<LayoutProviderId, string> = {
 	paddle: "https://aistudio.baidu.com/account/accessToken",
+	mineru: "https://mineru.net/apiManage/token",
 };
 
 export function isLayoutBackend(value: unknown): value is LayoutBackend {

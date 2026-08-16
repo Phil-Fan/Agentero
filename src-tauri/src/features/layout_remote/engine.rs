@@ -49,6 +49,7 @@ pub trait RemoteLayoutEngine: Send + Sync {
 pub fn engine_for(provider: &str) -> Option<Arc<dyn RemoteLayoutEngine>> {
     match provider.trim().to_ascii_lowercase().as_str() {
         "paddle" => Some(Arc::new(super::paddle::PaddleEngine)),
+        "mineru" => Some(Arc::new(super::mineru::MineruEngine)),
         _ => None,
     }
 }

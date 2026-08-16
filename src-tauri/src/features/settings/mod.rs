@@ -510,6 +510,7 @@ pub fn commercial_provider_settings_key(provider: &str) -> Option<&'static str> 
 pub fn layout_provider_settings_key(provider: &str) -> Option<&'static str> {
     match provider.trim().to_ascii_lowercase().as_str() {
         "paddle" => Some("paddle"),
+        "mineru" => Some("mineru"),
         _ => None,
     }
 }
@@ -688,7 +689,7 @@ fn normalize(s: &mut AppSettings) {
         s.translate.source_lang = default_translate_source();
     }
 
-    const LAYOUT_BACKENDS: &[&str] = &["local", "paddle"];
+    const LAYOUT_BACKENDS: &[&str] = &["local", "paddle", "mineru"];
     if !LAYOUT_BACKENDS.contains(&s.layout.backend.as_str()) {
         s.layout.backend = default_layout_backend();
     }
@@ -696,7 +697,7 @@ fn normalize(s: &mut AppSettings) {
 }
 
 fn normalize_layout_provider_configs(configs: &mut HashMap<String, LayoutProviderConfig>) {
-    const PROVIDERS: &[&str] = &["paddle"];
+    const PROVIDERS: &[&str] = &["paddle", "mineru"];
     configs.retain(|k, _| PROVIDERS.contains(&k.as_str()));
     for cfg in configs.values_mut() {
         cfg.api_key = cfg.api_key.trim().to_string();

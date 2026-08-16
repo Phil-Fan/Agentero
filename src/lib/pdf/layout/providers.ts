@@ -39,6 +39,13 @@ export const LAYOUT_PROVIDERS: Record<LayoutBackend, LayoutProviderDescriptor> =
 			supportsBaseUrl: false,
 			sidecarMode: "paddle-layout",
 		},
+		mineru: {
+			id: "mineru",
+			kind: "remote",
+			requiresApiKey: true,
+			supportsBaseUrl: true,
+			sidecarMode: "mineru-layout",
+		},
 	};
 
 export function layoutProviderFor(

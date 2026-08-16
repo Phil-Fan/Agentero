@@ -1,6 +1,6 @@
 //! Remote PDF layout analysis: shared wire types, the progress event, and
 //! the provider registry. Engine implementations live in per-provider files
-//! (`paddle.rs`); commands dispatch through [`engine::engine_for`].
+//! (`paddle.rs`, `mineru.rs`); commands dispatch through [`engine::engine_for`].
 //!
 //! Engines return raw layout detection boxes; coordinate conversion stays in
 //! the frontend.
@@ -11,6 +11,7 @@ use tauri::{AppHandle, Emitter};
 
 pub mod commands;
 pub mod engine;
+pub mod mineru;
 pub mod paddle;
 
 #[derive(Debug, Clone, Serialize)]
@@ -77,8 +78,8 @@ pub struct LayoutRemoteAnalyzePdfArgs {
 #[serde(rename_all = "camelCase")]
 pub struct LayoutRemotePageResult {
     pub boxes: Vec<LayoutRemoteBox>,
-    /// Rendered page image size in px when the service reported it;
-    /// otherwise null and the frontend assumes a 200 DPI render.
+    /// Page size in the same units as box coordinates (paddle: rendered px,
+    /// mineru: PDF points); null makes the frontend assume a 144 DPI render.
     pub width_px: Option<u32>,
     pub height_px: Option<u32>,
 }

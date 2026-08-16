@@ -16,11 +16,15 @@ export const LAYOUT_SIDECAR_FILE = "layout.json";
 export { LAYOUT_INDEX_FILE } from "@/lib/pdf/layout/layout-index";
 
 /** Producer recorded in `source.mode` — which backend generated the regions. */
-export type LayoutSidecarMode = "embedpdf-layout" | "paddle-layout";
+export type LayoutSidecarMode =
+	| "embedpdf-layout"
+	| "paddle-layout"
+	| "mineru-layout";
 
 const LAYOUT_SIDECAR_MODES: readonly LayoutSidecarMode[] = [
 	"embedpdf-layout",
 	"paddle-layout",
+	"mineru-layout",
 ];
 
 export type PdfLayoutSidecar = {
