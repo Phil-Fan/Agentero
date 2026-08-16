@@ -4,6 +4,8 @@
 //! Import body is plain text (BibTeX / RIS / …) → returns the same item array shape.
 
 use super::map::{enrich_remote_urls, map_zotero_item};
+#[cfg(not(feature = "desktop"))]
+use super::AppHandle;
 use super::{normalize_parent_dir, DEFAULT_TRANSLATOR_BASE_URL};
 use crate::core::error::AppError;
 use crate::features::catalog::papers::{self, PaperRecord};
@@ -11,6 +13,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::time::Duration;
+#[cfg(feature = "desktop")]
+use tauri::AppHandle;
 
 const USER_AGENT: &str = "agentero-lookup/0.1 (+https://github.com/poco-ai/agentero)";
 
@@ -127,7 +131,10 @@ pub async fn export_catalog(args: PaperExportArgs) -> Result<PaperExportResult, 
     })
 }
 
-pub async fn import_catalog(args: PaperImportArgs) -> Result<PaperImportResult, AppError> {
+pub async fn import_catalog(
+    args: PaperImportArgs,
+    app: Option<&AppHandle>,
+) -> Result<PaperImportResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
         return Err(AppError::message("vault path is not a directory"));
@@ -147,7 +154,7 @@ pub async fn import_catalog(args: PaperImportArgs) -> Result<PaperImportResult, 
     let mut errors = Vec::new();
 
     for item in items {
-        match import_one_item(&vault, &parent_rel, &item).await {
+        match import_one_item(&vault, &parent_rel, &item, app).await {
             Ok(Some((path, title))) => {
                 imported += 1;
                 paths.push(path);
@@ -171,6 +178,7 @@ async fn import_one_item(
     vault: &std::path::Path,
     parent_rel: &str,
     item: &Value,
+    app: Option<&AppHandle>,
 ) -> Result<Option<(String, String)>, AppError> {
     use crate::features::import::paper_import::{
         paper_commit, AssetsPolicy, CommitStatus, DedupePolicy, PaperCommitOptions,
@@ -196,6 +204,7 @@ async fn import_one_item(
             translate_abstract: true,
             fresh_timestamps: false,
             cache: None,
+            app,
         },
     )
     .await?;

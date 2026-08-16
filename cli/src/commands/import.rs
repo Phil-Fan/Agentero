@@ -89,12 +89,15 @@ async fn import_id(globals: &GlobalOpts, text: &str, parent: &str) -> Result<Val
 async fn import_bib(globals: &GlobalOpts, file: &PathBuf, parent: &str) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
     let content = read_input(file)?;
-    let result = paper_import::import_catalog(PaperImportArgs {
-        vault_path: vault.to_string_lossy().to_string(),
-        parent_dir: Some(parent.to_string()),
-        content,
-        translator_base_url: globals.translator_base_url(),
-    })
+    let result = paper_import::import_catalog(
+        PaperImportArgs {
+            vault_path: vault.to_string_lossy().to_string(),
+            parent_dir: Some(parent.to_string()),
+            content,
+            translator_base_url: globals.translator_base_url(),
+        },
+        None,
+    )
     .await
     .map_err(|e| CliError::import_failed(e.to_string()))?;
 

@@ -134,6 +134,10 @@ impl ConnectorController {
         }
     }
 
+    pub fn app_handle(&self) -> Option<AppHandle> {
+        self.inner.lock().ok().and_then(|g| g.app.clone())
+    }
+
     pub fn set_remote_registry(&self, registry: Arc<crate::features::remote::RemoteRegistry>) {
         if let Ok(mut g) = self.remote_registry.lock() {
             *g = Some(registry);

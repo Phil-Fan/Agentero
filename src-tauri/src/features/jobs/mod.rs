@@ -1251,7 +1251,9 @@ impl Default for JobCenter {
 }
 
 pub fn emit_job_changed(app: &tauri::AppHandle, job: JobSnapshot) {
-    let _ = app.emit(JOB_CHANGED_EVENT, JobChangedPayload { job });
+    let payload = JobChangedPayload { job };
+    let _ = app.emit(JOB_CHANGED_EVENT, &payload);
+    crate::features::lifecycle::emit_job_terminal(app, &payload.job);
 }
 
 pub fn parse_lane(lane: Option<JobLane>) -> JobLane {

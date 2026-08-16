@@ -7,6 +7,8 @@
 
 use crate::core::error::AppError;
 use crate::features::catalog::{papers, probe_paper_caps, CapsCache};
+#[cfg(not(feature = "desktop"))]
+use crate::features::import::AppHandle;
 use crate::features::import::{
     allocate_paper_path, ensure_paper_assets_with_progress, normalize_parent_dir,
     paper_record_from_meta, write_paper_shell_opts, AssetDownloadResult, AssetProgressContext,
@@ -15,6 +17,8 @@ use crate::features::import::{
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
+#[cfg(feature = "desktop")]
+use tauri::AppHandle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -68,6 +72,8 @@ pub struct PaperCommitOptions<'a> {
     pub fresh_timestamps: bool,
     /// Optional in-memory caps cache; avoids repeated directory walks.
     pub cache: Option<&'a CapsCache>,
+    /// Lifecycle event sink (`paper:imported` / `paper:assets-ready`).
+    pub app: Option<&'a AppHandle>,
 }
 
 /// Uniform result shape for every entry (camelCase matches the frontend).
@@ -168,6 +174,8 @@ pub async fn paper_commit(
     let record = paper_record_from_meta(&path_rel, &meta);
     papers::upsert_paper(vault, &record)?;
 
+    crate::features::lifecycle::emit_paper_imported(opts.app, vault, &meta.id);
+
     let parse_app = match &opts.assets {
         AssetsPolicy::SyncDownload { progress, .. } | AssetsPolicy::CopyPdf { progress, .. } => {
             progress.app
@@ -177,7 +185,7 @@ pub async fn paper_commit(
 
     let (assets, assets_pending) = match opts.assets {
         AssetsPolicy::SyncDownload { cookies, progress } => {
-            let assets = ensure_paper_assets_with_progress(
+            let assets = match ensure_paper_assets_with_progress(
                 &paper_dir,
                 vault,
                 &path_rel,
@@ -190,11 +198,17 @@ pub async fn paper_commit(
                 progress,
             )
             .await
-            .unwrap_or_else(|e| {
-                let mut r = AssetDownloadResult::default();
-                r.messages.push(format!("asset download error: {e}"));
-                r
-            });
+            {
+                Ok(assets) => {
+                    crate::features::lifecycle::emit_paper_assets_ready(opts.app, vault, &meta.id);
+                    assets
+                }
+                Err(e) => {
+                    let mut r = AssetDownloadResult::default();
+                    r.messages.push(format!("asset download error: {e}"));
+                    r
+                }
+            };
             (assets, false)
         }
         AssetsPolicy::CopyPdf { .. } => {

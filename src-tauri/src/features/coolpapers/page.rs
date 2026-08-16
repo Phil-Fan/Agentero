@@ -171,6 +171,7 @@ pub async fn import_page(args: ImportPageArgs<'_>) -> Result<PaperCommitResult, 
             translate_abstract: true,
             fresh_timestamps: false,
             cache: None,
+            app: args.progress.app,
         },
     )
     .await

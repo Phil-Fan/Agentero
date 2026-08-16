@@ -248,6 +248,7 @@ pub async fn paper_export(args: PaperExportArgs) -> ApiResult<PaperExportResult>
 /// Import BibTeX/RIS/… via Translator `POST /import`, write papers into vault + catalog.
 #[tauri::command]
 pub async fn paper_import(
+    app: tauri::AppHandle,
     registry: State<'_, Arc<RemoteRegistry>>,
     args: PaperImportArgs,
 ) -> Result<ApiResult<PaperImportResult>, String> {
@@ -266,7 +267,7 @@ pub async fn paper_import(
         ));
     }
     Ok(
-        op.finish_result_ok_extra(super::import_catalog(args).await, |r| {
+        op.finish_result_ok_extra(super::import_catalog(args, Some(&app)).await, |r| {
             format!("imported={} skipped={}", r.imported, r.skipped)
         }),
     )

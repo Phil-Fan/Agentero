@@ -27,6 +27,7 @@ pub mod jobs;
 pub mod layout_model;
 #[cfg(feature = "desktop")]
 pub mod layout_remote;
+pub mod lifecycle;
 #[cfg(feature = "desktop")]
 pub mod modelscope_proxy;
 pub mod network;

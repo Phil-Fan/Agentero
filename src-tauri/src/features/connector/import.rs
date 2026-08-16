@@ -58,6 +58,7 @@ pub async fn import_connector_item_with_cookies(
 
     // No abstract MT and no awaited downloads — the browser extension's HTTP
     // request must finish within ~15s, so assets stay Deferred.
+    let app = ctrl.app_handle();
     let commit = paper_commit(
         meta,
         PaperCommitOptions {
@@ -68,6 +69,7 @@ pub async fn import_connector_item_with_cookies(
             translate_abstract: false,
             fresh_timestamps: true,
             cache: None,
+            app: app.as_ref(),
         },
     )
     .await?;
@@ -668,7 +670,14 @@ pub async fn import_standalone_attachment(
         let session = reg.get(sid).await?;
         import_standalone_remote(session, &parent_dir, meta, bytes).await?
     } else {
-        import_standalone_local(Path::new(&vault_handle), &parent_dir, meta, bytes).await?
+        import_standalone_local(
+            Path::new(&vault_handle),
+            &parent_dir,
+            meta,
+            bytes,
+            ctrl.app_handle().as_ref(),
+        )
+        .await?
     };
 
     ctrl.record_session_paper(session_id, &result.path);
@@ -693,6 +702,7 @@ async fn import_standalone_local(
     parent_dir: &str,
     meta: PaperMeta,
     bytes: &[u8],
+    app: Option<&tauri::AppHandle>,
 ) -> Result<ConnectorImportResult, AppError> {
     use crate::features::import::paper_import::{
         paper_commit, AssetsPolicy, CommitStatus, DedupePolicy, PaperCommitOptions,
@@ -711,6 +721,7 @@ async fn import_standalone_local(
             translate_abstract: false,
             fresh_timestamps: true,
             cache: None,
+            app,
         },
     )
     .await?;

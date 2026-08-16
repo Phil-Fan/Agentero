@@ -299,6 +299,7 @@ pub async fn import_by_identifier_with_progress(
             translate_abstract: true,
             fresh_timestamps: false,
             cache,
+            app,
         },
     )
     .await?;
@@ -753,6 +754,7 @@ async fn import_one_local_pdf(
             translate_abstract: true,
             fresh_timestamps: false,
             cache,
+            app: progress.app,
         },
     )
     .await?;
