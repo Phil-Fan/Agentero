@@ -130,6 +130,7 @@ export function LayoutStep({
 		}
 		try {
 			await invokeLayoutRemoteProbe({
+				provider: "paddle",
 				imageBase64: base64,
 				apiKey: toSave.apiKey,
 			});

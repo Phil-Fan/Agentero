@@ -123,6 +123,7 @@ export function LayoutPane({
 			}
 			// Mask → Host resolves the stored token; plaintext draft → test pre-save.
 			void invokeLayoutRemoteProbe({
+				provider: "paddle",
 				imageBase64: base64,
 				apiKey: apiKey || undefined,
 			})

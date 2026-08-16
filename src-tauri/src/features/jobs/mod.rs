@@ -240,12 +240,15 @@ fn kind_concurrency(inner: &JobCenterInner, kind: JobKind) -> usize {
     }
 }
 
-/// Remote Paddle jobs are just HTTP; they must not share the ONNX cap of 1.
+/// Remote layout jobs are just HTTP; they must not share the ONNX cap of 1.
+/// Any non-`local` backend is treated as remote so new providers need no
+/// change here.
 pub fn layout_analyze_concurrency(backend: &str) -> usize {
-    if backend.trim().eq_ignore_ascii_case("paddle") {
-        usize::MAX
-    } else {
+    let backend = backend.trim();
+    if backend.is_empty() || backend.eq_ignore_ascii_case("local") {
         1
+    } else {
+        usize::MAX
     }
 }
 

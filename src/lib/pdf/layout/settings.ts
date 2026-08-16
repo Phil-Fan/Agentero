@@ -5,13 +5,15 @@
  */
 
 /** Layout provider ids with remote credentials. */
-export type LayoutProviderId = "paddle";
+export const LAYOUT_PROVIDER_IDS = ["paddle"] as const;
+export type LayoutProviderId = (typeof LAYOUT_PROVIDER_IDS)[number];
 
 /**
  * - `local`: on-device PP-DocLayoutV3 (ONNX in the renderer).
  * - `paddle`: remote PP-StructureV3 async job API (`/api/v2/ocr/jobs`).
  */
-export type LayoutBackend = "local" | "paddle";
+export const LAYOUT_BACKENDS = ["local", ...LAYOUT_PROVIDER_IDS] as const;
+export type LayoutBackend = (typeof LAYOUT_BACKENDS)[number];
 
 export type LayoutProviderConfig = {
 	apiKey: string;
@@ -27,10 +29,6 @@ export const DEFAULT_LAYOUT_SETTINGS: LayoutSettings = {
 	providerConfigs: {},
 };
 
-export const LAYOUT_BACKENDS: LayoutBackend[] = ["local", "paddle"];
-
-export const LAYOUT_PROVIDER_IDS: LayoutProviderId[] = ["paddle"];
-
 /** Fixed AI Studio PaddleOCR jobs endpoint (shown read-only in Settings). */
 export const LAYOUT_PADDLE_JOBS_URL =
 	"https://paddleocr.aistudio-app.com/api/v2/ocr/jobs";
@@ -41,11 +39,17 @@ export const LAYOUT_PROVIDER_DOCS_URLS: Record<LayoutProviderId, string> = {
 };
 
 export function isLayoutBackend(value: unknown): value is LayoutBackend {
-	return value === "local" || value === "paddle";
+	return (
+		typeof value === "string" &&
+		(LAYOUT_BACKENDS as readonly string[]).includes(value)
+	);
 }
 
 export function isLayoutProviderId(value: unknown): value is LayoutProviderId {
-	return value === "paddle";
+	return (
+		typeof value === "string" &&
+		(LAYOUT_PROVIDER_IDS as readonly string[]).includes(value)
+	);
 }
 
 /** Same mask convention as translate BYOK keys (all `*`, same length). */

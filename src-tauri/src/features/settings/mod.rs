@@ -430,6 +430,19 @@ impl AppSettingsStore {
             Some(api_key.to_string())
         }
     }
+
+    /// Resolve a layout-provider base URL by provider id (empty → None).
+    pub fn layout_base_url(&self, provider: &str) -> Option<String> {
+        let key = layout_provider_settings_key(provider)?;
+        let guard = self.inner.lock().ok()?;
+        let cfg = guard.layout.provider_configs.get(key)?;
+        let base_url = cfg.base_url.trim();
+        if base_url.is_empty() {
+            None
+        } else {
+            Some(base_url.to_string())
+        }
+    }
 }
 
 fn read_file(path: &PathBuf) -> (AppSettings, bool) {

@@ -10,6 +10,7 @@ import { logger } from "@/lib/core/logger";
 import { isTauri } from "@/lib/core/tauri";
 import { findLocalPdfPath, localFileToArrayBuffer } from "@/lib/paper";
 import {
+	type LayoutSidecarMode,
 	readLayoutSidecar,
 	writeLayoutIndexFromRaw,
 	writeLayoutSidecar,
@@ -27,6 +28,11 @@ import {
 	type LayoutRemoteProgressPayload,
 	paddlePageToRegions,
 } from "@/lib/pdf/layout/paddle";
+import {
+	isRemoteLayoutProvider,
+	layoutProviderFor,
+	type RemoteLayoutProviderDescriptor,
+} from "@/lib/pdf/layout/providers";
 import {
 	setLayoutAnalysisUi,
 	setLayoutDocumentResult,
@@ -57,8 +63,8 @@ export type RunLayoutAnalysisOptions = {
 	/** Optional live document guard for viewer-bound analysis. */
 	isDocumentOpen?: () => boolean;
 	/**
-	 * True PDF page size in points for the remote `paddle` backend (the
-	 * service renders pages itself, so sizes cannot come from a local render).
+	 * True PDF page size in points for remote backends (the service renders
+	 * pages itself, so sizes cannot come from a local render).
 	 */
 	pageSizeAt?: (pageIndex: number) => { width: number; height: number } | null;
 	onProgress?: (messageStage: DocumentAnalysisProgress) => void;
@@ -66,7 +72,7 @@ export type RunLayoutAnalysisOptions = {
 	onError?: (message: string, aborted: boolean) => void;
 };
 
-/** Structural task shape shared by the local plugin task and the paddle task. */
+/** Structural task shape shared by the local plugin task and the remote task. */
 export type LayoutTaskLike = {
 	onProgress: (listener: (p: DocumentAnalysisProgress) => void) => void;
 	wait: (
@@ -408,15 +414,17 @@ export async function runDocumentLayoutAnalysis(
 		documentId,
 	);
 
-	// Remote PP-StructureV3 backend (Settings → Layout): whole-PDF async job.
+	// Remote layout backend (Settings → Layout): whole-PDF async job.
 	// Falls back to local ONNX when the paper folder / page count is unknown.
+	const provider = layoutProviderFor(loadSettings().layout.backend);
 	if (
-		loadSettings().layout.backend === "paddle" &&
+		provider &&
+		isRemoteLayoutProvider(provider) &&
 		options.paperAbsPath &&
 		typeof options.totalPages === "number" &&
 		options.totalPages > 0
 	) {
-		return startPaddleLayoutAnalysis(scope, documentId, options, {
+		return startRemoteLayoutAnalysis(provider, scope, documentId, options, {
 			paperAbsPath: options.paperAbsPath,
 			totalPages: Math.floor(options.totalPages),
 			analyzingMessage,
@@ -633,8 +641,8 @@ export async function runDocumentLayoutAnalysis(
 	return task;
 }
 
-/** Minimal LayoutTask-compatible handle for the remote paddle run. */
-class PaddleLayoutTask implements LayoutTaskLike {
+/** Minimal LayoutTask-compatible handle for a remote provider run. */
+class RemoteLayoutTask implements LayoutTaskLike {
 	private progressListeners: Array<(p: DocumentAnalysisProgress) => void> = [];
 	private settled = false;
 	private aborted = false;
@@ -690,11 +698,12 @@ async function finalizeRemoteLayoutRegions(args: {
 	scope: LayoutAnalysisScope;
 	documentId: string;
 	options: RunLayoutAnalysisOptions;
-	task: PaddleLayoutTask;
+	task: RemoteLayoutTask;
 	raw: PdfLayoutRegion[];
 	pageSizes: Map<number, { width: number; height: number }>;
 	totalPages: number;
 	backendLabel: string;
+	sidecarMode: LayoutSidecarMode;
 	cancelClosedDocument: () => void;
 }): Promise<void> {
 	const { scope, documentId, options, task, pageSizes, totalPages } = args;
@@ -752,7 +761,7 @@ async function finalizeRemoteLayoutRegions(args: {
 	enriched = result.rawRegions;
 
 	try {
-		await writeLayoutSidecar(options.paperAbsPath, enriched, "paddle-layout");
+		await writeLayoutSidecar(options.paperAbsPath, enriched, args.sidecarMode);
 	} catch (e) {
 		const message = e instanceof Error ? e.message : String(e);
 		logger.warn("layout sidecar write failed", { error: message });
@@ -784,7 +793,7 @@ async function finalizeRemoteLayoutRegions(args: {
 	task.settle();
 }
 
-type PaddleRunDeps = {
+type RemoteRunDeps = {
 	paperAbsPath: string;
 	totalPages: number;
 	analyzingMessage: string;
@@ -807,17 +816,18 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 /**
- * Remote PP-StructureV3 run: upload the whole PDF once as an async job; the Host
+ * Remote provider run: upload the whole PDF once as an async job; the Host
  * polls and streams progress events, then per-page boxes come back in one
  * result — no per-page rendering or requests on our side.
  */
-function startPaddleLayoutAnalysis(
+function startRemoteLayoutAnalysis(
+	provider: RemoteLayoutProviderDescriptor,
 	scope: LayoutAnalysisScope,
 	documentId: string,
 	options: RunLayoutAnalysisOptions,
-	deps: PaddleRunDeps,
-): PaddleLayoutTask {
-	const task = new PaddleLayoutTask();
+	deps: RemoteRunDeps,
+): RemoteLayoutTask {
+	const task = new RemoteLayoutTask();
 	const { paperAbsPath, totalPages, analyzingMessage } = deps;
 
 	void (async () => {
@@ -877,6 +887,7 @@ function startPaddleLayoutAnalysis(
 				documentId,
 			);
 			const res = await invokeLayoutRemoteAnalyzePdf({
+				provider: provider.id,
 				pdfBase64: arrayBufferToBase64(buffer),
 				fileName: pdfPath.split(/[/\\]/).pop() || "paper.pdf",
 				requestId,
@@ -906,7 +917,7 @@ function startPaddleLayoutAnalysis(
 						pageIndex,
 						pageWidth: size.width,
 						pageHeight: size.height,
-						idPrefix: "paddle",
+						idPrefix: provider.id,
 					}),
 				);
 			}
@@ -919,7 +930,8 @@ function startPaddleLayoutAnalysis(
 				raw,
 				pageSizes,
 				totalPages,
-				backendLabel: "paddle",
+				backendLabel: provider.id,
+				sidecarMode: provider.sidecarMode,
 				cancelClosedDocument: deps.cancelClosedDocument,
 			});
 		} catch (error) {

@@ -54,6 +54,7 @@ export const PADDLE_LAYOUT_MIN_SCORE = 0.3;
 export const PADDLE_ASSUMED_RENDER_DPI = 144;
 
 export async function invokeLayoutRemoteAnalyzePdf(args: {
+	provider: string;
 	pdfBase64: string;
 	fileName?: string;
 	apiKey?: string;
@@ -61,6 +62,7 @@ export async function invokeLayoutRemoteAnalyzePdf(args: {
 }): Promise<LayoutRemoteAnalyzePdfResult> {
 	return invokeApi<LayoutRemoteAnalyzePdfResult>("layout_remote_analyze_pdf", {
 		args: {
+			provider: args.provider,
 			pdfBase64: args.pdfBase64,
 			fileName: args.fileName ?? null,
 			apiKey: args.apiKey ?? null,
@@ -75,11 +77,13 @@ export async function invokeLayoutRemoteAnalyzePdf(args: {
  * are valid. A masked/omitted key is resolved from settings by the Host.
  */
 export async function invokeLayoutRemoteProbe(args: {
+	provider: string;
 	imageBase64: string;
 	apiKey?: string;
 }): Promise<{ jobId: string }> {
 	return invokeApi<{ jobId: string }>("layout_remote_probe", {
 		args: {
+			provider: args.provider,
 			imageBase64: args.imageBase64,
 			apiKey: args.apiKey ?? null,
 		},
