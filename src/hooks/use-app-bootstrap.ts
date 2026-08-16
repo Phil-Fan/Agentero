@@ -12,6 +12,7 @@ import i18n, { resolveLocale } from "@/i18n";
 import { startActivityTracking } from "@/lib/activity";
 import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
+import { initLifecycleBridge } from "@/lib/lifecycle";
 import { startJobCompletionRefresh } from "@/lib/paper/job-refresh";
 import { refreshLibrary } from "@/lib/paper/library-store";
 import { initJobCenterExecutors } from "@/lib/pdf/layout/enqueue-paper-layout";
@@ -132,6 +133,18 @@ export function useAppBootstrap(): void {
 		);
 		return () => {
 			unbind?.();
+		};
+	}, []);
+
+	// Bridge Tauri wire lifecycle events into the frontend bus.
+	useEffect(() => {
+		if (!isTauri()) return;
+		let dispose: (() => void) | undefined;
+		void initLifecycleBridge().then((d) => {
+			dispose = d;
+		});
+		return () => {
+			dispose?.();
 		};
 	}, []);
 
