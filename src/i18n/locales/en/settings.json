@@ -527,7 +527,6 @@
 	"sync": {
 		"title": "Cloud sync",
 		"advanced": "Advanced",
-		"intro": "Sync this vault across devices via any S3-compatible object storage (Cloudflare R2, MinIO, AWS S3, …).",
 		"localVaultOnly": "Cloud sync is available for local vaults only.",
 		"endpoint": "Endpoint",
 		"region": "Region",

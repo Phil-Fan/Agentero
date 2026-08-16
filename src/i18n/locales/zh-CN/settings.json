@@ -527,7 +527,6 @@
 	"sync": {
 		"title": "云同步",
 		"advanced": "高级",
-		"intro": "通过任意 S3 兼容对象存储（Cloudflare R2、MinIO、AWS S3 等）在多设备间同步此 Vault。",
 		"localVaultOnly": "云同步仅支持本地 Vault。",
 		"endpoint": "Endpoint",
 		"region": "区域",

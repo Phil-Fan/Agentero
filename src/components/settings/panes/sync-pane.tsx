@@ -255,10 +255,6 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 				}
 			/>
 
-			{status?.configured ? null : (
-				<p className="mb-4 text-muted-foreground text-xs">{t("sync.intro")}</p>
-			)}
-
 			<SettingsGroup>
 				<SettingsRow label={t("sync.endpoint")} htmlFor="sync-endpoint">
 					{field("endpoint", { placeholder: "https://…" })}
