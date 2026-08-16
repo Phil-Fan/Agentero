@@ -369,18 +369,28 @@
 		"backend": {
 			"label": "解析方式",
 			"local": "本地推理",
-			"paddle": "Paddle API"
+			"paddle": "Paddle API",
+			"mineru": "MinerU（云端 API）"
 		},
 		"providerConfig": {
-			"section": "Paddle API",
-			"paddle": "PP-StructureV3",
+			"section": "服务商配置",
+			"providerName": {
+				"paddle": "PP-StructureV3",
+				"mineru": "MinerU"
+			},
 			"confirm": "确定",
 			"openDocs": "打开服务商网站",
 			"openDocsLabel": "获取访问令牌",
 			"notConfigured": "未配置",
 			"apiKey": {
 				"label": "API Key",
-				"placeholder": "填写 PP-StructureV3 访问令牌"
+				"placeholder": {
+					"paddle": "填写 PP-StructureV3 访问令牌",
+					"mineru": "填写 MinerU API Token"
+				}
+			},
+			"baseUrl": {
+				"label": "Base URL"
 			},
 			"probeIdle": "尚未检测",
 			"probeOk": "可用",

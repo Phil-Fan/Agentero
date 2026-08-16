@@ -18,6 +18,8 @@ export type LayoutBackend = (typeof LAYOUT_BACKENDS)[number];
 
 export type LayoutProviderConfig = {
 	apiKey: string;
+	/** Optional endpoint override; empty → provider default. */
+	baseUrl: string;
 };
 
 export type LayoutSettings = {
@@ -38,6 +40,13 @@ export const LAYOUT_PADDLE_JOBS_URL =
 export const LAYOUT_PROVIDER_DOCS_URLS: Record<LayoutProviderId, string> = {
 	paddle: "https://aistudio.baidu.com/account/accessToken",
 	mineru: "https://mineru.net/apiManage/token",
+};
+
+/** Official endpoints, shown as the Base URL placeholder (override-capable providers only). */
+export const LAYOUT_PROVIDER_DEFAULT_BASE_URLS: Partial<
+	Record<LayoutProviderId, string>
+> = {
+	mineru: "https://mineru.net",
 };
 
 export function isLayoutBackend(value: unknown): value is LayoutBackend {

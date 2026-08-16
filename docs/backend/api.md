@@ -2133,42 +2133,46 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 - **参数**：`{ progressTaskId?: string }`（来自 `enqueueBackgroundTask` 的 id）
 - **返回**：`LayoutModelStatus`；未就绪则下载（进程锁；支持取消与字节进度）
 
-### 3.10.2 版面解析后端（本地 ONNX / Paddle API）
+### 3.10.2 版面解析后端（本地 ONNX / 远程 Provider）
 
 `settings.json` 新增 `layout` 段（camelCase，`settings_get` / `settings_set` 同构）：
 
 ```jsonc
 {
   "layout": {
-    "backend": "local", // "local"（默认，ONNX）| "paddle"（AI Studio 异步任务）
+    "backend": "local", // "local"（默认，ONNX）| "paddle"（AI Studio 异步任务）| "mineru"（MinerU 云 API）
     "providerConfigs": {
-      "paddle": { "apiKey": "***" }
+      "paddle": { "apiKey": "***", "baseUrl": "" },
+      "mineru": { "apiKey": "***", "baseUrl": "" } // baseUrl 空 → 官方 https://mineru.net
     }
   }
 }
 ```
 
-- `apiKey` 与翻译 BYOK 同一套掩码机制：`settings_get` 返回 `*` 掩码，`settings_set` 收到掩码时保留已存密钥。Key 在 AI Studio PaddleOCR 任务页获取。
-- 设置 UI：Settings →「版面解析 / Layout」（后端选择 + Paddle API Key / 端点 + 连通性测试）。
+- `apiKey` 与翻译 BYOK 同一套掩码机制：`settings_get` 返回 `*` 掩码，`settings_set` 收到掩码时保留已存密钥。Paddle key 在 AI Studio 访问令牌页获取；MinerU token 在 mineru.net API 管理页获取（前端 `LAYOUT_PROVIDER_DOCS_URLS`）。
+- `baseUrl` 为可选端点覆盖：paddle 端点固定（不支持覆盖）；mineru 支持覆盖且强制 https（loopback `http://localhost` 等除外）。
+- 设置 UI：Settings →「版面解析 / Layout」（后端选择由前端 `LAYOUT_PROVIDERS` 注册表驱动；按 provider 的 `requiresApiKey` / `supportsBaseUrl` 显隐 API Key / Base URL 输入 + 连通性测试）。
 
 #### `layout_remote_analyze_pdf`（已实现）
 
-整份 PDF 的 **异步** PP-StructureV3 解析（无同步逐页接口）：
+整份 PDF 的 **异步** 远程解析（无同步逐页接口），按 `provider` 分发到对应 engine：
 
-- **参数**：`{ args: { pdfBase64, fileName?, apiKey?, requestId? } }`
-  - 端点固定为 `https://paddleocr.aistudio-app.com/api/v2/ocr/jobs`；`apiKey` 为空 / 掩码时由 Host 从设置注入（WebView 不持有明文）。
+- **参数**：`{ args: { provider?, pdfBase64, fileName?, apiKey?, requestId? } }`
+  - `provider`：`"paddle"` | `"mineru"`，缺省 `"paddle"`（向后兼容）；未知 provider 返回错误。
+  - `apiKey` 为空 / 掩码时由 Host 从设置注入（WebView 不持有明文）；`baseUrl` 一律由 Host 从设置读取。
   - `requestId` 用于并行任务把 `layout-remote:progress` 对回调用方。
-- **流程**：multipart 提交任务 `POST /api/v2/ocr/jobs`（`model: PP-StructureV3`，`Authorization: bearer <token>`）→ 每 3s 轮询 `GET /api/v2/ocr/jobs/{jobId}`（总时限 10 分钟）→ 完成后下载 `resultUrl.jsonUrl`（JSONL）并提取每页 `prunedResult.layout_det_res.boxes`。
+- **Paddle 流程**：multipart 提交任务 `POST /api/v2/ocr/jobs`（`model: PP-StructureV3`，`Authorization: bearer <token>`，端点固定 `https://paddleocr.aistudio-app.com`）→ 每 3s 轮询 `GET /api/v2/ocr/jobs/{jobId}`（总时限 10 分钟）→ 完成后下载 `resultUrl.jsonUrl`（JSONL）并提取每页 `prunedResult.layout_det_res.boxes`。
+- **MinerU 流程**：`POST {base}/api/v4/file-urls/batch` 申请预签名上传 URL → `PUT` 上传 PDF 字节 → 每 3s 轮询 `GET {base}/api/v4/extract-results/batch/{batchId}`（总时限 10 分钟）→ 下载结果 zip，解析 `*content_list.json`（bbox 为 0–1000 归一化，Host 换算回页面像素）+ `*middle.json`（每页尺寸），label 映射到与 PP-DocLayoutV3 统一的词表。不受信 zip 设下载（256 MB）与单条目解压（128 MB）上限。
 - **进度**：轮询期间 emit `layout-remote:progress`，payload `{ phase, extractedPages, totalPages, requestId? }`（phase：`uploading` / `pending` / `running` / `downloading` / `done`）。
-- **并发**：`settings.layout.backend === "paddle"` 时 JobCenter `layoutAnalyze` **无并发上限**；本地 ONNX 仍 cap=1。
-- **返回**：`{ pages: [{ boxes: [{ clsId, label, score, coordinate }], widthPx, heightPx }] }`；渲染像素尺寸优先取 `dataInfo` / `inputImage` JPEG 头，缺失为 `null`（前端按 200 DPI 估算）。
+- **并发**：`settings.layout.backend` 为远程 provider 时 JobCenter `layoutAnalyze` **无并发上限**（远端排队）；本地 ONNX 仍 cap=1。
+- **返回**：`{ pages: [{ boxes: [{ clsId, label, score, coordinate }], widthPx, heightPx }] }`；渲染像素尺寸优先取服务端报告（Paddle：`dataInfo` / `inputImage` JPEG 头；MinerU：`middle.json` 页尺寸），缺失为 `null`（前端按 200 DPI 估算）。
 - **超时 / 代理**：单请求 120s；走 Host 全局代理（`network::client_builder`）。
-- 实现：`src-tauri/src/features/layout_remote/`；前端 `src/lib/pdf/layout/paddle.ts`。
+- 实现：`src-tauri/src/features/layout_remote/`（`commands.rs` 命令壳 + `engine.rs` `RemoteLayoutEngine` trait / 注册 + `paddle.rs` + `mineru.rs`）；前端 `src/lib/pdf/layout/paddle.ts`（IPC 封装）+ `providers.ts`（`LAYOUT_PROVIDERS` 注册表）。
 
 #### `layout_remote_probe`（已实现）
 
-- **参数**：`{ args: { imageBase64, apiKey? } }`
-- **行为**：用同一异步任务通路提交一张小图任务，返回 `{ jobId }` 即端点 + token 有效。走 Host（无 WebView CORS 限制、遵循代理），供设置页「测试连接」使用。
+- **参数**：`{ args: { provider?, imageBase64, apiKey? } }`（`provider` 缺省 `"paddle"`）
+- **行为**：按 provider 走各自最小请求验证端点 + token（paddle 提交一张小图任务返回 `{ jobId }`；mineru 调 `file-urls/batch` 空列表验证鉴权）。走 Host（无 WebView CORS 限制、遵循代理），供设置页 / Onboarding「测试连接」使用。
 
 #### `settings_get`（已实现）
 

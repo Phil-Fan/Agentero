@@ -369,18 +369,28 @@
 		"backend": {
 			"label": "Analysis engine",
 			"local": "On-device",
-			"paddle": "Paddle API"
+			"paddle": "Paddle API",
+			"mineru": "MinerU (Cloud API)"
 		},
 		"providerConfig": {
-			"section": "Paddle API",
-			"paddle": "PP-StructureV3",
+			"section": "Provider settings",
+			"providerName": {
+				"paddle": "PP-StructureV3",
+				"mineru": "MinerU"
+			},
 			"confirm": "Confirm",
 			"openDocs": "Open provider website",
 			"openDocsLabel": "Get an access token",
 			"notConfigured": "Not configured",
 			"apiKey": {
 				"label": "API key",
-				"placeholder": "Enter your PP-StructureV3 access token"
+				"placeholder": {
+					"paddle": "Enter your PP-StructureV3 access token",
+					"mineru": "Enter your MinerU API token"
+				}
+			},
+			"baseUrl": {
+				"label": "Base URL"
 			},
 			"probeIdle": "Not checked yet",
 			"probeOk": "Available",

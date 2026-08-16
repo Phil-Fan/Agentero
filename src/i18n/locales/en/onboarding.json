@@ -48,9 +48,8 @@
 	},
 	"layout": {
 		"title": "Layout parsing",
-		"configureOwn": "Configure Paddle API (recommended)",
+		"configureOwn": "Configure a cloud API (recommended)",
 		"useDefault": "Local on-device model",
-		"apiKeyPlaceholder": "Enter your PP-StructureV3 access token",
 		"openDocs": "Open provider website",
 		"test": "Test",
 		"probeIdle": "Not tested yet",

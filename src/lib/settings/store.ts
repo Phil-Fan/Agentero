@@ -555,9 +555,10 @@ function normalizeLayoutProviderConfigs(
 	for (const [id, value] of Object.entries(raw)) {
 		if (!isLayoutProviderId(id)) continue;
 		if (!value || typeof value !== "object") continue;
-		const cfg = value as { apiKey?: unknown };
+		const cfg = value as { apiKey?: unknown; baseUrl?: unknown };
 		out[id] = {
 			apiKey: typeof cfg.apiKey === "string" ? cfg.apiKey.trim() : "",
+			baseUrl: typeof cfg.baseUrl === "string" ? cfg.baseUrl.trim() : "",
 		};
 	}
 	return out;

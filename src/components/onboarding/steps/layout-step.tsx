@@ -11,19 +11,28 @@ import { ChoiceCard } from "@/components/onboarding/choice-card";
 import type { OnboardingStepId } from "@/components/onboarding/flow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { isTauri } from "@/lib/core/tauri";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/core/utils";
 import {
-	invokeLayoutRemoteProbe,
-	tinyProbeJpegBase64,
-} from "@/lib/pdf/layout/paddle";
+	persistLayoutProviderConfig,
+	probeLayoutProvider,
+} from "@/lib/pdf/layout/provider-config";
 import {
-	isLayoutApiKeyMask,
+	isRemoteLayoutProvider,
+	LAYOUT_PROVIDERS,
+} from "@/lib/pdf/layout/providers";
+import {
+	LAYOUT_PROVIDER_DEFAULT_BASE_URLS,
 	LAYOUT_PROVIDER_DOCS_URLS,
-	maskLayoutApiKey,
+	type LayoutProviderId,
 } from "@/lib/pdf/layout/settings";
 import type { AppSettings } from "@/lib/settings";
-import { saveSettingsAsync } from "@/lib/settings";
 
 function openExternalUrl(url: string): void {
 	void import("@tauri-apps/plugin-opener")
@@ -32,6 +41,10 @@ function openExternalUrl(url: string): void {
 			window.open(url, "_blank", "noopener,noreferrer");
 		});
 }
+
+const REMOTE_PROVIDERS = Object.values(LAYOUT_PROVIDERS).filter(
+	isRemoteLayoutProvider,
+);
 
 type ProbeStatus = "idle" | "probing" | "ok" | "fail";
 
@@ -82,10 +95,14 @@ export function LayoutStep({
 }) {
 	const { t } = useTranslation(["onboarding", "settings"]);
 	const layout = settings.layout;
-	const stored = layout.providerConfigs.paddle;
 	const [mode, setMode] = useState<"choose" | "configure">("choose");
-	const [draft, setDraft] = useState<string | undefined>(undefined);
+	const [providerId, setProviderId] = useState<LayoutProviderId>("paddle");
+	const [draft, setDraft] = useState<{ apiKey?: string; baseUrl?: string }>({});
 	const [probe, setProbe] = useState<ProbeStatus>("idle");
+
+	const provider =
+		REMOTE_PROVIDERS.find((p) => p.id === providerId) ?? REMOTE_PROVIDERS[0];
+	const stored = layout.providerConfigs[provider.id];
 
 	// Next is allowed once the user committed to the own-API flow ("use system
 	// default" advances immediately from the chooser instead).
@@ -98,46 +115,24 @@ export function LayoutStep({
 		onUseDefault();
 	};
 
-	const displayKey = draft ?? stored?.apiKey ?? "";
+	const displayKey = draft.apiKey ?? stored?.apiKey ?? "";
+	const displayBaseUrl = draft.baseUrl ?? stored?.baseUrl ?? "";
 
 	const confirm = async () => {
-		const apiKey = (draft ?? stored?.apiKey ?? "").trim();
+		const apiKey = displayKey.trim();
 		if (!apiKey) return;
-		const toSave = { apiKey };
-		const masked = isLayoutApiKeyMask(apiKey)
-			? apiKey
-			: maskLayoutApiKey(apiKey);
-		const nextLayout = {
-			...layout,
-			backend: "paddle" as const,
-			providerConfigs: {
-				...layout.providerConfigs,
-				paddle: { ...toSave, apiKey: masked },
-			},
-		};
-		setDraft(masked);
-		try {
-			await saveSettingsAsync({ ...settings, layout: nextLayout });
-		} catch {
-			// Still mask the UI below.
-		}
-		patch({ layout: nextLayout });
+		const baseUrl = provider.supportsBaseUrl ? displayBaseUrl.trim() : "";
+		const { displayLayout } = await persistLayoutProviderConfig({
+			settings,
+			provider: provider.id,
+			config: { apiKey, baseUrl },
+			backend: provider.id,
+		});
+		patch({ layout: displayLayout });
+		setDraft({});
 		setProbe("probing");
-		const base64 = tinyProbeJpegBase64();
-		if (!base64 || !isTauri()) {
-			setProbe("fail");
-			return;
-		}
-		try {
-			await invokeLayoutRemoteProbe({
-				provider: "paddle",
-				imageBase64: base64,
-				apiKey: toSave.apiKey,
-			});
-			setProbe("ok");
-		} catch {
-			setProbe("fail");
-		}
+		const ok = await probeLayoutProvider(provider.id, apiKey);
+		setProbe(ok ? "ok" : "fail");
 	};
 
 	if (mode === "choose") {
@@ -171,9 +166,31 @@ export function LayoutStep({
 				>
 					<ArrowLeft className="size-4" />
 				</Button>
-				<span className="shrink-0 text-muted-foreground text-xs">
-					{t("layout.apiKeyPlaceholder")}
-				</span>
+				<Select
+					value={provider.id}
+					onValueChange={(value) => {
+						setProviderId(value as LayoutProviderId);
+						setDraft({});
+						setProbe("idle");
+					}}
+				>
+					<SelectTrigger
+						size="sm"
+						className="w-40 shrink-0"
+						aria-label={t("settings:layout.backend.label")}
+					>
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						{REMOTE_PROVIDERS.map((p) => (
+							<SelectItem key={p.id} value={p.id}>
+								{t(
+									`settings:layout.backend.${p.id}` as "settings:layout.backend.paddle",
+								)}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
 				<Button
 					type="button"
 					variant="ghost"
@@ -181,7 +198,9 @@ export function LayoutStep({
 					className="shrink-0"
 					aria-label={t("layout.openDocs")}
 					title={t("layout.openDocs")}
-					onClick={() => openExternalUrl(LAYOUT_PROVIDER_DOCS_URLS.paddle)}
+					onClick={() =>
+						openExternalUrl(LAYOUT_PROVIDER_DOCS_URLS[provider.id])
+					}
 				>
 					<ExternalLink className="size-4" />
 				</Button>
@@ -210,10 +229,22 @@ export function LayoutStep({
 			</div>
 			<Input
 				value={displayKey}
-				placeholder={t("layout.apiKeyPlaceholder")}
-				onChange={(e) => setDraft(e.target.value)}
+				placeholder={t(
+					`settings:layout.providerConfig.apiKey.placeholder.${provider.id}` as "settings:layout.providerConfig.apiKey.placeholder.paddle",
+				)}
+				aria-label={t("settings:layout.providerConfig.apiKey.label")}
+				onChange={(e) => setDraft((d) => ({ ...d, apiKey: e.target.value }))}
 				className="h-8"
 			/>
+			{provider.supportsBaseUrl ? (
+				<Input
+					value={displayBaseUrl}
+					placeholder={LAYOUT_PROVIDER_DEFAULT_BASE_URLS[provider.id]}
+					aria-label={t("settings:layout.providerConfig.baseUrl.label")}
+					onChange={(e) => setDraft((d) => ({ ...d, baseUrl: e.target.value }))}
+					className="h-8"
+				/>
+			) : null}
 		</div>
 	);
 }

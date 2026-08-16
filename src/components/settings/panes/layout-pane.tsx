@@ -24,20 +24,22 @@ import {
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import {
-	invokeLayoutRemoteProbe,
-	tinyProbeJpegBase64,
-} from "@/lib/pdf/layout/paddle";
+	persistLayoutProviderConfig,
+	probeLayoutProvider,
+} from "@/lib/pdf/layout/provider-config";
 import {
-	isLayoutApiKeyMask,
+	isRemoteLayoutProvider,
+	LAYOUT_PROVIDERS,
+	layoutProviderFor,
+	type RemoteLayoutProviderDescriptor,
+} from "@/lib/pdf/layout/providers";
+import {
 	isLayoutBackend,
-	LAYOUT_BACKENDS,
+	LAYOUT_PROVIDER_DEFAULT_BASE_URLS,
 	LAYOUT_PROVIDER_DOCS_URLS,
-	type LayoutBackend,
 	type LayoutProviderConfig,
-	maskLayoutApiKey,
 } from "@/lib/pdf/layout/settings";
 import type { AppSettings } from "@/lib/settings";
-import { saveSettingsAsync } from "@/lib/settings";
 
 function openExternalUrl(url: string): void {
 	void import("@tauri-apps/plugin-opener")
@@ -49,6 +51,7 @@ function openExternalUrl(url: string): void {
 
 const EMPTY_PROVIDER_CONFIG: LayoutProviderConfig = {
 	apiKey: "",
+	baseUrl: "",
 };
 
 type ProbeStatus = "idle" | "probing" | "ok" | "fail";
@@ -88,95 +91,9 @@ export function LayoutPane({
 }) {
 	const { t } = useTranslation("settings");
 	const layout = settings.layout;
-	const patchLayout = useCallback(
-		(partial: Partial<typeof layout>) =>
-			patch({ layout: { ...layout, ...partial } }),
-		[patch, layout],
-	);
-
-	const showConfig = layout.backend === "paddle";
-	const stored = layout.providerConfigs.paddle ?? EMPTY_PROVIDER_CONFIG;
-	const [draft, setDraft] = useState<Partial<LayoutProviderConfig>>({});
-	const [status, setStatus] = useState<ProbeStatus>("idle");
-	const probeAbortRef = useRef<AbortController | null>(null);
-
-	const displayApiKey =
-		draft.apiKey !== undefined ? draft.apiKey : stored.apiKey;
-	const configured = displayApiKey.trim().length > 0;
-
-	const runProbe = useCallback(
-		(override?: { apiKey?: string }) => {
-			if (!isTauri()) return;
-			const apiKey = (override?.apiKey ?? displayApiKey).trim();
-			if (!apiKey) {
-				setStatus("idle");
-				return;
-			}
-			probeAbortRef.current?.abort();
-			const ac = new AbortController();
-			probeAbortRef.current = ac;
-			setStatus("probing");
-			const base64 = tinyProbeJpegBase64();
-			if (!base64) {
-				setStatus("fail");
-				return;
-			}
-			// Mask → Host resolves the stored token; plaintext draft → test pre-save.
-			void invokeLayoutRemoteProbe({
-				provider: "paddle",
-				imageBase64: base64,
-				apiKey: apiKey || undefined,
-			})
-				.then(() => {
-					if (!ac.signal.aborted) setStatus("ok");
-				})
-				.catch(() => {
-					if (!ac.signal.aborted) setStatus("fail");
-				});
-		},
-		[displayApiKey],
-	);
-
-	/** Confirm: persist drafts (key kept secret by Host), mask UI, then probe. */
-	const confirmProvider = useCallback(async () => {
-		const apiKey = (
-			draft.apiKey !== undefined ? draft.apiKey : stored.apiKey
-		).trim();
-		const toSave: LayoutProviderConfig = { apiKey };
-		if (!toSave.apiKey) {
-			setStatus("idle");
-			return;
-		}
-		const displayMask = isLayoutApiKeyMask(toSave.apiKey)
-			? toSave.apiKey
-			: maskLayoutApiKey(toSave.apiKey);
-		const nextLayout = {
-			...layout,
-			providerConfigs: { ...layout.providerConfigs, paddle: toSave },
-		};
-		setDraft({});
-		try {
-			await saveSettingsAsync({ ...settings, layout: nextLayout });
-		} catch {
-			// Still mask the UI below.
-		}
-		patch({
-			layout: {
-				...nextLayout,
-				providerConfigs: {
-					...nextLayout.providerConfigs,
-					paddle: { ...toSave, apiKey: displayMask },
-				},
-			},
-		});
-		runProbe({ apiKey: toSave.apiKey });
-	}, [draft, layout, patch, runProbe, settings, stored]);
-
-	useEffect(() => {
-		return () => {
-			probeAbortRef.current?.abort();
-		};
-	}, []);
+	const provider = layoutProviderFor(layout.backend);
+	const remoteProvider =
+		provider && isRemoteLayoutProvider(provider) ? provider : null;
 
 	return (
 		<div className="space-y-6">
@@ -188,7 +105,7 @@ export function LayoutPane({
 						value={layout.backend}
 						onValueChange={(value) => {
 							if (isLayoutBackend(value)) {
-								patchLayout({ backend: value as LayoutBackend });
+								patch({ layout: { ...layout, backend: value } });
 							}
 						}}
 					>
@@ -200,9 +117,11 @@ export function LayoutPane({
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent className="max-h-72">
-							{LAYOUT_BACKENDS.map((backend) => (
-								<SelectItem key={backend} value={backend}>
-									{t(`layout.backend.${backend}` as "layout.backend.local")}
+							{Object.values(LAYOUT_PROVIDERS).map((descriptor) => (
+								<SelectItem key={descriptor.id} value={descriptor.id}>
+									{t(
+										`layout.backend.${descriptor.id}` as "layout.backend.local",
+									)}
 								</SelectItem>
 							))}
 						</SelectContent>
@@ -210,76 +129,163 @@ export function LayoutPane({
 				</SettingsRow>
 			</SettingsGroup>
 
-			{showConfig ? (
-				<div>
-					<h3 className="mb-2 px-0.5 font-medium text-sm">
-						{t("layout.providerConfig.section")}
-					</h3>
-					<div className="rounded-lg border bg-card px-3 py-2.5">
-						<div className="mb-2 flex items-center justify-between gap-2">
-							<div className="flex min-w-0 items-center gap-1.5">
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<span
-											role="status"
-											aria-label={t(
-												probeStatusLabelKey(
-													status,
-												) as "layout.providerConfig.probeIdle",
-											)}
-											className={cn(
-												"inline-block size-1.5 shrink-0 rounded-full",
-												probeDotClass(status, configured),
-											)}
-										/>
-									</TooltipTrigger>
-									<TooltipContent>
-										{t(
-											probeStatusLabelKey(
-												status,
-											) as "layout.providerConfig.probeIdle",
-										)}
-									</TooltipContent>
-								</Tooltip>
-								<span className="truncate font-medium text-sm">
-									{t("layout.providerConfig.paddle")}
-								</span>
-								<Button
-									type="button"
-									variant="link"
-									size="xs"
-									className="-ml-1.5 h-auto shrink-0 px-1.5 text-primary"
-									onClick={() =>
-										openExternalUrl(LAYOUT_PROVIDER_DOCS_URLS.paddle)
-									}
-								>
-									<ExternalLink data-icon="inline-start" className="size-3" />
-									{t("layout.providerConfig.openDocsLabel")}
-								</Button>
-							</div>
-							<Button
-								type="button"
-								variant="outline"
-								size="xs"
-								disabled={status === "probing"}
-								onClick={() => void confirmProvider()}
-							>
-								{t("layout.providerConfig.confirm")}
-							</Button>
-						</div>
+			{remoteProvider ? (
+				<ProviderConfigCard
+					key={remoteProvider.id}
+					provider={remoteProvider}
+					settings={settings}
+					patch={patch}
+				/>
+			) : null}
+		</div>
+	);
+}
 
+function ProviderConfigCard({
+	provider,
+	settings,
+	patch,
+}: {
+	provider: RemoteLayoutProviderDescriptor;
+	settings: AppSettings;
+	patch: (p: Partial<AppSettings>) => void;
+}) {
+	const { t } = useTranslation("settings");
+	const layout = settings.layout;
+	const stored = layout.providerConfigs[provider.id] ?? EMPTY_PROVIDER_CONFIG;
+	const [draft, setDraft] = useState<Partial<LayoutProviderConfig>>({});
+	const [status, setStatus] = useState<ProbeStatus>("idle");
+	const probeAbortRef = useRef<AbortController | null>(null);
+
+	const displayApiKey =
+		draft.apiKey !== undefined ? draft.apiKey : stored.apiKey;
+	const displayBaseUrl =
+		draft.baseUrl !== undefined ? draft.baseUrl : stored.baseUrl;
+	const configured = displayApiKey.trim().length > 0;
+
+	const runProbe = useCallback(
+		(apiKey: string) => {
+			if (!isTauri()) return;
+			if (!apiKey.trim()) {
+				setStatus("idle");
+				return;
+			}
+			probeAbortRef.current?.abort();
+			const ac = new AbortController();
+			probeAbortRef.current = ac;
+			setStatus("probing");
+			// Mask → Host resolves the stored token; plaintext draft → test pre-save.
+			void probeLayoutProvider(provider.id, apiKey).then((ok) => {
+				if (!ac.signal.aborted) setStatus(ok ? "ok" : "fail");
+			});
+		},
+		[provider.id],
+	);
+
+	/** Confirm: persist drafts (key kept secret by Host), mask UI, then probe. */
+	const confirmProvider = useCallback(async () => {
+		const apiKey = (
+			draft.apiKey !== undefined ? draft.apiKey : stored.apiKey
+		).trim();
+		const baseUrl = provider.supportsBaseUrl
+			? (draft.baseUrl !== undefined ? draft.baseUrl : stored.baseUrl).trim()
+			: "";
+		if (!apiKey) {
+			setStatus("idle");
+			return;
+		}
+		const { displayLayout } = await persistLayoutProviderConfig({
+			settings,
+			provider: provider.id,
+			config: { apiKey, baseUrl },
+		});
+		patch({ layout: displayLayout });
+		setDraft({});
+		runProbe(apiKey);
+	}, [draft, patch, provider, runProbe, settings, stored]);
+
+	useEffect(() => {
+		return () => {
+			probeAbortRef.current?.abort();
+		};
+	}, []);
+
+	return (
+		<div>
+			<h3 className="mb-2 px-0.5 font-medium text-sm">
+				{t("layout.providerConfig.section")}
+			</h3>
+			<div className="rounded-lg border bg-card px-3 py-2.5">
+				<div className="mb-2 flex items-center justify-between gap-2">
+					<div className="flex min-w-0 items-center gap-1.5">
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<span
+									role="status"
+									aria-label={t(
+										probeStatusLabelKey(
+											status,
+										) as "layout.providerConfig.probeIdle",
+									)}
+									className={cn(
+										"inline-block size-1.5 shrink-0 rounded-full",
+										probeDotClass(status, configured),
+									)}
+								/>
+							</TooltipTrigger>
+							<TooltipContent>
+								{t(
+									probeStatusLabelKey(
+										status,
+									) as "layout.providerConfig.probeIdle",
+								)}
+							</TooltipContent>
+						</Tooltip>
+						<span className="truncate font-medium text-sm">
+							{t(
+								`layout.providerConfig.providerName.${provider.id}` as "layout.providerConfig.providerName.paddle",
+							)}
+						</span>
+						<Button
+							type="button"
+							variant="link"
+							size="xs"
+							className="-ml-1.5 h-auto shrink-0 px-1.5 text-primary"
+							onClick={() =>
+								openExternalUrl(LAYOUT_PROVIDER_DOCS_URLS[provider.id])
+							}
+						>
+							<ExternalLink data-icon="inline-start" className="size-3" />
+							{t("layout.providerConfig.openDocsLabel")}
+						</Button>
+					</div>
+					<Button
+						type="button"
+						variant="outline"
+						size="xs"
+						disabled={status === "probing"}
+						onClick={() => void confirmProvider()}
+					>
+						{t("layout.providerConfig.confirm")}
+					</Button>
+				</div>
+
+				<div className="space-y-2">
+					{provider.requiresApiKey ? (
 						<div className="flex items-center gap-2">
 							<Label
-								htmlFor="layout-provider-paddle-api-key"
+								htmlFor={`layout-provider-${provider.id}-api-key`}
 								className="w-20 shrink-0 font-normal text-muted-foreground text-xs"
 							>
 								{t("layout.providerConfig.apiKey.label")}
 							</Label>
 							<Input
-								id="layout-provider-paddle-api-key"
+								id={`layout-provider-${provider.id}-api-key`}
 								type="password"
 								value={displayApiKey}
-								placeholder={t("layout.providerConfig.apiKey.placeholder")}
+								placeholder={t(
+									`layout.providerConfig.apiKey.placeholder.${provider.id}` as "layout.providerConfig.apiKey.placeholder.paddle",
+								)}
 								className="h-8 min-w-0 flex-1 font-mono text-xs placeholder:text-muted-foreground/50"
 								spellCheck={false}
 								autoComplete="off"
@@ -289,9 +295,31 @@ export function LayoutPane({
 								onFocus={(e) => e.target.select()}
 							/>
 						</div>
-					</div>
+					) : null}
+					{provider.supportsBaseUrl ? (
+						<div className="flex items-center gap-2">
+							<Label
+								htmlFor={`layout-provider-${provider.id}-base-url`}
+								className="w-20 shrink-0 font-normal text-muted-foreground text-xs"
+							>
+								{t("layout.providerConfig.baseUrl.label")}
+							</Label>
+							<Input
+								id={`layout-provider-${provider.id}-base-url`}
+								type="text"
+								value={displayBaseUrl}
+								placeholder={LAYOUT_PROVIDER_DEFAULT_BASE_URLS[provider.id]}
+								className="h-8 min-w-0 flex-1 font-mono text-xs placeholder:text-muted-foreground/50"
+								spellCheck={false}
+								autoComplete="off"
+								onChange={(e) =>
+									setDraft((prev) => ({ ...prev, baseUrl: e.target.value }))
+								}
+							/>
+						</div>
+					) : null}
 				</div>
-			) : null}
+			</div>
 		</div>
 	);
 }

@@ -48,9 +48,8 @@
 	},
 	"layout": {
 		"title": "版面解析",
-		"configureOwn": "配置 Paddle API（推荐）",
+		"configureOwn": "配置云端 API（推荐）",
 		"useDefault": "本地模型推理",
-		"apiKeyPlaceholder": "填写 PP-StructureV3 访问令牌",
 		"openDocs": "打开服务商官网",
 		"test": "测试",
 		"probeIdle": "尚未测试",

@@ -118,7 +118,7 @@ UI / Host 动作
 
 | `kind` | 本地载荷 | PostHog | 漏斗 |
 |---|---|---|---|
-| `layout.analyze` | `path`, `trigger`(import\|open\|manual), `backend`(onnx\|paddle), `cache`(miss\|force), `region_count`, `dur_ms` | `layout_analyzed`：`trigger`, `backend`, `cache`, `dur_bucket` | `run-analysis` / headless executor **实际跑模型成功后** |
+| `layout.analyze` | `path`, `trigger`(import\|open\|manual), `backend`(onnx\|paddle\|mineru), `cache`(miss\|force), `region_count`, `dur_ms` | `layout_analyzed`：`trigger`, `backend`, `cache`, `dur_bucket` | `run-analysis` / headless executor **实际跑模型成功后** |
 
 **跳过**：sidecar cache hit 的静默 JSON→侧栏（打开论文时的常态）。那不是用户动作，会淹没画像。
 
@@ -187,7 +187,7 @@ UI / Host 动作
   },
 },
 'layout.analyze': {
-  local: { path: 'string', trigger: 'import'|'open'|'manual', backend: 'onnx'|'paddle', cache: 'miss'|'force', region_count: 'number', dur_ms: 'number' },
+  local: { path: 'string', trigger: 'import'|'open'|'manual', backend: 'onnx'|'paddle'|'mineru', cache: 'miss'|'force', region_count: 'number', dur_ms: 'number' },
   posthog: { name: 'layout_analyzed', props: ['trigger', 'backend', 'cache', 'dur_bucket'] },
 },
 ```
