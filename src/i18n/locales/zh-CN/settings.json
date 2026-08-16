@@ -85,8 +85,7 @@
 			"label": "网络代理"
 		},
 		"plaza": {
-			"label": "广场",
-			"description": "在侧栏显示发现来源。关闭后隐藏广场，也不再加载对应面板。"
+			"label": "广场"
 		},
 		"connector": {
 			"label": "兼容 Zotero Connector",
@@ -106,8 +105,7 @@
 				"label": "共享匿名使用数据"
 			},
 			"usageTracking": {
-				"label": "记录本地使用活动",
-				"description": "打开、下载、工具操作只写在本机 XDG usage.sqlite，供 Agent 作上下文。"
+				"label": "记录本地使用活动"
 			},
 			"clearUsage": {
 				"label": "清除使用记录",

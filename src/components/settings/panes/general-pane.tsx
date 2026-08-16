@@ -147,11 +147,7 @@ export function GeneralPane({
 						</SelectContent>
 					</Select>
 				</SettingsRow>
-				<SettingsRow
-					label={t("general.plaza.label")}
-					description={t("general.plaza.description")}
-					htmlFor="plaza-enabled"
-				>
+				<SettingsRow label={t("general.plaza.label")} htmlFor="plaza-enabled">
 					<Switch
 						id="plaza-enabled"
 						checked={settings.plazaEnabled}
@@ -208,7 +204,6 @@ function PrivacySettingsBlock({
 				</SettingsRow>
 				<SettingsRow
 					label={t("general.privacy.usageTracking.label")}
-					description={t("general.privacy.usageTracking.description")}
 					htmlFor="usage-tracking-enabled"
 				>
 					<Switch

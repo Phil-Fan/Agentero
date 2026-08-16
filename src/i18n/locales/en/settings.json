@@ -85,8 +85,7 @@
 			"label": "Network proxy"
 		},
 		"plaza": {
-			"label": "Plaza",
-			"description": "Show discovery sources in the sidebar. Turn off to hide Plaza and skip loading it."
+			"label": "Plaza"
 		},
 		"connector": {
 			"label": "Zotero Connector compatibility",
@@ -106,8 +105,7 @@
 				"label": "Share anonymous usage data"
 			},
 			"usageTracking": {
-				"label": "Record local activity",
-				"description": "Paper opens, downloads, and tool use stay on this device (XDG usage.sqlite) for Agent context."
+				"label": "Record local activity"
 			},
 			"clearUsage": {
 				"label": "Clear activity history",
