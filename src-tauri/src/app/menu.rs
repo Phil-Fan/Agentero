@@ -3,6 +3,11 @@
 #[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 
+/// Broadcast when a native menu item is clicked; payload `{ action: <menu id> }`.
+/// Wire naming follows docs/development/lifecycle-events.md (`domain:event`);
+/// this is a request/command signal, not a lifecycle fact event.
+pub const MENU_INVOKED_EVENT: &str = "menu:invoked";
+
 /// Labels for the native application menu.
 #[cfg(target_os = "macos")]
 pub struct MenuLabels {

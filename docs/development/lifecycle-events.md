@@ -26,8 +26,8 @@
 
 ### 历史违规与清理
 
-- `settings_window_closed` / `feature_window_closed`（snake_case 无前缀）→ `window:closed`，payload 带 `kind`
-- 菜单裸 id 事件（`open_vault`、`toggle_sidebar` 等）→ `menu:invoked`，payload 带 `action`
+- ✅ `settings_window_closed` / `feature_window_closed`（snake_case 无前缀）→ `window:closed`，payload `{ kind: "settings" | "feature", view? }`
+- ✅ 菜单裸 id 事件（`open_vault`、`toggle_sidebar` 等）→ `menu:invoked`，payload `{ action }`
 - `job:changed` 保留为内部状态机事件，对外暴露派生的 `job:completed` / `job:failed`
 
 ## 事件清单

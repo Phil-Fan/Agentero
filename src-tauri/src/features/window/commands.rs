@@ -22,6 +22,24 @@ const SETTINGS_TRAFFIC_LIGHT_Y: f64 = 16.0;
 
 pub const SETTINGS_WINDOW_LABEL: &str = "settings";
 
+/// Broadcast when a singleton child window closes (or fails to build).
+/// Wire naming follows docs/development/lifecycle-events.md (`domain:event`);
+/// this is a window signal, not a lifecycle fact event.
+pub const WINDOW_CLOSED_EVENT: &str = "window:closed";
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowClosedPayload<'a> {
+    kind: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    view: Option<&'a str>,
+}
+
+/// Emit `window:closed` with `kind: "settings" | "feature"` (+ `view` for feature).
+pub fn emit_window_closed(app: &AppHandle, kind: &str, view: Option<&str>) {
+    let _ = app.emit(WINDOW_CLOSED_EVENT, WindowClosedPayload { kind, view });
+}
+
 /// Open a fresh Agentero window without restoring the last vault (`?fresh=1`).
 ///
 /// `async` is load-bearing: sync command handlers run on the main thread inside
@@ -142,7 +160,7 @@ pub async fn settings_window_open(
         Err(e) => {
             op.finish_err_msg("settings", &e);
             // Keep the main window's `⌘,` toggle out of a stuck "open" state.
-            let _ = app.emit("settings_window_closed", ());
+            emit_window_closed(&app, "settings", None);
             return Err(e.to_string());
         }
     };
@@ -261,7 +279,7 @@ pub async fn feature_window_open(
         Ok(w) => w,
         Err(e) => {
             op.finish_err_msg("feature", &e);
-            let _ = app.emit("feature_window_closed", serde_json::json!({ "view": view }));
+            emit_window_closed(&app, "feature", Some(&view));
             return Err(e.to_string());
         }
     };

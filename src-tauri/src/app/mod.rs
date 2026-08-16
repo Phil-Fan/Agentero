@@ -261,7 +261,13 @@ pub fn run() {
                 });
                 return;
             }
-            let _ = app.emit(id, ());
+            // Remaining menu ids are renderer actions: broadcast one
+            // `menu:invoked` event with the action id (naming per
+            // docs/development/lifecycle-events.md).
+            let _ = app.emit(
+                crate::app::menu::MENU_INVOKED_EVENT,
+                serde_json::json!({ "action": id }),
+            );
         });
     }
 
@@ -271,14 +277,20 @@ pub fn run() {
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 window.state::<FsWatchController>().stop(window.label());
                 if window.label() == crate::features::window::commands::SETTINGS_WINDOW_LABEL {
-                    let _ = window.app_handle().emit("settings_window_closed", ());
+                    crate::features::window::commands::emit_window_closed(
+                        window.app_handle(),
+                        "settings",
+                        None,
+                    );
                 }
                 if let Some(view) =
                     crate::features::window::commands::feature_view_from_label(window.label())
                 {
-                    let _ = window
-                        .app_handle()
-                        .emit("feature_window_closed", serde_json::json!({ "view": view }));
+                    crate::features::window::commands::emit_window_closed(
+                        window.app_handle(),
+                        "feature",
+                        Some(view),
+                    );
                 }
             }
         });

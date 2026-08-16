@@ -32,28 +32,47 @@ export function useNativeMenuEvents(handlers: NativeMenuHandlers): void {
 		if (!isTauri()) return;
 
 		let cancelled = false;
-		const unsubs: Array<() => void> = [];
+		let unsub: (() => void) | undefined;
 
 		void (async () => {
 			const { listen } = await import("@tauri-apps/api/event");
 			if (cancelled) return;
 
-			unsubs.push(await listen("settings", () => onSettings()));
-			unsubs.push(await listen("open_vault", () => onOpenVault()));
-			unsubs.push(await listen("create_vault", () => onCreateVault()));
-			unsubs.push(await listen("refresh_tree", () => onRefresh()));
-			unsubs.push(await listen("toggle_sidebar", () => onToggleSidebar()));
-			unsubs.push(await listen("split_pane", () => onSplitPane()));
-			unsubs.push(await listen("toggle_chat", () => onToggleChat()));
-			// File → Close / ⌘W (macOS menu accelerator; keydown also handles non-macOS)
-			unsubs.push(
-				await listen("close_tab_or_window", () => onCloseTabOrWindow()),
-			);
+			unsub = await listen<{ action: string }>("menu:invoked", (e) => {
+				switch (e.payload?.action) {
+					case "settings":
+						onSettings();
+						break;
+					case "open_vault":
+						onOpenVault();
+						break;
+					case "create_vault":
+						onCreateVault();
+						break;
+					case "refresh_tree":
+						onRefresh();
+						break;
+					case "toggle_sidebar":
+						onToggleSidebar();
+						break;
+					case "split_pane":
+						onSplitPane();
+						break;
+					case "toggle_chat":
+						onToggleChat();
+						break;
+					// File → Close / ⌘W (macOS menu accelerator; keydown also
+					// handles non-macOS)
+					case "close_tab_or_window":
+						onCloseTabOrWindow();
+						break;
+				}
+			});
 		})();
 
 		return () => {
 			cancelled = true;
-			for (const unsub of unsubs) unsub();
+			unsub?.();
 		};
 	}, [
 		onSettings,

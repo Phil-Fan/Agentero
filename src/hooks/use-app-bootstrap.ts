@@ -112,8 +112,8 @@ export function useAppBootstrap(): void {
 		let unlisten: (() => void) | undefined;
 		void (async () => {
 			const { listen } = await import("@tauri-apps/api/event");
-			unlisten = await listen("settings_window_closed", () => {
-				setSettingsOpenState(false);
+			unlisten = await listen<{ kind: string }>("window:closed", (e) => {
+				if (e.payload?.kind === "settings") setSettingsOpenState(false);
 			});
 		})();
 		return () => {

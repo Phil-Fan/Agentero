@@ -312,7 +312,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 - **行为**
   - label 为 `feature-{view}`；已存在则 `set_focus`。
   - URL：`index.html?window=feature&view=…&vault_path=…&active_path=…&paper_title=…`（轻量 Feature 根，不加载完整 App Dock）。
-  - 窗口关闭时 Host 向所有窗口 `emit("feature_window_closed", { view })`。
+  - 窗口关闭时 Host 向所有窗口 `emit("window:closed", { kind: "feature", view })`。
   - **必须是 `async` command**（同 `window_new`）。
 
 #### `feature_window_close`（已实现）
@@ -362,7 +362,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - URL 带 `?window=settings&section=...&vault_path=...`，由 `src/main.tsx` 分支渲染轻量 Settings 页面（不加载完整 `App`）。
   - 新窗口初始隐藏，由全局 page-load hook 在页面加载完成后显示；首个 React commit 前显示静态启动壳。
   - macOS 使用 Overlay 标题栏与原生交通灯；Windows / Linux 使用系统原生窗口边框（OS 自绘标题栏与 caption 按钮）。
-  - 窗口关闭时 Host 向所有窗口 `emit("settings_window_closed", ())`，便于主窗口同步 Settings 打开状态（实现 `⌘,` _toggle_）；建窗失败时也会 emit 一次，避免 toggle 卡在“已打开”。
+  - 窗口关闭时 Host 向所有窗口 `emit("window:closed", { kind: "settings" })`，便于主窗口同步 Settings 打开状态（实现 `⌘,` _toggle_）；建窗失败时也会 emit 一次，避免 toggle 卡在“已打开”。
   - 与 `window_new` 同理，**必须是 `async` command**。
 
 #### `fs_watch_start` / `fs_watch_stop`（已实现）
@@ -2264,9 +2264,9 @@ CLI 对照：`agentero usage which|timeline|summary|clear`（见 [cli.md](cli.md
 
 #### 菜单事件
 
-原生菜单项点击后 Host 通过 `emit(id, ())` 广播，前端在 `src/App.tsx` 监听。事件名（id）稳定、不随语言变化；仅菜单显示文案随 `set_locale` 本地化。
+原生菜单项点击后 Host 通过 `emit("menu:invoked", { action: id })` 广播（`new_window` 除外），前端在 `src/hooks/use-native-menu-events.ts` 单监听按 `action` 分发。action（菜单 id）稳定、不随语言变化；仅菜单显示文案随 `set_locale` 本地化。
 
-| 事件名 | 菜单项 | 快捷键 | 说明 |
+| action | 菜单项 | 快捷键 | 说明 |
 |---|---|---|---|
 | `settings` | Settings… | `⌘,` | 前端监听，打开 App 内设置浮层 |
 | `new_window` | New Window | `⌘N` | **Host 直接** `window_new`，不 emit 给前端 |

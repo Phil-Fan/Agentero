@@ -203,25 +203,29 @@ export function readFeatureWindowView(): FeatureViewType | null {
 	}
 }
 
-/** Subscribe main windows to feature_window_closed and clear popped-out flags. */
+/** Subscribe main windows to `window:closed` (kind=feature) and clear popped-out flags. */
 export function bindFeatureWindowClosedListener(): () => void {
 	if (!isTauri()) return () => {};
 	let unlisten: (() => void) | undefined;
 	void (async () => {
 		const { listen } = await import("@tauri-apps/api/event");
 		const { setFeaturePoppedOut } = await import("@/lib/shell/ui-store");
-		unlisten = await listen<{ view: string }>("feature_window_closed", (e) => {
-			const view = e.payload?.view;
-			if (
-				view === "agent" ||
-				view === "backlinks" ||
-				view === "annotations" ||
-				view === "references" ||
-				view === "figures"
-			) {
-				setFeaturePoppedOut(view, false);
-			}
-		});
+		unlisten = await listen<{ kind: string; view?: string }>(
+			"window:closed",
+			(e) => {
+				if (e.payload?.kind !== "feature") return;
+				const view = e.payload.view;
+				if (
+					view === "agent" ||
+					view === "backlinks" ||
+					view === "annotations" ||
+					view === "references" ||
+					view === "figures"
+				) {
+					setFeaturePoppedOut(view, false);
+				}
+			},
+		);
 	})();
 	return () => {
 		unlisten?.();
