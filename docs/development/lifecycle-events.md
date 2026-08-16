@@ -38,7 +38,7 @@
 
 | 事件 | 时机 |
 |---|---|
-| ⭐ `app:ready` | 前端 bootstrap 完成（store 初始化、vault 校验后） |
+| ⭐ `app:ready` | 前端 bootstrap 完成（store 初始化、vault 校验后）。已预埋 emit、暂无消费者 |
 | ○ `app:will-quit` | 退出前（Rust `RunEvent::Exit`） |
 | ○ `window:opened` / `window:closed` | 子窗口生命周期（替换 snake_case 旧事件） |
 
@@ -63,7 +63,7 @@
 
 | 事件 | 时机 |
 |---|---|
-| ⭐ `paper:opened` | openPaper/openTab 完成（layout enqueue、activity 打点挂载点） |
+| ⭐ `paper:opened` | openPaper/openTab 完成（layout enqueue、activity 打点挂载点）。已预埋 emit、暂无消费者 |
 | ○ `paper:closed` | 关 tab |
 | ○ `mark:created` / `mark:deleted` | 标注增删 |
 | ○ `translation:completed` | 翻译完成 |
@@ -79,7 +79,7 @@
 
 | 事件 | 时机 |
 |---|---|
-| ⭐ `job:completed` / `job:failed` | 由 `job:changed` 状态机单点派生，payload 带 `JobKind`（ParseRefs / ParseBody / LayoutAnalyze / LayoutTranslate / DownloadAssets / PageCount / WikiReindex） |
+| ⭐ `job:completed` / `job:failed` | 由 `job:changed` 状态机单点派生，payload 带 `JobKind`（ParseRefs / ParseBody / LayoutAnalyze / LayoutTranslate / DownloadAssets / PageCount / WikiReindex）。已预埋 emit、暂无消费者 |
 
 ### 已符合规范、直接纳入
 
@@ -98,7 +98,7 @@ Rust 关键节点 ──emit──▶ Tauri wire 事件 ──┐
   - `bus.ts`：极简 typed emitter（on/off/emit，无第三方依赖）
   - `tauri-bridge.ts`：集中 `listen()` wire 事件并转发进 bus；在 bootstrap 初始化一次
 - **Rust 端不做 observer 抽象**：仅在关键节点（`paper_commit` 后、jobs 状态机单点、assets 完成后）直接 emit 语义事件；当前只有前端一个消费者，不过度设计。
-- **顺序约束显式化**：handler 按注册顺序串行 await（如导入后 openPaper 依赖 refreshLibrary），不引入优先级系统，靠注册文件内的显式顺序表达。
+- **顺序约束显式化**：handler 按注册顺序串行 await，不引入优先级系统，靠注册文件内的显式顺序表达。（注：openPaper 直接用导入结果里的绝对路径打开，不依赖 refreshLibrary 完成。）
 
 ## 落地批次
 

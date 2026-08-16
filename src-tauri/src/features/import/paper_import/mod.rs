@@ -212,6 +212,7 @@ pub async fn paper_commit(
             (assets, false)
         }
         AssetsPolicy::CopyPdf { .. } => {
+            crate::features::lifecycle::emit_paper_assets_ready(opts.app, vault, &meta.id);
             let assets = AssetDownloadResult {
                 pdf: true,
                 ..Default::default()

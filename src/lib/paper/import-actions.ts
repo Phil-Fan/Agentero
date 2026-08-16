@@ -131,9 +131,6 @@ export async function lookupSubmit(
 									.replace(/^\/+|\/+$/g, ""),
 							);
 					if (openImported) openPaper(paperAbs);
-					setDetail(
-						i18n.t("app:tasks.lookupRefreshing", { title: first.title }),
-					);
 				}
 				// Papers that already have a PDF after import: start layout now.
 				// Those still downloading enqueue layout after download completes.

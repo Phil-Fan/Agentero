@@ -1072,13 +1072,15 @@ impl JobCenter {
         let mut inner = self.inner.lock().await;
         let id = JobId(job_id.to_string());
         let job = inner.jobs.get_mut(&id)?;
-        // Already settled (e.g. cancelled mid-run): keep the terminal state so a
-        // runner's late finish() cannot overwrite it, and don't double-free the slot.
+        // Already settled (e.g. cancelled mid-run or renderer job_report set the
+        // terminal state): keep it so a runner's late finish() cannot overwrite
+        // it, don't double-free the slot, and return None so the terminal
+        // snapshot (already emitted at the real transition) isn't emitted twice.
         if matches!(
             job.state,
             JobState::Succeeded | JobState::Failed | JobState::Cancelled | JobState::Skipped
         ) {
-            return Some(job.snapshot());
+            return None;
         }
         let was_running = job.state == JobState::Running;
         let kind = job.kind;

@@ -248,7 +248,6 @@
 		"downloadRefreshing": "正在刷新论文库… · {{path}}",
 		"lookupImport": "添加论文",
 		"lookupFetching": "正在拉取元数据与资源… · {{id}}",
-		"lookupRefreshing": "正在刷新论文库… · {{title}}",
 		"libraryImport": "导入文献库",
 		"importPdf": "导入 PDF",
 		"libraryExport": "导出文献库",

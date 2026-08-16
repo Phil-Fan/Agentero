@@ -34,9 +34,14 @@ pub async fn lookup_import_batch(
                 return Ok(crate::core::error::map_err(e));
             }
         };
-        return Ok(
-            op.finish_result(import_bridge::import_by_identifier_batch_remote(session, args).await)
-        );
+        let vault_id = std::path::PathBuf::from(&args.vault_path);
+        let result = import_bridge::import_by_identifier_batch_remote(session, args).await;
+        if let Ok(r) = &result {
+            for paper in &r.imported {
+                crate::features::lifecycle::emit_paper_imported(Some(&app), &vault_id, &paper.id);
+            }
+        }
+        return Ok(op.finish_result(result));
     }
     let task_id = args.task_id.clone();
     let result = super::import_by_identifier_batch(args, Some(&app), Some(&cache)).await;
@@ -133,7 +138,14 @@ pub async fn paper_import_local_pdf(
                 return Ok(crate::core::error::map_err(e));
             }
         };
-        import_bridge::import_local_pdfs_remote(session, args).await
+        let vault_id = std::path::PathBuf::from(&args.vault_path);
+        let result = import_bridge::import_local_pdfs_remote(session, args).await;
+        if let Ok(r) = &result {
+            for paper in &r.papers {
+                crate::features::lifecycle::emit_paper_imported(Some(&app), &vault_id, &paper.id);
+            }
+        }
+        result
     } else {
         super::import_local_pdfs(args, Some(&app), Some(&cache)).await
     };

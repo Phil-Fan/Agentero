@@ -22,39 +22,44 @@ import { rebuildWikiAndNotify } from "@/lib/wiki/store";
 /** Batch imports emit one `paper:imported` per paper; merge the rebuilds. */
 let importWikiTimer: ReturnType<typeof setTimeout> | null = null;
 
-function scheduleImportWikiRebuild(): void {
+function scheduleImportWikiRebuild(vault: string): void {
 	if (importWikiTimer) clearTimeout(importWikiTimer);
 	importWikiTimer = setTimeout(() => {
 		importWikiTimer = null;
-		const vault = getVaultPath();
-		if (!vault || isRemoteVaultHandle(vault)) return;
+		if (isRemoteVaultHandle(vault) || getVaultPath() !== vault) return;
 		void rebuildWikiAndNotify(vault);
 	}, 300);
 }
 
 export function registerLifecycleHandlers(): () => void {
 	const offs = [
-		lifecycle.on("vault:opened", ({ vaultPath }) => {
-			void refreshTree(vaultPath);
+		lifecycle.on("vault:opened", ({ vaultId }) => {
+			void refreshTree(vaultId);
 			void refreshLibrary();
-			seedVaultSkills(vaultPath);
+			seedVaultSkills(vaultId);
 			if (isTauri()) {
 				// T2 reconcile: backfill PAPER.md for catalog papers missing it. Fire
 				// & forget; jobs are idempotent and throttled (ParseBody cap = 1).
 				void invokeApi(
 					"job_reconcile_vault",
-					{ args: { vaultPath } },
+					{ args: { vaultPath: vaultId } },
 					{ fallback: "vault reconcile failed" },
 				).catch(() => undefined);
 			}
 		}),
-		lifecycle.on("paper:imported", () => {
+		lifecycle.on("paper:imported", ({ vaultId }) => {
+			// `app.emit` broadcasts to every window; only react to the active vault.
+			if (vaultId !== getVaultPath()) return;
 			scheduleTreeRefresh();
-			scheduleImportWikiRebuild();
+			scheduleImportWikiRebuild(vaultId);
 			scheduleLibraryRefresh();
 		}),
 	];
 	return () => {
+		if (importWikiTimer) {
+			clearTimeout(importWikiTimer);
+			importWikiTimer = null;
+		}
 		for (const off of offs) off();
 	};
 }

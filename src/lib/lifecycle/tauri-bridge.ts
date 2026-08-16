@@ -8,24 +8,35 @@ const WIRE_EVENTS = [
 	"job:failed",
 ] as const satisfies readonly LifecycleEvent[];
 
-let bridgePromise: Promise<() => void> | null = null;
+let bridgePromise: Promise<Array<() => void>> | null = null;
+let consumers = 0;
 
-/** Forwards Tauri wire lifecycle events into the frontend bus. Idempotent. */
-export function initLifecycleBridge(): Promise<() => void> {
-	if (bridgePromise) return bridgePromise;
-	bridgePromise = (async () => {
-		const { listen } = await import("@tauri-apps/api/event");
-		const unlistens = await Promise.all(
-			WIRE_EVENTS.map((event) =>
-				listen<LifecycleEventMap[typeof event]>(event, (e) => {
-					void emit(event, e.payload);
-				}),
-			),
-		);
-		return () => {
-			for (const unlisten of unlistens) unlisten();
+/** Forwards Tauri wire lifecycle events into the frontend bus. Idempotent;
+ *  the returned disposer waits for pending `listen` calls before unlistening. */
+export function initLifecycleBridge(): () => void {
+	consumers += 1;
+	if (!bridgePromise) {
+		bridgePromise = (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			return Promise.all(
+				WIRE_EVENTS.map((event) =>
+					listen<LifecycleEventMap[typeof event]>(event, (e) => {
+						void emit(event, e.payload);
+					}),
+				),
+			);
+		})();
+	}
+	const pending = bridgePromise;
+	let disposed = false;
+	return () => {
+		if (disposed) return;
+		disposed = true;
+		consumers -= 1;
+		void pending.then((unlistens) => {
+			if (consumers > 0 || bridgePromise !== pending) return;
 			bridgePromise = null;
-		};
-	})();
-	return bridgePromise;
+			for (const unlisten of unlistens) unlisten();
+		});
+	};
 }

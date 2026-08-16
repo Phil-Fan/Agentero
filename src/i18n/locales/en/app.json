@@ -248,7 +248,6 @@
 		"downloadRefreshing": "Refreshing library… · {{path}}",
 		"lookupImport": "Add paper",
 		"lookupFetching": "Fetching metadata & assets… · {{id}}",
-		"lookupRefreshing": "Refreshing library… · {{title}}",
 		"libraryImport": "Import bibliography",
 		"importPdf": "Import PDF",
 		"libraryExport": "Export library",

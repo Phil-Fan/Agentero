@@ -81,6 +81,13 @@ pub fn emit_job_terminal(app: &AppHandle, job: &crate::features::jobs::JobSnapsh
         .and_then(|p| p.rsplit(['/', '\\']).next())
         .filter(|s| !s.is_empty())
         .map(str::to_string);
+    if job.kind == crate::features::jobs::JobKind::DownloadAssets
+        && job.state == JobState::Succeeded
+    {
+        if let Some(pid) = paper_id.as_deref() {
+            emit_paper_assets_ready(Some(app), Path::new(&job.vault_path), pid);
+        }
+    }
     emit_or_log(
         app,
         event,

@@ -1,6 +1,6 @@
 export type LifecycleEventMap = {
 	"app:ready": { timestamp: number };
-	"vault:opened": { vaultPath: string; timestamp: number };
+	"vault:opened": { vaultId: string; timestamp: number };
 	"paper:imported": { vaultId: string; paperId: string; timestamp: number };
 	"paper:assets-ready": { vaultId: string; paperId: string; timestamp: number };
 	"paper:opened": { paperId: string; timestamp: number };

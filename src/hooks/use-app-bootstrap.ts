@@ -85,12 +85,9 @@ export function useAppBootstrap(): void {
 	useEffect(() => {
 		const unregister = registerLifecycleHandlers();
 		if (!isTauri()) return unregister;
-		let dispose: (() => void) | undefined;
-		void initLifecycleBridge().then((d) => {
-			dispose = d;
-		});
+		const dispose = initLifecycleBridge();
 		return () => {
-			dispose?.();
+			dispose();
 			unregister();
 		};
 	}, []);
@@ -103,7 +100,10 @@ export function useAppBootstrap(): void {
 			void refreshLibrary();
 			return;
 		}
-		void lifecycle.emit("vault:opened", { vaultPath, timestamp: Date.now() });
+		void lifecycle.emit("vault:opened", {
+			vaultId: vaultPath,
+			timestamp: Date.now(),
+		});
 	}, [vaultPath]);
 
 	// Mirror the native settings window's lifecycle into the ui store.
