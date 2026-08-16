@@ -15,7 +15,6 @@ import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
 import { currentLookupParentDir } from "@/lib/paper/library-actions";
 import {
 	libraryStore,
-	refreshLibrary,
 	setImportPdfDraft,
 	setLibraryIoBusy,
 } from "@/lib/paper/library-store";
@@ -40,10 +39,8 @@ import {
 	uiStore,
 } from "@/lib/shell/ui-store";
 import { joinVaultPath } from "@/lib/vault";
-import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 import { getVaultPath, refreshTree } from "@/lib/vault/store";
 import { toVaultRelative } from "@/lib/wiki";
-import { rebuildWikiAndNotify } from "@/lib/wiki/store";
 import { openPaper } from "@/lib/workspace/actions";
 
 /** ⇧⌘I — expand the left rail (popover owns focus) and open the wand. */
@@ -63,7 +60,7 @@ export type LookupSubmitOptions = {
 	openImported?: boolean;
 	/** Vault-relative destination, e.g. `papers` or `papers/nlp`. Defaults to the current tree selection. */
 	parentDir?: string;
-	/** Run after one input has finished importing and stores have refreshed. */
+	/** Run after one input has finished importing (store refresh is debounced via paper:imported). */
 	onComplete?: (result: LookupBatchAddResult) => void | Promise<void>;
 };
 
@@ -98,11 +95,7 @@ export async function lookupSubmit(
 					progressTaskId: id,
 				});
 
-				await refreshTree(vaultPath);
-				if (!isRemoteVaultHandle(vaultPath)) {
-					await rebuildWikiAndNotify(vaultPath);
-				}
-				await refreshLibrary();
+				// Tree / wiki / library refresh runs via the paper:imported handler.
 				if (result.skillCandidates.length > 0) {
 					setSkillImportDraft(result.skillCandidates);
 					setDetail(
@@ -329,9 +322,7 @@ export async function importLocalPdf(opts?: {
 						count: r.papers.length,
 					}),
 				);
-				await refreshTree(vaultPath);
-				await rebuildWikiAndNotify(vaultPath);
-				await refreshLibrary();
+				// Tree / wiki / library refresh runs via the paper:imported handler.
 				return r;
 			},
 		);

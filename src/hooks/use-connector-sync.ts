@@ -26,9 +26,9 @@ import {
 	connectorSetParentDir,
 	connectorSetVault,
 } from "@/lib/paper/import/connector";
-import { refreshLibrary } from "@/lib/paper/library-store";
+import { scheduleLibraryRefresh } from "@/lib/paper/library-store";
 import { joinVaultPath } from "@/lib/vault";
-import { getVaultPath, refreshTree } from "@/lib/vault/store";
+import { getVaultPath, scheduleTreeRefresh } from "@/lib/vault/store";
 import { openPaper } from "@/lib/workspace/actions";
 
 export function useConnectorSync(): void {
@@ -97,8 +97,10 @@ export function useConnectorSync(): void {
 					const p = ev.payload;
 					const vault = getVaultPath();
 					if (vault) {
-						void refreshTree(vault);
-						void refreshLibrary();
+						// Debounced: import saves coalesce with the paper:imported
+						// handler; non-import saves (upload, move) still refresh here.
+						scheduleTreeRefresh();
+						scheduleLibraryRefresh();
 					}
 					// Open/focus the paper tab (metadata save, upload, or move).
 					const rel = (p?.path ?? "")

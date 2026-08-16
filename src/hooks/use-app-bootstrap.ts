@@ -1,7 +1,8 @@
 /**
  * App bootstrap effects: store seeding, theme / locale / uiScale application,
- * restored-vault validation, per-vault side effects (tree, library, skills),
- * and the native settings-window closed listener.
+ * restored-vault validation, lifecycle handler registration + wire bridge
+ * (per-vault side effects run via `vault:opened`), and the native
+ * settings-window closed listener.
  */
 
 import { useTheme } from "next-themes";
@@ -10,22 +11,17 @@ import { useSettings, useVaultStore } from "@/hooks/use-app-stores";
 import { useVaultOpenRequest } from "@/hooks/use-vault-open-request";
 import i18n, { resolveLocale } from "@/i18n";
 import { startActivityTracking } from "@/lib/activity";
-import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
-import { initLifecycleBridge } from "@/lib/lifecycle";
+import { initLifecycleBridge, lifecycle } from "@/lib/lifecycle";
+import { registerLifecycleHandlers } from "@/lib/lifecycle/register";
 import { startJobCompletionRefresh } from "@/lib/paper/job-refresh";
 import { refreshLibrary } from "@/lib/paper/library-store";
 import { initJobCenterExecutors } from "@/lib/pdf/layout/enqueue-paper-layout";
 import { applyDocumentChrome } from "@/lib/settings";
 import { initSettingsStore } from "@/lib/settings/react-store";
 import { setSettingsOpenState } from "@/lib/shell/ui-store";
-import { seedVaultSkills, validateRestoredVault } from "@/lib/vault/actions";
-import {
-	initVaultStore,
-	refreshTree,
-	setTree,
-	setTreeLoading,
-} from "@/lib/vault/store";
+import { validateRestoredVault } from "@/lib/vault/actions";
+import { initVaultStore, setTree, setTreeLoading } from "@/lib/vault/store";
 import { initWorkspaceStore } from "@/lib/workspace/store";
 
 export function useAppBootstrap(): void {
@@ -85,7 +81,21 @@ export function useAppBootstrap(): void {
 		validateRestoredVault();
 	}, []);
 
-	// Per-vault side effects: tree reload, library rows, bundled-skill seeding.
+	// Register lifecycle handlers, then bridge Tauri wire events into the bus.
+	useEffect(() => {
+		const unregister = registerLifecycleHandlers();
+		if (!isTauri()) return unregister;
+		let dispose: (() => void) | undefined;
+		void initLifecycleBridge().then((d) => {
+			dispose = d;
+		});
+		return () => {
+			dispose?.();
+			unregister();
+		};
+	}, []);
+
+	// Per-vault side effects hang off vault:opened (see lifecycle/register.ts).
 	useEffect(() => {
 		if (!vaultPath) {
 			setTree([]);
@@ -93,18 +103,7 @@ export function useAppBootstrap(): void {
 			void refreshLibrary();
 			return;
 		}
-		void refreshTree(vaultPath);
-		void refreshLibrary();
-		seedVaultSkills(vaultPath);
-		if (isTauri()) {
-			// T2 reconcile: backfill PAPER.md for catalog papers missing it. Fire
-			// & forget; jobs are idempotent and throttled (ParseBody cap = 1).
-			void invokeApi(
-				"job_reconcile_vault",
-				{ args: { vaultPath } },
-				{ fallback: "vault reconcile failed" },
-			).catch(() => undefined);
-		}
+		void lifecycle.emit("vault:opened", { vaultPath, timestamp: Date.now() });
 	}, [vaultPath]);
 
 	// Mirror the native settings window's lifecycle into the ui store.
@@ -136,22 +135,15 @@ export function useAppBootstrap(): void {
 		};
 	}, []);
 
-	// Bridge Tauri wire lifecycle events into the frontend bus.
-	useEffect(() => {
-		if (!isTauri()) return;
-		let dispose: (() => void) | undefined;
-		void initLifecycleBridge().then((d) => {
-			dispose = d;
-		});
-		return () => {
-			dispose?.();
-		};
-	}, []);
-
 	// Start listening for renderer-executed JobCenter offers.
 	useEffect(() => {
 		if (!isTauri()) return;
 		initJobCenterExecutors();
 		startJobCompletionRefresh();
+	}, []);
+
+	// Bootstrap complete: stores seeded, restored vault validated (async).
+	useEffect(() => {
+		void lifecycle.emit("app:ready", { timestamp: Date.now() });
 	}, []);
 }

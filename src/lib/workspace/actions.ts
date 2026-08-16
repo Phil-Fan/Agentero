@@ -10,6 +10,7 @@ import { notePaperFocus, track } from "@/lib/activity";
 import { notifyError, notifyUndo, notifyWarning } from "@/lib/core/notify";
 import { closeTopOverlay } from "@/lib/core/overlay-stack";
 import { isTauri } from "@/lib/core/tauri";
+import { lifecycle } from "@/lib/lifecycle";
 import {
 	detectPaperDirectory,
 	isPaperDirectory,
@@ -329,6 +330,12 @@ export function openTab(
 				track("paper.open", { path, mode: res.mode });
 			} else if (res.kind === "paper" || res.kind === "file") {
 				track("note.open", { path, mode: res.mode });
+			}
+			if (res.kind === "paper") {
+				void lifecycle.emit("paper:opened", {
+					paperId: basenameOf(path),
+					timestamp: Date.now(),
+				});
 			}
 			notePaperFocus(path);
 		}
