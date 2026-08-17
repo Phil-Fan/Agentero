@@ -87,7 +87,14 @@ export async function localFileToArrayBuffer(
 	absPath: string,
 ): Promise<ArrayBuffer | null> {
 	const bytes = await tryReadVaultBytes(absPath);
-	return bytes ? bytes.buffer : null;
+	if (!bytes) return null;
+	// Consumers may transfer this buffer to workers, so it must be owned and
+	// exactly sized. plugin-fs `readFile` already returns such a view; only
+	// slice if a future plugin version ever hands back a sub-view.
+	if (bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength) {
+		return bytes.buffer as ArrayBuffer;
+	}
+	return bytes.slice().buffer as ArrayBuffer;
 }
 
 /**

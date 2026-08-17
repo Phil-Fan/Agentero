@@ -37,27 +37,29 @@ export async function readVaultFile(path: string): Promise<string> {
 	return readTextFile(path);
 }
 
-/** Read a local or remote Vault file into an owned byte array. */
+/**
+ * Read a local or remote Vault file into an owned byte array.
+ *
+ * No defensive copy: plugin-fs `readFile` already returns a `Uint8Array`
+ * owning a fresh, exactly-sized ArrayBuffer per call. Duplicating it doubled
+ * peak memory on large PDFs; callers that need a bare `ArrayBuffer` normalize
+ * ownership themselves (see `localFileToArrayBuffer`).
+ */
 export async function readVaultBytes(path: string): Promise<Uint8Array> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("app:vault.readDesktopOnly"));
 	}
 
 	const remoteRead = parseRemoteJoinedPath(path);
-	let bytes: Uint8Array;
 	if (remoteRead) {
 		if (!remoteRead.rel) throw new Error("invalid remote path");
 		const localPath = await remoteCacheFile(
 			remoteRead.sessionId,
 			remoteRead.rel,
 		);
-		bytes = await readFile(localPath);
-	} else {
-		bytes = await readFile(path);
+		return readFile(localPath);
 	}
-	const copy = new Uint8Array(bytes.byteLength);
-	copy.set(bytes);
-	return copy;
+	return readFile(path);
 }
 
 /** Write text file (creates parent dirs when possible). */
