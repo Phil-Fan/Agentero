@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense } from "react";
+import { lazy, memo, Suspense, useCallback } from "react";
 import { PapersLibrary } from "@/components/library/papers-library";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { PdfViewerHandle } from "@/components/viewer";
@@ -123,6 +123,36 @@ function TabLoadingSkeleton() {
 	);
 }
 
+/**
+ * DocView routes by tab kind/mode and only reads the matching domain props.
+ * Compare just the fields the active branch consumes so a change in one
+ * domain (e.g. library query keystrokes) does not re-render PDF / editor
+ * panes. Must mirror the routing order below.
+ */
+function docViewPropsEqual(prev: DocViewProps, next: DocViewProps): boolean {
+	if (
+		prev.tab !== next.tab ||
+		prev.active !== next.active ||
+		prev.pdfKeepMounted !== next.pdfKeepMounted ||
+		prev.vaultPath !== next.vaultPath
+	) {
+		return false;
+	}
+	const tab = next.tab;
+	if (!tab.loaded) return true;
+	if (tab.kind === "library") return prev.library === next.library;
+	if (tab.kind === "trash") {
+		return (
+			prev.onTrashChanged === next.onTrashChanged &&
+			prev.trashReloadSignal === next.trashReloadSignal
+		);
+	}
+	if (tab.kind === "plaza") return true;
+	if (tab.mode === "markdown") return prev.editor === next.editor;
+	if (tab.mode === "pdf") return prev.pdf === next.pdf;
+	return true;
+}
+
 /** Document content router by tab.kind / mode (library, trash, editor, PDF, image, HTML). */
 export const DocView = memo(function DocView({
 	tab,
@@ -136,6 +166,24 @@ export const DocView = memo(function DocView({
 	trashReloadSignal = 0,
 }: DocViewProps) {
 	const plazaEnabled = useSettings((s) => s.plazaEnabled);
+	// Bind tab.id once per tab so PdfViewer's memo bails out when only the tab
+	// record changes (highlight / ask patches via updateTab).
+	const handlePdfHandle = useCallback(
+		(handle: PdfViewerHandle | null) => pdf.registerHandle(tab.id, handle),
+		[pdf, tab.id],
+	);
+	const handlePdfHighlightsChange = useCallback(
+		(list: PdfHighlight[]) => pdf.onHighlightsChange(tab.id, list),
+		[pdf, tab.id],
+	);
+	const handlePdfAsksChange = useCallback(
+		(list: PdfAskThread[]) => pdf.onAsksChange(tab.id, list),
+		[pdf, tab.id],
+	);
+	const handlePdfVisualTracesChange = useCallback(
+		(list: PdfVisualSessionTrace[]) => pdf.onVisualTracesChange(tab.id, list),
+		[pdf, tab.id],
+	);
 	if (!tab.loaded) {
 		return <TabLoadingSkeleton />;
 	}
@@ -253,12 +301,10 @@ export const DocView = memo(function DocView({
 						onOpenAnnotations={pdf.onOpenAnnotations}
 						onOpenSettings={pdf.onOpenSettings}
 						className="h-full w-full"
-						onHandle={(h) => pdf.registerHandle(tab.id, h)}
-						onHighlightsChange={(list) => pdf.onHighlightsChange(tab.id, list)}
-						onAsksChange={(list) => pdf.onAsksChange(tab.id, list)}
-						onVisualTracesChange={(list) =>
-							pdf.onVisualTracesChange(tab.id, list)
-						}
+						onHandle={handlePdfHandle}
+						onHighlightsChange={handlePdfHighlightsChange}
+						onAsksChange={handlePdfAsksChange}
+						onVisualTracesChange={handlePdfVisualTracesChange}
 					/>
 				</Suspense>
 			</div>
@@ -283,4 +329,4 @@ export const DocView = memo(function DocView({
 			<HtmlViewer srcUrl={tab.htmlUrl} className="h-full w-full" />
 		</div>
 	);
-});
+}, docViewPropsEqual);

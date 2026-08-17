@@ -43,7 +43,7 @@ import {
 	ZoomMode,
 	ZoomPluginPackage,
 } from "@embedpdf/plugin-zoom/react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
 import { PdfBottomBar } from "@/components/viewer/pdf/chrome/pdf-bottom-bar";
@@ -169,7 +169,7 @@ function rectsKey(
  * overlays, re-sourced from the selection plugin and persisted as
  * `marks/<id>.json`.
  */
-export function PdfViewer(props: PdfViewerProps) {
+export const PdfViewer = memo(function PdfViewer(props: PdfViewerProps) {
 	const { t } = useTranslation("viewer");
 	const {
 		engine,
@@ -306,7 +306,7 @@ export function PdfViewer(props: PdfViewerProps) {
 			</EmbedPDF>
 		</div>
 	);
-}
+});
 
 function PdfViewerInner({
 	docId,

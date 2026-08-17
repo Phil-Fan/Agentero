@@ -196,69 +196,116 @@ export function WorkspaceHost() {
 		savePersistedTabs(dockLayout);
 	}, [dockLayout]);
 
+	// Domain callbacks pinned with useCallback so the per-domain prop objects
+	// below keep their identity across host re-renders.
+	const handleRescan = useCallback(() => void rescanLibraryPapers(), []);
+	const handleAssetsChanged = useCallback(() => {
+		if (vaultPath) void refreshTree(vaultPath);
+	}, [vaultPath]);
+	const handleTrashReload = useCallback(() => void handleTrashChanged(), []);
+	const handleOpenAnnotations = useCallback(
+		() => openRightTab("annotations"),
+		[],
+	);
+	const handleOpenSettings = useCallback(
+		() => openSettingsWindow("translate"),
+		[],
+	);
+
 	/**
 	 * Memoized DocView props — must not be an inline object in JSX, or
-	 * DocView's React.memo never bails out. Grouped by kind so library /
-	 * editor / PDF surfaces stay decoupled.
+	 * DocView's React.memo never bails out. Each domain is memoized on its own
+	 * state so e.g. library query keystrokes only rebuild `libraryProps`;
+	 * DocView's domain-aware comparator then keeps PDF / editor panes mounted
+	 * without re-rendering.
 	 */
-	const centerProps = useMemo(
+	const libraryProps = useMemo(
 		() => ({
-			vaultPath,
-			library: {
-				papers: libraryPapers,
-				loading: libraryLoading,
-				query: libraryQuery,
-				onQueryChange: setLibraryQuery,
-				scopePath: libraryScopePath,
-				columns: libraryColumns,
-				onColumnsChange: handleLibraryColumnsChange,
-				rescanning,
-				onOpenPaper: openLibraryPaper,
-				onRescan: () => void rescanLibraryPapers(),
-			},
-			editor: {
-				fontSize: editorFontSize,
-				fontFamily: resolveFontFamilyCss(textFontFamily, "text"),
-				lineHeight: editorLineHeight,
-				showToolbar: showEditorToolbar,
-				notesPlaceholder: t("editor.notesPlaceholder"),
-				markdownPlaceholder: t("editor.markdownPlaceholder"),
-				onPersistFile: persistFile,
-				onAssetsChanged: () => {
-					if (vaultPath) void refreshTree(vaultPath);
-				},
-				onTabPatch: updateTab,
-				onRenameHeading:
-					vaultPath && !isRemoteVaultHandle(vaultPath)
-						? renameWikiHeadingAction
-						: undefined,
-			},
-			pdf: {
-				onOpenAnnotations: () => openRightTab("annotations"),
-				onOpenSettings: () => openSettingsWindow("translate"),
-				registerHandle: registerPdfHandle,
-				onHighlightsChange: setTabHighlights,
-				onAsksChange: setTabAsks,
-				onVisualTracesChange: setTabVisualTraces,
-			},
-			onTrashChanged: () => void handleTrashChanged(),
-			trashReloadSignal,
+			papers: libraryPapers,
+			loading: libraryLoading,
+			query: libraryQuery,
+			onQueryChange: setLibraryQuery,
+			scopePath: libraryScopePath,
+			columns: libraryColumns,
+			onColumnsChange: handleLibraryColumnsChange,
+			rescanning,
+			onOpenPaper: openLibraryPaper,
+			onRescan: handleRescan,
 		}),
 		[
-			vaultPath,
 			libraryPapers,
 			libraryLoading,
 			libraryQuery,
 			libraryScopePath,
 			libraryColumns,
+			rescanning,
+			handleRescan,
+		],
+	);
+	const editorProps = useMemo(
+		() => ({
+			fontSize: editorFontSize,
+			fontFamily: resolveFontFamilyCss(textFontFamily, "text"),
+			lineHeight: editorLineHeight,
+			showToolbar: showEditorToolbar,
+			notesPlaceholder: t("editor.notesPlaceholder"),
+			markdownPlaceholder: t("editor.markdownPlaceholder"),
+			onPersistFile: persistFile,
+			onAssetsChanged: handleAssetsChanged,
+			onTabPatch: updateTab,
+			onRenameHeading:
+				vaultPath && !isRemoteVaultHandle(vaultPath)
+					? renameWikiHeadingAction
+					: undefined,
+		}),
+		[
 			editorFontSize,
 			textFontFamily,
 			editorLineHeight,
 			showEditorToolbar,
-			rescanning,
-			trashReloadSignal,
 			t,
+			vaultPath,
+			handleAssetsChanged,
 		],
+	);
+	const pdfProps = useMemo(
+		() => ({
+			onOpenAnnotations: handleOpenAnnotations,
+			onOpenSettings: handleOpenSettings,
+			registerHandle: registerPdfHandle,
+			onHighlightsChange: setTabHighlights,
+			onAsksChange: setTabAsks,
+			onVisualTracesChange: setTabVisualTraces,
+		}),
+		[handleOpenAnnotations, handleOpenSettings],
+	);
+	const centerProps = useMemo(
+		() => ({
+			vaultPath,
+			library: libraryProps,
+			editor: editorProps,
+			pdf: pdfProps,
+			onTrashChanged: handleTrashReload,
+			trashReloadSignal,
+		}),
+		[
+			vaultPath,
+			libraryProps,
+			editorProps,
+			pdfProps,
+			handleTrashReload,
+			trashReloadSignal,
+		],
+	);
+
+	const activeTabMode = activeTab?.mode;
+	const pdfKeepMountedIds = useMemo(
+		() => [
+			...pdfLru,
+			...visiblePanelIds,
+			...(activeTabMode === "pdf" && activeTabId ? [activeTabId] : []),
+		],
+		[pdfLru, visiblePanelIds, activeTabId, activeTabMode],
 	);
 
 	return (
@@ -267,11 +314,7 @@ export function WorkspaceHost() {
 			tabs={tabs}
 			activePanelId={activeTabId}
 			layout={dockLayout}
-			pdfKeepMountedIds={[
-				...pdfLru,
-				...visiblePanelIds,
-				...(activeTab?.mode === "pdf" && activeTab ? [activeTab.id] : []),
-			]}
+			pdfKeepMountedIds={pdfKeepMountedIds}
 			centerProps={centerProps}
 			onActivePanelChange={handleActivePanelChange}
 			onVisiblePanelIdsChange={handleVisiblePanelIdsChange}

@@ -4,7 +4,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DocView } from "@/components/workspace/doc-view";
+import {
+	DocView,
+	type DocViewEditorProps,
+	type DocViewLibraryProps,
+	type DocViewPdfProps,
+} from "@/components/workspace/doc-view";
 import { useSettings, useVaultStore } from "@/hooks/use-app-stores";
 import { isMacOS, isTauri } from "@/lib/core/tauri";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
@@ -34,6 +39,30 @@ function closeCurrentWindow() {
 		}
 	})();
 }
+
+// DocView's memo compares domain objects by identity; the popout never shows
+// Library / PDF-chrome surfaces, so constant no-op stubs keep it that way.
+const LIBRARY_STUB: DocViewLibraryProps = {
+	papers: [],
+	loading: false,
+	query: "",
+	onQueryChange: () => {},
+	scopePath: null,
+	columns: [],
+	onColumnsChange: () => {},
+	rescanning: false,
+	onOpenPaper: () => {},
+	onRescan: () => {},
+};
+const PDF_STUB: DocViewPdfProps = {
+	onOpenAnnotations: () => {},
+	onOpenSettings: () => openSettingsWindow("general"),
+	registerHandle: () => {},
+	onHighlightsChange: () => {},
+	onAsksChange: () => {},
+	onVisualTracesChange: () => {},
+};
+const NOOP_TRASH_CHANGED = () => {};
 
 export function DocWindowRoot() {
 	const { t } = useTranslation(["app"]);
@@ -151,6 +180,23 @@ export function DocWindowRoot() {
 		setTab((prev) => (prev && prev.id === id ? { ...prev, ...patch } : prev));
 	}, []);
 
+	const editorProps = useMemo<DocViewEditorProps>(
+		() => ({
+			fontSize,
+			fontFamily,
+			lineHeight,
+			showToolbar,
+			notesPlaceholder: t("editor.notesPlaceholder"),
+			markdownPlaceholder: t("editor.markdownPlaceholder"),
+			onPersistFile: persistFile,
+			onAssetsChanged: () => {
+				if (vaultPath) void refreshTree(vaultPath);
+			},
+			onTabPatch,
+		}),
+		[fontSize, fontFamily, lineHeight, showToolbar, t, vaultPath, onTabPatch],
+	);
+
 	const title = tab?.title ?? t("tabs.strip");
 
 	return (
@@ -181,40 +227,10 @@ export function DocWindowRoot() {
 						active
 						pdfKeepMounted
 						vaultPath={vaultPath}
-						library={{
-							papers: [],
-							loading: false,
-							query: "",
-							onQueryChange: () => {},
-							scopePath: null,
-							columns: [],
-							onColumnsChange: () => {},
-							rescanning: false,
-							onOpenPaper: () => {},
-							onRescan: () => {},
-						}}
-						editor={{
-							fontSize,
-							fontFamily,
-							lineHeight,
-							showToolbar,
-							notesPlaceholder: t("editor.notesPlaceholder"),
-							markdownPlaceholder: t("editor.markdownPlaceholder"),
-							onPersistFile: persistFile,
-							onAssetsChanged: () => {
-								if (vaultPath) void refreshTree(vaultPath);
-							},
-							onTabPatch,
-						}}
-						pdf={{
-							onOpenAnnotations: () => {},
-							onOpenSettings: () => openSettingsWindow("general"),
-							registerHandle: () => {},
-							onHighlightsChange: () => {},
-							onAsksChange: () => {},
-							onVisualTracesChange: () => {},
-						}}
-						onTrashChanged={() => {}}
+						library={LIBRARY_STUB}
+						editor={editorProps}
+						pdf={PDF_STUB}
+						onTrashChanged={NOOP_TRASH_CHANGED}
 					/>
 				)}
 			</div>
