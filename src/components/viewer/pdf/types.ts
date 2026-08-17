@@ -79,7 +79,7 @@ export type PdfViewerProps = {
 	/** Called whenever visual agent-trace marks change (for the annotations panel) */
 	onVisualTracesChange?: (traces: PdfVisualSessionTrace[]) => void;
 	/**
-	 * Workspace active tab. Dock may keep inactive PDFs mounted (`pdfKeepMounted`);
+	 * Workspace active tab. Dock may keep inactive PDFs mounted (`keepMounted`);
 	 * only the active viewer should refresh marks/ (expensive base64 JSON list).
 	 */
 	isActive?: boolean;

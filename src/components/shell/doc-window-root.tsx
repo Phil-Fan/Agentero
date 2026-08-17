@@ -225,7 +225,7 @@ export function DocWindowRoot() {
 					<DocView
 						tab={tab}
 						active
-						pdfKeepMounted
+						keepMounted
 						vaultPath={vaultPath}
 						library={LIBRARY_STUB}
 						editor={editorProps}

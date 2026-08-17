@@ -24,6 +24,8 @@ type WorkspaceStore = {
 	dockLayout: unknown | null;
 	/** Most-recently-viewed PDF tab ids kept mounted (see PDF_TAB_MOUNT_LRU). */
 	pdfLru: string[];
+	/** Most-recently-viewed Markdown editor tab ids kept mounted (see EDITOR_TAB_MOUNT_LRU). */
+	editorLru: string[];
 };
 
 export const workspaceStore = createStore<WorkspaceStore>(() => ({
@@ -31,6 +33,7 @@ export const workspaceStore = createStore<WorkspaceStore>(() => ({
 	activeTabId: null,
 	dockLayout: null,
 	pdfLru: [],
+	editorLru: [],
 }));
 
 let initialized = false;
@@ -93,6 +96,16 @@ export function setPdfLru(
 		return;
 	}
 	workspaceStore.setState({ pdfLru: next });
+}
+
+export function setEditorLru(
+	next: string[] | ((previous: string[]) => string[]),
+): void {
+	if (typeof next === "function") {
+		workspaceStore.setState((s) => ({ editorLru: next(s.editorLru) }));
+		return;
+	}
+	workspaceStore.setState({ editorLru: next });
 }
 
 /** Merge a patch into the panel with the given id. */

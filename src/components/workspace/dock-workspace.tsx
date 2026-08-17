@@ -90,8 +90,8 @@ export type DockWorkspaceHandle = {
 type WorkspaceCtx = {
 	tabsById: Map<string, DocTab>;
 	activePanelId: string | null;
-	centerProps: Omit<DocViewProps, "tab" | "active" | "pdfKeepMounted">;
-	pdfKeepMountedIds: Set<string>;
+	centerProps: Omit<DocViewProps, "tab" | "active" | "keepMounted">;
+	keepMountedIds: Set<string>;
 	onToggleHtmlMode: (panelId: string) => void;
 };
 
@@ -104,7 +104,7 @@ function useWorkspace(): WorkspaceCtx {
 }
 
 function WorkspacePane(props: IDockviewPanelProps<{ panelId: string }>) {
-	const { tabsById, activePanelId, centerProps, pdfKeepMountedIds } =
+	const { tabsById, activePanelId, centerProps, keepMountedIds } =
 		useWorkspace();
 	const panelId = props.params.panelId;
 	const tab = tabsById.get(panelId) ?? null;
@@ -122,7 +122,7 @@ function WorkspacePane(props: IDockviewPanelProps<{ panelId: string }>) {
 				{...centerProps}
 				tab={tab}
 				active={active}
-				pdfKeepMounted={pdfKeepMountedIds.has(tab.id)}
+				keepMounted={keepMountedIds.has(tab.id)}
 			/>
 		</div>
 	);
@@ -290,12 +290,13 @@ function resolveReferencePanel(
 }
 
 /**
- * PDF panels use dockview `renderer: 'always'` so inactive sibling tabs keep
- * their React shell mounted (enables App-level PDF LRU keep-alive).
- * Other modes stay `onlyWhenVisible` to free DOM when not shown.
+ * PDF and Markdown panels use dockview `renderer: 'always'` so inactive
+ * sibling tabs keep their React shell mounted (enables App-level PDF /
+ * editor LRU keep-alive). Other modes stay `onlyWhenVisible` to free DOM
+ * when not shown.
  */
 function rendererForMode(mode: CenterViewMode): DockviewPanelRenderer {
-	return mode === "pdf" ? "always" : "onlyWhenVisible";
+	return mode === "pdf" || mode === "markdown" ? "always" : "onlyWhenVisible";
 }
 
 function applyPanelRenderer(panel: IDockviewPanel, mode: CenterViewMode): void {
@@ -395,8 +396,9 @@ type DockWorkspaceProps = {
 	activePanelId: string | null;
 	/** Global dockview layout snapshot (null = rebuild from panel list). */
 	layout: unknown | null;
-	pdfKeepMountedIds: string[];
-	centerProps: Omit<DocViewProps, "tab" | "active" | "pdfKeepMounted">;
+	/** Panel ids whose heavyweight content (PDF viewer / Plate editor) stays mounted. */
+	keepMountedIds: string[];
+	centerProps: Omit<DocViewProps, "tab" | "active" | "keepMounted">;
 	onActivePanelChange: (panelId: string | null) => void;
 	onVisiblePanelIdsChange: (panelIds: string[]) => void;
 	onClosePanel: (panelId: string) => void;
@@ -425,7 +427,7 @@ export const DockWorkspace = memo(
 			tabs,
 			activePanelId,
 			layout,
-			pdfKeepMountedIds,
+			keepMountedIds,
 			centerProps,
 			onActivePanelChange,
 			onVisiblePanelIdsChange,
@@ -519,10 +521,7 @@ export const DockWorkspace = memo(
 			[publishVisiblePanels, scheduleLayoutSave],
 		);
 
-		const pdfKeepSet = useMemo(
-			() => new Set(pdfKeepMountedIds),
-			[pdfKeepMountedIds],
-		);
+		const keepSet = useMemo(() => new Set(keepMountedIds), [keepMountedIds]);
 
 		const tabsById = useMemo(() => {
 			const m = new Map<string, DocTab>();
@@ -535,10 +534,10 @@ export const DockWorkspace = memo(
 				tabsById,
 				activePanelId,
 				centerProps,
-				pdfKeepMountedIds: pdfKeepSet,
+				keepMountedIds: keepSet,
 				onToggleHtmlMode: (panelId) => onToggleHtmlRef.current(panelId),
 			}),
-			[tabsById, activePanelId, centerProps, pdfKeepSet],
+			[tabsById, activePanelId, centerProps, keepSet],
 		);
 
 		/** Membership only: add missing / remove closed. Placement is imperative. */

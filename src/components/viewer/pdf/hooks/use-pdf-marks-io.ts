@@ -141,7 +141,7 @@ export function usePdfMarksIo({
 	}, [paperAbsPath]);
 
 	// Refresh ask conversation cards + agent-trace pins when this viewer is
-	// active (dock may keep inactive PDFs mounted under pdfKeepMounted —
+	// active (dock may keep inactive PDFs mounted under keepMounted —
 	// avoid N× listMarkRaw reads). Covers Agent-panel writes that create ask
 	// threads from 「加入对话」 selections while this tab was open.
 	//

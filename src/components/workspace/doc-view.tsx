@@ -86,11 +86,13 @@ export type DocViewProps = {
 	tab: DocTab;
 	active: boolean;
 	/**
-	 * Whether this PDF tab should stay mounted even when inactive (LRU of
-	 * recently viewed PDFs). Non-PDF tabs ignore this. When false and inactive,
-	 * the heavyweight PDF viewer unmounts to release its engine document.
+	 * Whether this tab should stay mounted even when inactive (LRU of recently
+	 * viewed PDFs / Markdown editors, plus every group-visible panel). When
+	 * false and inactive, the heavyweight content (PDF viewer or Plate editor)
+	 * unmounts — PDF releases its engine document, the editor drops back to a
+	 * placeholder. State needed for restore is persisted on the tab.
 	 */
-	pdfKeepMounted: boolean;
+	keepMounted: boolean;
 	vaultPath: string | null;
 	library: DocViewLibraryProps;
 	editor: DocViewEditorProps;
@@ -133,7 +135,7 @@ function docViewPropsEqual(prev: DocViewProps, next: DocViewProps): boolean {
 	if (
 		prev.tab !== next.tab ||
 		prev.active !== next.active ||
-		prev.pdfKeepMounted !== next.pdfKeepMounted ||
+		prev.keepMounted !== next.keepMounted ||
 		prev.vaultPath !== next.vaultPath
 	) {
 		return false;
@@ -157,7 +159,7 @@ function docViewPropsEqual(prev: DocViewProps, next: DocViewProps): boolean {
 export const DocView = memo(function DocView({
 	tab,
 	active,
-	pdfKeepMounted,
+	keepMounted,
 	vaultPath,
 	library,
 	editor,
@@ -233,6 +235,12 @@ export const DocView = memo(function DocView({
 	}
 	const isNotes = tabIsPaperNotes(tab);
 	if (tab.mode === "markdown") {
+		// PERF: same keep-alive gate as PDF. Dockview keeps the panel shell
+		// mounted (`renderer: 'always'` in dock-workspace); the workspace host
+		// LRU (`keepMounted`) decides whether the heavyweight Plate editor stays
+		// alive. Evicted editors unmount (their pending autosave flushes on
+		// unmount) and re-deserialize from the seed when shown again.
+		if (!active && !keepMounted) return <TabLoadingSkeleton />;
 		return (
 			<div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-muted/30">
 				<Suspense fallback={<TabLoadingSkeleton />}>
@@ -276,11 +284,11 @@ export const DocView = memo(function DocView({
 		// PERF: dockview keeps PDF panel shells mounted (`renderer: 'always'` in
 		// dock-workspace) so inactive siblings stay in the React tree. We still
 		// gate the heavyweight EmbedPDF viewer with App-level PDF LRU
-		// (`pdfKeepMounted`): only the active tab + a few recently viewed PDFs
+		// (`keepMounted`): only the active tab + a few recently viewed PDFs
 		// keep PDFium documents alive (main-thread cost). Older inactive PDFs
 		// return null here to release the engine; position / annotations / ask
 		// threads are persisted and restore on remount.
-		if (!active && !pdfKeepMounted) return null;
+		if (!active && !keepMounted) return null;
 		return (
 			<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
 				<Suspense fallback={<TabLoadingSkeleton />}>

@@ -1,8 +1,9 @@
 /**
  * DockWorkspace host: assembles `centerProps` from the domain stores and owns
- * the workspace sync effects (PDF viewer LRU, layout persistence, empty-strip
- * Library fallback, tree-selection follow). Library query keystrokes and PDF
- * annotation updates re-render this host only — never the whole App.
+ * the workspace sync effects (PDF / editor keep-alive LRUs, layout persistence,
+ * empty-strip Library fallback, tree-selection follow). Library query
+ * keystrokes and PDF annotation updates re-render this host only — never the
+ * whole App.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -53,6 +54,7 @@ import { registerDockHandle } from "@/lib/workspace/dock-registry";
 import { evictPdfBuffers, nextPdfLru } from "@/lib/workspace/pdf-retention";
 import {
 	setDockLayout,
+	setEditorLru,
 	setPdfLru,
 	setTabs,
 	toggleTabHtmlMode,
@@ -67,6 +69,13 @@ import { savePersistedTabs } from "@/lib/workspace/tabs";
  * every open document on the main thread.
  */
 const PDF_TAB_MOUNT_LRU = 2;
+
+/**
+ * Number of Plate Markdown editors kept mounted (most recent first). Same
+ * shell/LRU split as PDF: switching back to a recent note skips plugin init
+ * and full-document deserialization without retaining every open editor.
+ */
+const EDITOR_TAB_MOUNT_LRU = 2;
 
 function handleWorkspaceDrop(drop: WorkspaceExternalDrop): void {
 	const path = drop.paths[0];
@@ -91,6 +100,7 @@ export function WorkspaceHost() {
 	const activeTabId = useWorkspaceStore((s) => s.activeTabId);
 	const dockLayout = useWorkspaceStore((s) => s.dockLayout);
 	const pdfLru = useWorkspaceStore((s) => s.pdfLru);
+	const editorLru = useWorkspaceStore((s) => s.editorLru);
 	const libraryPapers = useLibraryStore((s) => s.papers);
 	const libraryLoading = useLibraryStore((s) => s.loading);
 	const libraryQuery = useLibraryStore((s) => s.query);
@@ -133,6 +143,13 @@ export function WorkspaceHost() {
 			.map((tab) => tab.id);
 	}, [tabs, visiblePanelIds]);
 
+	const visibleEditorIds = useMemo(() => {
+		const visible = new Set(visiblePanelIds);
+		return tabs
+			.filter((tab) => tab.mode === "markdown" && visible.has(tab.id))
+			.map((tab) => tab.id);
+	}, [tabs, visiblePanelIds]);
+
 	// Keep visible/recent PDF panels mounted without bootstrapping every restored PDF.
 	useEffect(() => {
 		const ids = tabs.filter((tab) => tab.mode === "pdf").map((tab) => tab.id);
@@ -148,6 +165,25 @@ export function WorkspaceHost() {
 			nextPdfLru(previous, ids, promoted, PDF_TAB_MOUNT_LRU),
 		);
 	}, [activeTab?.mode, activeTab?.id, tabs, visiblePdfIds]);
+
+	// Same keep-alive for Markdown editors: evicted tabs drop back to a
+	// placeholder and re-deserialize only when their group exposes them again.
+	useEffect(() => {
+		const ids = tabs
+			.filter((tab) => tab.mode === "markdown")
+			.map((tab) => tab.id);
+		const activeEditor = activeTab?.mode === "markdown" ? activeTab.id : null;
+		if (!ids.length) {
+			setEditorLru((previous) => (previous.length ? [] : previous));
+			return;
+		}
+		const promoted = activeEditor
+			? [activeEditor, ...visibleEditorIds.filter((id) => id !== activeEditor)]
+			: visibleEditorIds;
+		setEditorLru((previous) =>
+			nextPdfLru(previous, ids, promoted, EDITOR_TAB_MOUNT_LRU),
+		);
+	}, [activeTab?.mode, activeTab?.id, tabs, visibleEditorIds]);
 
 	// Local PDF ArrayBuffers are large and keep PDFium documents alive indirectly.
 	// Evicted tabs become placeholders and reload only when one of their groups
@@ -298,14 +334,14 @@ export function WorkspaceHost() {
 		],
 	);
 
-	const activeTabMode = activeTab?.mode;
-	const pdfKeepMountedIds = useMemo(
+	const keepMountedIds = useMemo(
 		() => [
 			...pdfLru,
+			...editorLru,
 			...visiblePanelIds,
-			...(activeTabMode === "pdf" && activeTabId ? [activeTabId] : []),
+			...(activeTabId ? [activeTabId] : []),
 		],
-		[pdfLru, visiblePanelIds, activeTabId, activeTabMode],
+		[pdfLru, editorLru, visiblePanelIds, activeTabId],
 	);
 
 	return (
@@ -314,7 +350,7 @@ export function WorkspaceHost() {
 			tabs={tabs}
 			activePanelId={activeTabId}
 			layout={dockLayout}
-			pdfKeepMountedIds={pdfKeepMountedIds}
+			keepMountedIds={keepMountedIds}
 			centerProps={centerProps}
 			onActivePanelChange={handleActivePanelChange}
 			onVisiblePanelIdsChange={handleVisiblePanelIdsChange}
