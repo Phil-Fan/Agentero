@@ -635,6 +635,26 @@ pub fn rebuild_from_disk(vault_root: &Path) -> Result<usize, AppError> {
     })
 }
 
+/// Ensure a catalog row exists for the paper folder at `rel_path`.
+/// Single-path variant of [`rebuild_from_disk`]: missing rows are rebuilt
+/// from the sidecar (preferred) or a minimal folder-name record, so orphaned
+/// folders left behind by a failed import become visible to the Library again.
+/// Returns the row (existing or freshly written).
+pub fn ensure_row_for_path(
+    vault_root: &Path,
+    rel_path: &str,
+) -> Result<Option<PaperRecord>, AppError> {
+    with_catalog(vault_root, |conn| {
+        if let Some(row) = get_conn(conn, rel_path)? {
+            return Ok(Some(row));
+        }
+        let record = super::sidecar::read_sidecar(vault_root, rel_path)
+            .unwrap_or_else(|| minimal_record_for(&vault_root.join(rel_path), rel_path));
+        upsert_conn(conn, &record)?;
+        Ok(Some(record))
+    })
+}
+
 /// Fallback record when a paper folder has no sidecar: folder name as id/title.
 fn minimal_record_for(dir: &Path, rel_path: &str) -> PaperRecord {
     let folder_name = dir
@@ -1387,6 +1407,79 @@ mod tests {
         let row = get_by_path(&dir, "papers/x").unwrap().unwrap();
         assert_eq!(row.title, "x");
         assert_eq!(row.year, None);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ensure_row_for_path_heals_orphaned_folder() {
+        let dir = env::temp_dir().join(format!("agentero-ensure-row-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let paper_dir = dir.join("papers").join("x");
+        fs::create_dir_all(&paper_dir).unwrap();
+        fs::write(paper_dir.join("NOTES.md"), "# notes\n").unwrap();
+        let record = PaperRecord {
+            path: "papers/x".into(),
+            id: "x".into(),
+            paper_type: "article".into(),
+            title: "Attention".into(),
+            authors: vec![],
+            creators: None,
+            year: Some(2017),
+            date: None,
+            abstract_text: None,
+            tags: vec![],
+            arxiv_id: None,
+            doi: None,
+            isbn: None,
+            issn: None,
+            pmid: None,
+            publication: None,
+            volume: None,
+            issue: None,
+            pages: None,
+            publisher: None,
+            place: None,
+            series: None,
+            language: None,
+            pdf_url: None,
+            html_url: None,
+            source_url: None,
+            body_source: None,
+            body_quality: None,
+            bibtex_key: None,
+            citation_count: None,
+            zotero_item_type: None,
+            meta_source: None,
+            extra: None,
+            summary: None,
+            status: "completed".into(),
+            is_read: false,
+            zotero_item_id: None,
+            zotero_last_synced: None,
+            added_at: "t".into(),
+            updated_at: "t".into(),
+        };
+        upsert_paper(&dir, &record).unwrap();
+        // Simulate a failed import's aftermath: folder + sidecar exist, row lost.
+        delete_under_path(&dir, "papers/x").unwrap();
+
+        // Heals from the metadata.json sidecar.
+        let healed = ensure_row_for_path(&dir, "papers/x").unwrap().unwrap();
+        assert_eq!(healed.title, "Attention");
+        let row = get_by_path(&dir, "papers/x").unwrap().unwrap();
+        assert_eq!(row.year, Some(2017));
+
+        // Idempotent: existing rows pass through untouched.
+        let again = ensure_row_for_path(&dir, "papers/x").unwrap().unwrap();
+        assert_eq!(again.title, "Attention");
+
+        // Without a sidecar, falls back to a minimal folder-name record.
+        fs::remove_file(paper_dir.join("metadata.json")).unwrap();
+        delete_under_path(&dir, "papers/x").unwrap();
+        let minimal = ensure_row_for_path(&dir, "papers/x").unwrap().unwrap();
+        assert_eq!(minimal.title, "x");
+        assert_eq!(minimal.year, None);
 
         let _ = fs::remove_dir_all(&dir);
     }

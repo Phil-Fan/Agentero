@@ -502,6 +502,11 @@ pub async fn download_paper_assets_with_progress(
     let (id, arxiv_id, pdf_url, doi) = if let Ok(Some(row)) = papers::get_by_path(&vault, &path_rel)
     {
         (row.id, row.arxiv_id, row.pdf_url, row.doi)
+    } else if let Ok(Some(row)) = papers::ensure_row_for_path(&vault, &path_rel) {
+        // Orphaned folder (import failed after shell + folder were written but
+        // before the catalog row landed): rebuild the row so the Library sees it.
+        crate::features::lifecycle::emit_paper_imported(app, &vault, &row.id);
+        (row.id, row.arxiv_id, row.pdf_url, row.doi)
     } else {
         // Fallback: folder name as id; treat as arXiv if it looks like one
         let name = paper_dir

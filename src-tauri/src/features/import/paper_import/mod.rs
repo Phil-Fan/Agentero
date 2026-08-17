@@ -162,17 +162,33 @@ pub async fn paper_commit(
     }
     fs::create_dir_all(&paper_dir)?;
 
-    if let AssetsPolicy::CopyPdf { src, .. } = &opts.assets {
-        // PDF lives in the folder root as `{id}.pdf` (same as downloaded PDFs).
-        fs::copy(src, paper_dir.join(format!("{}.pdf", meta.id)))
-            .map_err(|e| AppError::message(format!("copy PDF failed: {e}")))?;
+    // Copy → shell → catalog must succeed as a unit. The folder was just
+    // created by us; if any step fails, roll it back so a half-written paper
+    // never shows in the tree without a catalog row.
+    let commit_steps = async {
+        if let AssetsPolicy::CopyPdf { src, .. } = &opts.assets {
+            // PDF lives in the folder root as `{id}.pdf` (same as downloaded PDFs).
+            fs::copy(src, paper_dir.join(format!("{}.pdf", meta.id)))
+                .map_err(|e| AppError::message(format!("copy PDF failed: {e}")))?;
+        }
+
+        write_paper_shell_opts(&paper_dir, &meta, opts.translate_abstract).await?;
+
+        // Catalog SQLite is authoritative; metadata.json is a projection.
+        let record = paper_record_from_meta(&path_rel, &meta);
+        papers::upsert_paper(vault, &record)?;
+        Ok(())
+    };
+    if let Err(e) = commit_steps.await {
+        if let Err(rm) = fs::remove_dir_all(&paper_dir) {
+            log::warn!(
+                target: "agentero::import",
+                "rollback of {} failed: {rm}",
+                paper_dir.display()
+            );
+        }
+        return Err(e);
     }
-
-    write_paper_shell_opts(&paper_dir, &meta, opts.translate_abstract).await?;
-
-    // Catalog SQLite is authoritative; metadata.json is a projection.
-    let record = paper_record_from_meta(&path_rel, &meta);
-    papers::upsert_paper(vault, &record)?;
 
     crate::features::lifecycle::emit_paper_imported(opts.app, vault, &meta.id);
 

@@ -55,7 +55,7 @@
 
 | 事件 | 时机 |
 |---|---|
-| ⭐ `paper:imported` | `paper_commit` 成功（catalog 已写入、NOTES 已建）。四条导入路径（魔棒 / 本地 PDF / Zotero / Connector）统一发 |
+| ⭐ `paper:imported` | `paper_commit` 成功（catalog 已写入、NOTES 已建）。四条导入路径（魔棒 / 本地 PDF / Zotero / Connector）统一发；`paper_download_assets` 为孤儿文件夹补建 catalog 行时也发 |
 | ⭐ `paper:assets-ready` | PDF 下载 / LaTeX 解压 / PAPER.md 生成完成（异步，与 imported 分离） |
 | ○ `paper:deleted` / `paper:moved` / `paper:tags-changed` / `paper:metadata-updated` | 对象变更 |
 
