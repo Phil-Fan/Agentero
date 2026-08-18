@@ -55,8 +55,13 @@ For each candidate change:
   visible behavior.
 - Combine multiple commits that implement one user-visible outcome.
 - Keep a PR, commit, or issue URL as evidence for every bullet.
-- Include the first committer (commit `author`) or PR author (`author`) for each
-  bullet so contributors are credited in the notes.
+- Include the first committer or PR author for each bullet so contributors are
+  credited in the notes. **Resolve GitHub usernames** — the git commit author
+  name (e.g. `QiyuanChen`) is not necessarily the GitHub handle (e.g.
+  `qychen2001`). For PRs, use the PR `author.login` field directly. For
+  uncovered commits, run `gh api repos/poco-ai/Agentero/commits/<sha>` and
+  extract the `author.login` field. Fall back to the commit `author.name` only
+  when the GitHub API returns null (e.g. unauthenticated local commits).
 - Report uncertainty or conflicting evidence instead of inventing behavior.
 
 ## Draft the notes
