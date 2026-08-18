@@ -266,7 +266,7 @@ export function TreeContextMenuPortal({
 							</span>
 						</button>
 					) : null}
-					{menuCount === 1 && onRename && !isPaperMenu ? (
+					{menuCount === 1 && onRename ? (
 						<button
 							type="button"
 							role="menuitem"
