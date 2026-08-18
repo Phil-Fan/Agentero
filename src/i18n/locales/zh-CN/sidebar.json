@@ -98,6 +98,8 @@
 	"papersLibrary": {
 		"title": "论文库",
 		"loading": "正在加载论文…",
+		"rowOpen": "打开",
+		"rowEditMeta": "编辑元数据",
 		"emptyTitle": "暂无论文",
 		"emptyHint": "用侧边栏魔棒粘贴 arXiv 编号或 DOI，或把 PDF 拖到这里。",
 		"dropPdfHint": "松开以导入 PDF",
@@ -332,6 +334,29 @@
 		"arxivId": "arXiv 标识号",
 		"copyHint": "单击复制{{label}}",
 		"copied": "已复制{{label}}",
-		"copyFailed": "无法复制到剪贴板"
+		"copyFailed": "无法复制到剪贴板",
+		"editMeta": {
+			"title": "编辑元数据",
+			"fieldTitle": "标题",
+			"fieldAuthors": "作者",
+			"authorsPlaceholder": "每行一位作者",
+			"fieldYear": "年份",
+			"fieldArxivId": "arXiv 编号",
+			"fieldDoi": "DOI",
+			"fieldPublication": "期刊 / 会议",
+			"moreFields": "更多字段",
+			"fieldVolume": "卷",
+			"fieldIssue": "期",
+			"fieldPages": "页码",
+			"fieldPublisher": "出版社",
+			"fieldAbstract": "摘要",
+			"fieldPdfUrl": "PDF 链接",
+			"fieldHtmlUrl": "HTML 链接",
+			"cancel": "取消",
+			"save": "保存",
+			"desktopOnly": "编辑元数据需要桌面应用。",
+			"remoteUnsupported": "远程 Vault 暂不支持编辑元数据。",
+			"saveFailed": "元数据保存失败。"
+		}
 	}
 }

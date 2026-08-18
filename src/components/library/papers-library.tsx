@@ -11,7 +11,9 @@ import {
 	ArrowDown,
 	ArrowUp,
 	ArrowUpDown,
+	BookOpen,
 	ListFilter,
+	Pencil,
 	RefreshCw,
 	Search,
 	X,
@@ -60,6 +62,7 @@ import {
 	listPaperPageCounts,
 	savePaperPageCounts,
 } from "@/lib/paper/api";
+import { setEditMetaDraft } from "@/lib/paper/library-store";
 import {
 	aggregateReadingHeatmap,
 	heatmapCacheKey,
@@ -76,6 +79,7 @@ import {
 } from "@/lib/settings";
 import { type PaperTag, visiblePaperTags } from "@/lib/ui/tag-colors";
 import { joinVaultPath } from "@/lib/vault";
+import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 
 export type PapersLibraryProps = {
 	/** Full catalog list (or pre-scoped); further filtered by `scopePath`. */
@@ -596,6 +600,9 @@ export function PapersLibrary({
 		},
 		[cancelPendingCopy, onOpenPaper],
 	);
+
+	const canEditMeta =
+		Boolean(vaultPath) && !isRemoteVaultHandle(vaultPath ?? "");
 
 	// --- Column customization (order + visibility) ---
 	const [dragKey, setDragKey] = useState<SortKey | null>(null);
@@ -1168,19 +1175,34 @@ export function PapersLibrary({
 										tags: row.tags,
 									};
 									return (
-										<tr
-											key={p.path ?? p.id}
-											data-index={vr.index}
-											ref={rowVirtualizer.measureElement}
-											className="border-b border-border/60 transition-colors hover:bg-muted/50"
-											onDoubleClick={() => openPaperFromRow(p)}
-										>
-											{visibleColumns.map((col) => (
-												<Fragment key={col.key}>
-													{COLUMN_META[col.key].render(p, cellCtx)}
-												</Fragment>
-											))}
-										</tr>
+										<ContextMenu key={p.path ?? p.id}>
+											<ContextMenuTrigger asChild>
+												<tr
+													data-index={vr.index}
+													ref={rowVirtualizer.measureElement}
+													className="border-b border-border/60 transition-colors hover:bg-muted/50"
+													onDoubleClick={() => openPaperFromRow(p)}
+												>
+													{visibleColumns.map((col) => (
+														<Fragment key={col.key}>
+															{COLUMN_META[col.key].render(p, cellCtx)}
+														</Fragment>
+													))}
+												</tr>
+											</ContextMenuTrigger>
+											<ContextMenuContent className="w-44">
+												<ContextMenuItem onSelect={() => openPaperFromRow(p)}>
+													<BookOpen className="size-3.5" />
+													{t("papersLibrary.rowOpen")}
+												</ContextMenuItem>
+												{canEditMeta ? (
+													<ContextMenuItem onSelect={() => setEditMetaDraft(p)}>
+														<Pencil className="size-3.5" />
+														{t("papersLibrary.rowEditMeta")}
+													</ContextMenuItem>
+												) : null}
+											</ContextMenuContent>
+										</ContextMenu>
 									);
 								})}
 								{paddingBottom > 0 ? (

@@ -92,6 +92,7 @@ macro_rules! common_commands {
             crate::features::catalog::commands::paper_list,
             crate::features::catalog::commands::paper_move,
             crate::features::catalog::commands::paper_set_is_read,
+            crate::features::catalog::commands::paper_update_meta,
             crate::features::catalog::commands::paper_set_tags,
             crate::features::catalog::commands::paper_rescan,
             crate::features::catalog::commands::paper_page_counts,

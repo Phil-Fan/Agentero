@@ -707,6 +707,143 @@ fn minimal_record_for(dir: &Path, rel_path: &str) -> PaperRecord {
     }
 }
 
+/// Manual metadata patch: `None` keeps the current value; a provided value is
+/// trimmed and an empty string clears the column (stored as NULL).
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperMetaPatch {
+    pub title: Option<String>,
+    pub authors: Option<Vec<String>>,
+    /// Year as text so an empty string can clear it; validated as 1000..=2100.
+    pub year: Option<String>,
+    pub doi: Option<String>,
+    pub arxiv_id: Option<String>,
+    pub publication: Option<String>,
+    pub volume: Option<String>,
+    pub issue: Option<String>,
+    pub pages: Option<String>,
+    pub publisher: Option<String>,
+    #[serde(rename = "abstract")]
+    pub abstract_text: Option<String>,
+    pub pdf_url: Option<String>,
+    pub html_url: Option<String>,
+}
+
+/// Apply a manual metadata patch; returns the updated row.
+/// Marks `meta_source = "manual"` so sync/rescan flows know the user edited it.
+/// A title change appends the new title to NOTES.md frontmatter aliases
+/// (best-effort, old aliases kept for wiki-link compatibility).
+pub fn update_meta(
+    vault_root: &Path,
+    path: &str,
+    patch: &PaperMetaPatch,
+) -> Result<PaperRecord, AppError> {
+    let path = path.replace('\\', "/").trim_matches('/').to_string();
+    let Some(mut row) = get_by_path(vault_root, &path)? else {
+        return Err(AppError::message("paper not found in catalog"));
+    };
+
+    fn norm(value: &str) -> Option<String> {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    }
+
+    let mut title_changed = false;
+    if let Some(title) = patch.title.as_deref() {
+        let title = title.trim();
+        if title.is_empty() {
+            return Err(AppError::message("title cannot be empty"));
+        }
+        title_changed = title != row.title;
+        row.title = title.to_string();
+    }
+    if let Some(authors) = &patch.authors {
+        row.authors = authors
+            .iter()
+            .map(|a| a.trim().to_string())
+            .filter(|a| !a.is_empty())
+            .collect();
+    }
+    if let Some(year) = patch.year.as_deref() {
+        row.year = match norm(year) {
+            None => None,
+            Some(text) => {
+                let parsed: i32 = text
+                    .parse()
+                    .map_err(|_| AppError::message("year must be a number"))?;
+                if !(1000..=2100).contains(&parsed) {
+                    return Err(AppError::message("year must be between 1000 and 2100"));
+                }
+                Some(parsed)
+            }
+        };
+    }
+    if let Some(v) = patch.doi.as_deref() {
+        row.doi = norm(v);
+    }
+    if let Some(v) = patch.arxiv_id.as_deref() {
+        row.arxiv_id = norm(v);
+    }
+    if let Some(v) = patch.publication.as_deref() {
+        row.publication = norm(v);
+    }
+    if let Some(v) = patch.volume.as_deref() {
+        row.volume = norm(v);
+    }
+    if let Some(v) = patch.issue.as_deref() {
+        row.issue = norm(v);
+    }
+    if let Some(v) = patch.pages.as_deref() {
+        row.pages = norm(v);
+    }
+    if let Some(v) = patch.publisher.as_deref() {
+        row.publisher = norm(v);
+    }
+    if let Some(v) = patch.abstract_text.as_deref() {
+        row.abstract_text = norm(v);
+    }
+    if let Some(v) = patch.pdf_url.as_deref() {
+        row.pdf_url = norm(v);
+    }
+    if let Some(v) = patch.html_url.as_deref() {
+        row.html_url = norm(v);
+    }
+
+    row.meta_source = Some("manual".to_string());
+    row.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let updated = upsert_paper(vault_root, &row)?;
+    if title_changed {
+        append_title_alias_best_effort(vault_root, &path, &updated.title);
+    }
+    Ok(updated)
+}
+
+/// Append the new title to NOTES.md frontmatter aliases (best-effort; keeps
+/// old aliases so existing `[[...]]` links keep resolving).
+fn append_title_alias_best_effort(vault_root: &Path, rel_path: &str, title: &str) {
+    use crate::features::wiki::frontmatter as fm;
+    let notes_path = vault_root.join(rel_path).join("NOTES.md");
+    let Ok(body) = fs::read_to_string(&notes_path) else {
+        return;
+    };
+    let (frontmatter_end, existing) = fm::parse_frontmatter_aliases(&body);
+    if existing.iter().any(|a| a == title) {
+        return;
+    }
+    let mut merged = existing;
+    merged.push(title.to_string());
+    let next = if merged.len() >= 2 {
+        fm::patch_aliases(&body, &merged)
+    } else if frontmatter_end == 0 {
+        fm::prepend_new_aliases(&body, &merged)
+    } else {
+        return;
+    };
+    if let Ok(next) = next {
+        let _ = fs::write(&notes_path, next);
+    }
+}
+
 /// Set `is_read` for a paper path; returns the updated row.
 pub fn set_is_read(vault_root: &Path, path: &str, is_read: bool) -> Result<PaperRecord, AppError> {
     let path = path.replace('\\', "/").trim_matches('/').to_string();
@@ -1239,6 +1376,90 @@ mod tests {
         assert_eq!(count("papers/other/c"), 1);
         assert_eq!(count("papers/nlp/b"), 0);
         assert_eq!(count("papers/a"), 0);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn update_meta_patches_fields_and_syncs_aliases() {
+        let dir = env::temp_dir().join(format!("agentero-update-meta-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let paper_dir = dir.join("papers").join("x");
+        fs::create_dir_all(&paper_dir).unwrap();
+        fs::write(
+            paper_dir.join("NOTES.md"),
+            "---\naliases:\n  - \"Old Title\"\n---\n# Old Title\n",
+        )
+        .unwrap();
+        {
+            let conn = ensure_catalog(&dir).unwrap();
+            conn.execute(
+                "INSERT INTO papers (path, id, type, title, doi, added_at, updated_at) \
+                 VALUES ('papers/x', 'x', 'article', 'Old Title', '10.1/old', 't', 't')",
+                [],
+            )
+            .unwrap();
+        }
+
+        // Patch semantics: provided fields update, omitted fields stay.
+        let row = update_meta(
+            &dir,
+            "papers/x",
+            &PaperMetaPatch {
+                title: Some("New Title".into()),
+                authors: Some(vec![" A ".into(), "".into(), "B".into()]),
+                year: Some("2024".into()),
+                publication: Some("NeurIPS".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(row.title, "New Title");
+        assert_eq!(row.authors, vec!["A".to_string(), "B".to_string()]);
+        assert_eq!(row.year, Some(2024));
+        assert_eq!(row.publication.as_deref(), Some("NeurIPS"));
+        assert_eq!(row.doi.as_deref(), Some("10.1/old")); // untouched
+        assert_eq!(row.meta_source.as_deref(), Some("manual"));
+
+        // New title appended to aliases; old alias kept.
+        let notes = fs::read_to_string(paper_dir.join("NOTES.md")).unwrap();
+        assert!(notes.contains("Old Title"));
+        assert!(notes.contains("New Title"));
+
+        // Empty string clears a column; empty year clears year.
+        let row = update_meta(
+            &dir,
+            "papers/x",
+            &PaperMetaPatch {
+                doi: Some("  ".into()),
+                year: Some("".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(row.doi, None);
+        assert_eq!(row.year, None);
+
+        // Validation errors.
+        assert!(update_meta(
+            &dir,
+            "papers/x",
+            &PaperMetaPatch {
+                title: Some("  ".into()),
+                ..Default::default()
+            },
+        )
+        .is_err());
+        assert!(update_meta(
+            &dir,
+            "papers/x",
+            &PaperMetaPatch {
+                year: Some("99".into()),
+                ..Default::default()
+            },
+        )
+        .is_err());
+        assert!(update_meta(&dir, "papers/missing", &PaperMetaPatch::default()).is_err());
 
         let _ = fs::remove_dir_all(&dir);
     }

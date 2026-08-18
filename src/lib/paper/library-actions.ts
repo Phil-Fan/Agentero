@@ -22,8 +22,10 @@ import {
 import {
 	exportLibraryToFile,
 	importLibraryFromFile,
+	type PaperMetaPatch,
 	rescanPapers,
 	setPaperTags,
+	updatePaperMeta,
 } from "@/lib/paper/api";
 import {
 	libraryStore,
@@ -331,6 +333,58 @@ export async function paperTagsChange(
 		track("paper.tag", {
 			path,
 			extra: { op: "set", tagCount: tags.length },
+		});
+		setLibraryPapers((prev) =>
+			prev.map((p) => {
+				const key = (p.path ?? "")
+					.replace(/\\/g, "/")
+					.replace(/^\/+|\/+$/g, "");
+				return key === path ? { ...p, ...updated } : p;
+			}),
+		);
+		setTabs((prev) =>
+			prev.map((tab) => {
+				if (!tab.paperMeta) return tab;
+				const key = (tab.paperMeta.path ?? "")
+					.replace(/\\/g, "/")
+					.replace(/^\/+|\/+$/g, "");
+				const samePath = key === path;
+				const sameOpenPaper = !key && tab.paperMeta.id === paperMeta.id;
+				if (!samePath && !sameOpenPaper) return tab;
+				return {
+					...tab,
+					paperMeta: {
+						...tab.paperMeta,
+						...updated,
+						path: updated.path ?? path,
+					},
+				};
+			}),
+		);
+		return { ...paperMeta, ...updated, path: updated.path ?? path };
+	} catch (e) {
+		notifyError(e instanceof Error ? e.message : String(e));
+		return null;
+	}
+}
+
+/** Apply a manual metadata patch and sync library + open tabs. */
+export async function paperMetaChange(
+	paperMeta: PaperMetadata,
+	patch: PaperMetaPatch,
+): Promise<PaperMetadata | null> {
+	const vaultPath = getVaultPath();
+	if (!vaultPath) return null;
+	const path = await resolvePaperCatalogRel(paperMeta);
+	if (!path) {
+		notifyError(i18n.t("sidebar:paperInfo.editMeta.saveFailed"));
+		return null;
+	}
+	try {
+		const updated = await updatePaperMeta(vaultPath, path, patch);
+		track("paper.edit-meta", {
+			path,
+			extra: { fields: Object.keys(patch) },
 		});
 		setLibraryPapers((prev) =>
 			prev.map((p) => {

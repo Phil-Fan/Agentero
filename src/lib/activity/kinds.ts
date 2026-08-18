@@ -21,6 +21,7 @@ export const ACTIVITY_KINDS = [
 	"mark.delete",
 	"paper.tag",
 	"paper.read",
+	"paper.edit-meta",
 	"refs.parse",
 	"refs.import",
 	"zotero.save",

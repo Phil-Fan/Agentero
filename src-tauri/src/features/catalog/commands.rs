@@ -194,6 +194,36 @@ pub async fn paper_set_is_read(args: PaperSetIsReadArgs) -> ApiResult<PaperRecor
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PaperUpdateMetaArgs {
+    pub vault_path: String,
+    /// Vault-relative paper folder path.
+    pub path: String,
+    pub patch: papers::PaperMetaPatch,
+}
+
+/// Manually edit paper metadata (patch semantics: only provided fields change,
+/// empty strings clear). Marks the row `meta_source = "manual"`.
+#[tauri::command]
+pub async fn paper_update_meta(args: PaperUpdateMetaArgs) -> ApiResult<PaperRecord> {
+    run_blocking(move || {
+        let vault = PathBuf::from(args.vault_path.trim());
+        if !vault.is_dir() {
+            return map_err(AppError::message("vault path is not a directory"));
+        }
+        let path = args.path.trim().trim_matches('/').replace('\\', "/");
+        if path.is_empty() {
+            return map_err(AppError::message("path is required"));
+        }
+        match papers::update_meta(&vault, &path, &args.patch) {
+            Ok(row) => ApiResult::ok(row),
+            Err(e) => map_err(e),
+        }
+    })
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PaperMoveArgs {
     pub vault_path: String,
     /// Vault-relative item to move (paper folder, org folder, or file under `papers/`).

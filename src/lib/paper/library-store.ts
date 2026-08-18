@@ -34,6 +34,8 @@ type LibraryStore = {
 	ioBusy: LibraryIoBusy;
 	/** OS PDF drop onto papers/ → metadata confirm dialog (not silent import). */
 	importPdfDraft: ImportPdfDraft | null;
+	/** Paper being edited in the Edit Metadata dialog (null = closed). */
+	editMetaDraft: PaperMetadata | null;
 	/** Bump to force RecycleBinView reload after Empty Recycle Bin. */
 	trashReloadSignal: number;
 	/** Catalog rows by vault-relative path (for Zap / is_read). */
@@ -57,6 +59,7 @@ export const libraryStore = createStore<LibraryStore>(() => ({
 	rescanning: false,
 	ioBusy: null,
 	importPdfDraft: null,
+	editMetaDraft: null,
 	trashReloadSignal: 0,
 	paperMetaByRelPath: new Map(),
 }));
@@ -127,6 +130,10 @@ export function setLibraryIoBusy(ioBusy: LibraryIoBusy): void {
 
 export function setImportPdfDraft(draft: ImportPdfDraft | null): void {
 	libraryStore.setState({ importPdfDraft: draft });
+}
+
+export function setEditMetaDraft(draft: PaperMetadata | null): void {
+	libraryStore.setState({ editMetaDraft: draft });
 }
 
 export function bumpTrashReloadSignal(): void {

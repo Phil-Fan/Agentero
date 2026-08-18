@@ -87,6 +87,15 @@
             ) {
               return;
             }
+            // Radix ContextMenu triggers refuse to open when the event is
+            // already defaultPrevented; they preventDefault themselves, so the
+            // native menu stays hidden either way.
+            if (
+              target instanceof Element &&
+              target.closest('[data-slot="context-menu-trigger"]')
+            ) {
+              return;
+            }
             event.preventDefault();
           },
           { capture: true },

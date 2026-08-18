@@ -424,6 +424,56 @@ export async function setPaperTags(
 	return withNormalizedTags(paper);
 }
 
+/**
+ * Manual metadata patch: omitted fields keep current values; empty strings
+ * clear the column. Mirrors Host `PaperMetaPatch`.
+ */
+export type PaperMetaPatch = {
+	title?: string;
+	authors?: string[];
+	year?: string;
+	doi?: string;
+	arxivId?: string;
+	publication?: string;
+	volume?: string;
+	issue?: string;
+	pages?: string;
+	publisher?: string;
+	abstract?: string;
+	pdfUrl?: string;
+	htmlUrl?: string;
+};
+
+/**
+ * Manually edit paper metadata in catalog (patch semantics).
+ * Remote vaults are not supported yet.
+ */
+export async function updatePaperMeta(
+	vaultPath: string,
+	path: string,
+	patch: PaperMetaPatch,
+): Promise<PaperMetadata> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:paperInfo.editMeta.desktopOnly"));
+	}
+	const { isRemoteVaultHandle } = await import(
+		"@/lib/vault/remote/remote-vault"
+	);
+	if (isRemoteVaultHandle(vaultPath)) {
+		throw new Error(i18n.t("sidebar:paperInfo.editMeta.remoteUnsupported"));
+	}
+	const paper = await invokeApi<PaperMetadata>(
+		"paper_update_meta",
+		{
+			args: { vaultPath, path, patch },
+		},
+		{
+			fallback: i18n.t("sidebar:paperInfo.editMeta.saveFailed"),
+		},
+	);
+	return withNormalizedTags(paper);
+}
+
 export type PaperExportResult = {
 	format: string;
 	content: string;

@@ -4,6 +4,7 @@ import {
 	ChevronRight,
 	ExternalLink,
 	Info,
+	Pencil,
 	Tag,
 	Users,
 } from "lucide-react";
@@ -38,6 +39,7 @@ import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { cn } from "@/lib/core/utils";
 import type { PaperMetadata } from "@/lib/paper";
 import { arxivUrls } from "@/lib/paper/arxiv";
+import { setEditMetaDraft } from "@/lib/paper/library-store";
 import {
 	coercePaperTags,
 	isConnectorTagName,
@@ -48,6 +50,8 @@ import {
 	tagSwatchStyle,
 	visiblePaperTags,
 } from "@/lib/ui/tag-colors";
+import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
+import { getVaultPath } from "@/lib/vault/store";
 
 type PaperInfoPanelProps = {
 	meta: PaperMetadata | null;
@@ -457,6 +461,9 @@ export function PaperInfoPanel({
 	}, [meta]);
 
 	const resizable = open && Boolean(meta);
+	const vaultPath = getVaultPath();
+	const canEditMeta =
+		Boolean(meta) && !!vaultPath && !isRemoteVaultHandle(vaultPath);
 	const arxivId = meta?.arxiv_id ? arxivUrls(meta.arxiv_id)?.id : null;
 	const modelScopeUrl = arxivId
 		? `https://modelscope.cn/papers/${arxivId}/overview`
@@ -533,6 +540,22 @@ export function PaperInfoPanel({
 						<Info className="size-3.5 shrink-0" aria-hidden />
 						<span className="truncate">{t("paperInfo.info")}</span>
 					</CollapsibleTrigger>
+					{canEditMeta && meta ? (
+						<button
+							type="button"
+							title={t("paperInfo.editMeta.title")}
+							aria-label={t("paperInfo.editMeta.title")}
+							onClick={() => setEditMetaDraft(meta)}
+							className={cn(
+								"flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md",
+								"text-muted-foreground transition-colors",
+								"hover:bg-muted hover:text-foreground",
+								"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+							)}
+						>
+							<Pencil className="size-3" aria-hidden />
+						</button>
+					) : null}
 					{arxivId ? (
 						<button
 							type="button"
