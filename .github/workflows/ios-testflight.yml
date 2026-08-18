@@ -205,6 +205,9 @@ jobs:
       - name: Build iOS archive
         if: steps.signing-config.outputs.ready == 'true'
         env:
+          # macos-latest runners have 7GB RAM, so Node's default ~2GB heap
+          # limit is not enough for `vite build` on this bundle.
+          NODE_OPTIONS: --max-old-space-size=6144
           # Tauri CLI imports the certificate into a temp keychain and installs
           # the provisioning profile when these are present on CI.
           IOS_CERTIFICATE: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE }}
