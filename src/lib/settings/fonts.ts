@@ -22,7 +22,7 @@ export type FontStackPreset = (typeof FONT_STACK_PRESETS)[number];
 export type FontRole = "interface" | "text" | "mono";
 
 export const DEFAULT_SANS_STACK =
-	'"Geist Variable", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+	'"Geist Variable", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif';
 
 export const SYSTEM_SANS_STACK =
 	'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif';

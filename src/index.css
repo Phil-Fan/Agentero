@@ -89,7 +89,8 @@
 :root {
 	--agentero-font-sans:
 		"Geist Variable", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-		sans-serif;
+		"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei",
+		"Noto Sans SC", sans-serif;
 	--agentero-font-heading: var(--agentero-font-sans);
 	--agentero-font-mono:
 		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
