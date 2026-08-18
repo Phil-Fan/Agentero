@@ -15,6 +15,7 @@ import {
 import {
 	Fragment,
 	lazy,
+	memo,
 	Suspense,
 	useCallback,
 	useEffect,
@@ -68,40 +69,52 @@ export function preloadSettingsPane(section: string): Promise<unknown> {
 	return load();
 }
 
-const GeneralPane = lazy(() =>
-	PANE_LOADERS.general().then((m) => ({ default: m.GeneralPane })),
+// memo(): visited panes stay mounted across section switches; without this
+// every switch re-rendered ALL mounted panes (agent pane is ~1.5k lines).
+const GeneralPane = memo(
+	lazy(() => PANE_LOADERS.general().then((m) => ({ default: m.GeneralPane }))),
 );
-const AppearancePane = lazy(() =>
-	PANE_LOADERS.appearance().then((m) => ({ default: m.AppearancePane })),
+const AppearancePane = memo(
+	lazy(() =>
+		PANE_LOADERS.appearance().then((m) => ({ default: m.AppearancePane })),
+	),
 );
-const AgentPane = lazy(() =>
-	PANE_LOADERS.agent().then((m) => ({ default: m.AgentPane })),
+const AgentPane = memo(
+	lazy(() => PANE_LOADERS.agent().then((m) => ({ default: m.AgentPane }))),
 );
-const RemoteAgentPane = lazy(() =>
-	PANE_LOADERS.agent().then((m) => ({ default: m.RemoteAgentPane })),
+const RemoteAgentPane = memo(
+	lazy(() =>
+		PANE_LOADERS.agent().then((m) => ({ default: m.RemoteAgentPane })),
+	),
 );
-const TranslatePane = lazy(() =>
-	PANE_LOADERS.translate().then((m) => ({ default: m.TranslatePane })),
+const TranslatePane = memo(
+	lazy(() =>
+		PANE_LOADERS.translate().then((m) => ({ default: m.TranslatePane })),
+	),
 );
-const LayoutPane = lazy(() =>
-	PANE_LOADERS.layout().then((m) => ({ default: m.LayoutPane })),
+const LayoutPane = memo(
+	lazy(() => PANE_LOADERS.layout().then((m) => ({ default: m.LayoutPane }))),
 );
-const DoctorPane = lazy(() =>
-	PANE_LOADERS.doctor().then((m) => ({ default: m.DoctorPane })),
+const DoctorPane = memo(
+	lazy(() => PANE_LOADERS.doctor().then((m) => ({ default: m.DoctorPane }))),
 );
-const KeyboardPane = lazy(() =>
-	PANE_LOADERS.keyboard().then((m) => ({ default: m.KeyboardPane })),
+const KeyboardPane = memo(
+	lazy(() =>
+		PANE_LOADERS.keyboard().then((m) => ({ default: m.KeyboardPane })),
+	),
 );
-const RemoteAccessPane = lazy(() =>
-	PANE_LOADERS["remote-access"]().then((m) => ({
-		default: m.RemoteAccessPane,
-	})),
+const RemoteAccessPane = memo(
+	lazy(() =>
+		PANE_LOADERS["remote-access"]().then((m) => ({
+			default: m.RemoteAccessPane,
+		})),
+	),
 );
-const SyncPane = lazy(() =>
-	PANE_LOADERS.sync().then((m) => ({ default: m.SyncPane })),
+const SyncPane = memo(
+	lazy(() => PANE_LOADERS.sync().then((m) => ({ default: m.SyncPane }))),
 );
-const AboutPane = lazy(() =>
-	PANE_LOADERS.about().then((m) => ({ default: m.AboutPane })),
+const AboutPane = memo(
+	lazy(() => PANE_LOADERS.about().then((m) => ({ default: m.AboutPane }))),
 );
 
 const NAV: {
@@ -165,6 +178,31 @@ export function SettingsContent({
 			prev.includes(section) ? prev : [...prev, section],
 		);
 	}, [section]);
+
+	// Warm every pane chunk in the background shortly after the window opens.
+	// Only the initial section is preloaded at boot; without this, the FIRST
+	// click on any other section pays for its chunk fetch + evaluation right
+	// on the click (seconds on a busy machine / dev server) — perceived as the
+	// settings UI "freezing". Sequential + staggered so the warm-up never
+	// contends with the main window.
+	useEffect(() => {
+		let cancelled = false;
+		const sections = Object.keys(PANE_LOADERS) as SettingsSection[];
+		let i = 0;
+		let timer: ReturnType<typeof setTimeout> | null = null;
+		const warmNext = () => {
+			if (cancelled || i >= sections.length) return;
+			const load = PANE_LOADERS[sections[i++]];
+			void load().finally(() => {
+				if (!cancelled) timer = setTimeout(warmNext, 120);
+			});
+		};
+		timer = setTimeout(warmNext, 300);
+		return () => {
+			cancelled = true;
+			if (timer) clearTimeout(timer);
+		};
+	}, []);
 	const contentScrollRef = useRef<HTMLDivElement>(null);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: section intentionally triggers a scroll-to-top on switch
 	useEffect(() => {
