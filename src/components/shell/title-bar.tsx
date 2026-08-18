@@ -19,6 +19,13 @@ import {
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
@@ -26,12 +33,16 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/core/utils";
 import { moveFeatureToWindow } from "@/lib/shell/leaf";
+import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { formatShortcutById } from "@/lib/shell/shortcuts";
+import { openPalette } from "@/lib/shell/ui-store";
 
 /** Platform-formatted shortcut chips for title bar tooltips (⌥⌘… on macOS, Ctrl+… elsewhere). */
 const SIDEBAR_SHORTCUT = formatShortcutById("toggleSidebar");
 const CHAT_SHORTCUT = formatShortcutById("toggleChat");
 const SETTINGS_SHORTCUT = formatShortcutById("settings");
+const QUICK_OPEN_SHORTCUT = formatShortcutById("quickOpen");
+const COMMAND_PALETTE_SHORTCUT = formatShortcutById("commandPalette");
 
 type TitleBarProps = {
 	isMacDesktop: boolean;
@@ -231,36 +242,70 @@ export const TitleBar = memo(function TitleBar({
 					</Tooltip>
 				</div>
 				{/*
-				  Windows / Linux have no native menu bar, so Settings needs a
-				  visible entry point. The gear sits at the far right of the title
-				  bar (caption buttons are drawn by the OS).
+				  Windows / Linux have no native menu bar, so the gear doubles as a
+				  compact app menu: settings entries plus the palette actions that
+				  otherwise only exist as keyboard shortcuts (discoverability).
+				  Caption buttons are drawn by the OS.
 				*/}
 				{showSettingsGear ? (
 					<div className="flex shrink-0 items-center gap-0.5 pl-1">
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon-xs"
-									className="group"
-									aria-label={t("titlebar.settings")}
-									onClick={() => onOpenSettings()}
+						<DropdownMenu>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<DropdownMenuTrigger asChild>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon-xs"
+											className="group"
+											aria-label={t("titlebar.settings")}
+										>
+											<Settings
+												className={cn(
+													"size-3.5",
+													"transition-transform duration-200 ease-out group-hover:rotate-90",
+												)}
+											/>
+										</Button>
+									</DropdownMenuTrigger>
+								</TooltipTrigger>
+								<TooltipContent side="bottom">
+									{t("titlebar.settingsHint", {
+										shortcut: SETTINGS_SHORTCUT,
+									})}
+								</TooltipContent>
+							</Tooltip>
+							<DropdownMenuContent align="end" className="min-w-56">
+								<DropdownMenuItem onSelect={() => onOpenSettings()}>
+									<span className="flex-1">{t("titlebar.menuSettings")}</span>
+									<span className="text-muted-foreground text-xs tracking-wide">
+										{SETTINGS_SHORTCUT}
+									</span>
+								</DropdownMenuItem>
+								<DropdownMenuItem
+									onSelect={() => openSettingsWindow("keyboard")}
 								>
-									<Settings
-										className={cn(
-											"size-3.5",
-											"transition-transform duration-200 ease-out group-hover:rotate-90",
-										)}
-									/>
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">
-								{t("titlebar.settingsHint", {
-									shortcut: SETTINGS_SHORTCUT,
-								})}
-							</TooltipContent>
-						</Tooltip>
+									<span className="flex-1">
+										{t("titlebar.menuKeyboardShortcuts")}
+									</span>
+								</DropdownMenuItem>
+								<DropdownMenuSeparator />
+								<DropdownMenuItem onSelect={() => openPalette("go")}>
+									<span className="flex-1">{t("titlebar.menuQuickOpen")}</span>
+									<span className="text-muted-foreground text-xs tracking-wide">
+										{QUICK_OPEN_SHORTCUT}
+									</span>
+								</DropdownMenuItem>
+								<DropdownMenuItem onSelect={() => openPalette("commands")}>
+									<span className="flex-1">
+										{t("titlebar.menuCommandPalette")}
+									</span>
+									<span className="text-muted-foreground text-xs tracking-wide">
+										{COMMAND_PALETTE_SHORTCUT}
+									</span>
+								</DropdownMenuItem>
+							</DropdownMenuContent>
+						</DropdownMenu>
 					</div>
 				) : null}
 			</TooltipProvider>
