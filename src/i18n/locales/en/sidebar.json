@@ -78,7 +78,6 @@
 		"fieldAuthors": "Authors",
 		"authorsPlaceholder": "Comma-separated",
 		"fieldYear": "Year",
-		"fieldId": "Folder id",
 		"fieldDoi": "DOI",
 		"fieldArxivId": "arXiv ID",
 		"fetch": "Fetch",

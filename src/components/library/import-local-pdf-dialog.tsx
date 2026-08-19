@@ -18,7 +18,7 @@ import {
 	probePdfIdents,
 	resolveIdentifierMetadata,
 } from "@/lib/paper/api";
-import { slugFromPdfPath, titleFromPdfPath } from "@/lib/paper/local-pdf-meta";
+import { titleFromPdfPath } from "@/lib/paper/local-pdf-meta";
 import type {
 	LocalPdfExtraMeta,
 	LocalPdfImportEntry,
@@ -26,12 +26,11 @@ import type {
 
 type DraftRow = {
 	filePath: string;
-	/** Original filename for UI + default title/id (not the staging path). */
+	/** Original filename for UI + default title (not the staging path). */
 	sourceName: string;
 	title: string;
 	authors: string;
 	year: string;
-	id: string;
 	doi: string;
 	arxivId: string;
 	/** Structured fields from probe/Fetch, submitted as `extra`. */
@@ -52,7 +51,6 @@ function draftsFromItems(items: ImportLocalPdfDraftItem[]): DraftRow[] {
 			title: titleFromPdfPath(nameForMeta),
 			authors: "",
 			year: "",
-			id: slugFromPdfPath(nameForMeta),
 			doi: "",
 			arxivId: "",
 		};
@@ -138,9 +136,7 @@ export function ImportLocalPdfDialog({
 
 	const canSubmit = useMemo(() => {
 		if (!rows.length || busy || probing) return false;
-		return rows.every(
-			(r) => r.title.trim().length > 0 && r.id.trim().length > 0,
-		);
+		return rows.every((r) => r.title.trim().length > 0);
 	}, [rows, busy, probing]);
 
 	const updateRow = (index: number, patch: Partial<DraftRow>) => {
@@ -199,7 +195,6 @@ export function ImportLocalPdfDialog({
 				title: r.title.trim(),
 				authors: authors.length ? authors : undefined,
 				year: Number.isFinite(yearNum) ? yearNum : undefined,
-				id: r.id.trim() || undefined,
 				doi: r.doi.trim() || undefined,
 				arxivId: r.arxivId.trim() || undefined,
 				extra: hasIdentifiers ? r.extra : undefined,
@@ -295,32 +290,18 @@ export function ImportLocalPdfDialog({
 									/>
 								</div>
 							</div>
-							<div className="grid grid-cols-[1fr_1fr] gap-2">
-								<div className="space-y-1">
-									<Label className="text-xs">
-										{t("importLocalPdf.fieldAuthors")}
-									</Label>
-									<Input
-										value={row.authors}
-										onChange={(e) =>
-											updateRow(index, { authors: e.target.value })
-										}
-										placeholder={t("importLocalPdf.authorsPlaceholder")}
-										disabled={busy}
-									/>
-								</div>
-								<div className="space-y-1">
-									<Label className="text-xs">
-										{t("importLocalPdf.fieldId")}
-									</Label>
-									<Input
-										value={row.id}
-										onChange={(e) => updateRow(index, { id: e.target.value })}
-										spellCheck={false}
-										className="font-mono text-xs"
-										disabled={busy}
-									/>
-								</div>
+							<div className="space-y-1">
+								<Label className="text-xs">
+									{t("importLocalPdf.fieldAuthors")}
+								</Label>
+								<Input
+									value={row.authors}
+									onChange={(e) =>
+										updateRow(index, { authors: e.target.value })
+									}
+									placeholder={t("importLocalPdf.authorsPlaceholder")}
+									disabled={busy}
+								/>
 							</div>
 							<div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
 								<div className="space-y-1">

@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { basenameOf } from "@/lib/core/path";
 import {
-	slugFromPdfPath,
-	slugFromStem,
 	stemFromPath,
 	titleFromPdfPath,
 	titleFromStem,
@@ -21,12 +19,6 @@ describe("local-pdf-meta", () => {
 		);
 		expect(titleFromStem("  Hello   World  ")).toBe("Hello World");
 		expect(titleFromStem("   ")).toBe("Untitled");
-	});
-
-	it("slug_from_stem mirrors host", () => {
-		expect(slugFromStem("Hello World!")).toBe("Hello-World");
-		expect(slugFromStem("...")).toBe("paper");
-		expect(slugFromPdfPath("/tmp/My Paper (2020).pdf")).toBe("My-Paper-2020");
 	});
 
 	it("titleFromPdfPath", () => {

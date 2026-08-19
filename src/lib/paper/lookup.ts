@@ -240,7 +240,6 @@ export type LocalPdfImportEntry = {
 	title?: string;
 	authors?: string[];
 	year?: number;
-	id?: string;
 	doi?: string;
 	arxivId?: string;
 	extra?: LocalPdfExtraMeta;
@@ -257,7 +256,7 @@ export async function importLocalPdfs(opts: {
 	parentDir: string;
 	/** Absolute paths (skip native picker when non-empty; no metadata overrides). */
 	filePaths?: string[];
-	/** Preferred: path + optional title/authors/year/id from the confirm dialog. */
+	/** Preferred: path + optional title/authors/year/identifiers from the confirm dialog. */
 	entries?: LocalPdfImportEntry[];
 	/** Background task receiving the host parse phase. */
 	progressTaskId?: string;

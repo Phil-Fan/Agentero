@@ -78,7 +78,6 @@
 		"fieldAuthors": "作者",
 		"authorsPlaceholder": "逗号分隔",
 		"fieldYear": "年份",
-		"fieldId": "文件夹 id",
 		"fieldDoi": "DOI",
 		"fieldArxivId": "arXiv ID",
 		"fetch": "获取",

@@ -136,9 +136,6 @@ pub struct LocalPdfImportEntry {
     pub authors: Option<Vec<String>>,
     #[serde(default)]
     pub year: Option<i32>,
-    /// Preferred folder id (slug); host still de-duplicates with `-2`/`-3`.
-    #[serde(default)]
-    pub id: Option<String>,
     #[serde(default)]
     pub doi: Option<String>,
     #[serde(default)]
@@ -200,7 +197,7 @@ pub struct ImportLocalPdfArgs {
     /// Absolute paths to local PDF files (picker). Ignored when `entries` is non-empty.
     #[serde(default)]
     pub file_paths: Vec<String>,
-    /// Preferred: path + optional title/authors/year/id from the confirm dialog.
+    /// Preferred: path + optional title/authors/year/identifiers from the confirm dialog.
     #[serde(default)]
     pub entries: Vec<LocalPdfImportEntry>,
     /// Frontend background-task id for parse-phase progress.
@@ -674,7 +671,6 @@ pub async fn import_local_pdfs(
                 title: None,
                 authors: None,
                 year: None,
-                id: None,
                 doi: None,
                 arxiv_id: None,
                 extra: None,
@@ -779,11 +775,19 @@ async fn import_one_local_pdf(
         .map(|s| s.to_string())
         .unwrap_or_else(|| title_from_stem(stem));
     let base_id = entry
-        .id
+        .arxiv_id
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(slug_from_stem)
+        .or_else(|| {
+            entry
+                .doi
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(map::doi_slug)
+        })
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| slug_from_stem(stem));
 
@@ -1328,7 +1332,6 @@ mod tests {
             title: None,
             authors: None,
             year: None,
-            id: None,
             doi: None,
             arxiv_id: None,
             extra: None,

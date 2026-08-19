@@ -111,7 +111,7 @@ liteparse 在**运行时 `dlopen`** PDFium，而 `liteparse-pdfium-sys` 的 buil
 
 - 实现：`src-tauri/src/features/import/pdf_recognize.rs`（payload 组装 + HTTP client + `map_crossref_work`）；probe worker 变体在 `pdf_parse/mod.rs`（`--agentero-internal-pdf-recognize-worker`）。
 - payload 结构复刻 Zotero document-worker `getRecognizerData`：`word = [xMin,yMin,xMax,yMax,fontSize,spaceAfter,baseline,rotation,0,bold,italic,0,fontIndex,text]`，行来自 liteparse 投影行（竖排 arXiv stamp 落到独立行，服务端可重建）。
-- 确认对话框（`import-local-pdf-dialog.tsx`）打开时批量 `paper_probe_pdf_ident` 预填，并支持手填 DOI/arXiv 后 Fetch（`paper_resolve_identifier`）；entries 扩展 `doi`/`arxivId`/`extra`，用户确认的值 `meta_source=manual`。
+- 确认对话框（`import-local-pdf-dialog.tsx`）打开时批量 `paper_probe_pdf_ident` 预填，并支持手填 DOI/arXiv 后 Fetch（`paper_resolve_identifier`）；entries 扩展 `doi`/`arxivId`/`extra`，用户确认的值 `meta_source=manual`。文件夹 id 不可手填：Host 按 arXiv ID slug → DOI slug → 文件名 stem 派生（与标识符导入命名一致）。
 - 魔棒直选（无对话框）路径在 `import_one_local_pdf` 内联跑同一链路，`meta_source=recognize`，识别出的 arXiv/DOI slug 作为文件夹 id（与标识符导入命名一致）。
 - 隐私：上传的是前 5 页文本布局 JSON（~200KB），不是 PDF 文件；服务为 Zotero 托管的未公开 API，仅作尽力而为识别，失败无感知。
 - live 验证：`AGENTERO_RECOGNIZE_LIVE_PDF=<pdf> cargo test -p agentero --lib -- live_recognize --include-ignored --nocapture`。

@@ -178,7 +178,6 @@ pub async fn import_local_pdfs_remote(
                 title: None,
                 authors: None,
                 year: None,
-                id: None,
                 doi: None,
                 arxiv_id: None,
                 extra: None,
@@ -247,11 +246,19 @@ async fn import_one_local_pdf_remote(
         .map(|s| s.to_string())
         .unwrap_or_else(|| title_from_stem(stem));
     let base_id = entry
-        .id
+        .arxiv_id
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(slug_from_stem)
+        .or_else(|| {
+            entry
+                .doi
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(crate::features::import::map::doi_slug)
+        })
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| slug_from_stem(stem));
     let mut meta = crate::features::import::local_pdf_meta_for_import(base_id, title);

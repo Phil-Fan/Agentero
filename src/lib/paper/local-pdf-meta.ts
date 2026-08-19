@@ -1,7 +1,7 @@
 import { basenameOf } from "@/lib/core/path";
 
 /**
- * Client-side defaults for local PDF import (mirrors Host `title_from_stem` / `slug_from_stem`).
+ * Client-side defaults for local PDF import (mirrors Host `title_from_stem`).
  */
 
 /** Filename stem (no extension). */
@@ -23,27 +23,6 @@ export function titleFromStem(stem: string): string {
 	return spaced || "Untitled";
 }
 
-/** Folder-safe slug from a stem (alphanumerics + dots; other runs → `-`). */
-export function slugFromStem(stem: string): string {
-	let s = "";
-	let prevSep = true;
-	for (const c of stem.trim()) {
-		if (/[A-Za-z0-9.]/.test(c)) {
-			s += c;
-			prevSep = false;
-		} else if (!prevSep) {
-			s += "-";
-			prevSep = true;
-		}
-	}
-	s = s.slice(0, 60).replace(/^[-.]+|[-.]+$/g, "");
-	return s || "paper";
-}
-
 export function titleFromPdfPath(path: string): string {
 	return titleFromStem(stemFromPath(path));
-}
-
-export function slugFromPdfPath(path: string): string {
-	return slugFromStem(stemFromPath(path));
 }
