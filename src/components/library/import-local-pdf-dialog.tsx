@@ -1,6 +1,7 @@
 import { SearchCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -203,12 +204,19 @@ export function ImportLocalPdfDialog({
 		onConfirm(entries, dest.trim() || "papers");
 	};
 
-	const probeBadge = (row: DraftRow) => {
+	const headerAction = (row: DraftRow, index: number) => {
 		if (probing) {
 			return (
 				<span className="text-muted-foreground text-xs">
 					{t("importLocalPdf.recognizing")}
 				</span>
+			);
+		}
+		if (fetching[row.filePath]) {
+			return (
+				<Shimmer as="span" className="text-xs">
+					{t("importLocalPdf.fetching")}
+				</Shimmer>
 			);
 		}
 		const status = probeStatus[row.filePath];
@@ -220,7 +228,18 @@ export function ImportLocalPdfDialog({
 				</span>
 			);
 		}
-		return null;
+		return (
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				className="h-7 px-2 text-xs"
+				disabled={busy || !(row.doi.trim() || row.arxivId.trim())}
+				onClick={() => void handleFetch(index, row)}
+			>
+				{t("importLocalPdf.fetch")}
+			</Button>
+		);
 	};
 
 	return (
@@ -262,7 +281,7 @@ export function ImportLocalPdfDialog({
 								>
 									{row.sourceName || basenameOf(row.filePath)}
 								</p>
-								{probeBadge(row)}
+								{headerAction(row, index)}
 							</div>
 							<div className="grid grid-cols-[1fr_5.5rem] gap-2">
 								<div className="space-y-1">
@@ -303,7 +322,7 @@ export function ImportLocalPdfDialog({
 									disabled={busy}
 								/>
 							</div>
-							<div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+							<div className="grid grid-cols-[1fr_1fr] gap-2">
 								<div className="space-y-1">
 									<Label className="text-xs">
 										{t("importLocalPdf.fieldDoi")}
@@ -332,22 +351,6 @@ export function ImportLocalPdfDialog({
 										disabled={busy}
 									/>
 								</div>
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									className="h-8"
-									disabled={
-										busy ||
-										fetching[row.filePath] ||
-										!(row.doi.trim() || row.arxivId.trim())
-									}
-									onClick={() => void handleFetch(index, row)}
-								>
-									{fetching[row.filePath]
-										? t("importLocalPdf.fetching")
-										: t("importLocalPdf.fetch")}
-								</Button>
 							</div>
 						</li>
 					))}
