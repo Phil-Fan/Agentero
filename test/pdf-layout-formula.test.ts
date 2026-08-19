@@ -158,8 +158,8 @@ describe("mergeFormulasByNumber", () => {
 		expect(out[0]?.title).toBeUndefined();
 		expect(out[0]?.titleBbox).toEqual(number.bbox);
 		// Body ∪ number
-		expect(out[0]!.bbox.x).toBeLessThanOrEqual(numberedBody.bbox.x + 1e-9);
-		expect(out[0]!.bbox.x + out[0]!.bbox.w).toBeGreaterThanOrEqual(
+		expect(out[0]?.bbox.x).toBeLessThanOrEqual(numberedBody.bbox.x + 1e-9);
+		expect(out[0]?.bbox.x + out[0]?.bbox.w).toBeGreaterThanOrEqual(
 			number.bbox.x + number.bbox.w - 1e-9,
 		);
 	});

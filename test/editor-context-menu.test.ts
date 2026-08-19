@@ -89,7 +89,7 @@ describe("Markdown editor context menu", () => {
 		expect(typeof link?.agenteroEditId).toBe("string");
 		expect(editor.api.string([])).toBe("Before label after");
 		expect(peekExternalLinkEditId(editor)).toBe(link?.agenteroEditId);
-		clearExternalLinkEditRequest(editor, link!.agenteroEditId!);
+		clearExternalLinkEditRequest(editor, link?.agenteroEditId ?? "");
 		expect(peekExternalLinkEditId(editor)).toBeNull();
 	});
 

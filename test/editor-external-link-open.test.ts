@@ -1,6 +1,6 @@
 import { createSlateEditor, KEYS } from "platejs";
 import { ParagraphPlugin } from "platejs/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
 import {
 	clearExternalLinkEditRequest,
