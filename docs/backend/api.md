@@ -196,6 +196,7 @@ type VaultTreeNode = {
 | Command | 说明 |
 |---|---|
 | `remote_connect` | `{ host, user?, remotePath }` → `RemoteSessionInfo`（含 `vaultHandle`、`caps`） |
+| `remote_ssh_config_hosts` | `()` → `[{ alias, user?, hostname?, port? }]`，解析 `~/.ssh/config`（含 `Include`），供连接对话框联想 |
 | `remote_disconnect` | flush catalog + 拆会话 |
 | `remote_list` | 列目录 |
 | `remote_read_text` / `remote_write_text` / `remote_write_bytes` | 读写 |

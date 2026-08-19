@@ -107,6 +107,19 @@ export async function remoteConnect(args: {
 	);
 }
 
+export type SshConfigHost = {
+	alias: string;
+	user?: string;
+	hostname?: string;
+	port?: number;
+};
+
+/** Host entries from `~/.ssh/config` for connect-dialog suggestions (#339). */
+export async function remoteSshConfigHosts(): Promise<SshConfigHost[]> {
+	if (!isTauri()) return [];
+	return invokeApi<SshConfigHost[]>("remote_ssh_config_hosts");
+}
+
 export type RemoteVaultEnsureResult = {
 	path: string;
 	created: string[];

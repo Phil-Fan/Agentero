@@ -6,7 +6,7 @@
 
 | 层 | 说明 |
 |---|---|
-| 连接 | `remote_connect` / `disconnect`；密钥或 SSH agent |
+| 连接 | `remote_connect` / `disconnect`；密钥或 SSH agent；`remote_ssh_config_hosts` 解析 `~/.ssh/config` 供对话框联想 |
 | 文件 | SFTP list/read/write/mkdir/remove/bytes |
 | Catalog | work mirror（本机查询，写回远端） |
 | PDF | blob 缓存（`remote_cache_*`） |

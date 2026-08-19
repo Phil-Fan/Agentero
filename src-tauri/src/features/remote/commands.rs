@@ -60,6 +60,15 @@ pub async fn remote_connect(
     }
 }
 
+/// Host entries from `~/.ssh/config` for the connect dialog's suggestions (#339).
+#[tauri::command]
+pub async fn remote_ssh_config_hosts(
+) -> Result<ApiResult<Vec<crate::features::remote::ssh_config::SshConfigHost>>, String> {
+    Ok(ApiResult::ok(
+        crate::features::remote::ssh_config::ssh_config_hosts(),
+    ))
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSessionArgs {

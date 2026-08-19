@@ -141,6 +141,7 @@ pub fn attach_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
             crate::features::agent::commands::agent_load_session,
             crate::features::agent::commands::agent_warm,
             crate::features::remote::commands::remote_connect,
+            crate::features::remote::commands::remote_ssh_config_hosts,
             crate::features::remote::commands::remote_disconnect,
             crate::features::remote::commands::remote_vault_ensure,
             crate::features::remote::commands::remote_list,

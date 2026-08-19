@@ -11,6 +11,7 @@ pub(crate) mod paper_commit;
 pub mod session;
 #[cfg(unix)]
 pub mod sftp_fs;
+pub mod ssh_config;
 pub mod trash_bridge;
 
 pub use launch::{
