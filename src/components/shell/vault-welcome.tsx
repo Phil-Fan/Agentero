@@ -192,8 +192,10 @@ export function VaultWelcome({
 										subtitle={`${entry.host}:${entry.remotePath}`}
 										onOpen={() =>
 											void runRemoteConnect({
-												host: entry.host,
-												user: entry.user,
+												host:
+													entry.user && !entry.host.includes("@")
+														? `${entry.user}@${entry.host}`
+														: entry.host,
 												remotePath: entry.remotePath,
 											})
 										}

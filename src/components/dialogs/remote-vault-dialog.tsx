@@ -19,7 +19,6 @@ import {
 
 export type OpenRemoteVaultArgs = {
 	host: string;
-	user?: string;
 	remotePath: string;
 };
 
@@ -47,7 +46,6 @@ export function RemoteVaultDialog({
 }) {
 	const { t } = useTranslation("app");
 	const [host, setHost] = useState("");
-	const [user, setUser] = useState("");
 	const [remotePath, setRemotePath] = useState("");
 	const [connecting, setConnecting] = useState(false);
 	const [sshHosts, setSshHosts] = useState<SshConfigHost[]>([]);
@@ -87,9 +85,6 @@ export function RemoteVaultDialog({
 
 	const pickHost = (h: SshConfigHost) => {
 		setHost(h.alias);
-		if (h.user) {
-			setUser((prev) => (prev.trim() ? prev : (h.user ?? "")));
-		}
 		setSuggestOpen(false);
 		pathRef.current?.focus();
 	};
@@ -131,7 +126,6 @@ export function RemoteVaultDialog({
 		try {
 			await onConnect({
 				host: h,
-				user: user.trim() || undefined,
 				remotePath: p,
 			});
 			onOpenChange(false);
@@ -217,19 +211,6 @@ export function RemoteVaultDialog({
 								</div>
 							)}
 						</div>
-					</div>
-					<div className="flex flex-col gap-1.5">
-						<Label htmlFor="remote-user-shared">
-							{t("vault.remoteUserLabel")}
-						</Label>
-						<Input
-							id="remote-user-shared"
-							value={user}
-							onChange={(e) => setUser(e.target.value)}
-							placeholder={t("vault.remoteUserPlaceholder")}
-							autoComplete="username"
-							disabled={disabled}
-						/>
 					</div>
 					<div className="flex flex-col gap-1.5">
 						<Label htmlFor="remote-path-shared">

@@ -406,8 +406,10 @@ export const VaultSidebarHeader = memo(function VaultSidebarHeader({
 											if (!onOpenRemoteVault) return;
 											void (async () => {
 												await onOpenRemoteVault({
-													host: entry.host,
-													user: entry.user,
+													host:
+														entry.user && !entry.host.includes("@")
+															? `${entry.user}@${entry.host}`
+															: entry.host,
 													remotePath: entry.remotePath,
 												});
 												refreshRecentRemotes();
