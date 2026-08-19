@@ -388,6 +388,106 @@ pub fn map_arxiv_atom(xml: &str, bare_id: &str) -> Result<PaperMeta, AppError> {
     })
 }
 
+/// Crossref `GET /works/{doi}` → `message` object → `PaperMeta`.
+/// `doi` is passed in separately because callers resolve it before fetching.
+pub fn map_crossref_work(message: &Value, doi: &str) -> Result<PaperMeta, AppError> {
+    let title = message
+        .get("title")
+        .and_then(|v| v.as_array())
+        .and_then(|a| a.first())
+        .and_then(|v| v.as_str())
+        .map(collapse_ws)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| AppError::message("crossref work missing title"))?;
+
+    let mut authors = Vec::new();
+    if let Some(arr) = message.get("author").and_then(|v| v.as_array()) {
+        for a in arr {
+            if let Some(name) = a.get("name").and_then(|v| v.as_str()) {
+                let n = collapse_ws(name);
+                if !n.is_empty() {
+                    authors.push(n);
+                }
+                continue;
+            }
+            let given = a.get("given").and_then(|v| v.as_str()).unwrap_or("");
+            let family = a.get("family").and_then(|v| v.as_str()).unwrap_or("");
+            let n = format!("{given} {family}").trim().to_string();
+            if !n.is_empty() {
+                authors.push(n);
+            }
+        }
+    }
+
+    let date = message
+        .pointer("/issued/date-parts/0/0")
+        .and_then(|v| v.as_i64())
+        .map(|y| y.to_string());
+    let year = date.as_ref().and_then(|d| d.parse::<i32>().ok());
+
+    let str_or_first = |key: &str| -> Option<String> {
+        let v = message.get(key)?;
+        match v {
+            Value::String(s) => Some(s.clone()),
+            Value::Array(a) => a.first().and_then(|x| x.as_str()).map(String::from),
+            _ => None,
+        }
+        .filter(|s| !s.trim().is_empty())
+    };
+
+    // Crossref abstracts are JATS XML; strip tags so NOTES/catalog stay plain.
+    let abstract_text = str_or_first("abstract").map(|s| {
+        let mut plain = String::with_capacity(s.len());
+        let mut in_tag = false;
+        for c in s.chars() {
+            match c {
+                '<' => in_tag = true,
+                '>' => in_tag = false,
+                _ if !in_tag => plain.push(c),
+                _ => {}
+            }
+        }
+        collapse_ws(&plain)
+    });
+
+    let now = chrono_lite_now();
+    Ok(PaperMeta {
+        id: doi_slug(doi),
+        paper_type: "article".into(),
+        title,
+        authors,
+        creators: None,
+        year,
+        date,
+        abstract_text,
+        tags: vec![],
+        arxiv_id: None,
+        doi: Some(doi.to_string()),
+        isbn: None,
+        issn: str_or_first("ISSN"),
+        pmid: None,
+        publication: str_or_first("container-title"),
+        volume: str_or_first("volume"),
+        issue: str_or_first("issue"),
+        pages: str_or_first("page"),
+        publisher: str_or_first("publisher"),
+        place: None,
+        series: None,
+        language: str_or_first("language"),
+        pdf_url: None,
+        html_url: Some(format!("https://doi.org/{doi}")),
+        source_url: Some(format!("https://doi.org/{doi}")),
+        bibtex_key: None,
+        zotero_item_type: Some("journalArticle".into()),
+        meta_source: Some("crossref.org".into()),
+        extra: None,
+        summary: None,
+        status: "completed".into(),
+        added_at: now.clone(),
+        updated_at: now,
+    })
+}
+
 /// Minimal metadata for a locally-imported PDF (no Translator lookup).
 /// `id` is a folder-safe slug; `title` is derived from the filename.
 pub fn local_pdf_meta(id: String, title: String) -> PaperMeta {
@@ -522,11 +622,11 @@ fn extract_pmid_from_extra(extra: Option<&str>) -> Option<String> {
     None
 }
 
-fn doi_slug(doi: &str) -> String {
+pub(crate) fn doi_slug(doi: &str) -> String {
     doi.replace(['/', '.'], "_")
 }
 
-fn citekey_fallback(authors: &[String], year: Option<i32>, title: &str) -> String {
+pub(crate) fn citekey_fallback(authors: &[String], year: Option<i32>, title: &str) -> String {
     let author = authors
         .first()
         .map(|a| {

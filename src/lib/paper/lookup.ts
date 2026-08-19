@@ -68,12 +68,12 @@ type HostLookupResult = {
 };
 
 function resolveTranslatorBaseUrl(
-	settings: AppSettings,
+	settings: AppSettings | undefined,
 	override?: string,
 ): string {
 	const raw =
 		override?.trim() ||
-		settings.translatorBaseUrl?.trim() ||
+		settings?.translatorBaseUrl?.trim() ||
 		DEFAULT_TRANSLATOR_BASE_URL;
 	return raw.replace(/\/+$/, "");
 }
@@ -221,6 +221,19 @@ export type LocalPdfImportResult = {
 	errors: string[];
 };
 
+/** Structured fields fetched via identifier resolution (not user-edited). */
+export type LocalPdfExtraMeta = {
+	publication?: string;
+	volume?: string;
+	issue?: string;
+	pages?: string;
+	publisher?: string;
+	issn?: string;
+	language?: string;
+	date?: string;
+	abstract?: string;
+};
+
 /** Per-file metadata for local PDF import (confirm dialog / host overrides). */
 export type LocalPdfImportEntry = {
 	filePath: string;
@@ -228,6 +241,9 @@ export type LocalPdfImportEntry = {
 	authors?: string[];
 	year?: number;
 	id?: string;
+	doi?: string;
+	arxivId?: string;
+	extra?: LocalPdfExtraMeta;
 };
 
 /**
@@ -245,6 +261,8 @@ export async function importLocalPdfs(opts: {
 	entries?: LocalPdfImportEntry[];
 	/** Background task receiving the host parse phase. */
 	progressTaskId?: string;
+	/** Settings (translator URL for background recognition). */
+	settings?: AppSettings;
 }): Promise<LocalPdfImportResult | null> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:lookup.desktopOnly"));
@@ -277,6 +295,7 @@ export async function importLocalPdfs(opts: {
 				filePaths: [],
 				entries,
 				taskId: opts.progressTaskId,
+				translatorBaseUrl: resolveTranslatorBaseUrl(opts.settings),
 			},
 		},
 		{ fallback: i18n.t("sidebar:lookup.fetchFailed") },

@@ -481,6 +481,92 @@ export type PaperExportResult = {
 	filename: string;
 };
 
+/** One PDF recognition result (Host `paper_probe_pdf_ident`). */
+export type PdfIdentProbe = {
+	filePath: string;
+	/** `ok` resolved metadata | `title` recognizer-only | `no-match` | `error` */
+	status: string;
+	error?: string;
+	doi?: string;
+	arxivId?: string;
+	title?: string;
+	authors: string[];
+	year?: number;
+	abstractText?: string;
+	publication?: string;
+	volume?: string;
+	issue?: string;
+	pages?: string;
+	publisher?: string;
+	source: string;
+};
+
+/**
+ * Recognize local PDFs (liteparse probe → Zotero recognizer → identifier
+ * resolution) for the import confirm dialog. Best-effort per file.
+ */
+export async function probePdfIdents(
+	filePaths: string[],
+): Promise<PdfIdentProbe[]> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:paperInfo.editMeta.desktopOnly"));
+	}
+	const { getSettings } = await import("@/lib/settings/react-store");
+	const settings: AppSettings = getSettings();
+	return invokeApi<PdfIdentProbe[]>(
+		"paper_probe_pdf_ident",
+		{
+			args: {
+				filePaths,
+				translatorBaseUrl: settings.translatorBaseUrl,
+			},
+		},
+		{ fallback: i18n.t("sidebar:importLocalPdf.recognizeFailed") },
+	);
+}
+
+/** Identifier-resolved metadata (Host `paper_resolve_identifier`). */
+export type ResolvedPaperMeta = {
+	title: string;
+	authors: string[];
+	year?: number;
+	date?: string;
+	abstract?: string;
+	doi?: string;
+	arxivId?: string;
+	publication?: string;
+	volume?: string;
+	issue?: string;
+	pages?: string;
+	publisher?: string;
+	pdfUrl?: string;
+	htmlUrl?: string;
+};
+
+/**
+ * Resolve a DOI / arXiv id to metadata without importing. Backs the import
+ * dialog's Fetch button and Edit Metadata's refresh.
+ */
+export async function resolveIdentifierMetadata(
+	text: string,
+): Promise<ResolvedPaperMeta> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:paperInfo.editMeta.desktopOnly"));
+	}
+	const { getSettings } = await import("@/lib/settings/react-store");
+	const settings: AppSettings = getSettings();
+	return invokeApi<ResolvedPaperMeta>(
+		"paper_resolve_identifier",
+		{
+			args: {
+				text: text.trim(),
+				translatorBaseUrl: settings.translatorBaseUrl,
+			},
+		},
+		{ fallback: i18n.t("sidebar:paperInfo.editMeta.fetchFailed") },
+	);
+}
+
 export type PaperImportResult = {
 	imported: number;
 	skipped: number;

@@ -14,6 +14,7 @@ mod assets;
 pub(crate) mod batch;
 pub(crate) mod map;
 pub(crate) mod parse;
+pub(crate) mod pdf_recognize;
 mod skill_import;
 #[cfg(feature = "desktop")]
 pub(crate) mod zotero_db;
@@ -138,6 +139,39 @@ pub struct LocalPdfImportEntry {
     /// Preferred folder id (slug); host still de-duplicates with `-2`/`-3`.
     #[serde(default)]
     pub id: Option<String>,
+    #[serde(default)]
+    pub doi: Option<String>,
+    #[serde(default)]
+    pub arxiv_id: Option<String>,
+    /// Structured fields fetched via identifier resolution in the dialog
+    /// (publication/volume/issue/pages/abstract/…). Applied only when present.
+    #[serde(default)]
+    pub extra: Option<LocalPdfExtraMeta>,
+}
+
+/// Non-editable structured metadata carried from the confirm dialog's
+/// identifier fetch into the catalog row.
+#[derive(Debug, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalPdfExtraMeta {
+    #[serde(default)]
+    pub publication: Option<String>,
+    #[serde(default)]
+    pub volume: Option<String>,
+    #[serde(default)]
+    pub issue: Option<String>,
+    #[serde(default)]
+    pub pages: Option<String>,
+    #[serde(default)]
+    pub publisher: Option<String>,
+    #[serde(default)]
+    pub issn: Option<String>,
+    #[serde(default)]
+    pub language: Option<String>,
+    #[serde(default)]
+    pub date: Option<String>,
+    #[serde(rename = "abstract", default)]
+    pub abstract_text: Option<String>,
 }
 
 /// Stage a dropped PDF (path-less WKWebView drop) into `~/.agentero/import-tmp/`.
@@ -172,6 +206,10 @@ pub struct ImportLocalPdfArgs {
     /// Frontend background-task id for parse-phase progress.
     #[serde(default)]
     pub task_id: Option<String>,
+    /// Translator base URL for identifier resolution during background
+    /// recognition (entries without dialog metadata). Empty → default.
+    #[serde(default)]
+    pub translator_base_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -637,6 +675,9 @@ pub async fn import_local_pdfs(
                 authors: None,
                 year: None,
                 id: None,
+                doi: None,
+                arxiv_id: None,
+                extra: None,
             })
             .collect()
     };
@@ -649,10 +690,16 @@ pub async fn import_local_pdfs(
             &vault,
             &parent_rel,
             entry,
-            cache,
-            AssetProgressContext {
-                app,
+            &ImportLocalPdfContext {
+                translator_base: args
+                    .translator_base_url
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(DEFAULT_TRANSLATOR_BASE_URL),
                 task_id: task_id.as_deref(),
+                app,
+                cache,
             },
         )
         .await
@@ -693,12 +740,19 @@ fn dedupe_local_pdf_entries(entries: Vec<LocalPdfImportEntry>) -> Vec<LocalPdfIm
         .collect()
 }
 
+/// Shared per-import context threaded into `import_one_local_pdf`.
+struct ImportLocalPdfContext<'a> {
+    translator_base: &'a str,
+    task_id: Option<&'a str>,
+    app: Option<&'a AppHandle>,
+    cache: Option<&'a CapsCache>,
+}
+
 async fn import_one_local_pdf(
     vault: &Path,
     parent_rel: &str,
     entry: &LocalPdfImportEntry,
-    cache: Option<&CapsCache>,
-    progress: AssetProgressContext<'_>,
+    ctx: &ImportLocalPdfContext<'_>,
 ) -> Result<LookupImportResult, AppError> {
     use crate::features::import::paper_import::{
         paper_commit, AssetsPolicy, DedupePolicy, PaperCommitOptions,
@@ -733,7 +787,55 @@ async fn import_one_local_pdf(
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| slug_from_stem(stem));
 
-    let mut meta = local_pdf_meta(base_id, title);
+    let dialog_meta = entry.title.is_some()
+        || entry.doi.is_some()
+        || entry.arxiv_id.is_some()
+        || entry.extra.is_some();
+
+    // Entries straight from the picker (no dialog metadata) run background
+    // recognition so DOI/arXiv/title survive renamed files. Best-effort:
+    // any failure keeps the filename-derived metadata.
+    let mut meta = if dialog_meta {
+        local_pdf_meta(base_id, title)
+    } else {
+        let fallback = local_pdf_meta(base_id.clone(), title.clone());
+        match pdf_recognize::recognize_and_resolve(&src, ctx.translator_base, ctx.task_id).await {
+            probe if probe.status == "ok" => {
+                // Adopt the resolved identifier as the folder id (matches
+                // identifier-import naming, e.g. papers/1706.03762).
+                let resolved_id = probe
+                    .arxiv_id
+                    .as_deref()
+                    .map(slug_from_stem)
+                    .or_else(|| probe.doi.as_deref().map(map::doi_slug))
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(base_id);
+                let mut m = local_pdf_meta(resolved_id, probe.title.clone().unwrap_or(title));
+                m.authors = probe.authors.clone();
+                m.year = probe.year;
+                m.doi = probe.doi.clone();
+                m.arxiv_id = probe.arxiv_id.clone();
+                m.abstract_text = probe.abstract_text.clone();
+                m.publication = probe.publication.clone();
+                m.volume = probe.volume.clone();
+                m.issue = probe.issue.clone();
+                m.pages = probe.pages.clone();
+                m.publisher = probe.publisher.clone();
+                m.meta_source = Some("recognize".into());
+                m
+            }
+            probe if probe.status == "title" => {
+                let mut m = local_pdf_meta(base_id, probe.title.clone().unwrap_or(title));
+                m.authors = probe.authors.clone();
+                m.year = probe.year;
+                m.doi = probe.doi.clone();
+                m.arxiv_id = probe.arxiv_id.clone();
+                m.meta_source = Some("recognize".into());
+                m
+            }
+            _ => fallback,
+        }
+    };
     if let Some(authors) = &entry.authors {
         meta.authors = authors
             .iter()
@@ -745,7 +847,64 @@ async fn import_one_local_pdf(
     if let Some(year) = entry.year {
         meta.year = Some(year);
     }
+    // Dialog-provided identifiers and fetched fields win over recognition
+    // and filename defaults; the user confirmed them, so mark the row manual.
+    let mut has_dialog_meta = false;
+    if let Some(doi) = entry
+        .doi
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        meta.doi = Some(doi.to_string());
+        has_dialog_meta = true;
+    }
+    if let Some(arxiv) = entry
+        .arxiv_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        meta.arxiv_id = Some(arxiv.to_string());
+        has_dialog_meta = true;
+    }
+    if let Some(extra) = &entry.extra {
+        if extra.publication.is_some()
+            || extra.volume.is_some()
+            || extra.issue.is_some()
+            || extra.pages.is_some()
+            || extra.abstract_text.is_some()
+        {
+            has_dialog_meta = true;
+        }
+        meta.publication = extra.publication.clone().filter(|s| !s.trim().is_empty());
+        meta.volume = extra.volume.clone().filter(|s| !s.trim().is_empty());
+        meta.issue = extra.issue.clone().filter(|s| !s.trim().is_empty());
+        meta.pages = extra.pages.clone().filter(|s| !s.trim().is_empty());
+        meta.publisher = extra.publisher.clone().filter(|s| !s.trim().is_empty());
+        meta.issn = extra.issn.clone().filter(|s| !s.trim().is_empty());
+        meta.language = extra.language.clone().filter(|s| !s.trim().is_empty());
+        if let Some(date) = extra
+            .date
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            meta.date = Some(date.to_string());
+            if meta.year.is_none() {
+                meta.year = date.chars().take(4).collect::<String>().parse().ok();
+            }
+        }
+        meta.abstract_text = extra.abstract_text.clone().filter(|s| !s.trim().is_empty());
+    }
+    if has_dialog_meta {
+        meta.meta_source = Some("manual".into());
+    }
 
+    let progress = AssetProgressContext {
+        app: ctx.app,
+        task_id: ctx.task_id,
+    };
     let commit = paper_commit(
         meta,
         PaperCommitOptions {
@@ -758,8 +917,8 @@ async fn import_one_local_pdf(
             },
             translate_abstract: true,
             fresh_timestamps: false,
-            cache,
-            app: progress.app,
+            cache: ctx.cache,
+            app: ctx.app,
         },
     )
     .await?;
@@ -956,7 +1115,7 @@ fn translator_request(text: &str, base: &str) -> (String, String) {
     }
 }
 
-async fn fetch_arxiv_metadata(
+pub(crate) async fn fetch_arxiv_metadata(
     arxiv_id: &str,
     task_id: Option<&str>,
 ) -> Result<PaperMeta, AppError> {
@@ -1170,6 +1329,9 @@ mod tests {
             authors: None,
             year: None,
             id: None,
+            doi: None,
+            arxiv_id: None,
+            extra: None,
         };
         let out = dedupe_local_pdf_entries(vec![
             entry(r"C:\Users\me\x.pdf"),

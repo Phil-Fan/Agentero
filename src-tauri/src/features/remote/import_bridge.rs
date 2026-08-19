@@ -179,6 +179,9 @@ pub async fn import_local_pdfs_remote(
                 authors: None,
                 year: None,
                 id: None,
+                doi: None,
+                arxiv_id: None,
+                extra: None,
             })
             .collect()
     };

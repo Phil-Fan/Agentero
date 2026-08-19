@@ -236,7 +236,7 @@ fn strip_version(id: &str) -> String {
     id.to_string()
 }
 
-fn clean_doi(s: &str) -> Option<String> {
+pub(crate) fn clean_doi(s: &str) -> Option<String> {
     let mut x = s.trim().to_string();
     if x.starts_with("https://doi.org/") {
         x = x["https://doi.org/".len()..].to_string();

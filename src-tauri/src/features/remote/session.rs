@@ -896,6 +896,7 @@ mod tests {
                 file_paths: vec![pdf_path.to_string_lossy().into()],
                 entries: vec![],
                 task_id: None,
+                translator_base_url: None,
             },
         )
         .await

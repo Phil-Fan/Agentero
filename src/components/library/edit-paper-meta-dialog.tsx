@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
-import type { PaperMetaPatch } from "@/lib/paper/api";
+import {
+	type PaperMetaPatch,
+	resolveIdentifierMetadata,
+} from "@/lib/paper/api";
 import type { PaperMetadata } from "@/lib/paper/types";
 
 type Draft = {
@@ -112,6 +115,8 @@ export function EditPaperMetaDialog({
 	const [draft, setDraft] = useState<Draft | null>(null);
 	const [moreOpen, setMoreOpen] = useState(false);
 	const [saving, setSaving] = useState(false);
+	const [refreshing, setRefreshing] = useState(false);
+	const [refreshError, setRefreshError] = useState(false);
 
 	useOverlayRegistration("edit-paper-meta", open, () => onOpenChange(false));
 
@@ -122,6 +127,8 @@ export function EditPaperMetaDialog({
 		setDraft(next);
 		setMoreOpen(false);
 		setSaving(false);
+		setRefreshing(false);
+		setRefreshError(false);
 	}, [paper]);
 
 	const patch = useMemo(
@@ -146,6 +153,44 @@ export function EditPaperMetaDialog({
 			await onConfirm(paper, patch);
 		} finally {
 			setSaving(false);
+		}
+	};
+
+	/** Fill the form from DOI/arXiv identifier metadata (user reviews, then saves). */
+	const handleRefreshFromIdentifier = async () => {
+		if (!draft) return;
+		const text = draft.doi.trim() || draft.arxivId.trim();
+		if (!text) return;
+		setRefreshing(true);
+		setRefreshError(false);
+		try {
+			const meta = await resolveIdentifierMetadata(text);
+			setDraft((prev) =>
+				prev
+					? {
+							...prev,
+							title: meta.title?.trim() || prev.title,
+							authors: meta.authors?.length
+								? meta.authors.join("\n")
+								: prev.authors,
+							year: meta.year != null ? String(meta.year) : prev.year,
+							doi: meta.doi?.trim() || prev.doi,
+							arxivId: meta.arxivId?.trim() || prev.arxivId,
+							publication: meta.publication?.trim() || prev.publication,
+							volume: meta.volume?.trim() || prev.volume,
+							issue: meta.issue?.trim() || prev.issue,
+							pages: meta.pages?.trim() || prev.pages,
+							publisher: meta.publisher?.trim() || prev.publisher,
+							abstract: meta.abstract?.trim() || prev.abstract,
+							pdfUrl: meta.pdfUrl?.trim() || prev.pdfUrl,
+							htmlUrl: meta.htmlUrl?.trim() || prev.htmlUrl,
+						}
+					: prev,
+			);
+		} catch {
+			setRefreshError(true);
+		} finally {
+			setRefreshing(false);
 		}
 	};
 
@@ -209,10 +254,38 @@ export function EditPaperMetaDialog({
 							className: "font-mono text-xs",
 						})}
 					</div>
-					{field("doi", t("paperInfo.editMeta.fieldDoi"), {
-						className: "font-mono text-xs",
-						placeholder: "10.1000/xyz123",
-					})}
+					<div className="grid grid-cols-[1fr_auto] items-end gap-2">
+						{field("doi", t("paperInfo.editMeta.fieldDoi"), {
+							className: "font-mono text-xs",
+							placeholder: "10.1000/xyz123",
+						})}
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="h-9 gap-1"
+							title={t("paperInfo.editMeta.refreshTitle")}
+							disabled={
+								saving ||
+								refreshing ||
+								!(draft.doi.trim() || draft.arxivId.trim())
+							}
+							onClick={() => void handleRefreshFromIdentifier()}
+						>
+							<RefreshCw
+								className={`size-3.5 ${refreshing ? "animate-spin" : ""}`}
+								aria-hidden
+							/>
+							{refreshing
+								? t("paperInfo.editMeta.refreshing")
+								: t("paperInfo.editMeta.refresh")}
+						</Button>
+					</div>
+					{refreshError && (
+						<p className="text-destructive text-xs">
+							{t("paperInfo.editMeta.fetchFailed")}
+						</p>
+					)}
 					{field("publication", t("paperInfo.editMeta.fieldPublication"))}
 
 					<Collapsible open={moreOpen} onOpenChange={setMoreOpen}>

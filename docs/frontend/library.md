@@ -42,6 +42,16 @@
 
 核心字段（标题/作者/年份/DOI/arXiv/期刊）直接展示，卷期页、出版社、摘要、URL 折叠在"更多字段"。作者每行一位；仅提交变更字段（patch）→ `paper_update_meta` → 返回行原地同步 Library 表与所有打开 tab（`paperMetaChange`）。远程 Vault 暂不支持，入口隐藏。后端语义见 [../backend/catalog.md](../backend/catalog.md)。
 
+DOI 旁有 **刷新** 按钮：按当前 DOI（或 arXiv ID）拉取权威元数据（`paper_resolve_identifier` → Translator/Crossref/arXiv），只填充表单供确认，保存仍走 patch。
+
+## 导入 PDF 识别
+
+拖入/魔棒导入 PDF 的确认对话框（`import-local-pdf-dialog.tsx`）打开时自动识别（liteparse probe → Zotero recognizer → 标识符解析，见 [../backend/paper-import.md](../backend/paper-import.md)）：
+
+- 识别成功预填 标题/作者/年份/DOI/arXiv ID，行尾显示"已识别元数据"；
+- 每行可手填 DOI 或 arXiv ID 后点 **Fetch** 拉取完整元数据（识别失败时的手动通道）；
+- 魔棒直选（无确认对话框）导入同样在后台跑识别链路。
+
 ## 代码
 
 - UI：`src/components/library/`（拖入：`library-pdf-drop-surface.tsx`）

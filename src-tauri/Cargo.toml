@@ -112,7 +112,7 @@ posthog-rs = { version = "0.23", default-features = false, optional = true }
 # Keep this cfg in sync with the gates in src/features/import/pdf_parse/mod.rs
 # — desktop (incl. Windows) needs it.
 [target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
-liteparse = "2.5"
+liteparse = "2.13"
 
 [target.'cfg(target_os = "ios")'.dependencies]
 security-framework = "3.7"

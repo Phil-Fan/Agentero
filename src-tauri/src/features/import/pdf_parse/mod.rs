@@ -26,11 +26,15 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 const PAPER_MD: &str = "PAPER.md";
 /// Cancellation is a user action, not a parse failure; `PaperParseResult::fail`
 /// keys off this to avoid reporting cancelled work as broken.
-const CANCELLED_MESSAGE: &str = "background task cancelled";
+pub(crate) const CANCELLED_MESSAGE: &str = "background task cancelled";
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_PARSE_WORKER_ARG: &str = "--agentero-internal-pdf-parse-worker";
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
+const PDF_PROBE_WORKER_ARG: &str = "--agentero-internal-pdf-recognize-worker";
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_PARSE_TIMEOUT: Duration = Duration::from_secs(120);
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+const PDF_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const MAX_CONCURRENT_PDF_PARSE: usize = 2;
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
@@ -285,9 +289,54 @@ enum PdfParseWorkerResponse {
     },
 }
 
+/// One word's geometry from a PDF page, in liteparse viewport coords
+/// (top-left origin, 72 DPI). Feeds the recognizer payload builder.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeWord {
+    pub text: String,
+    pub x_min: f32,
+    pub y_min: f32,
+    pub x_max: f32,
+    pub y_max: f32,
+    pub font_size: f32,
+    /// Bottom of the word box; approximates the typographic baseline.
+    pub baseline: f32,
+    pub rotation: i32,
+    pub bold: bool,
+    pub italic: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_name: Option<String>,
+}
+
+/// One projected line's words, in reading order.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeLine {
+    pub words: Vec<ProbeWord>,
+}
+
+/// Flattened first-pages line data for metadata recognition.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbePage {
+    pub width: f32,
+    pub height: f32,
+    pub lines: Vec<ProbeLine>,
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+enum PdfProbeWorkerResponse {
+    Ok { pages: Vec<ProbePage> },
+    Err { message: String },
+}
+
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 #[derive(Debug, PartialEq, Eq)]
 struct PdfParseWorkerRequest {
+    worker_arg: &'static str,
     pdf_path: PathBuf,
     response_path: PathBuf,
 }
@@ -301,9 +350,13 @@ fn pdf_parse_worker_request_from_args(
     let Some(mode) = args.next() else {
         return Ok(None);
     };
-    if mode != OsStr::new(PDF_PARSE_WORKER_ARG) {
+    let worker_arg = if mode == OsStr::new(PDF_PARSE_WORKER_ARG) {
+        PDF_PARSE_WORKER_ARG
+    } else if mode == OsStr::new(PDF_PROBE_WORKER_ARG) {
+        PDF_PROBE_WORKER_ARG
+    } else {
         return Ok(None);
-    }
+    };
     let pdf_path = args
         .next()
         .map(PathBuf::from)
@@ -316,6 +369,7 @@ fn pdf_parse_worker_request_from_args(
         return Err("PDF parse worker received unexpected arguments".to_string());
     }
     Ok(Some(PdfParseWorkerRequest {
+        worker_arg,
         pdf_path,
         response_path,
     }))
@@ -337,19 +391,38 @@ pub fn try_run_pdf_parse_worker() -> Option<i32> {
         .enable_all()
         .build()
     {
-        Ok(runtime) => match runtime.block_on(run_liteparse_markdown_direct(&request.pdf_path)) {
-            Ok((markdown, body_source, body_quality)) => PdfParseWorkerResponse::Ok {
-                markdown,
-                body_source,
-                body_quality,
-            },
-            Err(error) => PdfParseWorkerResponse::Err {
-                message: error.to_string(),
-            },
-        },
-        Err(error) => PdfParseWorkerResponse::Err {
-            message: format!("start PDF parse worker runtime: {error}"),
-        },
+        Ok(runtime) => {
+            // Both response enums share the identical
+            // `{"status":"err","message":…}` encoding, so failures from
+            // either mode decode in the parent process.
+            let outcome = if request.worker_arg == PDF_PROBE_WORKER_ARG {
+                runtime
+                    .block_on(run_liteparse_probe_direct(&request.pdf_path))
+                    .map(|pages| PdfProbeWorkerResponse::Ok { pages })
+                    .map_err(|error| error.to_string())
+                    .and_then(|r| serde_json::to_value(&r).map_err(|e| e.to_string()))
+            } else {
+                runtime
+                    .block_on(run_liteparse_markdown_direct(&request.pdf_path))
+                    .map(
+                        |(markdown, body_source, body_quality)| PdfParseWorkerResponse::Ok {
+                            markdown,
+                            body_source,
+                            body_quality,
+                        },
+                    )
+                    .map_err(|error| error.to_string())
+                    .and_then(|r| serde_json::to_value(&r).map_err(|e| e.to_string()))
+            };
+            match outcome {
+                Ok(value) => value,
+                Err(message) => serde_json::json!({ "status": "err", "message": message }),
+            }
+        }
+        Err(error) => serde_json::json!({
+            "status": "err",
+            "message": format!("start PDF parse worker runtime: {error}"),
+        }),
     };
 
     let result = serde_json::to_vec(&response)
@@ -431,6 +504,30 @@ async fn run_liteparse_markdown(
     pdf_path: &Path,
     task_id: Option<&str>,
 ) -> Result<(String, String, String), AppError> {
+    let bytes =
+        spawn_pdf_worker(PDF_PARSE_WORKER_ARG, pdf_path, task_id, PDF_PARSE_TIMEOUT).await?;
+    let response = serde_json::from_slice::<PdfParseWorkerResponse>(&bytes).map_err(|error| {
+        AppError::message(format!("decode isolated PDF parser response: {error}"))
+    })?;
+    match response {
+        PdfParseWorkerResponse::Ok {
+            markdown,
+            body_source,
+            body_quality,
+        } => Ok((markdown, body_source, body_quality)),
+        PdfParseWorkerResponse::Err { message } => Err(AppError::message(message)),
+    }
+}
+
+/// Spawn the isolated parser worker in the given mode and return its raw
+/// response bytes. Shared by the body-parse and metadata-probe paths.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+async fn spawn_pdf_worker(
+    worker_arg: &str,
+    pdf_path: &Path,
+    task_id: Option<&str>,
+    timeout_limit: Duration,
+) -> Result<Vec<u8>, AppError> {
     if pdf_parse_task_is_cancelled(task_id) {
         return Err(AppError::message(CANCELLED_MESSAGE));
     }
@@ -458,7 +555,7 @@ async fn run_liteparse_markdown(
 
     let mut command = tokio::process::Command::new(executable);
     command
-        .arg(PDF_PARSE_WORKER_ARG)
+        .arg(worker_arg)
         .arg(pdf_path)
         .arg(&response_path)
         .stdin(Stdio::null())
@@ -479,7 +576,7 @@ async fn run_liteparse_markdown(
         }
     };
 
-    let timeout = tokio::time::sleep(PDF_PARSE_TIMEOUT);
+    let timeout = tokio::time::sleep(timeout_limit);
     tokio::pin!(timeout);
     let mut cancel_poll = tokio::time::interval(Duration::from_millis(100));
     cancel_poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -502,7 +599,7 @@ async fn run_liteparse_markdown(
                 let _ = fs::remove_dir_all(&worker_dir);
                 return Err(AppError::message(format!(
                     "liteparse timed out after {}s; PDF import completed without PAPER.md",
-                    PDF_PARSE_TIMEOUT.as_secs()
+                    timeout_limit.as_secs()
                 )));
             }
             _ = cancel_poll.tick(), if task_id.is_some() => {
@@ -516,30 +613,44 @@ async fn run_liteparse_markdown(
         }
     };
 
-    let response = fs::read(&response_path)
-        .map_err(|error| {
-            let tail = worker_stderr_tail(&stderr_path)
-                .map(|tail| format!(": {tail}"))
-                .unwrap_or_default();
-            AppError::message(format!(
-                "isolated PDF parser produced no response ({status}, {error}){tail}"
-            ))
-        })
-        .and_then(|bytes| {
-            serde_json::from_slice::<PdfParseWorkerResponse>(&bytes).map_err(|error| {
-                AppError::message(format!("decode isolated PDF parser response: {error}"))
-            })
-        });
+    let bytes = fs::read(&response_path).map_err(|error| {
+        let tail = worker_stderr_tail(&stderr_path)
+            .map(|tail| format!(": {tail}"))
+            .unwrap_or_default();
+        AppError::message(format!(
+            "isolated PDF parser produced no response ({status}, {error}){tail}"
+        ))
+    });
     let _ = fs::remove_dir_all(&worker_dir);
+    bytes
+}
 
-    match response? {
-        PdfParseWorkerResponse::Ok {
-            markdown,
-            body_source,
-            body_quality,
-        } => Ok((markdown, body_source, body_quality)),
-        PdfParseWorkerResponse::Err { message } => Err(AppError::message(message)),
+/// Probe the first pages of a local PDF for metadata recognition.
+/// Runs in the same isolated worker as body parsing (killable, PDFium-safe).
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+pub async fn run_liteparse_probe(
+    pdf_path: &Path,
+    task_id: Option<&str>,
+) -> Result<Vec<ProbePage>, AppError> {
+    let bytes =
+        spawn_pdf_worker(PDF_PROBE_WORKER_ARG, pdf_path, task_id, PDF_PROBE_TIMEOUT).await?;
+    let response = serde_json::from_slice::<PdfProbeWorkerResponse>(&bytes).map_err(|error| {
+        AppError::message(format!("decode isolated PDF probe response: {error}"))
+    })?;
+    match response {
+        PdfProbeWorkerResponse::Ok { pages } => Ok(pages),
+        PdfProbeWorkerResponse::Err { message } => Err(AppError::message(message)),
     }
+}
+
+#[cfg(any(target_os = "ios", target_os = "android"))]
+pub async fn run_liteparse_probe(
+    _pdf_path: &Path,
+    _task_id: Option<&str>,
+) -> Result<Vec<ProbePage>, AppError> {
+    Err(AppError::message(
+        "PDF metadata recognition runs on the paired desktop host",
+    ))
 }
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
@@ -604,6 +715,141 @@ async fn run_liteparse_markdown(
     Err(AppError::message(
         "PDF body parsing runs on the paired desktop host",
     ))
+}
+
+/// Worker body for the metadata probe: first pages only, native text,
+/// word boxes on. Mirrors Zotero's `PDFWorker.getRecognizerData` scope.
+/// Also called directly (no worker subprocess) by in-crate live tests.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+pub(crate) async fn run_liteparse_probe_direct(
+    pdf_path: &Path,
+) -> Result<Vec<ProbePage>, AppError> {
+    let data = fs::read(pdf_path).map_err(|e| AppError::message(format!("read pdf: {e}")))?;
+
+    let config = LiteParseConfig {
+        ocr_enabled: false,
+        output_format: OutputFormat::Text,
+        image_mode: ImageMode::Off,
+        quiet: true,
+        max_pages: PROBE_MAX_PAGES,
+        target_pages: Some("1-5".to_string()),
+        emit_word_boxes: true,
+        ..Default::default()
+    };
+    let parser = LiteParse::new(config);
+    let result = parser
+        .parse_input(liteparse::types::PdfInput::Bytes(data))
+        .await
+        .map_err(|e| AppError::message(format!("liteparse probe: {e}")))?;
+
+    Ok(result
+        .pages
+        .iter()
+        .take(PROBE_MAX_PAGES)
+        .map(probe_page_from_parsed)
+        .collect())
+}
+
+/// Number of leading pages the recognizer probe extracts (Zotero uses 5).
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+const PROBE_MAX_PAGES: usize = 5;
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn probe_page_from_parsed(page: &liteparse::types::ParsedPage) -> ProbePage {
+    // Use liteparse's projected lines (the same decomposition the Markdown
+    // emitter consumes): rotated margin stamps land in their own lines
+    // instead of polluting body lines, matching the reading order real
+    // Zotero payloads get from PDF.js line structure.
+    let mut lines = Vec::with_capacity(page.projected_lines.len());
+    for line in &page.projected_lines {
+        let mut words = Vec::new();
+        let fallback_size = if line.dominant_font_size > 0.1 {
+            line.dominant_font_size
+        } else {
+            line.bbox.height.max(6.0)
+        };
+        let mut spans: Vec<&liteparse::types::TextItem> = line.spans.iter().collect();
+        // `spans` is x-ascending; RTL lines read right-to-left.
+        if line.rtl {
+            spans.reverse();
+        }
+        for span in spans {
+            collect_probe_words(span, fallback_size, &mut words);
+        }
+        if !words.is_empty() {
+            lines.push(ProbeLine { words });
+        }
+    }
+    ProbePage {
+        width: page.page_width,
+        height: page.page_height,
+        lines,
+    }
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn collect_probe_words(
+    item: &liteparse::types::TextItem,
+    fallback_size: f32,
+    out: &mut Vec<ProbeWord>,
+) {
+    let text = item.text.trim();
+    if text.is_empty() {
+        return;
+    }
+    let font_size = item.font_size.unwrap_or(item.height).max(0.1);
+    let font_name = item.font_name.clone();
+    let name_lower = font_name
+        .as_deref()
+        .map(|n| n.to_ascii_lowercase())
+        .unwrap_or_default();
+    let bold = item.font_weight.is_some_and(|w| w >= 600) || name_lower.contains("bold");
+    let italic = item.font_flags.is_some_and(|f| f & 2 != 0)
+        || name_lower.contains("italic")
+        || name_lower.contains("oblique");
+    let rotation = item.rotation.round() as i32;
+    let size = if font_size > 0.1 {
+        font_size
+    } else {
+        fallback_size
+    };
+    let make = |text: String, x: f32, y: f32, w: f32, h: f32| ProbeWord {
+        text,
+        x_min: x,
+        y_min: y,
+        x_max: x + w,
+        y_max: y + h,
+        baseline: y + h,
+        font_size: size,
+        rotation,
+        bold,
+        italic,
+        font_name: font_name.clone(),
+    };
+
+    if item.words.is_empty() {
+        out.push(make(
+            item.text.trim().to_string(),
+            item.x,
+            item.y,
+            item.width,
+            item.height,
+        ));
+        return;
+    }
+    for word in &item.words {
+        let wt = word.text.trim();
+        if wt.is_empty() {
+            continue;
+        }
+        out.push(make(
+            wt.to_string(),
+            word.x,
+            word.y,
+            word.width,
+            word.height,
+        ));
+    }
 }
 
 fn update_catalog_body(

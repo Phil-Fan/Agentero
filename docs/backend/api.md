@@ -978,7 +978,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 #### `paper_import_local_pdf`
 
-把本地 PDF 导入为 paper 文件夹（复制 + catalog + liteparse），**无网络查询**。入口：魔棒弹层原生 PDF 选择器；或将 PDF **拖到左侧树 `papers/` 组织夹** → metadata 确认对话框后再导入。
+把本地 PDF 导入为 paper 文件夹（复制 + catalog + liteparse）。入口：魔棒弹层原生 PDF 选择器；或将 PDF **拖到左侧树 `papers/` 组织夹** → metadata 确认对话框后再导入。
 
 - **参数**（invoke 字段名 `args`）：
 
@@ -993,13 +993,35 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
       authors?: string[];
       year?: number;
       id?: string;       // 文件夹 slug 偏好；Host 仍会做 -2/-3 去重
+      doi?: string;      // 对话框确认的 DOI
+      arxivId?: string;  // 对话框确认的 arXiv ID
+      extra?: {          // Fetch/识别得到的结构化字段
+        publication?; volume?; issue?; pages?; publisher?;
+        issn?; language?; date?; abstract?
+      };
     }>;
     taskId?: string;      // 后台任务 id，用于显示 parse 阶段
+    translatorBaseUrl?: string; // 直选路径后台识别时的标识符解析
   }
   ```
 
 - **返回**：`{ ok: true; data: { papers: LookupImportResult[]; errors: string[] } }`（`errors` 为 `"<文件>: <原因>"`；仅当**全部**失败才整体 `ok:false`）。
-- **行为**：每个 PDF → 标题/id 优先用 `entries` 覆盖，否则文件名 stem；复制到 `{slug}.pdf`；写 `NOTES.md` 壳 + catalog（type `pdf`，可含 authors/year）。导入任务本身**不**再等待 liteparse；前端会在导入完成后独立入队 `paper_parse_body` 后台任务生成 `PAPER.md`（无 TeX 且有 PDF 时）。不覆盖已存在文件夹（slug 去重）。
+- **行为**：每个 PDF → 标题/id 优先用 `entries` 覆盖，否则文件名 stem；带 `doi`/`arxivId`/`extra` 的 entries 记 `meta_source=manual`；无对话框元数据的 entries（魔棒直选）内联跑识别链路（见 [paper-import.md](paper-import.md) § PDF 元数据识别），命中则用解析出的元数据与标识符 slug 命名（`meta_source=recognize`），失败退回文件名 stem。复制到 `{slug}.pdf`；写 `NOTES.md` 壳 + catalog。导入任务本身**不**再等待 liteparse；前端会在导入完成后独立入队 `paper_parse_body` 后台任务生成 `PAPER.md`（无 TeX 且有 PDF 时）。不覆盖已存在文件夹（slug 去重）。
+
+#### `paper_probe_pdf_ident`
+
+识别本地 PDF 的元数据（liteparse probe → Zotero recognizer → 标识符解析），供导入确认对话框预填。尽力而为：单文件失败返回该行 `status="error"`，不整体失败。
+
+- **参数**（invoke 字段名 `args`）：`{ filePaths: string[]; translatorBaseUrl?: string }`
+- **返回**：`{ ok: true; data: PdfIdentProbe[] }`，每行 `{ filePath; status: "ok"|"title"|"no-match"|"error"; doi?; arxivId?; title?; authors: string[]; year?; abstractText?; publication?; volume?; issue?; pages?; publisher?; error?; source }`。
+
+#### `paper_resolve_identifier`
+
+把 DOI / arXiv id 解析为元数据（不入库）。支撑导入对话框的 Fetch 按钮与编辑元数据的刷新按钮。
+
+- **参数**（invoke 字段名 `args`）：`{ text: string; translatorBaseUrl?: string }`
+- **返回**：`{ ok: true; data: PaperMeta }`（snake_case，与 `paper_get` 行同构）。
+- **链路**：Translator 优先；DOI 失败回退 Crossref `works/{doi}` 直连；arXiv 回退 export.arxiv.org Atom。
 
 #### `paper_parse_body`
 

@@ -312,6 +312,7 @@ export async function importLocalPdf(opts?: {
 					parentDir: opts?.parentDir ?? currentLookupParentDir(),
 					entries: opts?.entries,
 					progressTaskId: id,
+					settings: getSettings(),
 				});
 				if (!r) return null;
 				setDetail(
