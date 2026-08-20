@@ -120,7 +120,7 @@ type FileTreeProps = {
 	/** Absolute paths currently staged by Cut (for row dimming). */
 	cutPaths?: string[];
 	/**
-	 * OS PDF drop onto a `papers/` org folder → open confirm dialog in parent.
+	 * OS PDF drop onto a `papers/` org folder → background import in parent.
 	 * `parentDir` is vault-relative (e.g. `papers` or `papers/nlp`).
 	 * `items` include absolute path + original filename for metadata defaults.
 	 */

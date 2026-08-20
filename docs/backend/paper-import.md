@@ -93,12 +93,12 @@ liteparse 在**运行时 `dlopen`** PDFium，而 `liteparse-pdfium-sys` 的 buil
 
 ## 本地 PDF
 
-- 魔棒多选或拖到 `papers/` 组织夹 → metadata 确认 → 复制 PDF + catalog + 通常生成 `PAPER.md`。
+- 魔棒多选或拖到 `papers/` 组织夹 → 直接后台导入（无确认对话框）：复制 PDF + catalog + 通常生成 `PAPER.md`，识别链路在导入任务内自动补全元数据，识别有误由用户在 Edit Metadata 中修正。
 - 窗口其它区域拖入不入库（防 WebView 导航）。
 
 ### PDF 元数据识别（recognize 链路）
 
-文件名推导只是兜底；确认对话框打开时（以及魔棒直选导入时）会跑一条识别链路补全 DOI/arXiv/标题/作者：
+文件名推导只是兜底；导入（拖入与魔棒直选）会在导入任务内跑一条识别链路补全 DOI/arXiv/标题/作者：
 
 ```
 本地 liteparse probe（隔离 worker，前 5 页投影行 + 词级字号/坐标，~秒级）
@@ -111,8 +111,7 @@ liteparse 在**运行时 `dlopen`** PDFium，而 `liteparse-pdfium-sys` 的 buil
 
 - 实现：`src-tauri/src/features/import/pdf_recognize.rs`（payload 组装 + HTTP client + `map_crossref_work`）；probe worker 变体在 `pdf_parse/mod.rs`（`--agentero-internal-pdf-recognize-worker`）。
 - payload 结构复刻 Zotero document-worker `getRecognizerData`：`word = [xMin,yMin,xMax,yMax,fontSize,spaceAfter,baseline,rotation,0,bold,italic,0,fontIndex,text]`，行来自 liteparse 投影行（竖排 arXiv stamp 落到独立行，服务端可重建）。
-- 确认对话框（`import-local-pdf-dialog.tsx`）打开时批量 `paper_probe_pdf_ident` 预填，并支持手填 DOI/arXiv 后 Fetch（`paper_resolve_identifier`）；entries 扩展 `doi`/`arxivId`/`extra`，用户确认的值 `meta_source=manual`。文件夹 id 不可手填：Host 按 arXiv ID slug → DOI slug → 文件名 stem 派生（与标识符导入命名一致）。
-- 魔棒直选（无对话框）路径在 `import_one_local_pdf` 内联跑同一链路，`meta_source=recognize`，识别出的 arXiv/DOI slug 作为文件夹 id（与标识符导入命名一致）。
+- 拖入与魔棒直选统一在 `import_one_local_pdf` 内联跑同一链路，`meta_source=recognize`，识别出的 arXiv/DOI slug 作为文件夹 id（与标识符导入命名一致）；Host 侧 entries 仍支持 `title`/`doi`/`arxivId`/`extra` 覆盖（`meta_source=manual`），供 CLI 等调用方使用。导入后可在 Edit Metadata 中手填 DOI/arXiv 并刷新（`paper_resolve_identifier`）。
 - 隐私：上传的是前 5 页文本布局 JSON（~200KB），不是 PDF 文件；服务为 Zotero 托管的未公开 API，仅作尽力而为识别，失败无感知。
 - live 验证：`AGENTERO_RECOGNIZE_LIVE_PDF=<pdf> cargo test -p agentero --lib -- live_recognize --include-ignored --nocapture`。
 

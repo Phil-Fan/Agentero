@@ -188,7 +188,7 @@ export function useTreeDragDrop({
 			setDropTarget(null);
 			endVaultFileDrag();
 
-			// External PDF drop onto papers/ org folder → confirm dialog in App.
+			// External PDF drop onto papers/ org folder → background import in App.
 			// Snapshot DataTransfer **now** (WKWebView clears it after the handler).
 			// Prefer nativeEvent — React synthetic DataTransfer can hide FileList.
 			// Path-less Files are staged via Host `paper_stage_import_file`.

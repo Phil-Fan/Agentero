@@ -234,7 +234,7 @@ export type LocalPdfExtraMeta = {
 	abstract?: string;
 };
 
-/** Per-file metadata for local PDF import (confirm dialog / host overrides). */
+/** Per-file metadata overrides for local PDF import (host recognizes when absent). */
 export type LocalPdfImportEntry = {
 	filePath: string;
 	title?: string;
@@ -256,7 +256,7 @@ export async function importLocalPdfs(opts: {
 	parentDir: string;
 	/** Absolute paths (skip native picker when non-empty; no metadata overrides). */
 	filePaths?: string[];
-	/** Preferred: path + optional title/authors/year/identifiers from the confirm dialog. */
+	/** Path + optional metadata overrides (host recognizes when absent). */
 	entries?: LocalPdfImportEntry[];
 	/** Background task receiving the host parse phase. */
 	progressTaskId?: string;

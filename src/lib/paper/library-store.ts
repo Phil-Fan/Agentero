@@ -13,11 +13,6 @@ import { getVaultPath } from "@/lib/vault/store";
 
 export type LibraryIoBusy = "import" | "export" | "import-pdf" | null;
 
-export type ImportPdfDraft = {
-	items: Array<{ path: string; sourceName: string }>;
-	parentDir: string;
-};
-
 export type { LocalPdfImportEntry };
 
 type LibraryStore = {
@@ -32,8 +27,6 @@ type LibraryStore = {
 	scopePath: string | null;
 	rescanning: boolean;
 	ioBusy: LibraryIoBusy;
-	/** OS PDF drop onto papers/ → metadata confirm dialog (not silent import). */
-	importPdfDraft: ImportPdfDraft | null;
 	/** Paper being edited in the Edit Metadata dialog (null = closed). */
 	editMetaDraft: PaperMetadata | null;
 	/** Bump to force RecycleBinView reload after Empty Recycle Bin. */
@@ -58,7 +51,6 @@ export const libraryStore = createStore<LibraryStore>(() => ({
 	scopePath: null,
 	rescanning: false,
 	ioBusy: null,
-	importPdfDraft: null,
 	editMetaDraft: null,
 	trashReloadSignal: 0,
 	paperMetaByRelPath: new Map(),
@@ -126,10 +118,6 @@ export function setLibraryRescanning(rescanning: boolean): void {
 
 export function setLibraryIoBusy(ioBusy: LibraryIoBusy): void {
 	libraryStore.setState({ ioBusy });
-}
-
-export function setImportPdfDraft(draft: ImportPdfDraft | null): void {
-	libraryStore.setState({ importPdfDraft: draft });
 }
 
 export function setEditMetaDraft(draft: PaperMetadata | null): void {

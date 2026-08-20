@@ -72,18 +72,6 @@
 		}
 	},
 	"importLocalPdf": {
-		"title": "Import {{count}} PDF(s)",
-		"parentDir": "Destination folder",
-		"fieldTitle": "Title",
-		"fieldAuthors": "Authors",
-		"fieldIdentifier": "Identifier",
-		"fetch": "Fetch",
-		"fetching": "Fetching…",
-		"recognizing": "Recognizing…",
-		"recognized": "Metadata found",
-		"recognizeFailed": "PDF recognition failed",
-		"confirm": "Import",
-		"cancel": "Cancel",
 		"dropNoPath": "Could not read the dropped PDF. Try the magic wand → Import PDF, or drop from Finder again."
 	},
 	"recycleBin": {

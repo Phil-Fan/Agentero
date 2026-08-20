@@ -252,45 +252,6 @@ pub async fn paper_stage_import_file(
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PaperProbePdfIdentArgs {
-    /// Absolute local PDF paths.
-    pub file_paths: Vec<String>,
-    #[serde(default)]
-    pub translator_base_url: Option<String>,
-}
-
-/// Recognize local PDFs (liteparse probe → Zotero recognizer → identifier
-/// resolution) to prefill the import confirm dialog. Best-effort: failures
-/// return per-file `error` rows instead of failing the whole batch.
-#[tauri::command]
-pub async fn paper_probe_pdf_ident(
-    args: PaperProbePdfIdentArgs,
-) -> ApiResult<Vec<super::pdf_recognize::PdfIdentProbe>> {
-    let n = args.file_paths.len();
-    let op = OpTimer::start_with("paper_probe_pdf_ident", format!("count={n}"));
-    let base = args
-        .translator_base_url
-        .clone()
-        .unwrap_or_else(|| super::DEFAULT_TRANSLATOR_BASE_URL.to_string());
-
-    let mut results = Vec::with_capacity(n);
-    for file_path in &args.file_paths {
-        let path = std::path::PathBuf::from(file_path.trim());
-        let probe = if !path.is_file() {
-            super::pdf_recognize::PdfIdentProbe::error(file_path, "file not found".into())
-        } else {
-            super::pdf_recognize::recognize_and_resolve(&path, &base, None).await
-        };
-        results.push(probe);
-    }
-    let ok = results.iter().filter(|r| r.status == "ok").count();
-    let out = ApiResult::ok(results);
-    op.finish_ok_extra(format!("ok={ok} total={n}"));
-    out
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct PaperResolveIdentifierArgs {
     /// DOI / arXiv id / URL text.
     pub text: String,
@@ -299,7 +260,7 @@ pub struct PaperResolveIdentifierArgs {
 }
 
 /// Resolve an identifier (DOI/arXiv) to metadata without importing — backs
-/// the import dialog's Fetch button and Edit Metadata's refresh.
+/// Edit Metadata's identifier refresh.
 #[tauri::command]
 pub async fn paper_resolve_identifier(
     args: PaperResolveIdentifierArgs,

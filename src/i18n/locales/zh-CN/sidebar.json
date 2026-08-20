@@ -72,18 +72,6 @@
 		}
 	},
 	"importLocalPdf": {
-		"title": "导入 {{count}} 个 PDF",
-		"parentDir": "目标文件夹",
-		"fieldTitle": "标题",
-		"fieldAuthors": "作者",
-		"fieldIdentifier": "标识符",
-		"fetch": "获取",
-		"fetching": "获取中…",
-		"recognizing": "识别中…",
-		"recognized": "已识别元数据",
-		"recognizeFailed": "PDF 识别失败",
-		"confirm": "导入",
-		"cancel": "取消",
 		"dropNoPath": "无法读取拖入的 PDF。请改用魔棒 → 导入 PDF，或从 Finder 再拖一次。"
 	},
 	"recycleBin": {

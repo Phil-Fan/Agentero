@@ -17,7 +17,7 @@ import { invokeApi } from "@/lib/core/ipc";
 import { basenameOf } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 
-/** A dropped PDF ready for the confirm dialog / import host. */
+/** A dropped PDF ready for the import host. */
 export type ResolvedDropPdf = {
 	/** Absolute path to read (native or staging). */
 	path: string;

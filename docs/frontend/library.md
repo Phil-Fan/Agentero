@@ -46,12 +46,10 @@ DOI 旁有 **刷新** 按钮：按当前 DOI（或 arXiv ID）拉取权威元数
 
 ## 导入 PDF 识别
 
-拖入/魔棒导入 PDF 的确认对话框（`import-local-pdf-dialog.tsx`）打开时自动识别（liteparse probe → Zotero recognizer → 标识符解析，见 [../backend/paper-import.md](../backend/paper-import.md)）：
+拖入/魔棒导入 PDF 直接进入后台导入任务，无确认对话框；识别链路（liteparse probe → Zotero recognizer → 标识符解析，见 [../backend/paper-import.md](../backend/paper-import.md)）在导入任务内自动补全：
 
-- 识别成功预填 标题/作者/年份/DOI/arXiv ID，行尾显示"已识别元数据"；
-- 每行可手填 DOI 或 arXiv ID 后点 **Fetch** 拉取完整元数据（识别失败时的手动通道）；
-- 文件夹 id 无输入框：Host 按 arXiv ID → DOI slug → 文件名 slug 自动派生；
-- 魔棒直选（无确认对话框）导入同样在后台跑识别链路。
+- 识别成功自动填充 标题/作者/年份/DOI/arXiv ID，文件夹 id 按 arXiv ID → DOI slug → 文件名 slug 自动派生；
+- 识别失败静默回退文件名派生元数据，用户在 Edit Metadata 中修正（DOI 旁刷新按钮拉取权威元数据）。
 
 ## 代码
 

@@ -1,7 +1,6 @@
 /**
  * App-level dialogs: Zotero migration, rename, external-rename repair, move
- * papers, local-PDF import confirm, and the command palette. Each subscribes
- * to its own store slice.
+ * papers, and the command palette. Each subscribes to its own store slice.
  */
 
 import { CommandPalette } from "@/components/dialogs/command-palette";
@@ -10,7 +9,6 @@ import { SkillImportDialog } from "@/components/dialogs/skill-import-dialog";
 import { ZoteroMigrateDialog } from "@/components/dialogs/zotero-migrate-dialog";
 import { ZoteroSyncDialog } from "@/components/dialogs/zotero-sync-dialog";
 import { EditPaperMetaDialog } from "@/components/library/edit-paper-meta-dialog";
-import { ImportLocalPdfDialog } from "@/components/library/import-local-pdf-dialog";
 import { paletteCommands } from "@/components/shell/palette-commands";
 import {
 	useLibraryStore,
@@ -19,9 +17,7 @@ import {
 } from "@/hooks/use-app-stores";
 import {
 	cancelSkillImport,
-	confirmImportLocalPdf,
 	confirmSkillImport,
-	importPdfDialogOpenChange,
 } from "@/lib/paper/import-actions";
 import { paperMetaChange } from "@/lib/paper/library-actions";
 import { setEditMetaDraft } from "@/lib/paper/library-store";
@@ -41,9 +37,7 @@ export function AppDialogs() {
 	const commandOpen = useUiStore((s) => s.commandOpen);
 	const commandMode = useUiStore((s) => s.commandMode);
 	const libraryPapers = useLibraryStore((s) => s.papers);
-	const importPdfDraft = useLibraryStore((s) => s.importPdfDraft);
 	const editMetaDraft = useLibraryStore((s) => s.editMetaDraft);
-	const ioBusy = useLibraryStore((s) => s.ioBusy);
 	const skillImportDraft = useUiStore((s) => s.skillImportDraft);
 
 	return (
@@ -67,15 +61,6 @@ export function AppDialogs() {
 			/>
 
 			<ExternalRenameDialog />
-
-			<ImportLocalPdfDialog
-				open={importPdfDraft !== null}
-				onOpenChange={importPdfDialogOpenChange}
-				items={importPdfDraft?.items ?? []}
-				parentDir={importPdfDraft?.parentDir ?? "papers"}
-				onConfirm={confirmImportLocalPdf}
-				busy={ioBusy === "import-pdf"}
-			/>
 
 			<EditPaperMetaDialog
 				paper={editMetaDraft}

@@ -1,6 +1,6 @@
 /**
- * Paper import actions: magic-wand identifier lookup, local-PDF import, and
- * the OS-drop confirm dialog flow. Heavy work runs as background tasks.
+ * Paper import actions: magic-wand identifier lookup and local-PDF import.
+ * Heavy work (including PDF metadata recognition) runs as background tasks.
  */
 
 import i18n from "@/i18n";
@@ -13,11 +13,7 @@ import { invokeApi } from "@/lib/core/ipc";
 import { logger } from "@/lib/core/logger";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
 import { currentLookupParentDir } from "@/lib/paper/library-actions";
-import {
-	libraryStore,
-	setImportPdfDraft,
-	setLibraryIoBusy,
-} from "@/lib/paper/library-store";
+import { libraryStore, setLibraryIoBusy } from "@/lib/paper/library-store";
 import {
 	addPapersByIdentifiers,
 	discardSkillDiscovery,
@@ -290,7 +286,7 @@ export function cancelSkillImport(): void {
 /**
  * Import local PDF file(s) → paper folders + catalog + PAPER.md.
  * - No args: native PDF picker (magic wand).
- * - `entries` + optional `parentDir`: confirm-dialog drop import.
+ * - `entries` + optional `parentDir`: OS-drop import.
  */
 export async function importLocalPdf(opts?: {
 	entries?: LocalPdfImportEntry[];
@@ -349,7 +345,11 @@ export async function importLocalPdf(opts?: {
 	}
 }
 
-/** OS PDF drop onto a papers/ folder or the Library → metadata confirm dialog. */
+/**
+ * OS PDF drop onto a papers/ folder or the Library → background import.
+ * Metadata (title/authors/identifiers) is recognized by the Host during the
+ * import task; the user edits via Edit Metadata if recognition is off.
+ */
 export function dropLocalPdfs(
 	items: Array<{ path: string; sourceName: string }>,
 	parentDir: string,
@@ -365,22 +365,8 @@ export function dropLocalPdfs(
 		void cleanupImportTempPaths(paths);
 		return;
 	}
-	setImportPdfDraft({ items, parentDir: parentDir || "papers" });
-}
-
-export function confirmImportLocalPdf(
-	entries: LocalPdfImportEntry[],
-	parentDir: string,
-): void {
-	setImportPdfDraft(null);
-	void importLocalPdf({ entries, parentDir });
-}
-
-export function importPdfDialogOpenChange(open: boolean): void {
-	if (open) return;
-	const paths =
-		libraryStore.getState().importPdfDraft?.items.map((i) => i.path) ?? [];
-	setImportPdfDraft(null);
-	// User cancelled confirm — drop staging copies.
-	void cleanupImportTempPaths(paths);
+	void importLocalPdf({
+		entries: paths.map((filePath) => ({ filePath })),
+		parentDir: parentDir || "papers",
+	});
 }
