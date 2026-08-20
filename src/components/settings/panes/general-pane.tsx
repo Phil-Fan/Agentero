@@ -202,16 +202,6 @@ function PrivacySettingsBlock({
 						onCheckedChange={(v) => patch({ telemetryEnabled: v })}
 					/>
 				</SettingsRow>
-				<SettingsRow
-					label={t("general.privacy.usageTracking.label")}
-					htmlFor="usage-tracking-enabled"
-				>
-					<Switch
-						id="usage-tracking-enabled"
-						checked={settings.usageTrackingEnabled}
-						onCheckedChange={(v) => patch({ usageTrackingEnabled: v })}
-					/>
-				</SettingsRow>
 				<SettingsRow label={t("general.privacy.clearUsage.label")}>
 					<Button
 						type="button"

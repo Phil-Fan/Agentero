@@ -5,13 +5,12 @@
 
 use crate::core::blocking::run_blocking;
 use crate::core::error::{map_err, ApiResult};
-use crate::features::settings::AppSettingsStore;
 use crate::features::usage::events::{
     clear_default, list_default, record_default, summarize_default, ListFilter, UsageEvent,
     UsageKindCount, UsageRecord,
 };
 use serde::Deserialize;
-use tauri::State;
+use tauri::AppHandle;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,22 +20,35 @@ pub struct ActivityRecordArgs {
 
 #[tauri::command]
 pub async fn activity_record_events(
-    store: State<'_, AppSettingsStore>,
+    app: AppHandle,
     args: ActivityRecordArgs,
 ) -> Result<ApiResult<usize>, String> {
-    // Settings snapshot is an in-memory read; only the SQLite write is heavy.
-    match store.get() {
-        Ok(snapshot) if !snapshot.settings.usage_tracking_enabled => {
-            return Ok(ApiResult::ok(0));
-        }
-        Ok(_) => {}
-        Err(e) => return Ok(map_err(e)),
-    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    forward_to_telemetry(&app, &args.events);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let _ = &app;
+
     Ok(run_blocking(move || match record_default(&args.events) {
         Ok(n) => ApiResult::ok(n),
         Err(e) => map_err(e),
     })
     .await)
+}
+
+/// Project events to their sanitized PostHog shape and forward them. No-op
+/// unless product analytics is enabled; unmapped kinds are dropped.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn forward_to_telemetry(app: &AppHandle, events: &[UsageRecord]) {
+    use crate::features::telemetry::Telemetry;
+    use crate::features::usage::telemetry_projection;
+    use std::sync::Arc;
+    use tauri::Manager;
+
+    let Some(telemetry) = app.try_state::<Arc<Telemetry>>() else {
+        return;
+    };
+    let projections: Vec<_> = events.iter().filter_map(telemetry_projection).collect();
+    telemetry.capture_activity(&projections);
 }
 
 #[derive(Debug, Deserialize)]

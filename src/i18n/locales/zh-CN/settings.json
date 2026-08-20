@@ -104,9 +104,6 @@
 			"telemetry": {
 				"label": "共享匿名使用数据"
 			},
-			"usageTracking": {
-				"label": "记录本地使用活动"
-			},
 			"clearUsage": {
 				"label": "清除使用记录",
 				"action": "清除",

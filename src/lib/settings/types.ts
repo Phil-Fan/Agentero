@@ -137,11 +137,6 @@ export type AppSettings = {
 	 */
 	telemetryEnabled: boolean;
 	/**
-	 * Local activity log (paper opens, downloads, Agent runs, …) written to
-	 * XDG `usage.sqlite`. Default **on**. Off = do not write.
-	 */
-	usageTrackingEnabled: boolean;
-	/**
 	 * Plaza discovery sources (Cool Papers, feeds, Skill picks) in the sidebar.
 	 * Default **on**. Off hides the node and does not mount Plaza panels.
 	 */

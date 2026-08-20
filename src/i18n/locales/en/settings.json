@@ -104,9 +104,6 @@
 			"telemetry": {
 				"label": "Share anonymous usage data"
 			},
-			"usageTracking": {
-				"label": "Record local activity"
-			},
 			"clearUsage": {
 				"label": "Clear activity history",
 				"action": "Clear",

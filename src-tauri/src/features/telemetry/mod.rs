@@ -12,6 +12,7 @@
 
 use crate::core::paths;
 use crate::features::settings::AppSettings;
+use crate::features::usage::ActivityProjection;
 use serde_json::json;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -123,7 +124,6 @@ struct Inner {
     distinct_id: String,
     session_id: String,
     started_at_ms: u64,
-    usage_enabled: bool,
 }
 
 /// Managed app state. `inner` is `None` until [`Telemetry::start`] decides
@@ -138,15 +138,12 @@ impl Telemetry {
         Self::default()
     }
 
-    /// Record local `app.started` (if usage tracking is on) and capture
-    /// PostHog `app started` when product analytics is enabled.
+    /// Record local `app.started` and capture PostHog `app started` when
+    /// product analytics is enabled. Local activity recording is always on;
+    /// only the PostHog leg is gated by [`enabled`].
     /// Never fails the launch: every error is only logged.
     pub fn start(&self, settings: &AppSettings) {
-        let usage_enabled = settings.usage_tracking_enabled;
         let posthog_enabled = enabled(settings);
-        if !usage_enabled && !posthog_enabled {
-            return;
-        }
 
         let distinct_id = install_id();
         let session_id = uuid::Uuid::new_v4().to_string();
@@ -163,9 +160,7 @@ impl Telemetry {
             "session_id": session_id,
         });
 
-        if usage_enabled {
-            record_usage("app.started", None, extra.clone());
-        }
+        record_usage("app.started", None, extra.clone());
 
         let client = if posthog_enabled {
             posthog_key().map(posthog_rs::client)
@@ -205,8 +200,42 @@ impl Telemetry {
             distinct_id,
             session_id,
             started_at_ms: now_ms(),
-            usage_enabled,
         });
+    }
+
+    /// Forward sanitized activity events to PostHog. No-op unless product
+    /// analytics is enabled (i.e. the inner client is present). Each projection
+    /// carries only bucketed/whitelisted fields — never paths, vault, or raw
+    /// query/skill content.
+    pub fn capture_activity(&self, projections: &[ActivityProjection]) {
+        if projections.is_empty() {
+            return;
+        }
+        let guard = self.inner.lock().unwrap();
+        let Some(inner) = guard.as_ref() else {
+            return;
+        };
+        let Some(client) = inner.client.as_ref() else {
+            return;
+        };
+        for proj in projections {
+            let mut event = posthog_rs::Event::new(proj.name, inner.distinct_id.as_str());
+            let _ = event.insert_prop("session_id", inner.session_id.clone());
+            let _ = event.insert_prop("app_version", APP_VERSION);
+            if let Some(facet) = &proj.facet {
+                let _ = event.insert_prop("facet", facet.clone());
+            }
+            if let Some(status) = &proj.status {
+                let _ = event.insert_prop("status", status.clone());
+            }
+            if let Some(qty) = proj.qty {
+                let _ = event.insert_prop("qty", qty);
+            }
+            if let Some(bucket) = proj.dur_bucket {
+                let _ = event.insert_prop("dur_bucket", bucket);
+            }
+            client.capture(event);
+        }
     }
 
     /// Record local `app.exited`, then capture PostHog `app exited` and flush.
@@ -216,16 +245,14 @@ impl Telemetry {
             return;
         };
         let duration_ms = now_ms().saturating_sub(inner.started_at_ms);
-        if inner.usage_enabled {
-            record_usage(
-                "app.exited",
-                Some(duration_ms as i64),
-                json!({
-                    "app_version": APP_VERSION,
-                    "session_id": inner.session_id,
-                }),
-            );
-        }
+        record_usage(
+            "app.exited",
+            Some(duration_ms as i64),
+            json!({
+                "app_version": APP_VERSION,
+                "session_id": inner.session_id,
+            }),
+        );
         let Some(client) = inner.client else {
             return;
         };

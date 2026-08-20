@@ -4,10 +4,6 @@ vi.mock("@/lib/core/tauri", () => ({
 	isTauri: () => true,
 }));
 
-vi.mock("@/lib/settings/store", () => ({
-	loadSettings: () => ({ usageTrackingEnabled: true }),
-}));
-
 vi.mock("@/lib/vault/store", () => ({
 	getVaultPath: () => "/Users/me/vault",
 }));

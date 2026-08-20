@@ -80,7 +80,7 @@ UI / Host 动作
  usage.sqlite   PostHog 投影      Agent / 继续阅读
 ```
 
-前端缓冲：5s / window blur / beforeunload / 满 50 条 → `activity_record_events`。同一 `(kind, path, mode)` 1s 去重。Host 一事务写本地（schema v2）。`app.started` / `app.exited` 由 `Telemetry::start` / `shutdown` 直写本地，不走 `track()`。其它 kind 的 PostHog 投影（`Telemetry::capture`）**尚未接线**。
+前端缓冲：5s / window blur / beforeunload / 满 50 条 → `activity_record_events`。同一 `(kind, path, mode)` 1s 去重。Host 一事务写本地（schema v2）。`app.started` / `app.exited` 由 `Telemetry::start` / `shutdown` 直写本地，不走 `track()`。其它 kind 的 PostHog 投影（`Telemetry::capture_activity`）**已接线**：写本地前按白名单脱敏转发。
 
 业务代码禁止直接 `posthog_rs::Event` 或手写 `INSERT usage_events`。
 
@@ -373,14 +373,13 @@ agentero usage timeline --path papers/xxx --json
 
 | 开关 | 默认 | 含义 |
 |---|---|---|
-| `usageTrackingEnabled` | true | 写本地、生成画像、注入 Agent |
-| `telemetryEnabled` | true（已有） | 投影到 PostHog |
+| `telemetryEnabled` | true（已有） | 投影行为事件到 PostHog（下次启动生效） |
 
-独立：可「本地 Memory 开、PostHog 关」。关本地则**不写库**。
+本地记录始终开启、无开关：行为事件恒写 `usage.sqlite`（生成画像、注入 Agent、供 CLI 查询）。是否上报 PostHog 由 `telemetryEnabled` 单独控制；关闭后本地照常记录，仅停止投影。可一键清除本地记录。`Telemetry::capture_activity` 投影**已接线**。
 
 PostHog 硬约束：无路径、标题、paper id、DOI、检索词、划词/译文/批注正文、Skill URL/名称、Vault 路径。已有 `app started` / `app exited` 保留；新事件用 `object_verb`。
 
-设置 → 隐私：两行开关 +「清除使用记录」；文案写明本地检索词与 Skill id 不出站。
+设置 → 隐私：`telemetryEnabled` 开关 +「清除使用记录」；文案写明本地检索词与 Skill id 不出站。
 
 iOS / TestFlight 仍无遥测。debug / 无 key 构建不上报。
 
@@ -389,7 +388,7 @@ iOS / TestFlight 仍无遥测。debug / 无 key 构建不上报。
 | 阶段 | 内容 | 可验证 |
 |---|---|---|
 | **P0** | Registry + `track()` + usage.sqlite v2 + 双开关 + CLI `usage which\|timeline\|summary\|clear` | **已落地**（漏斗见 [usage.md](../backend/usage.md)「前端漏斗」；翻译 / 版面 / 批注尚未接线） |
-| **P0 余** | 补翻译 / 版面 / 批注漏斗；`Telemetry::capture` 投影 | CLI dump 含这些 kind；关开关分别停本地 / PostHog；cache hit 与逐 region 翻译不刷屏 |
+| **P0 余** | 补翻译 / 版面 / 批注漏斗；`Telemetry::capture_activity` 投影 | 已接线行为事件投影（[telemetry.md](../backend/telemetry.md) 映射表）；关 `telemetryEnabled` 停投影但本地照记；cache hit 与逐 region 翻译不刷屏；翻译 / 版面 / 批注漏斗仍待接线 |
 | **P1** | Profile（含 `toolAffinity`）+ 继续阅读 | 顶栏能跳对页 |
 | **P2** | `build_prompt` 注入（CLI 查询面已有） | 问答能提到工具习惯；关本地后注入消失 |
 | **P3** | usage-reviewer、周回顾、推荐、可选 memories | `Reviews/YYYY-WW.md` |

@@ -15,7 +15,7 @@
 
 ## 开关
 
-`AppSettings.usageTrackingEnabled`（设置 → 通用 → 隐私）。关闭后 Host 命令直接返回 0、不写库。与 PostHog `telemetryEnabled` 独立。
+本地活动记录**始终开启**、无独立开关：`activity_record_events` 无条件写库。是否投影到 PostHog 由 `telemetryEnabled` 单独控制（见 [telemetry.md](telemetry.md)）。
 
 设置页可一键清除全部记录。
 

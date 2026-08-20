@@ -9,7 +9,7 @@ mod schema;
 
 pub use events::{
     clear_all, clear_vault, list_events, record_events, rename_path, since_rfc3339_days, summarize,
-    ListFilter, UsageEvent, UsageKindCount, UsageRecord,
+    telemetry_projection, ActivityProjection, ListFilter, UsageEvent, UsageKindCount, UsageRecord,
 };
 pub use schema::{
     ensure_usage, ensure_usage_at, paper_path_of, schema_version, usage_db_path,

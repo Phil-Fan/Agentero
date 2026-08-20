@@ -8,7 +8,6 @@ import { type ActivityKind, isActivityKind } from "@/lib/activity/kinds";
 import { logger } from "@/lib/core/logger";
 import { toVaultRelative } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
-import { loadSettings } from "@/lib/settings/store";
 import { getVaultPath } from "@/lib/vault/store";
 
 const FLUSH_MS = 5000;
@@ -42,7 +41,6 @@ export function track(
 		return;
 	}
 	if (!isTauri()) return;
-	if (!loadSettings().usageTrackingEnabled) return;
 
 	const vault = getVaultPath() ?? undefined;
 	const path = normalizePath(vault, payload.path);
@@ -116,10 +114,6 @@ export async function flushActivity(): Promise<void> {
 		flushTimer = null;
 	}
 	if (flushing || buffer.length === 0) return;
-	if (!loadSettings().usageTrackingEnabled) {
-		buffer.length = 0;
-		return;
-	}
 	flushing = true;
 	const batch = buffer
 		.splice(0, buffer.length)

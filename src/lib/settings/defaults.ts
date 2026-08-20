@@ -49,7 +49,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	batchImportConcurrency: 5,
 	exportWatermarkEnabled: false,
 	telemetryEnabled: true,
-	usageTrackingEnabled: true,
 	plazaEnabled: true,
 	onboardingDone: false,
 	theme: "system",

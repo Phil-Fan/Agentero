@@ -2215,15 +2215,15 @@ UI 入口见 `settings_window_open`：Settings 现为独立原生单例窗口，
 
 ### 3.10.3 使用记录（XDG `usage.sqlite`）
 
-设备本地活动日志，**不在 Vault 内**。schema v2、列定义与 `kind`/`facet` 对照见 [usage.md](usage.md)。`usageTrackingEnabled === false` 时写入命令直接返回 `0`、不碰库。
+设备本地活动日志，**不在 Vault 内**。schema v2、列定义与 `kind`/`facet` 对照见 [usage.md](usage.md)。本地记录始终开启（无开关）；非移动端还会按 `telemetry_projection` 白名单把登记的 kind 脱敏投影到 PostHog（受 `telemetryEnabled` 约束，见 [telemetry.md](telemetry.md)）。
 
 #### `activity_record_events`（已实现）
 
-前端 `track()` 缓冲后批量写入。Host 从 `path` / `mode` / `extra` 推导 `paper_path`、`facet`、`qty`、`status`，并同事务 upsert `usage_daily` / `usage_vaults`。
+前端 `track()` 缓冲后批量写入。Host 从 `path` / `mode` / `extra` 推导 `paper_path`、`facet`、`qty`、`status`，并同事务 upsert `usage_daily` / `usage_vaults`；写库前先把登记的 kind 脱敏转发到 PostHog。
 
 - **参数**（`args`）：`{ events: ActivityRecord[] }`
 - **`ActivityRecord`**：`{ ts?, vault?, kind, path?, mode?, durMs?, extra? }`。调用方不要自己填 `paper_path` / `facet` / `qty` / `status`。
-- **返回**：写入条数（`number`）。开关关闭或空数组为 `0`。单批上限 200。
+- **返回**：写入条数（`number`）。空数组为 `0`。单批上限 200。
 - **说明**：浏览器预览（非 Tauri）前端短路为 `0`。
 
 #### `usage_list`（已实现）
