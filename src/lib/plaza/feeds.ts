@@ -227,7 +227,6 @@ export function importFeedPaper(item: FeedItem): Promise<boolean> {
 			resolve(ok);
 		}
 		void lookupSubmit([url], {
-			openImported: false,
 			onComplete: (result) => {
 				const ok =
 					result.imported.length > 0 ||

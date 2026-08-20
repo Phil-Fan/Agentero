@@ -51,7 +51,7 @@
 | 多选拖拽 | ⌘/Shift + 拖到 `papers/` 组织夹（内部拖动带 `application/x-agentero-vault-paths`，Composer / Library 不抢成图片或 PDF 导入） |
 | 外部 PDF | 拖到 `papers/` 组织夹，或拖到中间栏 Library 表（[#309](https://github.com/poco-ai/Agentero/issues/309)） |
 | 折叠 | `⌘←` 选中夹；`⇧⌘←` 折叠至默认 |
-| 定位 | 激活文档 / 入库后展开祖先并 `scrollToIndex` |
+| 定位 | 激活文档变化时展开祖先并 `scrollToIndex`；同一目标只定位一次，导入后台阶段引起的树刷新不再重复滚动 |
 | 刷新 | File → Refresh（`⌘R`）；watcher 局部刷新 |
 
 ## 代码

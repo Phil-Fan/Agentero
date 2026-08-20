@@ -62,9 +62,19 @@ export function useTreeReveal({
 	}, [flatRowKeys, uiScale, rowVirtualizer]);
 
 	const pendingRevealPathRef = useRef<string | null>(null);
+	/** Target that armed the current reveal; guards against effect-identity churn. */
+	const armedTargetRef = useRef<string | null>(null);
+	/** Target already scrolled into view; a reveal is spent once it lands. */
+	const revealedTargetRef = useRef<string | null>(null);
 
+	// Every tree refresh rebuilds `byPathKey`, so `expandAncestorsOf` gets a new
+	// identity and this effect re-runs. Compare by value: only a genuine target
+	// change arms a reveal, otherwise background import stages would each scroll.
 	useEffect(() => {
 		if (!treeSelectedPath) return;
+		if (armedTargetRef.current === treeSelectedPath) return;
+		armedTargetRef.current = treeSelectedPath;
+		revealedTargetRef.current = null;
 		// New selection always re-enables auto-reveal (e.g. open paper).
 		suppressAutoRevealRef.current = false;
 		pendingRevealPathRef.current = treeSelectedPath;
@@ -75,12 +85,15 @@ export function useTreeReveal({
 	// selected path is not yet a visible flat row (parents collapsed, or the
 	// node just appeared after magic-wand import).
 	useEffect(() => {
+		if (!treeSelectedPath || isVirtualTreePath(treeSelectedPath)) return;
+		// Already landed on this row: later refreshes must not scroll again, and
+		// an intentional collapse must stay collapsed.
+		if (revealedTargetRef.current === treeSelectedPath) return;
 		if (suppressAutoRevealRef.current) {
 			// Consume once: intentional collapse must not re-expand ancestors.
 			suppressAutoRevealRef.current = false;
 			return;
 		}
-		if (!treeSelectedPath || isVirtualTreePath(treeSelectedPath)) return;
 		if (findRowIndex(flatRows, treeSelectedPath) >= 0) return;
 		pendingRevealPathRef.current = treeSelectedPath;
 		expandAncestorsOf(treeSelectedPath);
@@ -96,6 +109,7 @@ export function useTreeReveal({
 		if (idx < 0) return;
 
 		pendingRevealPathRef.current = null;
+		revealedTargetRef.current = target;
 		// Double rAF: first for expand→flatRows layout, second for virtualizer measure.
 		requestAnimationFrame(() => {
 			requestAnimationFrame(() => {

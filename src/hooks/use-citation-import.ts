@@ -59,7 +59,6 @@ export function useCitationImport(
 			const origin = paperPath;
 			try {
 				await lookupSubmit([identifier], {
-					openImported: false,
 					parentDir,
 					onComplete: async () => {
 						try {

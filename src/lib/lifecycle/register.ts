@@ -11,6 +11,7 @@ import {
 	scheduleLibraryRefresh,
 } from "@/lib/paper/library-store";
 import { seedVaultSkills } from "@/lib/vault/actions";
+import { joinVaultPath } from "@/lib/vault/path";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 import {
 	getVaultPath,
@@ -47,10 +48,16 @@ export function registerLifecycleHandlers(): () => void {
 				).catch(() => undefined);
 			}
 		}),
-		lifecycle.on("paper:imported", ({ vaultId }) => {
+		lifecycle.on("paper:imported", ({ vaultId, paperId }) => {
 			// `app.emit` broadcasts to every window; only react to the active vault.
 			if (vaultId !== getVaultPath()) return;
-			scheduleTreeRefresh();
+			// `paperId` is the folder basename, so point the targeted refresh at
+			// `papers/` (re-listed eagerly by the Host, org subfolders included)
+			// instead of rebuilding the whole tree, which would re-mark lazily
+			// expanded folders as pending and cascade extra listings.
+			scheduleTreeRefresh(
+				paperId ? [joinVaultPath(vaultId, `papers/${paperId}`)] : undefined,
+			);
 			scheduleImportWikiRebuild(vaultId);
 			scheduleLibraryRefresh();
 		}),

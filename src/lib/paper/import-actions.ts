@@ -37,7 +37,6 @@ import {
 import { joinVaultPath } from "@/lib/vault";
 import { getVaultPath, refreshTree } from "@/lib/vault/store";
 import { toVaultRelative } from "@/lib/wiki";
-import { openPaper } from "@/lib/workspace/actions";
 
 /** ⇧⌘I — expand the left rail (popover owns focus) and open the wand. */
 export function openMagicWand(): void {
@@ -52,8 +51,6 @@ export function openMagicWand(): void {
 }
 
 export type LookupSubmitOptions = {
-	/** Open the first newly imported paper after the import finishes. */
-	openImported?: boolean;
 	/** Vault-relative destination, e.g. `papers` or `papers/nlp`. Defaults to the current tree selection. */
 	parentDir?: string;
 	/** Run after one input has finished importing (store refresh is debounced via paper:imported). */
@@ -70,7 +67,6 @@ export async function lookupSubmit(
 	}
 	if (texts.length === 0) return;
 	const settings = getSettings();
-	const openImported = opts.openImported ?? true;
 
 	for (const text of texts) {
 		const input = text.trim();
@@ -115,18 +111,6 @@ export async function lookupSubmit(
 							extra: { source: inferLookupSource(input) },
 						});
 					}
-				}
-				const first = result.imported[0];
-				if (first) {
-					const paperAbs = first.paperDir
-						? first.paperDir.replace(/[\\/]+$/, "")
-						: joinVaultPath(
-								vaultPath,
-								(first.path || "")
-									.replace(/\\/g, "/")
-									.replace(/^\/+|\/+$/g, ""),
-							);
-					if (openImported) openPaper(paperAbs);
 				}
 				// Papers that already have a PDF after import: start layout now.
 				// Those still downloading enqueue layout after download completes.
@@ -321,7 +305,6 @@ export async function importLocalPdf(opts?: {
 			},
 		);
 		if (result) {
-			if (result.papers[0]) openPaper(result.papers[0].paperDir);
 			for (const paper of result.papers) {
 				if (paper.paperDir) {
 					enqueuePaperLayoutAnalysis({

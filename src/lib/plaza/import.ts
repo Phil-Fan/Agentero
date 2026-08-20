@@ -72,7 +72,6 @@ function importViaLookup(request: PlazaImportRequest): Promise<boolean> {
 			resolve(ok);
 		}
 		void lookupSubmit([request.url], {
-			openImported: false,
 			onComplete: (result) => settle(result.imported.length > 0),
 		}).catch((error) => {
 			notifyError(error instanceof Error ? error.message : String(error));
@@ -158,7 +157,7 @@ export async function importPlazaPaper(
 /** Feed a GitHub Skill repo into the 魔棒 discovery → install dialog. */
 export async function importPlazaSkillRepo(url: string): Promise<void> {
 	try {
-		await lookupSubmit([url], { openImported: false });
+		await lookupSubmit([url]);
 	} catch (error) {
 		notifyError(error instanceof Error ? error.message : String(error));
 	}

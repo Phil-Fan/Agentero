@@ -99,7 +99,7 @@ MVP **不做**：`@handle` 展开、OPML、登录态、RSSHub 拼接。
 | **列表卡** | 全部条目 | 标题；「全部」下显示来源+日期，单源下日期与标题同行。摘要去掉 arXiv 编号 / Announce Type | 点卡片进详情 |
 | **详情** | 同上 | 打开时解析全文（RSS 摘要不够则抓 `item.url` → HTML→Markdown）。整篇是一份 Markdown：`# 标题` + 正文，走 `MessageResponse`。文末 `[...]` 会剥掉。入库 / 打开原文在顶栏 | 返回列表 |
 
-- 入库复用 `importPlazaPaper` / `lookupSubmit`：arXiv 喂 `https://arxiv.org/abs/{id}`；DOI 喂 `https://doi.org/{doi}`。`openImported: false`。
+- 入库复用 `importPlazaPaper` / `lookupSubmit`：arXiv 喂 `https://arxiv.org/abs/{id}`；DOI 喂 `https://doi.org/{doi}`。入库不自动打开论文。
 - 入库中按钮 busy；成功 Toast + 该行变为「已入库」（本机缓存记 `importedAt`，刷新不丢）。
 - 失败 `notifyError`，不在侧栏挂错误条。
 - 列表卡摘要只示纯文本 3 行。详情打开时走 `feeds_resolve_body`：已缓存 `bodyMarkdown` 则直接用；否则若 RSS 已是全文（或 arXiv / DOI 落地页）转 Markdown；博客摘要带 `[...]` 或 `paper_url` 为空（可能从落地页 metadata 确认论文身份）则抓原文 HTML，抽 `<article>` / 常见正文容器后 `htmd` 成 Markdown，并顺手解析 `citation_doi` 等回填 `paper_url`。渲染复用 `MessageResponse`（Streamdown + `$…$`）。

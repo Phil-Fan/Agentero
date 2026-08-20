@@ -8,14 +8,14 @@
 - 粘贴一个或多个论文标识符或 Skill 来源（空格/逗号/分号/换行）；去重后顺序处理。
 - 目标：`papers/` 或当前选中的 Papers 子文件夹。
 - 弹层内 **FileUp**：多选本地 PDF。
-- 成功后：刷新树、展开并滚到新论文、`openPaper`；批量**不**自动连跑精读。
-- 同一条 identifier lookup 管线可由其它入口复用；调用侧可通过 `lookupSubmit(texts, { openImported: false })` 关闭导入后自动打开。
+- 成功后：局部刷新 `papers/` 子树、Wiki、Library；**不**自动打开论文（并行入库时抢焦点会让文件树反复跳转），批量也**不**自动连跑精读。
+- 同一条 identifier lookup 管线可由其它入口复用（References 面板、Plaza 入库、Zotero 迁移）。
 - Host：`lookup_import_batch` 等。
 
 ## References 侧栏导入
 
 - 入口：打开论文后的右侧 **References** 面板，未入库引用卡片上的 Import 按钮。
-- 复用魔棒 identifier lookup 管线，但显式关闭导入后 `openPaper`。
+- 复用魔棒 identifier lookup 管线（与其它入口一样，入库后不打开新论文）。
 - 成功后：刷新 Vault 树、Wiki 索引、Library，并重解析当前论文 references 以更新 `localMatch`；当前阅读的论文保持打开。
 
 ### Skill 导入
