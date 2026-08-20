@@ -170,3 +170,24 @@ export function scheduleLibraryRefresh(): void {
 			});
 	}, 500);
 }
+
+/**
+ * Drop catalog state belonging to the vault being closed. Leaves `query` /
+ * `scopePath` to `activateVault` (cleared synchronously so the first frame of
+ * the new vault is not filtered by the old one) and preserves
+ * `trashReloadSignal`, whose monotonic value subscribers compare against.
+ */
+export function clearLibraryVaultState(): void {
+	if (libraryRefreshTimer) {
+		clearTimeout(libraryRefreshTimer);
+		libraryRefreshTimer = null;
+	}
+	libraryStore.setState({
+		papers: [],
+		paperMetaByRelPath: new Map(),
+		editMetaDraft: null,
+		loading: false,
+		rescanning: false,
+		ioBusy: null,
+	});
+}

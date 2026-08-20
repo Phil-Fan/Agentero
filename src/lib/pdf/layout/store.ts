@@ -116,3 +116,17 @@ export function getFocusedLayoutRegion(documentId: string): string | null {
 	if (!focused || focused.documentId !== documentId) return null;
 	return focused.regionId;
 }
+
+/**
+ * Drop every document's layout analysis. Keys are tab-scoped documentIds and a
+ * vault switch closes all tabs, so these results can never be reused.
+ */
+export function clearLayoutVaultState(): void {
+	layoutAnalysisStore.setState({
+		byDocument: {},
+		ui: { stage: "idle" },
+		activeDocumentId: null,
+		focused: null,
+		overlayVisible: {},
+	});
+}

@@ -295,3 +295,19 @@ export function clearAgentSessionOpenRequest(): void {
 	if (!uiStore.getState().agentSessionOpenRequest) return;
 	uiStore.setState({ agentSessionOpenRequest: null });
 }
+
+/**
+ * Close dialogs and drop one-shot requests that reference the vault being
+ * closed. Deliberately narrow: user chrome (rail state), live window truth
+ * (`agentPanelMounted`, `featurePoppedOut`, `settingsOpen`) and the monotonic
+ * `lookupOpenSignal` all outlive a vault switch.
+ */
+export function clearUiVaultState(): void {
+	uiStore.setState({
+		skillImportDraft: null,
+		zoteroOpen: false,
+		zoteroSyncOpen: false,
+		commandOpen: false,
+		agentSessionOpenRequest: null,
+	});
+}

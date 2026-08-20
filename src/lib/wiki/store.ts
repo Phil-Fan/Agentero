@@ -181,3 +181,26 @@ export function shouldIgnoreInternalRenameEvent(
 		return false;
 	});
 }
+
+/**
+ * Drop wiki state belonging to the vault being closed: the external-rename
+ * repair flow plus every watcher-echo collection, whose entries would otherwise
+ * be matched against the next vault's paths. `wikiIndexRevision` is left alone
+ * because subscribers compare its monotonic value.
+ */
+export function clearWikiVaultState(): void {
+	if (wikiRebuildTimer) {
+		clearTimeout(wikiRebuildTimer);
+		wikiRebuildTimer = null;
+	}
+	wikiRebuildPaths.clear();
+	wikiEchoEmbedPaths.clear();
+	selfWrittenPaths.clear();
+	internalRenamePaths.clear();
+	wikiStore.setState({
+		externalRenamePreview: null,
+		externalRenameVaultPath: null,
+		externalRenameRepairing: false,
+		externalRenameFailure: null,
+	});
+}

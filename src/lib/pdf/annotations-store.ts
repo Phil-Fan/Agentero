@@ -116,3 +116,15 @@ export function remapTabAnnotations(
 		};
 	});
 }
+
+/**
+ * Drop every tab's annotations. All state here is tab-keyed and a vault switch
+ * closes all tabs, so nothing survives that the next vault could use.
+ */
+export function clearAnnotationsVaultState(): void {
+	annotationsStore.setState({
+		highlightsByTab: {},
+		asksByTab: {},
+		visualTracesByTab: {},
+	});
+}

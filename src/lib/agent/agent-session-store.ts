@@ -351,3 +351,20 @@ export function applyAgentSessionHandoffOnce(payload: {
 	applyAgentSessionHandoff(payload);
 	return true;
 }
+
+/**
+ * Drop chat state belonging to the vault being closed. `_sendHandler` /
+ * `sendHandlerSlot` are wiring owned by AgentPanel's mount, not vault data —
+ * the panel does not remount on a switch, so clearing them here would break
+ * PDF-pin turns until it happened to remount.
+ */
+export function clearAgentVaultState(): void {
+	agentSessionStore.setState({
+		sessions: [],
+		activeTabId: "draft",
+		draftLines: EMPTY_CHAT_LINES,
+		submitting: false,
+		runningSessionIds: [],
+		turnRequest: null,
+	});
+}
