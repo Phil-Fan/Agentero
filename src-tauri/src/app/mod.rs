@@ -307,6 +307,12 @@ pub fn run() {
             ) {
                 #[cfg(not(target_os = "ios"))]
                 app.state::<Arc<ConnectorController>>().stop();
+                // Close the mobile relay rather than letting the socket die with
+                // the process, so paired clients see a clean shutdown. `stop`
+                // takes the runtime, so the second call in this arm is a no-op.
+                let _ = app
+                    .state::<crate::features::bridge::BridgeController>()
+                    .stop();
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 app.state::<Arc<crate::features::telemetry::Telemetry>>()
                     .shutdown();
