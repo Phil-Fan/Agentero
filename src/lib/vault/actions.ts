@@ -246,7 +246,10 @@ export function refreshAll(): void {
 	if (!vaultPath) return;
 	void (async () => {
 		await refreshTree(vaultPath);
-		await rebuildWikiAndNotify(vaultPath);
+		// Wiki rebuild needs local fs semantics; a remote handle always fails.
+		if (!isRemoteVaultHandle(vaultPath)) {
+			await rebuildWikiAndNotify(vaultPath);
+		}
 		await refreshLibrary();
 	})();
 }
@@ -407,7 +410,10 @@ export async function handleTrashChanged(): Promise<void> {
 	if (!vaultPath) return;
 	setTreeSelectedPath(null);
 	await refreshTree(vaultPath);
-	await rebuildWikiAndNotify(vaultPath);
+	// Wiki rebuild needs local fs semantics; a remote handle always fails.
+	if (!isRemoteVaultHandle(vaultPath)) {
+		await rebuildWikiAndNotify(vaultPath);
+	}
 	await refreshLibrary();
 }
 
