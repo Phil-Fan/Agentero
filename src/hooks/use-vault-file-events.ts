@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { toVaultRelative } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
+import { listenSafe } from "@/lib/core/tauri-events";
 import { isPaperAssetPath, isUnderPapers } from "@/lib/paper/paths";
 import {
 	startVaultWatch,
@@ -61,37 +62,26 @@ export function useVaultFileEvents({
 	}, [vaultPath]);
 
 	useEffect(() => {
-		if (!isTauri()) return;
-		let cancelled = false;
-		let unsub: (() => void) | undefined;
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-			unsub = await listen<VaultFileChangedPayload>(
-				VAULT_FILE_CHANGED_EVENT,
-				async ({ payload }) => {
-					if (shouldIgnoreEvent?.(payload)) return;
-					if (onLibraryChange && payloadAffectsLibrary(vaultPath, payload)) {
-						onLibraryChange();
-					}
-					if (payload.rename) {
-						await onExternalRename?.(payload.rename, payload);
-					} else if (payload.kind === "rename") {
-						onUnverifiedRename?.(payload);
-					}
-					for (const p of payload.paths) {
-						onDiskChange(p);
-						onWikiChange?.(p);
-					}
-					// Structural changes affect the tree; plain content edits don't.
-					if (payload.kind !== "modify") onStructuralChange(payload.paths);
-				},
-			);
-		})();
-		return () => {
-			cancelled = true;
-			unsub?.();
-		};
+		return listenSafe<VaultFileChangedPayload>(
+			VAULT_FILE_CHANGED_EVENT,
+			async (payload) => {
+				if (shouldIgnoreEvent?.(payload)) return;
+				if (onLibraryChange && payloadAffectsLibrary(vaultPath, payload)) {
+					onLibraryChange();
+				}
+				if (payload.rename) {
+					await onExternalRename?.(payload.rename, payload);
+				} else if (payload.kind === "rename") {
+					onUnverifiedRename?.(payload);
+				}
+				for (const p of payload.paths) {
+					onDiskChange(p);
+					onWikiChange?.(p);
+				}
+				// Structural changes affect the tree; plain content edits don't.
+				if (payload.kind !== "modify") onStructuralChange(payload.paths);
+			},
+		);
 	}, [
 		onDiskChange,
 		onExternalRename,

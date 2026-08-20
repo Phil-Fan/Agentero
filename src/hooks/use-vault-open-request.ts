@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { takePendingVaultOpen } from "@/lib/cli/api";
 import { notifyError } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
+import { listenSafe } from "@/lib/core/tauri-events";
 import { openLocalVaultPath } from "@/lib/vault/actions";
 
 type OpenPayload = { path: string };
@@ -13,8 +14,6 @@ type OpenPayload = { path: string };
 export function useVaultOpenRequest(): void {
 	useEffect(() => {
 		if (!isTauri()) return;
-		let unlistenOpen: (() => void) | undefined;
-		let unlistenError: (() => void) | undefined;
 		let cancelled = false;
 		/** In-flight path so event + pending take do not double-activate. */
 		let inflight: string | null = null;
@@ -42,25 +41,18 @@ export function useVaultOpenRequest(): void {
 			}
 		};
 
+		const offOpen = listenSafe<OpenPayload>("vault:open-request", (payload) => {
+			void handlePath(payload?.path);
+		});
+		const offError = listenSafe<{ message?: string }>(
+			"vault:open-error",
+			(payload) => {
+				if (payload?.message) notifyError(payload.message);
+			},
+		);
+
+		// Startup race: Host may have queued a path before the listener attached.
 		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-
-			unlistenOpen = await listen<OpenPayload>(
-				"vault:open-request",
-				(event) => {
-					void handlePath(event.payload?.path);
-				},
-			);
-			unlistenError = await listen<{ message?: string }>(
-				"vault:open-error",
-				(event) => {
-					const msg = event.payload?.message;
-					if (msg) notifyError(msg);
-				},
-			);
-
-			// Startup race: Host may have queued a path before the listener attached.
 			try {
 				const pending = await takePendingVaultOpen();
 				if (!cancelled && pending) {
@@ -73,8 +65,8 @@ export function useVaultOpenRequest(): void {
 
 		return () => {
 			cancelled = true;
-			unlistenOpen?.();
-			unlistenError?.();
+			offOpen();
+			offError();
 		};
 	}, []);
 }

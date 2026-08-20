@@ -26,7 +26,7 @@ import type {
 	SelectionMenuState,
 	VisualDraftEditorState,
 } from "@/components/viewer/pdf/types";
-import { isTauri } from "@/lib/core/tauri";
+import { listenSafe } from "@/lib/core/tauri-events";
 import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
 import {
 	type EquationSymbol,
@@ -153,41 +153,31 @@ export function usePdfLayoutHover({
 
 	// Reload Annotation.md when the Agent / editor rewrites it on disk.
 	useEffect(() => {
-		if (!paperAbsPath || !isTauri()) return;
+		if (!paperAbsPath) return;
 		const annotationPath = equationAnnotationPath(paperAbsPath);
 		const annotationKey = normalizePathKey(annotationPath);
-		let cancelled = false;
-		let unsub: (() => void) | undefined;
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-			unsub = await listen<VaultFileChangedPayload>(
-				VAULT_FILE_CHANGED_EVENT,
-				({ payload }) => {
-					const paths = [...payload.paths];
-					if (payload.rename) {
-						paths.push(payload.rename.from, payload.rename.to);
+		return listenSafe<VaultFileChangedPayload>(
+			VAULT_FILE_CHANGED_EVENT,
+			(payload) => {
+				const paths = [...payload.paths];
+				if (payload.rename) {
+					paths.push(payload.rename.from, payload.rename.to);
+				}
+				const hit = paths.some((p) => normalizePathKey(p) === annotationKey);
+				if (!hit) return;
+				void loadEquationAnnotation(paperAbsPath).then((symbols) => {
+					setEquationSymbols(symbols);
+					// Drop open card if the glossary disappeared.
+					if (symbols.length === 0) {
+						setFormulaAnnotationPreview(null);
+					} else {
+						setFormulaAnnotationPreview((prev) =>
+							prev ? { ...prev, symbols } : prev,
+						);
 					}
-					const hit = paths.some((p) => normalizePathKey(p) === annotationKey);
-					if (!hit) return;
-					void loadEquationAnnotation(paperAbsPath).then((symbols) => {
-						setEquationSymbols(symbols);
-						// Drop open card if the glossary disappeared.
-						if (symbols.length === 0) {
-							setFormulaAnnotationPreview(null);
-						} else {
-							setFormulaAnnotationPreview((prev) =>
-								prev ? { ...prev, symbols } : prev,
-							);
-						}
-					});
-				},
-			);
-		})();
-		return () => {
-			cancelled = true;
-			unsub?.();
-		};
+				});
+			},
+		);
 	}, [paperAbsPath]);
 
 	const cancelFormulaHover = useCallback((regionId?: string) => {

@@ -22,6 +22,7 @@ import { applyAgentSessionHandoffOnce } from "@/lib/agent/agent-session-store";
 import { normalizeAgentSourcePath } from "@/lib/agent/sources";
 import { toVaultRelative } from "@/lib/core/path";
 import { isMacOS, isTauri } from "@/lib/core/tauri";
+import { toSafeDisposer } from "@/lib/core/tauri-events";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { paperDirFromPath } from "@/lib/paper/detect";
 import { refreshLibrary } from "@/lib/paper/library-store";
@@ -323,42 +324,39 @@ export function FeatureWindowRoot() {
 		};
 	}, [bootQuery.vaultPath]);
 
-	useEffect(() => {
-		let unlisten: (() => void) | undefined;
-		void listenWorkspaceActive((payload) => {
-			setFollowed(payload);
-		}).then((u) => {
-			unlisten = u;
-		});
-		return () => {
-			unlisten?.();
-		};
-	}, []);
+	useEffect(
+		() =>
+			toSafeDisposer(
+				listenWorkspaceActive((payload) => {
+					setFollowed(payload);
+				}),
+			),
+		[],
+	);
 
 	useEffect(() => {
 		if (view !== "agent") return;
-		let unlistenOpen: (() => void) | undefined;
-		let unlistenHandoff: (() => void) | undefined;
-		void listenAgentOpenSession((payload) => {
-			const req = payload as AgentSessionOpenRequest;
-			if (!req || typeof req !== "object" || !("nonce" in req)) return;
-			uiStore.setState({ agentSessionOpenRequest: req });
-		}).then((u) => {
-			unlistenOpen = u;
-		});
-		// First handoff only — later retries must not clobber in-window chat.
-		void listenAgentSessionHandoff((payload) => {
-			applyAgentSessionHandoffOnce({
-				sessions: payload.sessions,
-				activeTabId: payload.activeTabId,
-				draftLines: payload.draftLines,
-			});
-		}).then((u) => {
-			unlistenHandoff = u;
-		});
+		const offs = [
+			toSafeDisposer(
+				listenAgentOpenSession((payload) => {
+					const req = payload as AgentSessionOpenRequest;
+					if (!req || typeof req !== "object" || !("nonce" in req)) return;
+					uiStore.setState({ agentSessionOpenRequest: req });
+				}),
+			),
+			// First handoff only — later retries must not clobber in-window chat.
+			toSafeDisposer(
+				listenAgentSessionHandoff((payload) => {
+					applyAgentSessionHandoffOnce({
+						sessions: payload.sessions,
+						activeTabId: payload.activeTabId,
+						draftLines: payload.draftLines,
+					});
+				}),
+			),
+		];
 		return () => {
-			unlistenOpen?.();
-			unlistenHandoff?.();
+			for (const off of offs) off();
 		};
 	}, [view]);
 

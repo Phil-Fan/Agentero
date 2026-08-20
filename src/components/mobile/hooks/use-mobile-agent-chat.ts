@@ -15,6 +15,7 @@ import type {
 	AgentStreamEvent,
 } from "@/components/mobile/types";
 import { bridgeRpc, listenBridgeEvent } from "@/lib/bridge/client";
+import { toSafeDisposer } from "@/lib/core/tauri-events";
 
 /**
  * Chat state machine for the mobile agent page: subscribes to the bridged
@@ -85,30 +86,39 @@ export function useMobileAgentChat({
 
 	useEffect(() => {
 		let active = true;
-		const unlisten: Array<() => void> = [];
-		void listenBridgeEvent<AgentStreamEvent>("agent:stream", (event) => {
-			if (!active || event.sessionId !== sessionRef.current) return;
-			setLines((current) => appendStreamChunk(current, event.chunk));
-		}).then((off) => unlisten.push(off));
-		void listenBridgeEvent<AgentResultEvent>("agent:completed", (event) => {
-			if (!active || event.sessionId !== sessionRef.current) return;
-			setSending(false);
-			setLines((current) => completeStream(current, event.content));
-		}).then((off) => unlisten.push(off));
-		void listenBridgeEvent<AgentFailedEvent>("agent:failed", (event) => {
-			if (!active || event.sessionId !== sessionRef.current) return;
-			setSending(false);
-			setLines((current) =>
-				appendAssistantLine(current, event.error ?? t("agent.failed")),
-			);
-		}).then((off) => unlisten.push(off));
-		void listenBridgeEvent<AgentPermissionRequest>(
-			"agent:permission-request",
-			(event) => {
-				if (!active || event.sessionId !== sessionRef.current) return;
-				setPermission(event);
-			},
-		).then((off) => unlisten.push(off));
+		const unlisten = [
+			toSafeDisposer(
+				listenBridgeEvent<AgentStreamEvent>("agent:stream", (event) => {
+					if (!active || event.sessionId !== sessionRef.current) return;
+					setLines((current) => appendStreamChunk(current, event.chunk));
+				}),
+			),
+			toSafeDisposer(
+				listenBridgeEvent<AgentResultEvent>("agent:completed", (event) => {
+					if (!active || event.sessionId !== sessionRef.current) return;
+					setSending(false);
+					setLines((current) => completeStream(current, event.content));
+				}),
+			),
+			toSafeDisposer(
+				listenBridgeEvent<AgentFailedEvent>("agent:failed", (event) => {
+					if (!active || event.sessionId !== sessionRef.current) return;
+					setSending(false);
+					setLines((current) =>
+						appendAssistantLine(current, event.error ?? t("agent.failed")),
+					);
+				}),
+			),
+			toSafeDisposer(
+				listenBridgeEvent<AgentPermissionRequest>(
+					"agent:permission-request",
+					(event) => {
+						if (!active || event.sessionId !== sessionRef.current) return;
+						setPermission(event);
+					},
+				),
+			),
+		];
 		return () => {
 			active = false;
 			for (const off of unlisten) off();

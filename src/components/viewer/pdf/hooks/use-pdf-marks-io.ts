@@ -28,7 +28,7 @@ import {
 } from "react";
 import { useStableDerived } from "@/components/viewer/pdf/hooks/use-stable-derived";
 import type { PdfViewerProps } from "@/components/viewer/pdf/types";
-import { isTauri } from "@/lib/core/tauri";
+import { listenSafe } from "@/lib/core/tauri-events";
 import {
 	listPdfVisualTraces,
 	type PdfVisualSessionTrace,
@@ -191,36 +191,28 @@ export function usePdfMarksIo({
 			}, MARKS_REFRESH_BURST_MS);
 		};
 		const marksKey = `${normalizePathKey(marksDir(paperAbsPath))}/`;
-		let unsubMarks: (() => void) | undefined;
-		if (isTauri()) {
-			void (async () => {
-				const { listen } = await import("@tauri-apps/api/event");
-				if (cancelled) return;
-				unsubMarks = await listen<VaultFileChangedPayload>(
-					VAULT_FILE_CHANGED_EVENT,
-					({ payload }) => {
-						const paths = [...payload.paths];
-						if (payload.rename) {
-							paths.push(payload.rename.from, payload.rename.to);
-						}
-						const marksPaths = paths.filter((p) =>
-							normalizePathKey(p).startsWith(marksKey),
-						);
-						if (!marksPaths.length) return;
-						// Our own writes already updated in-memory state; skip
-						// their watcher echo unless an external change landed in
-						// the same batch.
-						if (marksPaths.every((p) => isRecentSelfWrite(p))) return;
-						scheduleRefresh();
-					},
+		const unsubMarks = listenSafe<VaultFileChangedPayload>(
+			VAULT_FILE_CHANGED_EVENT,
+			(payload) => {
+				const paths = [...payload.paths];
+				if (payload.rename) {
+					paths.push(payload.rename.from, payload.rename.to);
+				}
+				const marksPaths = paths.filter((p) =>
+					normalizePathKey(p).startsWith(marksKey),
 				);
-			})();
-		}
+				if (!marksPaths.length) return;
+				// Our own writes already updated in-memory state; skip their
+				// watcher echo unless an external change landed in the same batch.
+				if (marksPaths.every((p) => isRecentSelfWrite(p))) return;
+				scheduleRefresh();
+			},
+		);
 		return () => {
 			cancelled = true;
 			window.removeEventListener("focus", onFocus);
 			if (burstTimer !== null) window.clearTimeout(burstTimer);
-			unsubMarks?.();
+			unsubMarks();
 		};
 	}, [paperAbsPath, isActive]);
 

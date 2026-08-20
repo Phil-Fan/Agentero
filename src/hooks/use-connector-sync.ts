@@ -19,6 +19,7 @@ import {
 } from "@/lib/core/background-tasks";
 import { notifyError } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
+import { listenSafe } from "@/lib/core/tauri-events";
 import {
 	type ConnectorItemSaved,
 	type ConnectorProgress,
@@ -86,75 +87,61 @@ export function useConnectorSync(): void {
 	// Refresh tree/library when the Connector saves into the vault; open the
 	// paper tab (same as magic-wand import).
 	useEffect(() => {
-		if (!isTauri()) return;
-		let cancelled = false;
-		const unsubs: Array<() => void> = [];
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-			unsubs.push(
-				await listen<ConnectorItemSaved>("connector:item-saved", (ev) => {
-					const p = ev.payload;
-					const vault = getVaultPath();
-					if (vault) {
-						// Debounced: import saves coalesce with the paper:imported
-						// handler; non-import saves (upload, move) still refresh here.
-						scheduleTreeRefresh();
-						scheduleLibraryRefresh();
-					}
-					// Open/focus the paper tab (metadata save, upload, or move).
-					const rel = (p?.path ?? "")
-						.replace(/\\/g, "/")
-						.replace(/^\/+|\/+$/g, "");
-					if (vault && rel) {
-						openPaper(joinVaultPath(vault, rel));
-					}
-				}),
-			);
-			unsubs.push(
-				await listen<ConnectorProgress>("connector:progress", (ev) => {
-					const p = ev.payload;
-					if (!p?.key) return;
-					let taskId = progressTasksRef.current.get(p.key);
-					if (!taskId) {
-						taskId = startBackgroundTask({
-							kind: "connector",
-							title: p.title || t("app:tasks.connector"),
-							detail: p.detail ?? undefined,
-							progress: p.progress ?? null,
-						});
-						progressTasksRef.current.set(p.key, taskId);
-					} else {
-						updateBackgroundTask(taskId, {
-							detail: p.detail ?? undefined,
-							progress: p.progress ?? null,
-						});
-					}
-					if (p.status === "completed") {
-						completeBackgroundTask(
-							taskId,
-							p.detail ?? t("app:tasks.connectorComplete"),
-						);
-						progressTasksRef.current.delete(p.key);
-					} else if (p.status === "failed") {
-						failBackgroundTask(
-							taskId,
-							p.error ?? p.detail ?? t("app:tasks.connectorFailed"),
-						);
-						progressTasksRef.current.delete(p.key);
-					}
-				}),
-			);
-			unsubs.push(
-				await listen<{ message?: string }>("connector:error", (ev) => {
-					const msg = ev.payload?.message?.trim();
-					if (msg) notifyError(msg);
-				}),
-			);
-		})();
+		const offs = [
+			listenSafe<ConnectorItemSaved>("connector:item-saved", (p) => {
+				const vault = getVaultPath();
+				if (vault) {
+					// Debounced: import saves coalesce with the paper:imported
+					// handler; non-import saves (upload, move) still refresh here.
+					scheduleTreeRefresh();
+					scheduleLibraryRefresh();
+				}
+				// Open/focus the paper tab (metadata save, upload, or move).
+				const rel = (p?.path ?? "")
+					.replace(/\\/g, "/")
+					.replace(/^\/+|\/+$/g, "");
+				if (vault && rel) {
+					openPaper(joinVaultPath(vault, rel));
+				}
+			}),
+			listenSafe<ConnectorProgress>("connector:progress", (p) => {
+				if (!p?.key) return;
+				let taskId = progressTasksRef.current.get(p.key);
+				if (!taskId) {
+					taskId = startBackgroundTask({
+						kind: "connector",
+						title: p.title || t("app:tasks.connector"),
+						detail: p.detail ?? undefined,
+						progress: p.progress ?? null,
+					});
+					progressTasksRef.current.set(p.key, taskId);
+				} else {
+					updateBackgroundTask(taskId, {
+						detail: p.detail ?? undefined,
+						progress: p.progress ?? null,
+					});
+				}
+				if (p.status === "completed") {
+					completeBackgroundTask(
+						taskId,
+						p.detail ?? t("app:tasks.connectorComplete"),
+					);
+					progressTasksRef.current.delete(p.key);
+				} else if (p.status === "failed") {
+					failBackgroundTask(
+						taskId,
+						p.error ?? p.detail ?? t("app:tasks.connectorFailed"),
+					);
+					progressTasksRef.current.delete(p.key);
+				}
+			}),
+			listenSafe<{ message?: string }>("connector:error", (payload) => {
+				const msg = payload?.message?.trim();
+				if (msg) notifyError(msg);
+			}),
+		];
 		return () => {
-			cancelled = true;
-			for (const u of unsubs) u();
+			for (const off of offs) off();
 		};
 	}, [t]);
 }

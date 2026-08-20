@@ -1,4 +1,3 @@
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
 	ChevronRight,
 	CircleHelp,
@@ -35,6 +34,7 @@ import {
 } from "@/components/ui/tooltip";
 import { errorMessage, notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
+import { listenSafe } from "@/lib/core/tauri-events";
 import { cn } from "@/lib/core/utils";
 import {
 	emptySyncConfig,
@@ -110,20 +110,21 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 
 	useEffect(() => {
 		if (!localVault) return;
-		const unlisten: UnlistenFn[] = [];
-		void listen<SyncStateEvent>(SYNC_STATE_EVENT, ({ payload }) => {
-			if (payload.vaultPath !== localVault) return;
-			setSyncing(payload.status === "syncing");
-			if (payload.status !== "syncing") {
-				setProgress(null);
-				void refresh().catch(() => undefined);
-			}
-		}).then((off) => unlisten.push(off));
-		void listen<SyncProgressEvent>(SYNC_PROGRESS_EVENT, ({ payload }) => {
-			if (payload.vaultPath === localVault) setProgress(payload);
-		}).then((off) => unlisten.push(off));
+		const offs = [
+			listenSafe<SyncStateEvent>(SYNC_STATE_EVENT, (payload) => {
+				if (payload.vaultPath !== localVault) return;
+				setSyncing(payload.status === "syncing");
+				if (payload.status !== "syncing") {
+					setProgress(null);
+					void refresh().catch(() => undefined);
+				}
+			}),
+			listenSafe<SyncProgressEvent>(SYNC_PROGRESS_EVENT, (payload) => {
+				if (payload.vaultPath === localVault) setProgress(payload);
+			}),
+		];
 		return () => {
-			for (const off of unlisten) off();
+			for (const off of offs) off();
 		};
 	}, [localVault, refresh]);
 

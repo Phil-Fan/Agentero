@@ -55,6 +55,7 @@ import {
 	dataTransferTypes,
 } from "@/lib/core/file-accept";
 import { isImeKeyboardEvent } from "@/lib/core/ime";
+import { toSafeDisposer } from "@/lib/core/tauri-events";
 import {
 	collectUserPromptTexts,
 	nextHistoryIndexOnDown,
@@ -422,13 +423,12 @@ export function useAgentComposer({
 		const pending = takePendingAgentContextPaths();
 		if (pending) attachContextPaths(pending);
 		const unsubscribe = subscribePendingAgentContextPaths(attachContextPaths);
-		let unlisten: (() => void) | undefined;
-		void listenAgentAttachContext(attachContextPaths).then((u) => {
-			unlisten = u;
-		});
+		const unlisten = toSafeDisposer(
+			listenAgentAttachContext(attachContextPaths),
+		);
 		return () => {
 			unsubscribe();
-			unlisten?.();
+			unlisten();
 		};
 	}, [attachContextPaths]);
 

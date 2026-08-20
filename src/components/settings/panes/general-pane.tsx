@@ -17,6 +17,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useTauriEvent } from "@/hooks/use-tauri-event";
 import { clearUsage } from "@/lib/activity";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
@@ -280,24 +281,9 @@ function ConnectorSettingsBlock({
 		void refresh();
 	}, [refresh]);
 
-	useEffect(() => {
-		if (!isTauri()) return;
-		let cancelled = false;
-		const unsubs: Array<() => void> = [];
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-			unsubs.push(
-				await listen<ConnectorStatus>("connector:status", (e) => {
-					setStatus(e.payload);
-				}),
-			);
-		})();
-		return () => {
-			cancelled = true;
-			for (const u of unsubs) u();
-		};
-	}, []);
+	useTauriEvent<ConnectorStatus>("connector:status", (payload) => {
+		setStatus(payload);
+	});
 
 	const onToggle = async (enabled: boolean) => {
 		patch({ connectorEnabled: enabled });
