@@ -1,4 +1,4 @@
-import { SearchCheck } from "lucide-react";
+import { Check, SearchCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -12,14 +12,16 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useVaultStore } from "@/hooks/use-app-stores";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
+import { usePapersOrgFolders } from "@/hooks/use-papers-org-folders";
 import { basenameOf } from "@/lib/core/path";
+import { cn } from "@/lib/core/utils";
 import {
 	type PdfIdentProbe,
 	probePdfIdents,
 	resolveIdentifierMetadata,
 } from "@/lib/paper/api";
-import { titleFromPdfPath } from "@/lib/paper/local-pdf-meta";
 import type {
 	LocalPdfExtraMeta,
 	LocalPdfImportEntry,
@@ -27,13 +29,13 @@ import type {
 
 type DraftRow = {
 	filePath: string;
-	/** Original filename for UI + default title (not the staging path). */
+	/** Original filename for UI (not the staging path). */
 	sourceName: string;
 	title: string;
 	authors: string;
 	year: string;
-	doi: string;
-	arxivId: string;
+	/** Single DOI or arXiv ID (or URL) input; classified on submit. */
+	identifier: string;
 	/** Structured fields from probe/Fetch, submitted as `extra`. */
 	extra?: LocalPdfExtraMeta;
 };
@@ -43,17 +45,22 @@ export type ImportLocalPdfDraftItem = {
 	sourceName: string;
 };
 
+function identifierKind(text: string): "DOI" | "arXiv" | null {
+	const v = text.trim();
+	if (!v) return null;
+	if (/^10\.\d{4,}\//.test(v) || /doi\.org\//i.test(v)) return "DOI";
+	return "arXiv";
+}
+
 function draftsFromItems(items: ImportLocalPdfDraftItem[]): DraftRow[] {
 	return items.map((item) => {
-		const nameForMeta = item.sourceName || item.path;
 		return {
 			filePath: item.path,
 			sourceName: item.sourceName || basenameOf(item.path),
-			title: titleFromPdfPath(nameForMeta),
+			title: "",
 			authors: "",
 			year: "",
-			doi: "",
-			arxivId: "",
+			identifier: "",
 		};
 	});
 }
@@ -64,8 +71,8 @@ function applyProbe(row: DraftRow, probe: PdfIdentProbe): DraftRow {
 	if (probe.title?.trim()) next.title = probe.title.trim();
 	if (probe.authors.length) next.authors = probe.authors.join(", ");
 	if (probe.year != null) next.year = String(probe.year);
-	if (probe.doi?.trim()) next.doi = probe.doi.trim();
-	if (probe.arxivId?.trim()) next.arxivId = probe.arxivId.trim();
+	const ident = probe.doi?.trim() || probe.arxivId?.trim();
+	if (ident) next.identifier = ident;
 	next.extra = {
 		publication: probe.publication,
 		volume: probe.volume,
@@ -101,9 +108,30 @@ export function ImportLocalPdfDialog({
 	const { t } = useTranslation("sidebar");
 	const [rows, setRows] = useState<DraftRow[]>([]);
 	const [dest, setDest] = useState(parentDir);
+	const [destOpen, setDestOpen] = useState(false);
+	const vaultPath = useVaultStore((s) => s.vaultPath);
+	const tree = useVaultStore((s) => s.tree);
+	const folders = usePapersOrgFolders(vaultPath, tree);
+	const destMatches = useMemo(() => {
+		const q = dest.trim().toLowerCase();
+		return folders.filter((f) => !q || f.toLowerCase().includes(q));
+	}, [folders, dest]);
 	const [probing, setProbing] = useState(false);
 	const [probeStatus, setProbeStatus] = useState<Record<string, string>>({});
 	const [fetching, setFetching] = useState<Record<string, boolean>>({});
+	const [dots, setDots] = useState(".");
+	useEffect(() => {
+		if (!probing) {
+			setDots(".");
+			return;
+		}
+		const id = setInterval(
+			() => setDots((d) => (d.length >= 3 ? "." : `${d}.`)),
+			400,
+		);
+		return () => clearInterval(id);
+	}, [probing]);
+	const probingPlaceholder = probing ? dots : undefined;
 
 	useOverlayRegistration("import-local-pdf", open, () => onOpenChange(false));
 
@@ -113,7 +141,7 @@ export function ImportLocalPdfDialog({
 		setDest(parentDir || "papers");
 		setProbeStatus({});
 		setFetching({});
-		// Best-effort recognition: failures leave filename-derived defaults.
+		// Best-effort recognition: failures leave empty fields for manual entry.
 		const paths = items.map((i) => i.path);
 		if (!paths.length) return;
 		setProbing(true);
@@ -130,7 +158,7 @@ export function ImportLocalPdfDialog({
 				);
 			})
 			.catch(() => {
-				/* keep filename defaults */
+				/* leave fields empty for manual entry */
 			})
 			.finally(() => setProbing(false));
 	}, [open, items, parentDir]);
@@ -147,7 +175,7 @@ export function ImportLocalPdfDialog({
 	};
 
 	const handleFetch = async (index: number, row: DraftRow) => {
-		const text = row.doi.trim() || row.arxivId.trim();
+		const text = row.identifier.trim();
 		if (!text) return;
 		setFetching((prev) => ({ ...prev, [row.filePath]: true }));
 		try {
@@ -159,8 +187,8 @@ export function ImportLocalPdfDialog({
 					if (meta.title?.trim()) next.title = meta.title.trim();
 					if (meta.authors?.length) next.authors = meta.authors.join(", ");
 					if (meta.year != null) next.year = String(meta.year);
-					if (meta.doi?.trim()) next.doi = meta.doi.trim();
-					if (meta.arxivId?.trim()) next.arxivId = meta.arxivId.trim();
+					const ident = meta.doi?.trim() || meta.arxivId?.trim();
+					if (ident) next.identifier = ident;
 					next.extra = {
 						publication: meta.publication,
 						volume: meta.volume,
@@ -190,15 +218,16 @@ export function ImportLocalPdfDialog({
 				.filter(Boolean);
 			const yearRaw = r.year.trim();
 			const yearNum = yearRaw ? Number.parseInt(yearRaw, 10) : NaN;
-			const hasIdentifiers = Boolean(r.doi.trim() || r.arxivId.trim());
+			const ident = r.identifier.trim();
+			const kind = identifierKind(ident);
 			return {
 				filePath: r.filePath,
 				title: r.title.trim(),
 				authors: authors.length ? authors : undefined,
 				year: Number.isFinite(yearNum) ? yearNum : undefined,
-				doi: r.doi.trim() || undefined,
-				arxivId: r.arxivId.trim() || undefined,
-				extra: hasIdentifiers ? r.extra : undefined,
+				doi: kind === "DOI" ? ident : undefined,
+				arxivId: kind === "arXiv" ? ident : undefined,
+				extra: ident ? r.extra : undefined,
 			};
 		});
 		onConfirm(entries, dest.trim() || "papers");
@@ -234,7 +263,7 @@ export function ImportLocalPdfDialog({
 				variant="outline"
 				size="sm"
 				className="h-7 px-2 text-xs"
-				disabled={busy || !(row.doi.trim() || row.arxivId.trim())}
+				disabled={busy || !row.identifier.trim()}
 				onClick={() => void handleFetch(index, row)}
 			>
 				{t("importLocalPdf.fetch")}
@@ -254,18 +283,54 @@ export function ImportLocalPdfDialog({
 					</DialogTitle>
 				</DialogHeader>
 
-				<div className="shrink-0 space-y-1.5">
+				<div className="relative shrink-0 space-y-1.5">
 					<Label htmlFor="import-pdf-parent" className="text-xs">
 						{t("importLocalPdf.parentDir")}
 					</Label>
 					<Input
 						id="import-pdf-parent"
 						value={dest}
-						onChange={(e) => setDest(e.target.value)}
+						onChange={(e) => {
+							setDest(e.target.value);
+							setDestOpen(true);
+						}}
+						onFocus={() => setDestOpen(true)}
+						onBlur={() => setDestOpen(false)}
 						disabled={busy}
 						spellCheck={false}
 						className="font-mono text-xs"
 					/>
+					{destOpen && destMatches.length > 0 ? (
+						<div className="absolute inset-x-0 top-full z-10 mt-1 max-h-40 overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+							{destMatches.map((folder) => {
+								const active = folder === dest.trim();
+								return (
+									<button
+										key={folder}
+										type="button"
+										className={cn(
+											"flex w-full items-center gap-2 rounded px-2 py-1 text-left font-mono text-xs transition-colors hover:bg-accent",
+											active && "bg-muted",
+										)}
+										onMouseDown={(e) => {
+											e.preventDefault();
+											setDest(folder);
+											setDestOpen(false);
+										}}
+									>
+										<span className="flex-1 truncate">
+											{folder === "papers"
+												? t("fileTree.movePicker.papersRoot")
+												: folder}
+										</span>
+										{active ? (
+											<Check className="size-3 shrink-0 text-primary" />
+										) : null}
+									</button>
+								);
+							})}
+						</div>
+					) : null}
 				</div>
 
 				<ul className="min-h-0 flex-1 list-none space-y-2 overflow-y-auto overscroll-contain pr-1">
@@ -283,34 +348,19 @@ export function ImportLocalPdfDialog({
 								</p>
 								{headerAction(row, index)}
 							</div>
-							<div className="grid grid-cols-[1fr_5.5rem] gap-2">
-								<div className="space-y-1">
-									<Label className="text-xs">
-										{t("importLocalPdf.fieldTitle")}
-									</Label>
-									<Input
-										value={row.title}
-										onChange={(e) =>
-											updateRow(index, { title: e.target.value })
-										}
-										disabled={busy}
-									/>
-								</div>
-								<div className="space-y-1">
-									<Label className="text-xs">
-										{t("importLocalPdf.fieldYear")}
-									</Label>
-									<Input
-										value={row.year}
-										onChange={(e) => updateRow(index, { year: e.target.value })}
-										inputMode="numeric"
-										placeholder="2024"
-										disabled={busy}
-									/>
-								</div>
+							<div className="flex items-center gap-2">
+								<Label className="w-16 shrink-0 text-xs">
+									{t("importLocalPdf.fieldTitle")}
+								</Label>
+								<Input
+									value={row.title}
+									onChange={(e) => updateRow(index, { title: e.target.value })}
+									placeholder={probingPlaceholder}
+									disabled={busy}
+								/>
 							</div>
-							<div className="space-y-1">
-								<Label className="text-xs">
+							<div className="flex items-center gap-2">
+								<Label className="w-16 shrink-0 text-xs">
 									{t("importLocalPdf.fieldAuthors")}
 								</Label>
 								<Input
@@ -318,38 +368,33 @@ export function ImportLocalPdfDialog({
 									onChange={(e) =>
 										updateRow(index, { authors: e.target.value })
 									}
-									placeholder={t("importLocalPdf.authorsPlaceholder")}
+									placeholder={probingPlaceholder}
 									disabled={busy}
 								/>
 							</div>
-							<div className="grid grid-cols-[1fr_1fr] gap-2">
-								<div className="space-y-1">
-									<Label className="text-xs">
-										{t("importLocalPdf.fieldDoi")}
-									</Label>
+							<div className="flex items-center gap-2">
+								<Label className="w-16 shrink-0 text-xs">
+									{t("importLocalPdf.fieldIdentifier")}
+								</Label>
+								<div className="relative min-w-0 flex-1">
 									<Input
-										value={row.doi}
-										onChange={(e) => updateRow(index, { doi: e.target.value })}
-										placeholder="10.1000/xyz123"
-										spellCheck={false}
-										className="font-mono text-xs"
-										disabled={busy}
-									/>
-								</div>
-								<div className="space-y-1">
-									<Label className="text-xs">
-										{t("importLocalPdf.fieldArxivId")}
-									</Label>
-									<Input
-										value={row.arxivId}
+										value={row.identifier}
 										onChange={(e) =>
-											updateRow(index, { arxivId: e.target.value })
+											updateRow(index, { identifier: e.target.value })
 										}
-										placeholder="1706.03762"
+										placeholder={probingPlaceholder}
 										spellCheck={false}
-										className="font-mono text-xs"
+										className="pr-16 font-mono text-xs placeholder:font-sans"
 										disabled={busy}
 									/>
+									{identifierKind(row.identifier) ? (
+										<span
+											className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-muted-foreground/60 text-xs"
+											aria-hidden
+										>
+											{identifierKind(row.identifier)}
+										</span>
+									) : null}
 								</div>
 							</div>
 						</li>
