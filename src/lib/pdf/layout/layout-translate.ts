@@ -16,6 +16,12 @@ import {
 	isAlgorithmLayoutKind,
 	isLayoutTranslatableKind,
 } from "@/lib/pdf/layout/labels";
+import {
+	buildLayoutTranslateChains,
+	type LayoutTranslateChain,
+	normalizeLayoutSourceText,
+	splitChainTranslation,
+} from "@/lib/pdf/layout/layout-translate-source";
 import { bboxCoveredBy } from "@/lib/pdf/layout/merge-captions";
 import type { PdfLayoutRegion } from "@/lib/pdf/layout/types";
 import {
@@ -26,6 +32,11 @@ import {
 import { loadSettings } from "@/lib/settings";
 import { runTranslate } from "@/lib/translate";
 import { langsFromSettings } from "@/lib/translate/lang";
+import {
+	type MaskedToken,
+	maskInlineTokens,
+	restoreInlineTokens,
+} from "@/lib/translate/mask";
 import { resolveTranslateAgent } from "@/lib/translate/resolve-agent";
 import type {
 	CommercialTranslateProviderId,
@@ -212,7 +223,7 @@ export function listTranslatableLayoutRegions(
 		if (isInsideAlgorithmRegion(r, algorithms)) continue;
 		// Text/headers nested inside a reference block (e.g. multi-line cites).
 		if (isInsideAlgorithmRegion(r, referenceBlocks)) continue;
-		const full = layoutRegionSourceText(r);
+		const full = normalizeLayoutSourceText(layoutRegionSourceText(r), r.kind);
 		if (!full) continue;
 		if (isAlgorithmTitleText(full)) continue;
 		if (isReferenceSectionTitle(full)) continue;
@@ -488,6 +499,11 @@ export function hasPendingLayoutTranslateItems(
 	);
 }
 
+/** Chains translate as one unit, so one stale fragment re-runs all of them. */
+function chainNeedsTranslate(chain: LayoutTranslateChain): boolean {
+	return hasPendingLayoutTranslateItems(chain.members);
+}
+
 export function persistLayoutTranslateSidecarBestEffort(
 	paperAbsPath: string | null | undefined,
 	key: LayoutTranslateCacheKey,
@@ -626,38 +642,40 @@ async function resolveLayoutTranslateAgentOpts(options: {
  */
 const TRANSLATE_BATCH_MARKER_RE = /(\[{2}|［{2})\s*(\d+)\s*(\]{2}|］{2})/g;
 
+/** Anything batchable: a single region or a joined paragraph chain. */
+type TranslateUnit = { source: string };
+
 /** Projected payload length of a batch (matches {@link buildNumberedPayload}). */
-function batchPayloadLength(batch: readonly LayoutTranslateItem[]): number {
+function batchPayloadLength(batch: readonly TranslateUnit[]): number {
 	if (batch.length === 0) return 0;
 	if (batch.length === 1) return batch[0]?.source.length ?? 0;
 	let total = 0;
-	batch.forEach((item, i) => {
-		total += `[[${i + 1}]] `.length + item.source.length;
+	batch.forEach((unit, i) => {
+		total += `[[${i + 1}]] `.length + unit.source.length;
 		if (i > 0) total += 2; // "\n\n"
 	});
 	return total;
 }
 
 /**
- * Group pending items (already in reading order) into batches whose combined
- * payload stays under {@link LAYOUT_TRANSLATE_BATCH_CHARS}. A single item always
- * fits, so no item is dropped. Batches may span adjacent pages; results are
- * mapped back per item id, so positions are unaffected.
+ * Group units (already in reading order) into batches whose combined payload
+ * stays under {@link LAYOUT_TRANSLATE_BATCH_CHARS}. A single unit always fits,
+ * so nothing is dropped. Batches may span adjacent pages; results are mapped
+ * back per unit, so positions are unaffected.
  */
-export function buildTranslateBatches(
-	items: readonly LayoutTranslateItem[],
-): LayoutTranslateItem[][] {
-	const batches: LayoutTranslateItem[][] = [];
-	let current: LayoutTranslateItem[] = [];
-	for (const item of items) {
-		if (item.status === "done" && item.translated?.trim()) continue;
-		const candidate = [...current, item];
+export function buildTranslateBatches<T extends TranslateUnit>(
+	units: readonly T[],
+): T[][] {
+	const batches: T[][] = [];
+	let current: T[] = [];
+	for (const unit of units) {
+		const candidate = [...current, unit];
 		if (
 			current.length > 0 &&
 			batchPayloadLength(candidate) > LAYOUT_TRANSLATE_BATCH_CHARS
 		) {
 			batches.push(current);
-			current = [item];
+			current = [unit];
 		} else {
 			current = candidate;
 		}
@@ -666,12 +684,10 @@ export function buildTranslateBatches(
 	return batches;
 }
 
-/** Join a batch into one numbered payload; a lone item is sent as-is. */
-export function buildNumberedPayload(
-	batch: readonly LayoutTranslateItem[],
-): string {
+/** Join a batch into one numbered payload; a lone unit is sent as-is. */
+export function buildNumberedPayload(batch: readonly TranslateUnit[]): string {
 	if (batch.length === 1) return batch[0]?.source ?? "";
-	return batch.map((item, i) => `[[${i + 1}]] ${item.source}`).join("\n\n");
+	return batch.map((unit, i) => `[[${i + 1}]] ${unit.source}`).join("\n\n");
 }
 
 /**
@@ -717,10 +733,11 @@ export function parseNumberedTranslation(
  * Translate regions with bounded concurrency. Invokes `onUpdate` after each
  * batch settles so the UI can paint overlays progressively.
  *
- * Paragraphs are grouped into reading-order batches and translated in a single
- * numbered request so the engine sees surrounding context; the result is split
- * back by marker and written to each region's original position. On a parse
- * mismatch the batch falls back to per-paragraph translation.
+ * A paragraph continued in the next column or on the next page is one layout
+ * region per fragment; those are chained into a single translation unit and the
+ * result is split back per bbox. Units are then grouped into reading-order
+ * batches translated in one numbered request so the engine sees surrounding
+ * context; on a parse mismatch the batch falls back to per-unit translation.
  */
 export async function runLayoutRegionTranslate(options: {
 	items: LayoutTranslateItem[];
@@ -741,23 +758,56 @@ export async function runLayoutRegionTranslate(options: {
 	);
 	const items = options.items.map((it) => ({ ...it }));
 	const signal = options.signal;
-	const batches = buildTranslateBatches(items);
+	const pending = buildLayoutTranslateChains(items).filter(chainNeedsTranslate);
+	const batches = buildTranslateBatches(pending);
 	let nextBatch = 0;
 
 	const publish = () => options.onUpdate(items.map((it) => ({ ...it })));
 
-	const translateOne = async (item: LayoutTranslateItem): Promise<string> => {
+	const translateText = async (
+		text: string,
+		pageIndex: number | undefined,
+	): Promise<string> => {
 		const translated = await runTranslate(
 			{
-				text: item.source,
+				text,
 				context: {
-					page: item.pageIndex + 1,
+					page: pageIndex != null ? pageIndex + 1 : undefined,
 					surface: "pdf-layout-bulk",
 				},
 			},
 			agentOpts,
 		);
 		return translated.trim();
+	};
+
+	/** Restore masked tokens; retry unmasked when the engine ate a placeholder. */
+	const finalizeSegment = async (
+		chain: LayoutTranslateChain,
+		segment: string,
+		tokens: readonly MaskedToken[],
+	): Promise<string> => {
+		if (tokens.length === 0) return segment.trim();
+		const restored = restoreInlineTokens(segment.trim(), tokens);
+		if (restored.missing === 0) return restored.text;
+		return await translateText(chain.source, chain.members[0]?.pageIndex);
+	};
+
+	const applyChain = (chain: LayoutTranslateChain, translated: string) => {
+		const segments = splitChainTranslation(
+			translated,
+			chain.members.map((m) => m.source.length),
+		);
+		chain.members.forEach((member, i) => {
+			const segment = segments[i]?.trim();
+			if (segment) {
+				member.translated = segment;
+				member.status = "done";
+			} else {
+				member.status = "error";
+				member.error = "Empty translation result";
+			}
+		});
 	};
 
 	const settleError = (item: LayoutTranslateItem, e: unknown) => {
@@ -769,6 +819,31 @@ export async function runLayoutRegionTranslate(options: {
 		}
 	};
 
+	const markChain = (
+		chain: LayoutTranslateChain,
+		status: LayoutTranslateItemStatus,
+	) => {
+		for (const member of chain.members) member.status = status;
+	};
+
+	const translateChain = async (chain: LayoutTranslateChain) => {
+		const masked = maskInlineTokens(chain.source);
+		const raw = await translateText(masked.text, chain.members[0]?.pageIndex);
+		const text = await finalizeSegment(chain, raw, masked.tokens);
+		if (signal?.aborted) {
+			markChain(chain, "skipped");
+			return;
+		}
+		if (!text) {
+			markChain(chain, "error");
+			for (const member of chain.members) {
+				member.error = "Empty translation result";
+			}
+			return;
+		}
+		applyChain(chain, text);
+	};
+
 	const worker = async () => {
 		while (true) {
 			if (signal?.aborted) return;
@@ -777,75 +852,63 @@ export async function runLayoutRegionTranslate(options: {
 			if (b >= batches.length) return;
 			const batch = batches[b];
 			if (!batch || batch.length === 0) continue;
-			for (const item of batch) item.status = "running";
+			for (const chain of batch) markChain(chain, "running");
 			publish();
 			try {
 				if (signal?.aborted) {
-					for (const item of batch) item.status = "skipped";
+					for (const chain of batch) markChain(chain, "skipped");
 					publish();
 					return;
 				}
-				if (batch.length === 1) {
-					const item = batch[0];
-					if (!item) continue;
-					const translated = await translateOne(item);
-					if (signal?.aborted) {
-						item.status = "skipped";
-					} else if (translated) {
-						item.translated = translated;
-						item.status = "done";
-					} else {
-						item.status = "error";
-						item.error = "Empty translation result";
-					}
+				const first = batch[0];
+				if (batch.length === 1 && first) {
+					await translateChain(first);
 				} else {
-					const payload = buildNumberedPayload(batch);
-					const result = await runTranslate(
-						{
-							text: payload,
-							context: {
-								page:
-									batch[0]?.pageIndex != null
-										? batch[0].pageIndex + 1
-										: undefined,
-								surface: "pdf-layout-bulk",
-							},
-						},
-						agentOpts,
+					const maskedUnits = batch.map((chain) => {
+						const masked = maskInlineTokens(chain.source);
+						return { chain, source: masked.text, tokens: masked.tokens };
+					});
+					const result = await translateText(
+						buildNumberedPayload(maskedUnits),
+						first?.members[0]?.pageIndex,
 					);
 					const segments = parseNumberedTranslation(result, batch.length);
 					if (signal?.aborted) {
-						for (const item of batch) item.status = "skipped";
+						for (const chain of batch) markChain(chain, "skipped");
 					} else if (segments) {
-						batch.forEach((item, i) => {
-							item.translated = segments[i];
-							item.status = segments[i] ? "done" : "error";
-							if (!segments[i]) item.error = "Empty translation result";
-						});
+						for (const [i, unit] of maskedUnits.entries()) {
+							const text = await finalizeSegment(
+								unit.chain,
+								segments[i] ?? "",
+								unit.tokens,
+							);
+							if (text) applyChain(unit.chain, text);
+							else {
+								markChain(unit.chain, "error");
+								for (const member of unit.chain.members) {
+									member.error = "Empty translation result";
+								}
+							}
+						}
 					} else {
 						// Marker split failed — fall back to per-paragraph translation.
-						for (const item of batch) {
+						for (const chain of batch) {
 							if (signal?.aborted) {
-								item.status = "skipped";
+								markChain(chain, "skipped");
 								continue;
 							}
 							try {
-								const translated = await translateOne(item);
-								if (translated) {
-									item.translated = translated;
-									item.status = "done";
-								} else {
-									item.status = "error";
-									item.error = "Empty translation result";
-								}
+								await translateChain(chain);
 							} catch (e) {
-								settleError(item, e);
+								for (const member of chain.members) settleError(member, e);
 							}
 						}
 					}
 				}
 			} catch (e) {
-				for (const item of batch) settleError(item, e);
+				for (const chain of batch) {
+					for (const member of chain.members) settleError(member, e);
+				}
 			}
 			publish();
 		}

@@ -116,6 +116,16 @@ export {
 	writeLayoutTranslateSidecar,
 } from "@/lib/pdf/layout/layout-translate";
 export {
+	buildLayoutTranslateChains,
+	isLayoutParagraphContinuation,
+	joinContinuationSources,
+	LAYOUT_TRANSLATE_CHAIN_MAX_CHARS,
+	LAYOUT_TRANSLATE_CHAIN_MAX_MEMBERS,
+	type LayoutTranslateChain,
+	normalizeLayoutSourceText,
+	splitChainTranslation,
+} from "@/lib/pdf/layout/layout-translate-source";
+export {
 	areFigureNeighbors,
 	bboxCoveredBy,
 	bboxFullyContains,
