@@ -22,6 +22,20 @@
 - `vault_create` 返回的 `openPath` 为首篇教程路径；若教程已存在则回退到 `AGENTS.md`。
 - 每次打开会补种缺失的 bundled skills；第一方 `SKILL.md` 仅通过 frontmatter 整数 `version` 安全升级（盘上版本低于模板则覆盖并 toast）。无 `version`、同版本或更高版本的文件保持原样；返回值的 `updated` 列出本次安全升级路径。
 
+## 关闭 / 切换
+
+没有 `vault_close` 命令。vault 的生命期由前端 `vault:opened` 作用域的 teardown 表达（见 [../development/lifecycle-events.md](../development/lifecycle-events.md)）：
+
+```text
+切换 / 关闭 vault
+  → 释放 vault:opened 作用域
+  → 各 store 的 vault 级 clear（catalog 行、wiki 重命名流程、
+     agent 会话、标注、layout 结果、相关弹窗）
+  → vault_release：驱逐该 vault 的 catalog 连接缓存条目（remote handle 跳过）
+```
+
+文件监听不需要显式停止：`fs_watch_start` 会替换该窗口的既有 watcher，窗口销毁时由 `on_window_event(Destroyed)` 停止。
+
 ## 文件树
 
 | Command | 说明 |

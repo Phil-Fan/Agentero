@@ -65,6 +65,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 | `paper:assets-ready`（已实现） | 论文资产就绪：同步下载完成 / 本地 PDF 拷贝完成 / `DownloadAssets` job 成功 | `{ vaultId, paperId, timestamp }` |
 | `job:completed`（已实现） | job 状态机真实迁移到 `Succeeded` 时由 `job:changed` 单点派生 | `{ jobId, kind, paperId?, timestamp }` |
 | `job:failed`（已实现） | job 状态机真实迁移到 `Failed` 时由 `job:changed` 单点派生 | `{ jobId, kind, paperId?, error?, timestamp }` |
+| `window:closed`（已实现） | 子窗口销毁（`on_window_event(Destroyed)`）。经 lifecycle bridge 转发进前端 bus，消费者集中在 `lifecycle/register.ts` | `{ kind: 'settings' \| 'feature', view? }`（无 `timestamp`） |
 
 #### `agent_warm`
 
@@ -414,13 +415,15 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - 文件监听由前端打开 Vault 后调用 `fs_watch_start`（已落地；见上），非本命令内隐式启动。
   - 返回完整文件树。
 
-#### `vault:close`（规划）
+#### `vault_release`
 
-关闭当前 Vault。
+释放 Host 侧为某个 vault 持有的资源。前端在释放 `vault:opened` 作用域时调用（remote handle 跳过）。
 
-- **参数**：无
+- **参数**：`{ path: string }`
 - **返回**：`{ ok: true; data: null }`
-- **行为**：停止文件监听，释放资源，不删除数据。
+- **行为**：驱逐该 vault 的 catalog 连接缓存条目。该缓存是进程级、按 vault 根路径索引的，此前唯一的驱逐路径是 `with_catalog` 发现数据库文件消失，因此一次会话中访问过的每个 vault 都会把 SQLite 句柄与 WAL 留到进程退出。对正在进行的 catalog 操作安全：它们持有连接的 `Arc` 克隆，这里只移除缓存条目。
+- **不负责**：文件监听。`fs_watch_start` 本身就会替换该窗口的既有 watcher，窗口销毁时由 Host 的 `on_window_event(Destroyed)` 停止。
+- **没有 `vault:close` 命令**：vault 的生命期由前端 `vault:opened` 作用域的 teardown 表达，见 [../development/lifecycle-events.md](../development/lifecycle-events.md)。
 
 #### `vault:recent`（规划；前端已临时实现）
 

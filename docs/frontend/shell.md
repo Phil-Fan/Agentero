@@ -77,3 +77,7 @@
 
 - 工具栏优先图标 + `aria-label` + Tooltip；避免常驻解释文案。
 - 基础组件 shadcn/ui；Chat/树 AI UI 用 AI Elements（[components.md](components.md)）。
+- **启动种子放 `boot()`**（`src/main.tsx`），不要在 render 期做副作用。`initSettingsStore` / `initVaultStore` / `initWorkspaceStore` 在 `createRoot` 前调用：既保证首帧前完成，又不依赖 `useState` 初始化器（StrictMode 下可能跑两次）。
+- **订阅 Host 事件一律用 `listenSafe()`（`src/lib/core/tauri-events.ts`）或 `useTauriEvent()`**；非 Tauri wire 的 promise 式订阅（bridge、workspace-broadcast）用 `toSafeDisposer()`。手写 `let off; void (async () => { off = await listen(...) })(); return () => off?.()` 会在 `listen` resolve 前 dispose 时泄漏监听器 —— StrictMode 每次开发挂载都会命中。
+- **注册全局订阅的 `init*` / `start*` 必须返回 disposer**，并由调用方 effect 返回。
+- 每个 vault 的副作用挂在 `vault:opened` 作用域上，清理写在同一 handler 的 teardown 里，见 [../development/lifecycle-events.md](../development/lifecycle-events.md)。
