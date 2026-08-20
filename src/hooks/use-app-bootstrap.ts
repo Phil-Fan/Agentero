@@ -93,6 +93,7 @@ export function useAppBootstrap(): void {
 	}, []);
 
 	// Per-vault side effects hang off vault:opened (see lifecycle/register.ts).
+	// Returning the scope release makes switch / close / unmount all tear down.
 	useEffect(() => {
 		if (!vaultPath) {
 			setTree([]);
@@ -100,7 +101,7 @@ export function useAppBootstrap(): void {
 			void refreshLibrary();
 			return;
 		}
-		void lifecycle.emit("vault:opened", {
+		return lifecycle.emitScoped("vault:opened", {
 			vaultId: vaultPath,
 			timestamp: Date.now(),
 		});

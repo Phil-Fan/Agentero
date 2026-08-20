@@ -20,3 +20,13 @@ export type LifecycleEventMap = {
 };
 
 export type LifecycleEvent = keyof LifecycleEventMap;
+
+/**
+ * Events with a lifetime. Handlers may return a teardown, run when the emitter
+ * releases the scope (see `emitScoped`). Re-emitting does NOT imply teardown:
+ * the emitter owns the scope, so React effect cleanup drives it.
+ */
+export type ScopedLifecycleEvent = "vault:opened";
+
+/** One-shot facts. Any value a handler returns is ignored — no teardown slot. */
+export type FactLifecycleEvent = Exclude<LifecycleEvent, ScopedLifecycleEvent>;
