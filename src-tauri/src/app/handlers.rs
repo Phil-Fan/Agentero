@@ -62,6 +62,7 @@ macro_rules! common_commands {
             crate::features::vault::commands::vault_create,
             crate::features::vault::commands::vault_ensure,
             crate::features::vault::commands::vault_allow_fs_scope,
+            crate::features::vault::commands::vault_release,
             crate::features::vault::commands::vault_tree_build,
             crate::features::vault::commands::vault_tree_children,
             crate::features::vault::commands::wiki_move,

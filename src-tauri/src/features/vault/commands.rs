@@ -93,6 +93,31 @@ pub fn vault_allow_fs_scope<R: Runtime>(app: AppHandle<R>, path: String) -> ApiR
     }
 }
 
+/// Release Host-side resources held for a vault the app switched away from.
+///
+/// The catalog connection cache is process-wide and keyed by vault root, and
+/// the only existing eviction path is `with_catalog` noticing the database file
+/// disappeared. Without this, every vault opened during a session keeps an open
+/// SQLite handle (and its WAL) alive until exit. Safe while catalog work is in
+/// flight: those callers hold an `Arc` clone, so this only drops the cache entry.
+#[tauri::command]
+pub async fn vault_release(path: String) -> ApiResult<()> {
+    run_blocking(move || {
+        let op = OpTimer::start_with("vault_release", format!("path={}", trunc(&path, 200)));
+        match vault_path_arg(&path) {
+            Ok(p) => {
+                crate::features::catalog::evict_catalog_conn(&p);
+                op.finish_result(Ok(()))
+            }
+            Err(err) => {
+                op.finish_err(&err);
+                map_err(err)
+            }
+        }
+    })
+    .await
+}
+
 /// Build the whole vault file tree in one pass (single IPC).
 #[tauri::command]
 pub async fn vault_tree_build(

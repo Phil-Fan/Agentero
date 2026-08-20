@@ -3,15 +3,20 @@
  * registration order, so cross-handler ordering lives in this file.
  */
 
+import { clearAgentVaultState } from "@/lib/agent/agent-session-store";
 import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
 import { lifecycle } from "@/lib/lifecycle";
 import {
+	clearLibraryVaultState,
 	refreshLibrary,
 	scheduleLibraryRefresh,
 } from "@/lib/paper/library-store";
+import { clearAnnotationsVaultState } from "@/lib/pdf/annotations-store";
+import { clearLayoutVaultState } from "@/lib/pdf/layout/store";
 import { isFeatureViewType } from "@/lib/shell/feature-window";
 import {
+	clearUiVaultState,
 	setFeaturePoppedOut,
 	setSettingsOpenState,
 } from "@/lib/shell/ui-store";
@@ -23,7 +28,7 @@ import {
 	refreshTree,
 	scheduleTreeRefresh,
 } from "@/lib/vault/store";
-import { rebuildWikiAndNotify } from "@/lib/wiki/store";
+import { clearWikiVaultState, rebuildWikiAndNotify } from "@/lib/wiki/store";
 
 /** Batch imports emit one `paper:imported` per paper; merge the rebuilds. */
 let importWikiTimer: ReturnType<typeof setTimeout> | null = null;
@@ -61,6 +66,25 @@ export function registerLifecycleHandlers(): () => void {
 					{ fallback: "vault reconcile failed" },
 				).catch(() => undefined);
 			}
+			// `vaultId` is captured at setup, so this names the vault being closed.
+			// `activateVault` keeps its own synchronous clears: those stop the first
+			// painted frame of the new vault from showing the old one, which is a
+			// different concern from releasing resources.
+			return () => {
+				clearLibraryVaultState();
+				clearWikiVaultState();
+				clearAgentVaultState();
+				clearAnnotationsVaultState();
+				clearLayoutVaultState();
+				clearUiVaultState();
+				if (isTauri() && !isRemoteVaultHandle(vaultId)) {
+					void invokeApi(
+						"vault_release",
+						{ path: vaultId },
+						{ fallback: "vault release failed" },
+					).catch(() => undefined);
+				}
+			};
 		}),
 		lifecycle.on("paper:imported", ({ vaultId, paperId }) => {
 			// `app.emit` broadcasts to every window; only react to the active vault.
