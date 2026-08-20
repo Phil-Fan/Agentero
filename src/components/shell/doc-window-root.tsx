@@ -18,9 +18,8 @@ import { applyDocumentChrome, resolveFontFamilyCss } from "@/lib/settings";
 import { readDocWindowParams } from "@/lib/shell/doc-window";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { openRecentVault } from "@/lib/vault/actions";
-import { initVaultStore, refreshTree, vaultStore } from "@/lib/vault/store";
+import { refreshTree, vaultStore } from "@/lib/vault/store";
 import { persistFile } from "@/lib/workspace/actions";
-import { initWorkspaceStore } from "@/lib/workspace/store";
 import {
 	createPlaceholderTab,
 	type DocTab,
@@ -89,12 +88,6 @@ export function DocWindowRoot() {
 			monoFontFamily,
 		});
 	}, [uiScale, interfaceFontFamily, monoFontFamily]);
-
-	useState(() => {
-		initVaultStore();
-		initWorkspaceStore();
-		return null;
-	});
 
 	useEffect(() => {
 		let cancelled = false;

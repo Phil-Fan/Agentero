@@ -6,7 +6,6 @@
  * provides helpers to report progress / completion back via `job_report`.
  */
 
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import i18n from "@/i18n";
 import {
 	type BackgroundTaskKind,
@@ -23,6 +22,7 @@ import {
 } from "@/lib/core/background-tasks";
 import { invokeApi } from "@/lib/core/ipc";
 import { logger } from "@/lib/core/logger";
+import { listenSafe } from "@/lib/core/tauri-events";
 
 export type JobState =
 	| "queued"
@@ -53,7 +53,7 @@ export type JobExecutor = (offer: JobOfferPayload) => Promise<void>;
 
 const executors = new Map<JobKind, JobExecutor>();
 const inFlightOffers = new Set<string>();
-let unlisten: UnlistenFn | null = null;
+let offerSubscription: (() => void) | null = null;
 
 export function registerJobExecutor(
 	kind: JobKind,
@@ -126,17 +126,17 @@ async function claimRunningJobOffers(): Promise<void> {
 	}
 }
 
-export async function startJobCenterExecutorListener(): Promise<void> {
-	if (unlisten) return;
-	unlisten = await listen<JobOfferPayload>("job:offer", (event) => {
-		dispatchJobOffer(event.payload);
+export function startJobCenterExecutorListener(): void {
+	if (offerSubscription) return;
+	offerSubscription = listenSafe<JobOfferPayload>("job:offer", (payload) => {
+		dispatchJobOffer(payload);
 	});
-	await claimRunningJobOffers();
+	void claimRunningJobOffers();
 }
 
 export function stopJobCenterExecutorListener(): void {
-	unlisten?.();
-	unlisten = null;
+	offerSubscription?.();
+	offerSubscription = null;
 }
 
 export async function jobReport(args: {
@@ -202,8 +202,7 @@ function jobPanelTitle(kind: JobKind): string {
 	}
 }
 
-let projectionUnlisten: UnlistenFn | null = null;
-let projectionStarting = false;
+let projectionSubscription: (() => void) | null = null;
 const wiredJobCancels = new Set<string>();
 
 /**
@@ -212,16 +211,15 @@ const wiredJobCancels = new Set<string>();
  * routes panel cancellation to `job_cancel`.
  */
 export function startJobTaskProjection(): void {
-	if (projectionUnlisten || projectionStarting) return;
-	projectionStarting = true;
+	if (projectionSubscription) return;
+	projectionSubscription = listenSafe<{ job: JobChangedSnapshot }>(
+		"job:changed",
+		({ job }) => {
+			projectJobToBackgroundTask(job);
+		},
+	);
 	void (async () => {
 		try {
-			projectionUnlisten = await listen<{ job: JobChangedSnapshot }>(
-				"job:changed",
-				(event) => {
-					projectJobToBackgroundTask(event.payload.job);
-				},
-			);
 			const jobs = await invokeApi<JobChangedSnapshot[]>(
 				"job_list",
 				{ args: {} },
@@ -234,10 +232,13 @@ export function startJobTaskProjection(): void {
 			logger.warn("job task projection failed to start", {
 				error: error instanceof Error ? error.message : String(error),
 			});
-		} finally {
-			projectionStarting = false;
 		}
 	})();
+}
+
+export function stopJobTaskProjection(): void {
+	projectionSubscription?.();
+	projectionSubscription = null;
 }
 
 export function projectJobToBackgroundTask(job: JobChangedSnapshot): void {

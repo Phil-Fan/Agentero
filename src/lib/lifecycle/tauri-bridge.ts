@@ -2,6 +2,7 @@ import { emit } from "@/lib/lifecycle/bus";
 import type { LifecycleEvent, LifecycleEventMap } from "@/lib/lifecycle/events";
 
 const WIRE_EVENTS = [
+	"window:closed",
 	"paper:imported",
 	"paper:assets-ready",
 	"job:completed",

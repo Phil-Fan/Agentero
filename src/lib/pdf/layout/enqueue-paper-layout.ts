@@ -14,6 +14,8 @@ import {
 	registerJobExecutor,
 	startJobCenterExecutorListener,
 	startJobTaskProjection,
+	stopJobCenterExecutorListener,
+	stopJobTaskProjection,
 } from "@/lib/core/job-center";
 import { logger } from "@/lib/core/logger";
 import { analyzePaperLayoutHeadless } from "@/lib/pdf/layout/headless-analyze";
@@ -29,10 +31,15 @@ function normalizePaperKey(paperAbsPath: string): string {
 	return paperAbsPath.replace(/[/\\]+$/, "").replace(/\\/g, "/");
 }
 
-export function initJobCenterExecutors(): void {
+/** Caller owns the returned disposer. */
+export function initJobCenterExecutors(): () => void {
 	registerJobExecutor("layoutAnalyze", runLayoutAnalyzeExecutor);
-	void startJobCenterExecutorListener();
+	startJobCenterExecutorListener();
 	startJobTaskProjection();
+	return () => {
+		stopJobCenterExecutorListener();
+		stopJobTaskProjection();
+	};
 }
 
 async function runLayoutAnalyzeExecutor(offer: JobOfferPayload): Promise<void> {

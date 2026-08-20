@@ -15,8 +15,11 @@ import {
 	loadSettings,
 	subscribeSettings,
 } from "@/lib/settings";
+import { initSettingsStore } from "@/lib/settings/react-store";
 import { applyUiTheme } from "@/lib/ui/theme";
 import { checkForUpdate, installAvailableUpdate } from "@/lib/update";
+import { initVaultStore } from "@/lib/vault/store";
+import { initWorkspaceStore } from "@/lib/workspace/store";
 import i18n, { resolveLocale } from "./i18n";
 import "./index.css";
 
@@ -108,6 +111,8 @@ async function boot() {
 			"@/components/shell/feature-window-root"
 		);
 		bootStage("feature-window-module");
+		initVaultStore();
+		initWorkspaceStore();
 		ReactDOM.createRoot(root).render(
 			<React.StrictMode>
 				<I18nextProvider i18n={i18n}>
@@ -134,6 +139,8 @@ async function boot() {
 			import("katex/dist/katex.min.css"),
 		]);
 		bootStage("doc-window-module");
+		initVaultStore();
+		initWorkspaceStore();
 		ReactDOM.createRoot(root).render(
 			<PdfEngineHost>
 				<React.StrictMode>
@@ -166,6 +173,9 @@ async function boot() {
 		import("katex/dist/katex.min.css"),
 	]);
 	bootStage("app-module");
+	initSettingsStore();
+	initVaultStore();
+	initWorkspaceStore();
 	ReactDOM.createRoot(root).render(
 		<PdfEngineHost>
 			<React.StrictMode>

@@ -59,10 +59,9 @@ import {
 } from "@/lib/shell/workspace-broadcast";
 import { joinVaultPath } from "@/lib/vault";
 import { openRecentVault } from "@/lib/vault/actions";
-import { initVaultStore, refreshTree } from "@/lib/vault/store";
+import { refreshTree } from "@/lib/vault/store";
 import { rebuildWikiAndNotify } from "@/lib/wiki/store";
 import { openGraphPath } from "@/lib/workspace/actions";
-import { initWorkspaceStore } from "@/lib/workspace/store";
 
 const AgentPanel = lazy(() =>
 	import("@/components/agent/agent-panel").then((m) => ({
@@ -297,12 +296,6 @@ export function FeatureWindowRoot() {
 	const vaultPaperPaths = useVaultStore((s) => s.vaultPaperPaths);
 	const paperMetaByRelPath = useLibraryStore((s) => s.paperMetaByRelPath);
 	const paperTreeLabelMode = useSettings((s) => s.paperTreeLabelMode);
-
-	useState(() => {
-		initVaultStore();
-		initWorkspaceStore();
-		return null;
-	});
 
 	useEffect(() => {
 		setAgentPanelMounted(true);

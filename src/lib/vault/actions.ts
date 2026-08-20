@@ -995,11 +995,15 @@ export async function migrateZoteroFromWelcome(): Promise<void> {
 /**
  * Validate a restored local Vault: the path can remain in localStorage after
  * the directory is deleted. Clears all vault state when missing.
+ *
+ * Resolves once the check settles so callers can order work after it.
  */
-export function validateRestoredVault(): void {
+export function validateRestoredVault(): Promise<void> {
 	const restoredPath = getVaultPath();
-	if (!isTauri() || !restoredPath || isRemoteVaultHandle(restoredPath)) return;
-	void ensureLocalFsScope(restoredPath)
+	if (!isTauri() || !restoredPath || isRemoteVaultHandle(restoredPath)) {
+		return Promise.resolve();
+	}
+	return ensureLocalFsScope(restoredPath)
 		.then(() => import("@tauri-apps/plugin-fs"))
 		.then(({ exists }) => exists(restoredPath))
 		.then((pathExists) => {

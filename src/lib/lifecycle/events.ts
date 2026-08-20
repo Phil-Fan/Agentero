@@ -1,6 +1,8 @@
 export type LifecycleEventMap = {
 	"app:ready": { timestamp: number };
 	"vault:opened": { vaultId: string; timestamp: number };
+	/** Host-emitted; payload matches `WindowClosedPayload` (no timestamp). */
+	"window:closed": { kind: string; view?: string };
 	"paper:imported": { vaultId: string; paperId: string; timestamp: number };
 	"paper:assets-ready": { vaultId: string; paperId: string; timestamp: number };
 	"paper:opened": { paperId: string; timestamp: number };

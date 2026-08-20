@@ -1,12 +1,12 @@
 /**
- * App bootstrap effects: store seeding, theme / locale / uiScale application,
- * restored-vault validation, lifecycle handler registration + wire bridge
- * (per-vault side effects run via `vault:opened`), and the native
- * settings-window closed listener.
+ * App bootstrap effects: theme / locale / uiScale application, restored-vault
+ * validation then `app:ready`, lifecycle handler registration + wire bridge
+ * (per-vault side effects run via the `vault:opened` scope), and the JobCenter
+ * executor subscriptions. Store seeding happens in `boot()` before first paint.
  */
 
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useSettings, useVaultStore } from "@/hooks/use-app-stores";
 import { useVaultOpenRequest } from "@/hooks/use-vault-open-request";
 import i18n, { resolveLocale } from "@/i18n";
@@ -18,24 +18,13 @@ import { startJobCompletionRefresh } from "@/lib/paper/job-refresh";
 import { refreshLibrary } from "@/lib/paper/library-store";
 import { initJobCenterExecutors } from "@/lib/pdf/layout/enqueue-paper-layout";
 import { applyDocumentChrome } from "@/lib/settings";
-import { initSettingsStore } from "@/lib/settings/react-store";
-import { setSettingsOpenState } from "@/lib/shell/ui-store";
 import { validateRestoredVault } from "@/lib/vault/actions";
-import { initVaultStore, setTree, setTreeLoading } from "@/lib/vault/store";
-import { initWorkspaceStore } from "@/lib/workspace/store";
+import { setTree, setTreeLoading } from "@/lib/vault/store";
 
 export function useAppBootstrap(): void {
 	const { setTheme } = useTheme();
 	// CLI / deep-link: agentero open <path> → vault:open-request
 	useVaultOpenRequest();
-
-	// Seed stores from persisted state on first render (after settings boot).
-	useState(() => {
-		initSettingsStore();
-		initVaultStore();
-		initWorkspaceStore();
-		return null;
-	});
 
 	const theme = useSettings((s) => s.theme);
 	const locale = useSettings((s) => s.locale);
@@ -76,9 +65,18 @@ export function useAppBootstrap(): void {
 
 	useEffect(() => startActivityTracking(), []);
 
-	// Validate the restored local Vault before restoring its tree and tabs.
+	// Validate the restored local Vault before restoring its tree and tabs, then
+	// announce readiness — app:ready must not claim a validation that is still
+	// in flight.
 	useEffect(() => {
-		validateRestoredVault();
+		let cancelled = false;
+		void validateRestoredVault().then(() => {
+			if (cancelled) return;
+			void lifecycle.emit("app:ready", { timestamp: Date.now() });
+		});
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
 	// Register lifecycle handlers, then bridge Tauri wire events into the bus.
@@ -107,44 +105,14 @@ export function useAppBootstrap(): void {
 		});
 	}, [vaultPath]);
 
-	// Mirror the native settings window's lifecycle into the ui store.
-	useEffect(() => {
-		if (!isTauri()) return;
-		let unlisten: (() => void) | undefined;
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			unlisten = await listen<{ kind: string }>("window:closed", (e) => {
-				if (e.payload?.kind === "settings") setSettingsOpenState(false);
-			});
-		})();
-		return () => {
-			unlisten?.();
-		};
-	}, []);
-
-	// Feature singleton windows clear popped-out flags when closed.
-	useEffect(() => {
-		if (!isTauri()) return;
-		let unbind: (() => void) | undefined;
-		void import("@/lib/shell/feature-window").then(
-			({ bindFeatureWindowClosedListener }) => {
-				unbind = bindFeatureWindowClosedListener();
-			},
-		);
-		return () => {
-			unbind?.();
-		};
-	}, []);
-
 	// Start listening for renderer-executed JobCenter offers.
 	useEffect(() => {
 		if (!isTauri()) return;
-		initJobCenterExecutors();
-		startJobCompletionRefresh();
-	}, []);
-
-	// Bootstrap complete: stores seeded, restored vault validated (async).
-	useEffect(() => {
-		void lifecycle.emit("app:ready", { timestamp: Date.now() });
+		const disposeExecutors = initJobCenterExecutors();
+		const disposeRefresh = startJobCompletionRefresh();
+		return () => {
+			disposeExecutors();
+			disposeRefresh();
+		};
 	}, []);
 }

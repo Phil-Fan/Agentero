@@ -10,6 +10,11 @@ import {
 	refreshLibrary,
 	scheduleLibraryRefresh,
 } from "@/lib/paper/library-store";
+import { isFeatureViewType } from "@/lib/shell/feature-window";
+import {
+	setFeaturePoppedOut,
+	setSettingsOpenState,
+} from "@/lib/shell/ui-store";
 import { seedVaultSkills } from "@/lib/vault/actions";
 import { joinVaultPath } from "@/lib/vault/path";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
@@ -34,6 +39,15 @@ function scheduleImportWikiRebuild(vault: string): void {
 
 export function registerLifecycleHandlers(): () => void {
 	const offs = [
+		lifecycle.on("window:closed", ({ kind, view }) => {
+			if (kind === "settings") {
+				setSettingsOpenState(false);
+				return;
+			}
+			if (kind === "feature" && isFeatureViewType(view)) {
+				setFeaturePoppedOut(view, false);
+			}
+		}),
 		lifecycle.on("vault:opened", ({ vaultId }) => {
 			void refreshTree(vaultId);
 			void refreshLibrary();

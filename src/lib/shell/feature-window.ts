@@ -185,51 +185,19 @@ export function isFeatureWindowRoute(): boolean {
 	}
 }
 
+export function isFeatureViewType(
+	value: string | null | undefined,
+): value is FeatureViewType {
+	return FEATURE_TAB_ORDER.includes(value as FeatureViewType);
+}
+
 export function readFeatureWindowView(): FeatureViewType | null {
 	try {
 		const view = new URLSearchParams(window.location.search).get("view");
-		if (
-			view === "agent" ||
-			view === "backlinks" ||
-			view === "annotations" ||
-			view === "references" ||
-			view === "figures"
-		) {
-			return view;
-		}
-		return null;
+		return isFeatureViewType(view) ? view : null;
 	} catch {
 		return null;
 	}
-}
-
-/** Subscribe main windows to `window:closed` (kind=feature) and clear popped-out flags. */
-export function bindFeatureWindowClosedListener(): () => void {
-	if (!isTauri()) return () => {};
-	let unlisten: (() => void) | undefined;
-	void (async () => {
-		const { listen } = await import("@tauri-apps/api/event");
-		const { setFeaturePoppedOut } = await import("@/lib/shell/ui-store");
-		unlisten = await listen<{ kind: string; view?: string }>(
-			"window:closed",
-			(e) => {
-				if (e.payload?.kind !== "feature") return;
-				const view = e.payload.view;
-				if (
-					view === "agent" ||
-					view === "backlinks" ||
-					view === "annotations" ||
-					view === "references" ||
-					view === "figures"
-				) {
-					setFeaturePoppedOut(view, false);
-				}
-			},
-		);
-	})();
-	return () => {
-		unlisten?.();
-	};
 }
 
 export async function isFeaturePoppedOut(
