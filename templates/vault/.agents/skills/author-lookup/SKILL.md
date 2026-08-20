@@ -3,7 +3,8 @@ name: author-lookup
 version: 1
 description: >-
   查找论文一作 / 通讯作者的公开信息（email、个人主页、GitHub）与论文的 OpenReview
-  链接，逐项标注来源后写入 {paper}/NOTES.md 的 frontmatter 与「联系方式与链接」小节。
+  链接，逐项标注来源后写入 {paper}/NOTES.md（frontmatter + 「联系方式与链接」小节），
+  并为作者生成信息搜集报告写入 {paper}/attachments/。
   Use for finding a paper's author email / homepage / github and its OpenReview
   page in a Agentero vault.
 ---
@@ -115,8 +116,10 @@ Crossref / OpenAlex / Semantic Scholar 一般**不**公开邮箱，别指望 API
 
 若无联网能力：只输出本地 PDF / TeX 能确认的条目，并明确标注「未联网核实」。
 
-## 输出：写入 `{paper}/NOTES.md`
+## 输出
 
+两处产物：`{paper}/NOTES.md` 写**精炼结论**（frontmatter + 表格）；
+`{paper}/attachments/author-report.md` 写**作者信息搜集报告**（人物档案）。
 保留用户已有内容与既有 frontmatter，只做**合并**，不覆盖用户手写字段。
 
 ### 1) frontmatter（合并，供 Properties 面板识别）
@@ -151,11 +154,36 @@ email 用 `mailto:` 链接便于点击发信；每行**必须**写「来源」�
   `GitHub Search`、`github.io`、`OpenReview`、`机构主页`、`Google Scholar`。
 - 查不到的单元格填 `—`；整个角色都查不到时保留姓名行，来源写「未找到」。
 
+### 3) 作者信息报告：`{paper}/attachments/author-report.md`
+
+在附件里为一作与通讯作者各写一份**信息搜集报告**（人物档案），聚焦作者本身的公开信息，
+而不是记录你的检索 / 取舍过程。NOTES 只留结论表，展开的作者背景放这里。
+
+- 遵循 vault 约定：**有内容才创建** `attachments/`，不要预建空目录；支撑材料只放这里，
+  不塞论文根目录或 `source/`。
+- 每位作者一节，建议涵盖（有则写，无则略，不臆造）：
+  - **基本信息**：姓名、当前职位 / 所属机构、所在地区、在本文中的角色（一作 / 通讯 / 共同）。
+  - **研究方向**：主要研究主题、代表性成果 / 高引论文（可含年份、会议）。
+  - **链接与联系**：email、个人主页、Google Scholar、GitHub、ORCID、OpenReview profile、
+    （如公开）社交媒体；均附可点击链接。
+  - **简介**：一段话概述其学术背景与近期工作（基于主页 / Scholar / 机构页等公开资料）。
+- **一作作者的 Publication 全量表（必做）**：为本文一作列出其发表过的**全部** publication，
+  用表格呈现，**本人为一作 / 共同一作的排在前面**，其余按发表年份倒序。
+  - 数据源：OpenAlex 最全 —— `https://api.openalex.org/works?filter=author.id:{AUTHOR_ID}&per-page=200&sort=publication_date:desc`
+    （从本文 authorships 拿到该作者 OpenAlex id）；可用 DBLP / Google Scholar 交叉补全。
+  - 判定「一作」：OpenAlex `authorships[].author_position == "first"`（或作者列表首位）。
+  - 建议列：`一作? | 年份 | 标题 | 发表处(会议/期刊) | 链接(DOI/arXiv)`；
+    `一作?` 用 `✓` / 空标记。条目很多时可注明「按 OpenAlex 收录，截至 {date}」。
+  - 标题 / 会议 / 链接保持原文，不臆造缺失的年份或出处。
+- 每条信息标注来源（如 `机构主页`、`Google Scholar`、`GitHub`、`PDF p.1`）。
+- 抓取的网页快照等大文件也放 `attachments/`；不要写进 NOTES 或论文根目录。
+- 若用户已在 `attachments/` 放了同名文件，改用带后缀的新名（如 `author-report-2.md`），不覆盖。
+
 ## 规则
 
 - **不臆造**：邮箱 / 主页 / GitHub / OpenReview 必须基于可核实来源；不确定就留空并注明。
 - 同名歧义：主页 / GitHub 需与论文作者身份对得上（机构、方向、共同作者）才写入。
 - 保留用户已写的 wikilink 与正文；只新增或更新本小节与上述 frontmatter 键。
 - 正文默认中文（表头、来源说明）；姓名、邮箱、URL 保持原文。
-- 只改 `{paper}/NOTES.md`，不改 catalog、不改其它论文文件。
+- 只写 `{paper}/NOTES.md` 与 `{paper}/attachments/`；不改 catalog、不改 `source/`、不改其它论文。
 - 结束时用 `## Sources` 列出本次实际读取的 Vault 相对路径与联网来源 URL。
