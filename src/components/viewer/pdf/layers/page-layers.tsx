@@ -28,6 +28,7 @@ import {
 	PAGE_LAYER_STYLE,
 	PDF_BASE_LAYER_SCALE_CAP,
 	pdfRasterDpr,
+	pdfTileDpr,
 } from "@/components/viewer/pdf/constants";
 import { EMBED_PAGE_ATTR } from "@/components/viewer/pdf/coords";
 import { CitationLinkLayer } from "@/components/viewer/pdf/layers/citation-links";
@@ -288,7 +289,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 			<TilingLayer
 				documentId={docId}
 				pageIndex={pageIndex}
-				dpr={pdfRasterDpr()}
+				dpr={pdfTileDpr()}
 				className={pdfDark ? PDF_PAGE_RASTER_DARK_CLASS : undefined}
 				style={PAGE_LAYER_STYLE}
 			/>

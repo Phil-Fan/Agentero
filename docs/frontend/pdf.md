@@ -11,7 +11,7 @@
 
 PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑在 Web Worker，缩放/滚动不阻塞主线程）；启动时经 `whenReady()` 就绪握手 + 8s 超时探针验证（`@embedpdf/engines` patch 同时把 worker 侧 `wasmError` / `onerror` 暴露为就绪失败，不再静默挂起），失败则自动回退主线程 direct engine 并记住结论（旧版库的 worker 变体在 Tauri WebView 下就绪消息丢失，表现为文档永远“正在加载”）。wasm URL 传给 worker 前先解析为绝对地址（blob worker 不能按页面基址解析相对路径）。Engine 宿主位于 React StrictMode 外，异步初始化即使在完成前被卸载也会主动销毁结果，避免 dev reload 遗留孤儿 WASM engine。工作区只挂载当前可见与最近使用的至多两个 PDF viewer；恢复的隐藏 PDF 标签按需 hydrate，退出保留集合的本地 PDF 字节会释放并在再次激活时重新读取。
 
-光栅化分辨率按 `min(devicePixelRatio, 1.5)` 封顶（`pdfRasterDpr`）：高 DPI 屏全 dpr 光栅会让每次缩放重渲染过重；封顶后 `RenderLayer` / `TilingLayer` 都按该 dpr 出图（`TilingLayer` 的 `dpr` 属性由 `@embedpdf/plugin-tiling` patch 提供）。Agent 区域裁剪走 `renderPageRect`，不受封顶影响。
+光栅化分辨率分两层封顶：整页底图 `RenderLayer` 按 `min(devicePixelRatio, 1.5)`（`pdfRasterDpr`）出图——高 DPI 屏全 dpr 光栅会让每次缩放重渲染过重；高清瓦片 `TilingLayer` 是用户实际阅读的层，按 `min(devicePixelRatio, 2)`（`pdfTileDpr`）出图，HiDPI 屏小字号保持清晰，瓦片只覆盖视口 + 一圈故成本有界（`TilingLayer` 的 `dpr` 属性由 `@embedpdf/plugin-tiling` patch 提供）。Agent 区域裁剪走 `renderPageRect`，不受封顶影响。
 
 `RenderLayer` 只是瓦片下的底图层，其 scale 另按 `PDF_BASE_LAYER_SCALE_CAP`（1.5）封顶：zoom 超过该值后整页光栅不再重渲染（单 worker 串行渲染下，长文档高倍缩放的整页光栅 + blob 传输是主要开销），清晰层由 `TilingLayer` 承担。瓦片 `tileSize: 1024` + `extraRings: 1`，减少长文档快速滚动时的渲染往返与边缘弹出。
 

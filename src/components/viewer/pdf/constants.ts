@@ -12,16 +12,28 @@ import type { PdfLayoutRegion } from "@/lib/pdf/layout";
 import type { SelectionPin } from "@/lib/pdf/selection";
 
 /**
- * Full devicePixelRatio rasters on high-DPI screens make every zoom step
- * expensive (PDFium renders in a single worker shared by all pages). Cap the
- * raster dpr: pages stay sharp enough for reading while each re-render costs
- * far less WASM work.
+ * Full devicePixelRatio rasters make every zoom step expensive (PDFium
+ * renders in a single worker shared by all pages), so the whole-page base
+ * coat keeps a low dpr cap — it sits under the sharp tile layer anyway.
  */
 const PDF_RASTER_DPR_CAP = 1.5;
 
 export function pdfRasterDpr(): number {
 	const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
 	return Math.min(dpr, PDF_RASTER_DPR_CAP);
+}
+
+/**
+ * The TilingLayer is the layer users actually read: tiles cover only the
+ * viewport plus one ring, so letting them rasterize at (near-)native dpr
+ * keeps small text sharp on HiDPI screens at a bounded cost. Capped at 2 so
+ * 3× displays don't explode per-tile WASM work.
+ */
+const PDF_TILE_DPR_CAP = 2;
+
+export function pdfTileDpr(): number {
+	const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+	return Math.min(dpr, PDF_TILE_DPR_CAP);
 }
 
 /**
