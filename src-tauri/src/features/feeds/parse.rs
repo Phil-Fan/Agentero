@@ -185,7 +185,50 @@ pub fn extract_paper_url(parts: &[&str]) -> Option<String> {
     if let Some(doi) = find_doi(&blob) {
         return Some(format!("https://doi.org/{doi}"));
     }
+    // Deterministic last resort for feeds that only link the publisher page.
+    find_nature_doi_url(&blob)
+}
+
+/// Nature article URLs embed the DOI suffix: `nature.com/articles/<slug>` maps
+/// to `https://doi.org/10.1038/<slug>`. Only research-article slugs qualify
+/// (`s<journal>-…` and legacy `nature…`); news-magazine pages (`d41586-…`)
+/// and anything else are left alone as regular stories.
+fn find_nature_doi_url(text: &str) -> Option<String> {
+    let lower = text.to_ascii_lowercase();
+    let mut from = 0;
+    while let Some(idx) = lower[from..].find("nature.com/articles/") {
+        let start = from + idx + "nature.com/articles/".len();
+        let rest = &lower[start..];
+        let token = rest
+            .split(|c: char| c.is_whitespace() || matches!(c, '?' | '#' | '"' | '\'' | '<' | '&'))
+            .next()
+            .unwrap_or(rest)
+            .trim_end_matches(['.', ',', ')', ']']);
+        if is_nature_article_slug(token) {
+            return Some(format!("https://doi.org/10.1038/{token}"));
+        }
+        from = start;
+    }
     None
+}
+
+fn is_nature_article_slug(slug: &str) -> bool {
+    // Modern: s41592-026-03201-y / s41467-026-76837-1 — journal code, year,
+    // sequence, check char. Legacy: nature12373.
+    let parts: Vec<&str> = slug.split('-').collect();
+    (slug.starts_with('s')
+        && parts.len() == 4
+        && parts[0][1..].len() == 5
+        && parts[0][1..].bytes().all(|b| b.is_ascii_digit())
+        && parts[1].len() >= 2
+        && parts[1].bytes().all(|b| b.is_ascii_digit())
+        && parts[2].len() >= 4
+        && parts[2].bytes().all(|b| b.is_ascii_alphanumeric())
+        && parts[3].len() == 1
+        && parts[3].bytes().all(|b| b.is_ascii_alphanumeric()))
+        || (slug.starts_with("nature")
+            && slug.len() > 6
+            && slug[6..].bytes().all(|b| b.is_ascii_digit()))
 }
 
 fn find_arxiv_id(text: &str) -> Option<String> {
@@ -409,6 +452,52 @@ mod tests {
             Some("https://doi.org/10.1038/nature12373")
         );
         assert_eq!(extract_paper_url(&["just a blog post"]), None);
+    }
+
+    #[test]
+    fn paper_url_from_nature_article_slug() {
+        // Subject feeds (e.g. Nature Communications health sciences) link
+        // only the article page — the slug is the DOI suffix.
+        assert_eq!(
+            extract_paper_url(&["https://www.nature.com/articles/s41467-026-76837-1"]).as_deref(),
+            Some("https://doi.org/10.1038/s41467-026-76837-1")
+        );
+        assert_eq!(
+            extract_paper_url(&["https://www.nature.com/articles/s41592-026-03201-y"]).as_deref(),
+            Some("https://doi.org/10.1038/s41592-026-03201-y")
+        );
+        // Legacy short slug.
+        assert_eq!(
+            extract_paper_url(&["https://www.nature.com/articles/nature12373"]).as_deref(),
+            Some("https://doi.org/10.1038/nature12373")
+        );
+        // News-magazine pages are not papers.
+        assert_eq!(
+            extract_paper_url(&["https://www.nature.com/articles/d41586-026-01674-2"]),
+            None
+        );
+        // Non-article nature.com paths stay stories.
+        assert_eq!(
+            extract_paper_url(&["https://www.nature.com/nature/articles?type=news"]),
+            None
+        );
+        // Query strings / trailing markup do not leak into the slug.
+        assert_eq!(
+            extract_paper_url(&[
+                r#"<link>https://www.nature.com/articles/s41563-026-01234-w?from=feed</link>"#
+            ])
+            .as_deref(),
+            Some("https://doi.org/10.1038/s41563-026-01234-w")
+        );
+        // An explicit DOI in the item still wins over the slug guess.
+        assert_eq!(
+            extract_paper_url(&[
+                "https://www.nature.com/articles/s41467-026-76837-1",
+                "doi: 10.1100/other-paper"
+            ])
+            .as_deref(),
+            Some("https://doi.org/10.1100/other-paper")
+        );
     }
 
     #[test]

@@ -102,7 +102,7 @@ MVP **不做**：`@handle` 展开、OPML、登录态、RSSHub 拼接。
 - 入库复用 `importPlazaPaper` / `lookupSubmit`：arXiv 喂 `https://arxiv.org/abs/{id}`；DOI 喂 `https://doi.org/{doi}`。`openImported: false`。
 - 入库中按钮 busy；成功 Toast + 该行变为「已入库」（本机缓存记 `importedAt`，刷新不丢）。
 - 失败 `notifyError`，不在侧栏挂错误条。
-- 列表卡摘要只示纯文本 3 行。详情打开时走 `feeds_resolve_body`：已缓存 `bodyMarkdown` 则直接用；否则若 RSS 已是全文（或 arXiv / DOI 落地页）转 Markdown；博客摘要带 `[...]` 则抓原文 HTML，抽 `<article>` / 常见正文容器后 `htmd` 成 Markdown。渲染复用 `MessageResponse`（Streamdown + `$…$`）。
+- 列表卡摘要只示纯文本 3 行。详情打开时走 `feeds_resolve_body`：已缓存 `bodyMarkdown` 则直接用；否则若 RSS 已是全文（或 arXiv / DOI 落地页）转 Markdown；博客摘要带 `[...]` 或 `paper_url` 为空（可能从落地页 metadata 确认论文身份）则抓原文 HTML，抽 `<article>` / 常见正文容器后 `htmd` 成 Markdown，并顺手解析 `citation_doi` 等回填 `paper_url`。渲染复用 `MessageResponse`（Streamdown + `$…$`）。
 - 点标题 = 主操作。另给一个外链图标，论文卡也可打开原文。
 
 不做第三种「提醒卡」、图墙、视频墙、全文阅读栏（经典三栏的第三栏）。
@@ -177,8 +177,10 @@ CREATE INDEX items_timeline ON items (published_at DESC, first_seen_at DESC);
 1. 条目 `url` / `id` / 标题里的 `arxiv.org/abs/{id}` 或 `arXiv:{id}`
 2. `doi.org/{doi}` 或 `doi:{doi}`
 3. 摘要纯文本里的同上模式（防 HTML 实体）
+4. `nature.com/articles/<slug>` 确定性兜底：`<slug>` 即 DOI 后缀（`s41467-026-76837-1` / 旧式 `nature12373`），映射为 `https://doi.org/10.1038/<slug>`；仅限研究论文 slug，新闻页（`d41586-…`）不命中
+5. 详情打开抓原文页时，解析 Highwire `citation_doi` → `prism.doi` / `dc.identifier`（剥 `doi:` 前缀）回填 `paper_url`（见 `feeds_resolve_body`）
 
-抽不到就留空，UI 当短讯卡。
+抽不到就留空，UI 当短讯卡。刷新 upsert 用 `COALESCE(旧值, excluded.paper_url)`：无 DOI 字段的 feed 刷新不会抹掉已回填的 `paper_url`。
 
 ## 5. Host API
 
@@ -194,7 +196,7 @@ CREATE INDEX items_timeline ON items (published_at DESC, first_seen_at DESC);
 | `feeds_refresh` | `{ id?, staleOnly? }` | `{ subscriptions, fetched, failed }` | `id` 空 = 全部（并发 4）；`staleOnly` 只拉超过 15 分钟的源 |
 | `feeds_items` | `{ subscriptionId?, filter?: "all"\|"paper"\|"other", limit?, beforePublishedAt?, beforeId? }` | `{ items: FeedItem[] }` | 游标为 `(published_at, id)`；默认 limit 100 |
 | `feeds_mark_imported` | `{ id }` | `FeedItem` | 写入 `importedAt`，刷新不丢 |
-| `feeds_resolve_body` | `{ id }` | `FeedItem` | 打开详情时解析全文，写入 `bodyMarkdown` |
+| `feeds_resolve_body` | `{ id }` | `FeedItem` | 打开详情时解析全文，写入 `bodyMarkdown`；同时从落地页 `<meta>`（`citation_doi` / `prism.doi` / `dc.identifier`）回填 `paperUrl`（已有值不覆盖；`bodyMarkdown` 已缓存则直接返回不重抓） |
 
 `FeedItem` 至少：`id, subscriptionId, subscriptionTitle, title, url, publishedAt, summaryText, paperUrl, importedAt, bodyMarkdown`。`contentHtml` 留给 Host 转 Markdown，卡片不用。
 

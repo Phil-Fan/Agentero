@@ -14,8 +14,8 @@ pub mod commands;
 use crate::core::error::AppError;
 use crate::features::network;
 use body::{
-    ensure_heading, extract_article_html, html_to_markdown, is_fetchable_http_url,
-    is_paper_landing_url, looks_truncated, strip_trailing_ellipsis,
+    ensure_heading, extract_article_html, extract_paper_doi, html_to_markdown,
+    is_fetchable_http_url, is_paper_landing_url, looks_truncated, strip_trailing_ellipsis,
 };
 use chrono::Utc;
 use parse::{
@@ -376,7 +376,9 @@ fn upsert_items(conn: &Connection, sub_id: &str, items: &[ParsedItem]) -> Result
                 published_at = excluded.published_at,
                 summary_text = excluded.summary_text,
                 content_html = excluded.content_html,
-                paper_url = excluded.paper_url,
+                -- Feeds without DOI fields send NULL here; keep values that
+                -- were backfilled from the article page (resolve_body).
+                paper_url = COALESCE(NULLIF(items.paper_url, ''), excluded.paper_url),
                 body_markdown = CASE
                     WHEN items.url IS excluded.url THEN items.body_markdown
                     ELSE NULL
@@ -624,15 +626,29 @@ fn item_with_body(mut item: FeedItem, body: String) -> FeedItem {
     item
 }
 
-fn persist_body(conn: &Connection, id: &str, body: &str) -> Result<FeedItem, AppError> {
+fn persist_resolved(
+    conn: &Connection,
+    id: &str,
+    body: &str,
+    paper_url: Option<&str>,
+) -> Result<FeedItem, AppError> {
     conn.execute(
-        "UPDATE items SET body_markdown = ?1 WHERE id = ?2",
-        params![body, id],
+        "UPDATE items SET body_markdown = ?1,
+            paper_url = COALESCE(NULLIF(items.paper_url, ''), ?3)
+         WHERE id = ?2",
+        params![body, id, paper_url],
     )?;
     get_item(conn, id)
 }
 
-async fn fetch_article_markdown(url: &str, title: &str) -> Result<String, AppError> {
+/// Article page fetched for the detail view: the converted Markdown plus the
+/// DOI scraped from publisher `<meta>` tags, when the page has one.
+struct FetchedArticle {
+    markdown: String,
+    paper_url: Option<String>,
+}
+
+async fn fetch_article(url: &str, title: &str) -> Result<FetchedArticle, AppError> {
     let raw = http_get_accept(
         url,
         None,
@@ -645,23 +661,33 @@ async fn fetch_article_markdown(url: &str, title: &str) -> Result<String, AppErr
     }
     let body = String::from_utf8_lossy(&raw.body);
     if looks_like_html(&raw.content_type, &body) {
+        let paper_url = extract_paper_doi(&body).map(|doi| format!("https://doi.org/{doi}"));
         let article = extract_article_html(&body);
         let md = html_to_markdown(&article);
         if md.trim().is_empty() {
             return Err(AppError::message("feeds.body"));
         }
-        return Ok(ensure_heading(&md, title));
+        return Ok(FetchedArticle {
+            markdown: ensure_heading(&md, title),
+            paper_url,
+        });
     }
     let text = body.trim();
     if text.is_empty() {
         return Err(AppError::message("feeds.body"));
     }
-    Ok(ensure_heading(text, title))
+    Ok(FetchedArticle {
+        markdown: ensure_heading(text, title),
+        paper_url: None,
+    })
 }
 
 /// Resolve a full article body for the detail page. RSS often only ships an
 /// excerpt ending in `[...]`; opening the item fetches `item.url` and converts
-/// HTML → Markdown. Cached in `items.body_markdown`.
+/// HTML → Markdown. Cached in `items.body_markdown`. While the page is open
+/// anyway, a DOI found in the publisher's `<meta>` tags backfills
+/// `items.paper_url` so feeds without explicit DOIs (e.g. nature.com subject
+/// feeds) still offer the paper import action.
 pub async fn resolve_body(id: &str) -> Result<FeedItem, AppError> {
     let existing = {
         let conn = ensure_feeds()?;
@@ -677,37 +703,44 @@ pub async fn resolve_body(id: &str) -> Result<FeedItem, AppError> {
         return Ok(item_with_body(existing, md));
     }
     let rss = markdown_from_rss(&existing);
+    let missing_paper = existing
+        .paper_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_none();
     let skip_fetch = is_paper_landing_url(existing.url.as_deref());
     let need_fetch = !skip_fetch
         && existing.url.as_deref().is_some_and(is_fetchable_http_url)
-        && (looks_truncated(&rss) || rss.chars().count() < 400);
+        && (missing_paper || looks_truncated(&rss) || rss.chars().count() < 400);
     if !need_fetch {
         let body = ensure_heading(&strip_trailing_ellipsis(&rss), &existing.title);
         let conn = ensure_feeds()?;
-        return persist_body(&conn, id, &body);
+        return persist_resolved(&conn, id, &body, None);
     }
     let url = existing.url.clone().unwrap_or_default();
-    match fetch_article_markdown(&url, &existing.title).await {
-        Ok(article) if !article.trim().is_empty() => {
-            let chosen = if article.chars().count() + 40 >= rss.chars().count() {
-                article
+    match fetch_article(&url, &existing.title).await {
+        Ok(article) => {
+            let chosen = if article.markdown.chars().count() + 40 >= rss.chars().count() {
+                article.markdown
             } else {
                 rss
             };
             let conn = ensure_feeds()?;
-            persist_body(
+            persist_resolved(
                 &conn,
                 id,
                 &ensure_heading(&strip_trailing_ellipsis(&chosen), &existing.title),
+                article.paper_url.as_deref(),
             )
         }
-        Ok(_) | Err(_) => {
+        Err(_) => {
             let fallback = ensure_heading(&strip_trailing_ellipsis(&rss), &existing.title);
             if looks_truncated(&rss) {
                 return Ok(item_with_body(existing, fallback));
             }
             let conn = ensure_feeds()?;
-            persist_body(&conn, id, &fallback)
+            persist_resolved(&conn, id, &fallback, None)
         }
     }
 }
@@ -865,6 +898,129 @@ mod tests {
         assert_eq!(listed[0].id, later);
         assert!(listed[0].pinned);
         assert_eq!(listed[1].id, id);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn test_item(guid: &str, url: &str, paper_url: Option<&str>) -> ParsedItem {
+        ParsedItem {
+            guid: guid.to_string(),
+            title: format!("Item {guid}"),
+            url: Some(url.to_string()),
+            published_at: None,
+            summary_text: "short".to_string(),
+            content_html: None,
+            paper_url: paper_url.map(str::to_string),
+        }
+    }
+
+    /// A feed refresh must not wipe a paper_url that was backfilled from the
+    /// article page when the feed itself still provides none.
+    #[test]
+    fn upsert_keeps_backfilled_paper_url() {
+        let dir = std::env::temp_dir().join(format!(
+            "agentero-feeds-upsert-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("feeds.sqlite");
+        let conn = schema::ensure_feeds_at(&db).unwrap();
+        let sub = insert_subscription(&conn, "https://example.com/feed.xml", "Example").unwrap();
+
+        upsert_items(
+            &conn,
+            &sub,
+            &[test_item("g1", "https://example.com/a", None)],
+        )
+        .unwrap();
+        let item_id: String = conn
+            .query_row("SELECT id FROM items WHERE guid = 'g1'", [], |r| r.get(0))
+            .unwrap();
+
+        // Detail-open backfill writes the DOI scraped from the article page.
+        persist_resolved(
+            &conn,
+            &item_id,
+            "# Item g1\n\nbody",
+            Some("https://doi.org/10.1038/s41467-026-76837-1"),
+        )
+        .unwrap();
+
+        // Feed refresh arrives with no paper_url again — the backfill survives.
+        upsert_items(
+            &conn,
+            &sub,
+            &[test_item("g1", "https://example.com/a", None)],
+        )
+        .unwrap();
+        let stored: Option<String> = conn
+            .query_row("SELECT paper_url FROM items WHERE guid = 'g1'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            stored.as_deref(),
+            Some("https://doi.org/10.1038/s41467-026-76837-1")
+        );
+
+        // A feed that starts providing its own DOI still updates empty rows.
+        upsert_items(
+            &conn,
+            &sub,
+            &[test_item(
+                "g2",
+                "https://example.com/b",
+                Some("https://doi.org/10.1/xyz"),
+            )],
+        )
+        .unwrap();
+        let g2: Option<String> = conn
+            .query_row("SELECT paper_url FROM items WHERE guid = 'g2'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(g2.as_deref(), Some("https://doi.org/10.1/xyz"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Backfill never overwrites a paper_url that already exists.
+    #[test]
+    fn persist_resolved_keeps_existing_paper_url() {
+        let dir = std::env::temp_dir().join(format!(
+            "agentero-feeds-persist-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("feeds.sqlite");
+        let conn = schema::ensure_feeds_at(&db).unwrap();
+        let sub = insert_subscription(&conn, "https://example.com/feed.xml", "Example").unwrap();
+        upsert_items(
+            &conn,
+            &sub,
+            &[test_item(
+                "g1",
+                "https://example.com/a",
+                Some("https://arxiv.org/abs/1706.03762"),
+            )],
+        )
+        .unwrap();
+        let item_id: String = conn
+            .query_row("SELECT id FROM items WHERE guid = 'g1'", [], |r| r.get(0))
+            .unwrap();
+        let updated =
+            persist_resolved(&conn, &item_id, "# body", Some("https://doi.org/10.1038/x")).unwrap();
+        assert_eq!(
+            updated.paper_url.as_deref(),
+            Some("https://arxiv.org/abs/1706.03762")
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

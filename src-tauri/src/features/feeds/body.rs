@@ -58,6 +58,54 @@ pub fn is_paper_landing_url(url: Option<&str>) -> bool {
     ) || host.ends_with(".arxiv.org")
 }
 
+/// DOI scraped from an article page's `<meta>` tags: Highwire `citation_doi`
+/// first, then `prism.doi` / `dc.identifier` (both tolerate a `doi:` prefix).
+/// Used to backfill `items.paper_url` for feeds that never expose a DOI.
+pub fn extract_paper_doi(html: &str) -> Option<String> {
+    for name in ["citation_doi", "prism.doi", "dc.identifier"] {
+        let Some(content) = meta_named(html, name) else {
+            continue;
+        };
+        let doi = content
+            .trim()
+            .strip_prefix("doi:")
+            .map(str::trim)
+            .unwrap_or(content.trim());
+        if looks_like_doi(doi) {
+            return Some(doi.to_string());
+        }
+    }
+    None
+}
+
+fn looks_like_doi(s: &str) -> bool {
+    !s.is_empty() && s.starts_with("10.") && s.contains('/') && !s.contains(char::is_whitespace)
+}
+
+fn meta_named(html: &str, name: &str) -> Option<String> {
+    let lower = html.to_ascii_lowercase();
+    let mut from = 0;
+    while let Some(rel) = lower[from..].find("<meta") {
+        let start = from + rel;
+        let Some(gt) = lower[start..].find('>') else {
+            break;
+        };
+        let end = start + gt + 1;
+        let tag_l = &lower[start..end];
+        if attr_value(tag_l, "name").as_deref() == Some(name) {
+            // Read the content from the original slice: DOIs are
+            // case-insensitive but some contain uppercase characters.
+            if let Some(content) = attr_value(&html[start..end], "content") {
+                if !content.trim().is_empty() {
+                    return Some(content);
+                }
+            }
+        }
+        from = end;
+    }
+    None
+}
+
 pub fn is_fetchable_http_url(url: &str) -> bool {
     let Ok(parsed) = Url::parse(url.trim()) else {
         return false;
@@ -341,6 +389,31 @@ mod tests {
         assert!(!is_paper_landing_url(Some(
             "https://example.com/geometry-of-truth"
         )));
+    }
+
+    #[test]
+    fn extracts_doi_from_article_metadata() {
+        // Shape of a nature.com article page (truncated to the metas that matter).
+        let nature = r#"<html><head>
+<meta name="citation_doi" content="10.1038/s41467-026-76837-1">
+<meta name="prism.doi" content="doi:10.1038/s41467-026-76837-1">
+<meta name="dc.identifier" content="doi:10.1038/s41467-026-76837-1">
+</head><body><article><p>Body text long enough to matter.</p></article></body></html>"#;
+        assert_eq!(
+            extract_paper_doi(nature).as_deref(),
+            Some("10.1038/s41467-026-76837-1")
+        );
+        // prism.doi / dc.identifier carry a `doi:` prefix that gets stripped.
+        let prism_only = r#"<meta name="prism.doi" content="doi:10.1038/s41592-026-03201-y">"#;
+        assert_eq!(
+            extract_paper_doi(prism_only).as_deref(),
+            Some("10.1038/s41592-026-03201-y")
+        );
+        // Blog pages without paper metadata stay non-papers.
+        assert_eq!(extract_paper_doi("<html><head></head></html>"), None);
+        // Garbage content that is not a DOI is ignored.
+        let junk = r#"<meta name="citation_doi" content="not-a-doi">"#;
+        assert_eq!(extract_paper_doi(junk), None);
     }
 
     #[test]
