@@ -131,7 +131,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   - 初始化 `.agentero/catalog.sqlite`（schema 当前版本，含 Translator 元数据列）。详见 [`catalog.md`](catalog.md)。
   - 写入默认 `AGENTS.md`（若不存在）。
   - 写入 **`.agents/README.md`**（若不存在；内容来自仓库 `templates/vault/.agents/`）。
-  - 种子 **bundled skills**：`paper-reader`、`agentero-cli`、`vault-normalizer`、`idea-evaluator`、`deep-research`（后两者含 `references/`，来自 [Supervisor-Skills](https://github.com/HKUSTDial/Supervisor-Skills)，**CC BY-NC-SA 4.0**；另写 `skills/README.md` 与 `LICENSE-Supervisor-Skills.txt`）。
+  - 种子 **bundled skills**：`paper-reader`、`author-lookup`、`agentero-cli`、`vault-normalizer`、`idea-evaluator`、`deep-research`（后两者含 `references/`，来自 [Supervisor-Skills](https://github.com/HKUSTDial/Supervisor-Skills)，**CC BY-NC-SA 4.0**；另写 `skills/README.md` 与 `LICENSE-Supervisor-Skills.txt`）。
   - **不**创建根级 `PAPERS.md` / `library.bib`；已有第一方 `SKILL.md` 按 frontmatter 整数 `version` 升级（见 `vault_ensure`）；用户去掉/抬高 `version` 的修改与其它 `.agents/**` 文件保持原样。
   - 最近列表由前端在成功打开后写入 `localStorage`（`agentero-recent-vaults`）。
 

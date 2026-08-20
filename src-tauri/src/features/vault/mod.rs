@@ -95,6 +95,9 @@ pub const IDEA_EVALUATOR_SKILL: &str =
 pub const DEEP_RESEARCH_SKILL: &str =
     include_str!("../../../../templates/vault/.agents/skills/deep-research/SKILL.md");
 
+pub const AUTHOR_LOOKUP_SKILL: &str =
+    include_str!("../../../../templates/vault/.agents/skills/author-lookup/SKILL.md");
+
 // Onboarding tutorial notes are discovered by build.rs and embedded here.
 include!(concat!(env!("OUT_DIR"), "/onboarding_templates.rs"));
 
@@ -111,6 +114,10 @@ pub(crate) fn bundled_skill_files() -> &'static [(&'static str, &'static str)] {
             SUPERVISOR_SKILLS_LICENSE,
         ),
         (".agents/skills/paper-reader/SKILL.md", PAPER_READER_SKILL),
+        (
+            ".agents/skills/author-lookup/SKILL.md",
+            AUTHOR_LOOKUP_SKILL,
+        ),
         (
             ".agents/skills/equation-annotation/SKILL.md",
             EQUATION_ANNOTATION_SKILL,
