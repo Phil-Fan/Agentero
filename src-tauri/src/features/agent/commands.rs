@@ -422,17 +422,31 @@ pub async fn agent_list_sessions(
     vault_path: Option<String>,
     cursor: Option<String>,
 ) -> Result<ApiResult<crate::features::agent::models::AcpListSessionsResult>, String> {
+    use crate::core::log_util::{trunc, OpTimer};
+
+    let op = OpTimer::start_with(
+        "agent_list_sessions",
+        format!("agent_id={}", agent_id.as_deref().unwrap_or("default")),
+    );
     let desc = match registry.resolve_default(agent_id.as_deref()) {
         Ok(desc) => desc,
-        Err(error) => return Ok(map_err(error)),
+        Err(error) => {
+            op.finish_err(&error);
+            return Ok(map_err(error));
+        }
     };
     if let Some(error) = warm_gate.blocked(&desc.id) {
-        return Ok(map_err(AppError::message(error)));
+        let error = AppError::message(error);
+        op.finish_err(&error);
+        return Ok(map_err(error));
     }
     let remote_target =
         match resolve_remote_target(remote_registry.inner(), vault_path.as_deref()).await {
             Ok(t) => t,
-            Err(e) => return Ok(map_err(e)),
+            Err(e) => {
+                op.finish_err(&e);
+                return Ok(map_err(e));
+            }
         };
     let cwd = if let Some(ref rt) = remote_target {
         rt.agent_cwd()
@@ -447,10 +461,18 @@ pub async fn agent_list_sessions(
     {
         Ok(result) => {
             warm_gate.clear(&desc.id);
+            op.finish_ok_extra(format!(
+                "agent_id={} supported={} sessions={} truncated={}",
+                trunc(&desc.id, 48),
+                result.supported,
+                result.sessions.len(),
+                result.next_cursor.is_some()
+            ));
             Ok(ApiResult::ok(result))
         }
         Err(error) => {
             warm_gate.record_failure(&desc.id, &error.to_string());
+            op.finish_err(&error);
             Ok(map_err(error))
         }
     }

@@ -2,6 +2,7 @@
 mod acp_live {
     use crate::features::agent::acp::permission_response;
     use crate::features::agent::discover::resolve_command;
+    use crate::features::agent::list_acp_sessions;
     use crate::features::agent::models::{AgentDescriptor, AgentTemplate, CatalogAcpStatus};
     use crate::features::agent::probe_agent;
     use crate::features::agent::templates::catalog_templates;
@@ -10,7 +11,7 @@ mod acp_live {
         PermissionOption, PermissionOptionId, PermissionOptionKind, RequestPermissionOutcome,
         RequestPermissionRequest, ToolCallUpdate, ToolCallUpdateFields,
     };
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     fn desc(
         id: &str,
@@ -228,6 +229,43 @@ mod acp_live {
             assert_eq!(by_id("gemini").acp_status, CatalogAcpStatus::Missing);
         }
     }
+
+    /// #338: codex-acp pages `session/list` over a global time window and filters
+    /// by cwd inside each page, so the Host must walk the cursor rather than show
+    /// only the first page.
+    #[tokio::test]
+    async fn codex_acp_session_list_walks_cursor_pages() {
+        if resolve_command("codex-acp").is_none() {
+            eprintln!("skip: codex-acp not on PATH");
+            return;
+        }
+        let d = desc(
+            "test-codex-acp",
+            "Codex",
+            AgentTemplate::CodexAcp,
+            "codex-acp",
+            vec![],
+        );
+        let cwd = std::env::current_dir().expect("cwd");
+        let result = list_acp_sessions(&d, cwd.clone(), None, None)
+            .await
+            .expect("session/list must succeed");
+        assert!(result.supported, "codex-acp advertises session.list");
+        eprintln!(
+            "codex-acp sessions for {}: {}",
+            cwd.display(),
+            result.sessions.len()
+        );
+        let mut seen = HashSet::new();
+        for s in &result.sessions {
+            assert!(
+                seen.insert(s.session_id.clone()),
+                "duplicate session {}",
+                s.session_id
+            );
+            assert_eq!(s.cwd, cwd.to_string_lossy(), "agent must filter by cwd");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -278,5 +316,76 @@ mod tool_payload {
             panic!("expected string payload");
         };
         assert!(text.contains("truncated"));
+    }
+}
+
+#[cfg(test)]
+mod list_sessions_paging {
+    use crate::features::agent::acp::{
+        list_sessions_page_done, LIST_SESSIONS_BUDGET, LIST_SESSIONS_MAX, LIST_SESSIONS_MAX_PAGES,
+    };
+    use std::time::Duration;
+
+    #[test]
+    fn exhausted_cursor_stops() {
+        assert!(list_sessions_page_done(
+            None,
+            Some("2026-08-10T00:00:00Z"),
+            3,
+            1,
+            Duration::ZERO
+        ));
+    }
+
+    #[test]
+    fn empty_page_with_a_fresh_cursor_keeps_paging() {
+        // #338: codex-acp pages globally and filters by cwd, so a page holding
+        // zero sessions for this vault still has more results behind it.
+        assert!(!list_sessions_page_done(
+            Some("2026-08-05T00:00:00Z"),
+            Some("2026-08-10T00:00:00Z"),
+            0,
+            7,
+            Duration::ZERO
+        ));
+    }
+
+    #[test]
+    fn stalled_cursor_stops() {
+        let same = "2026-08-10T00:00:00Z";
+        assert!(list_sessions_page_done(
+            Some(same),
+            Some(same),
+            1,
+            2,
+            Duration::ZERO
+        ));
+    }
+
+    #[test]
+    fn caps_stop_the_walk() {
+        let next = Some("2026-08-05T00:00:00Z");
+        let prev = Some("2026-08-10T00:00:00Z");
+        assert!(list_sessions_page_done(
+            next,
+            prev,
+            LIST_SESSIONS_MAX,
+            1,
+            Duration::ZERO
+        ));
+        assert!(list_sessions_page_done(
+            next,
+            prev,
+            0,
+            LIST_SESSIONS_MAX_PAGES,
+            Duration::ZERO
+        ));
+        assert!(list_sessions_page_done(
+            next,
+            prev,
+            0,
+            1,
+            LIST_SESSIONS_BUDGET
+        ));
     }
 }

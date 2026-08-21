@@ -2162,6 +2162,33 @@ pub async fn warm_agent(
     }
 }
 
+/// Caps for `session/list` cursor walking.
+pub(crate) const LIST_SESSIONS_BUDGET: std::time::Duration = std::time::Duration::from_secs(5);
+pub(crate) const LIST_SESSIONS_MAX_PAGES: usize = 200;
+pub(crate) const LIST_SESSIONS_MAX: usize = 500;
+
+/// Stop paging `session/list`. An empty page is *not* a stop condition: codex-acp
+/// pages over a global time window and filters by cwd inside each page, so pages
+/// for one vault are often empty while more sessions remain behind the cursor.
+pub(crate) fn list_sessions_page_done(
+    next: Option<&str>,
+    prev: Option<&str>,
+    collected: usize,
+    pages: usize,
+    elapsed: std::time::Duration,
+) -> bool {
+    match next {
+        None => true,
+        // Agent stopped advancing; keep walking and we would loop forever.
+        Some(next) => {
+            next == prev.unwrap_or_default()
+                || collected >= LIST_SESSIONS_MAX
+                || pages >= LIST_SESSIONS_MAX_PAGES
+                || elapsed >= LIST_SESSIONS_BUDGET
+        }
+    }
+}
+
 /// List sessions from an ACP agent via `session/list`.
 /// Returns `supported: false` if the agent does not advertise session.list capability.
 pub async fn list_acp_sessions(
@@ -2202,29 +2229,57 @@ pub async fn list_acp_sessions(
                     });
                 }
 
-                let mut req = ListSessionsRequest::new().cwd(cwd);
-                if let Some(c) = cursor {
-                    req = req.cursor(c);
+                let started = std::time::Instant::now();
+                let mut sessions: Vec<AcpSessionInfo> = Vec::new();
+                let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+                let mut cursor = cursor;
+                let mut pages = 0usize;
+
+                loop {
+                    let mut req = ListSessionsRequest::new().cwd(cwd.clone());
+                    if let Some(ref c) = cursor {
+                        req = req.cursor(c.clone());
+                    }
+
+                    let resp = timed_acp_request(
+                        "session/list",
+                        connection.send_request(req).block_task(),
+                    )
+                    .await?;
+                    pages += 1;
+
+                    for s in resp.sessions {
+                        let session_id = s.session_id.to_string();
+                        if !seen.insert(session_id.clone()) {
+                            continue;
+                        }
+                        sessions.push(AcpSessionInfo {
+                            session_id,
+                            cwd: s.cwd.to_string_lossy().to_string(),
+                            title: s.title,
+                            updated_at: s.updated_at,
+                        });
+                    }
+
+                    let next = resp.next_cursor;
+                    let stalled = next.is_some() && next.as_deref() == cursor.as_deref();
+                    if list_sessions_page_done(
+                        next.as_deref(),
+                        cursor.as_deref(),
+                        sessions.len(),
+                        pages,
+                        started.elapsed(),
+                    ) {
+                        // Never hand back a cursor that did not advance.
+                        cursor = if stalled { None } else { next };
+                        break;
+                    }
+                    cursor = next;
                 }
-
-                let resp =
-                    timed_acp_request("session/list", connection.send_request(req).block_task())
-                        .await?;
-
-                let sessions = resp
-                    .sessions
-                    .into_iter()
-                    .map(|s| AcpSessionInfo {
-                        session_id: s.session_id.to_string(),
-                        cwd: s.cwd.to_string_lossy().to_string(),
-                        title: s.title,
-                        updated_at: s.updated_at,
-                    })
-                    .collect();
 
                 Ok(AcpListSessionsResult {
                     sessions,
-                    next_cursor: resp.next_cursor,
+                    next_cursor: cursor,
                     supported: true,
                 })
             }

@@ -81,6 +81,13 @@ commands / config 仍可在 load 期间转发。
 通知即返回，最长仍封顶 800ms），替代此前的固定 800ms sleep；回放通常在
 response 前/后很快推完，空会话与短会话因此显著更快（#271）。
 
+`agent_list_sessions` 必须**跟随 `nextCursor` 翻页**。codex-acp 按全局时间窗口分
+页、再在每页内部按 `cwd` 过滤，因此属于当前 Vault 的会话会散落在多页里，中间
+夹着大量「空页但仍有 nextCursor」的页。只取第一页会让 Codex 历史只剩少数几条、
+甚至完全为空（#338）。Host 在单条 ACP 连接内走完 cursor，按 `sessionId` 去重，
+并受三重封顶保护：5s 预算、200 页、500 条；因未走完而中断时把 cursor 一并返回。
+cursor 不再推进（`next == prev`）时视为走完，避免死循环。
+
 ## 命令（摘要）
 
 | Command | 说明 |
