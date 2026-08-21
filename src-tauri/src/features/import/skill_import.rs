@@ -1,6 +1,7 @@
 #[cfg(not(feature = "desktop"))]
 use super::AppHandle;
 use crate::core::error::AppError;
+use crate::core::frontmatter::{frontmatter_block, scalar_field};
 use crate::features::import::assets::{extract_tar_safe, http_get_bytes_with_progress};
 use crate::features::import::parse::SkillSource;
 use flate2::read::GzDecoder;
@@ -94,6 +95,12 @@ pub async fn discover_skill_source(
         }))?,
     )?;
     let candidates = discover_candidates(&temp, vault, source)?;
+    if candidates.is_empty() {
+        let _ = fs::remove_dir_all(&temp);
+        return Err(AppError::message(
+            "no importable SKILL.md was found in this source",
+        ));
+    }
     Ok(SkillDiscovery {
         discovery_id,
         source: source.source.clone(),
@@ -267,22 +274,26 @@ fn discover_candidates_from_tar(
     tar_bytes: &[u8],
 ) -> Result<Vec<ParsedSkillCandidate>, AppError> {
     extract_tar_safe(temp, tar_bytes)?;
-    let candidates: Vec<_> = WalkDir::new(temp)
+    let mut candidates = Vec::new();
+    let entries = WalkDir::new(temp)
         .into_iter()
         .filter_map(Result::ok)
         .filter(|entry| entry.file_type().is_file() && entry.file_name() == "SKILL.md")
-        .take(MAX_EXTRACTED_FILES + 1)
-        .map(|entry| {
-            let dir = entry.path().parent().unwrap_or(temp).to_path_buf();
-            let content = fs::read_to_string(entry.path())?;
-            let (name, description) = parse_skill_metadata(&content)?;
-            Ok(ParsedSkillCandidate {
-                dir,
-                name,
-                description,
-            })
-        })
-        .collect::<Result<Vec<_>, AppError>>()?;
+        .take(MAX_EXTRACTED_FILES + 1);
+    for entry in entries {
+        let dir = entry.path().parent().unwrap_or(temp).to_path_buf();
+        let Ok(content) = fs::read_to_string(entry.path()) else {
+            continue;
+        };
+        let Ok((name, description)) = parse_skill_metadata(&content) else {
+            continue;
+        };
+        candidates.push(ParsedSkillCandidate {
+            dir,
+            name,
+            description,
+        });
+    }
     if candidates.len() > MAX_EXTRACTED_FILES {
         return Err(AppError::message("skill archive contains too many files"));
     }
@@ -324,30 +335,24 @@ fn decode_gzip(bytes: &[u8]) -> Result<Vec<u8>, AppError> {
 }
 
 fn parse_skill_metadata(content: &str) -> Result<(String, String), AppError> {
-    let rest = content
-        .strip_prefix("---\n")
+    let frontmatter = frontmatter_block(content)
         .ok_or_else(|| AppError::message("SKILL.md is missing YAML frontmatter"))?;
-    let (frontmatter, _) = rest
-        .split_once("\n---")
-        .ok_or_else(|| AppError::message("SKILL.md has invalid YAML frontmatter"))?;
-    let mut name = None;
-    let mut description = String::new();
-    for line in frontmatter.lines() {
-        if let Some(value) = line.strip_prefix("name:") {
-            name = Some(value.trim().trim_matches(['"', '\'']).to_string());
-        } else if let Some(value) = line.strip_prefix("description:") {
-            description = value.trim().trim_matches(['"', '\'']).to_string();
-        }
+    let name = scalar_field(frontmatter, "name")
+        .filter(|name| valid_skill_name(name))
+        .ok_or_else(|| {
+            AppError::message(
+                "SKILL.md has an invalid name; use lowercase letters, numbers, and hyphens",
+            )
+        })?;
+    let description = scalar_field(frontmatter, "description").unwrap_or_default();
+    Ok((name, truncate_chars(&description, MAX_DESCRIPTION_LEN)))
+}
+
+fn truncate_chars(value: &str, max: usize) -> String {
+    match value.char_indices().nth(max) {
+        Some((index, _)) => format!("{}…", value[..index].trim_end()),
+        None => value.to_string(),
     }
-    let name = name.filter(|name| valid_skill_name(name)).ok_or_else(|| {
-        AppError::message(
-            "SKILL.md has an invalid name; use lowercase letters, numbers, and hyphens",
-        )
-    })?;
-    if description.len() > MAX_DESCRIPTION_LEN {
-        return Err(AppError::message("SKILL.md description is too long"));
-    }
-    Ok((name, description))
 }
 
 fn valid_skill_name(value: &str) -> bool {
@@ -398,5 +403,24 @@ mod tests {
         .unwrap();
         assert_eq!(name, "example-skill");
         assert_eq!(description, "Useful instructions");
+    }
+
+    #[test]
+    fn reads_folded_description() {
+        let (_, description) = parse_skill_metadata(
+            "---\nname: paper-reader\nversion: 2\ndescription: >-\n  Read and explain a\n  research paper.\n---\n# Body",
+        )
+        .unwrap();
+        assert_eq!(description, "Read and explain a research paper.");
+    }
+
+    #[test]
+    fn truncates_long_description_instead_of_failing() {
+        let long = "研究".repeat(MAX_DESCRIPTION_LEN);
+        let content = format!("---\nname: deep-research\ndescription: \"{long}\"\n---\n# Body");
+        let (name, description) = parse_skill_metadata(&content).unwrap();
+        assert_eq!(name, "deep-research");
+        assert_eq!(description.chars().count(), MAX_DESCRIPTION_LEN + 1);
+        assert!(description.ends_with('…'));
     }
 }

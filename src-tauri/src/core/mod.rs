@@ -3,6 +3,7 @@
 #[cfg(feature = "desktop")]
 pub mod blocking;
 pub mod error;
+pub mod frontmatter;
 pub mod fs;
 pub mod install_dirs;
 pub mod log_util;

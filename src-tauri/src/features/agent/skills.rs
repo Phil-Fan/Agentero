@@ -1,4 +1,5 @@
 use crate::core::error::AppError;
+use crate::core::frontmatter::{frontmatter_block, scalar_field};
 use crate::features::agent::models::{AgentSkill, AgentTemplate};
 use std::collections::HashSet;
 use std::fs;
@@ -91,22 +92,11 @@ fn skill_roots(vault_path: Option<&str>) -> Vec<PathBuf> {
 }
 
 fn parse_skill_metadata(content: &str, fallback_name: &str) -> (String, String) {
-    let Some(rest) = content.strip_prefix("---\n") else {
+    let Some(front_matter) = frontmatter_block(content) else {
         return (fallback_name.to_string(), String::new());
     };
-    let Some((front_matter, _)) = rest.split_once("\n---") else {
-        return (fallback_name.to_string(), String::new());
-    };
-    let mut name = fallback_name.to_string();
-    let mut description = String::new();
-    for line in front_matter.lines() {
-        if let Some(value) = line.strip_prefix("name:") {
-            name = value.trim().trim_matches(['\"', '\'']).to_string();
-        }
-        if let Some(value) = line.strip_prefix("description:") {
-            description = value.trim().trim_matches(['\"', '\'']).to_string();
-        }
-    }
+    let name = scalar_field(front_matter, "name").unwrap_or_else(|| fallback_name.to_string());
+    let description = scalar_field(front_matter, "description").unwrap_or_default();
     (name, description)
 }
 
@@ -244,6 +234,14 @@ mod tests {
         );
         assert_eq!(name, "example");
         assert_eq!(description, "Useful instructions");
+    }
+
+    #[test]
+    fn parses_bundled_folded_description() {
+        let bundled = include_str!("../../../../templates/vault/.agents/skills/paper-reader/SKILL.md");
+        let (name, description) = parse_skill_metadata(bundled, "paper-reader");
+        assert_eq!(name, "paper-reader");
+        assert!(description.starts_with("Read and explain a research paper"));
     }
 
     #[test]

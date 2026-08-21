@@ -257,23 +257,10 @@ pub(crate) fn bundled_skill_files() -> &'static [(&'static str, &'static str)] {
 /// bundled skills). Accepts `version: 1` or `version: "1"`. Non-integer values
 /// are ignored so user/SemVer strings do not trigger silent overwrites.
 pub(crate) fn parse_skill_frontmatter_version(content: &str) -> Option<u32> {
-    let rest = content
-        .strip_prefix("---\n")
-        .or_else(|| content.strip_prefix("---\r\n"))?;
-    let (front_matter, _) = rest
-        .split_once("\n---")
-        .or_else(|| rest.split_once("\r\n---"))?;
-    for line in front_matter.lines() {
-        let line = line.trim();
-        let Some(value) = line.strip_prefix("version:") else {
-            continue;
-        };
-        let value = value.trim().trim_matches(['"', '\'']);
-        if let Ok(v) = value.parse::<u32>() {
-            return Some(v);
-        }
-    }
-    None
+    let front_matter = crate::core::frontmatter::frontmatter_block(content)?;
+    crate::core::frontmatter::scalar_field(front_matter, "version")?
+        .parse::<u32>()
+        .ok()
 }
 
 /// Whether `existing` may be replaced by the current bundled template.
