@@ -60,7 +60,7 @@ export function PaperSearchDialog({
 			}}
 		>
 			<DialogContent
-				className="w-[min(36rem,calc(100vw-2rem))] max-w-none overflow-hidden"
+				className="w-[min(36rem,calc(100vw-2rem))] max-w-none overflow-hidden sm:max-w-none"
 				aria-describedby={undefined}
 			>
 				<DialogHeader>
