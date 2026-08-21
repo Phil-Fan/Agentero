@@ -66,6 +66,13 @@ export function useTreeDragDrop({
 	const [dropTarget, setDropTarget] = useState<string | null>(null);
 	const draggingRef = useRef<string[] | null>(null);
 	const moveClaimedRef = useRef(false);
+	/**
+	 * macOS delivers the native drop *after* DOM `dragend`, which clears
+	 * `dragging`. Keep the paths alive briefly past dragend so that late drop
+	 * can still complete the move.
+	 */
+	const dragPathsRef = useRef<string[] | null>(null);
+	const dragPathsExpireRef = useRef(0);
 	draggingRef.current = dragging;
 
 	/** Org folder under papers/ (not a paper unit, not virtual). */
@@ -97,6 +104,17 @@ export function useTreeDragDrop({
 		[byPath],
 	);
 
+	/** Dragged paths, including the brief window after DOM `dragend`. */
+	const liveDragPaths = useCallback((): string[] | null => {
+		const live = draggingRef.current;
+		if (live?.length) return live;
+		const retained = dragPathsRef.current;
+		if (retained?.length && Date.now() < dragPathsExpireRef.current) {
+			return retained;
+		}
+		return null;
+	}, []);
+
 	const handleRowDragStart = useCallback(
 		(path: string, e: ReactDragEvent) => {
 			if (createDraft || renameDraft || isVirtualTreePath(path)) {
@@ -105,6 +123,8 @@ export function useTreeDragDrop({
 			}
 			const paths = pathsForAction(path);
 			moveClaimedRef.current = false;
+			dragPathsRef.current = paths;
+			dragPathsExpireRef.current = Number.POSITIVE_INFINITY;
 			setDragging(paths);
 			beginVaultFileDrag();
 			e.dataTransfer.effectAllowed = "move";
@@ -118,17 +138,32 @@ export function useTreeDragDrop({
 		[createDraft, renameDraft, pathsForAction],
 	);
 
+	/**
+	 * Folder an item lands in when dropped on this row. A paper unit is a leaf,
+	 * so dropping on it (like a plain file) lands in its parent folder; only a
+	 * plain/org directory accepts items into itself.
+	 */
+	const dropDirFor = useCallback(
+		(path: string): string => {
+			const node = byPath.get(path);
+			if (
+				node?.kind === "directory" &&
+				!isPaperDirectory(node.path, node.children)
+			) {
+				return path;
+			}
+			return dirnameOf(path) ?? path;
+		},
+		[byPath],
+	);
+
 	const handleRowDragOver = useCallback(
 		(path: string, e: ReactDragEvent) => {
 			// Internal vault move takes priority while a tree drag is active.
 			if (dragging && canDrop(path, dragging)) {
 				e.preventDefault();
 				e.dataTransfer.dropEffect = "move";
-				// Highlight the target folder itself, or the file's parent folder
-				// so the user sees where the item will land.
-				const node = byPath.get(path);
-				const highlightPath =
-					node?.kind === "directory" ? path : (dirnameOf(path) ?? path);
+				const highlightPath = dropDirFor(path);
 				if (dropTarget !== highlightPath) {
 					setDropTarget(highlightPath);
 				}
@@ -149,20 +184,29 @@ export function useTreeDragDrop({
 			}
 			if (dropTarget) setDropTarget(null);
 		},
-		[dragging, dropTarget, canDrop, onDropLocalPdfs, isPapersOrgFolder, byPath],
+		[
+			dragging,
+			dropTarget,
+			canDrop,
+			onDropLocalPdfs,
+			isPapersOrgFolder,
+			dropDirFor,
+		],
 	);
 
 	const finishVaultMove = useCallback(
 		(paths: string[], targetPath: string) => {
 			if (moveClaimedRef.current) return;
 			moveClaimedRef.current = true;
+			dragPathsRef.current = null;
+			dragPathsExpireRef.current = 0;
 			setDragging(null);
 			setDropTarget(null);
 			endVaultFileDrag();
 			if (!onDropMove || !canDrop(targetPath, paths)) return;
-			onDropMove(paths, targetPath);
+			onDropMove(paths, dropDirFor(targetPath));
 		},
-		[onDropMove, canDrop],
+		[onDropMove, canDrop, dropDirFor],
 	);
 
 	const handleRowDrop = useCallback(
@@ -227,29 +271,58 @@ export function useTreeDragDrop({
 		],
 	);
 
-	useEffect(() => {
-		return subscribeTauriFileDrop((payload) => {
-			if (payload.type !== "drop") return;
-			const paths = draggingRef.current;
-			if (!paths?.length) return;
-			const rows = document.querySelectorAll("[data-path]");
+	/** Innermost tree row under a native drag position, if any. */
+	const rowPathAtPoint = useCallback(
+		(position: { x: number; y: number }): string | null => {
 			let targetPath: string | null = null;
-			for (const row of rows) {
+			for (const row of document.querySelectorAll("[data-path]")) {
 				if (!(row instanceof HTMLElement)) continue;
-				if (
-					!isPhysicalPointInRect(payload.position, row.getBoundingClientRect())
-				) {
+				if (!isPhysicalPointInRect(position, row.getBoundingClientRect())) {
 					continue;
 				}
 				const next = row.dataset.path;
 				if (next) targetPath = next;
 			}
-			if (!targetPath) return;
+			return targetPath;
+		},
+		[],
+	);
+
+	/**
+	 * macOS-only route. wry overrides the WKWebView `NSDraggingDestination`
+	 * protocol and Tauri's handler always returns true, so wry never forwards to
+	 * `super` and the page receives no DOM dragover/drop — even for a drag that
+	 * started inside the tree. Windows/Linux gate these events on a real file
+	 * list, so in-app drags there keep flowing through the DOM handlers above.
+	 */
+	useEffect(() => {
+		return subscribeTauriFileDrop((payload) => {
+			const paths = liveDragPaths();
+			if (!paths?.length) return;
+			if (payload.type === "leave") {
+				setDropTarget(null);
+				return;
+			}
+			const targetPath = rowPathAtPoint(payload.position);
+			if (payload.type === "enter" || payload.type === "over") {
+				setDropTarget(
+					targetPath && canDrop(targetPath, paths)
+						? dropDirFor(targetPath)
+						: null,
+				);
+				return;
+			}
+			if (payload.type !== "drop" || !targetPath) return;
 			finishVaultMove(paths, targetPath);
 		});
-	}, [finishVaultMove]);
+	}, [finishVaultMove, rowPathAtPoint, canDrop, dropDirFor, liveDragPaths]);
 
 	const handleRowDragEnd = useCallback(() => {
+		// WebKit fires this source-side event *before* wry delivers the native
+		// drop, so keep the paths alive long enough for that drop to land.
+		if (!moveClaimedRef.current) {
+			dragPathsExpireRef.current = Date.now() + 1000;
+		}
 		setDragging(null);
 		setDropTarget(null);
 		endVaultFileDrag();
