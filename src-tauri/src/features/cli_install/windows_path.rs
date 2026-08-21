@@ -117,8 +117,10 @@ fn decode_reg_string(bytes: &[u8]) -> String {
         bytes = &bytes[..bytes.len() - 2];
     }
     let units = bytes
-        .chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
         .collect::<Vec<u16>>();
     String::from_utf16(&units).unwrap_or_default()
 }
