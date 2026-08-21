@@ -32,6 +32,8 @@ pub mod lifecycle;
 pub mod modelscope_proxy;
 pub mod network;
 pub mod open_request;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+pub mod pdf_locate;
 #[cfg(feature = "desktop")]
 pub mod recommend;
 pub mod refs;

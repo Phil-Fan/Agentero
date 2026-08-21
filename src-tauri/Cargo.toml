@@ -48,6 +48,7 @@ tauri-build = { version = "2", features = [] }
 [dev-dependencies]
 # `start_paused` virtual clock for stream coalescer / throttle unit tests.
 tokio = { version = "1", features = ["test-util", "macros"] }
+tempfile = "3"
 
 [dependencies]
 tauri = { version = "2", features = [], optional = true }
@@ -113,6 +114,10 @@ posthog-rs = { version = "0.23", default-features = false, optional = true }
 # — desktop (incl. Windows) needs it.
 [target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
 liteparse = "2.13"
+# The PDFium binding liteparse itself sits on (shared dylib, one global loader).
+# `features/pdf_locate` uses the text engine directly for quote → page rects,
+# bypassing liteparse's layout pass.
+liteparse-pdfium = "1.7"
 
 [target.'cfg(target_os = "ios")'.dependencies]
 security-framework = "3.7"

@@ -6,6 +6,8 @@
 use crate::core::error::AppError;
 use crate::features::catalog::{papers, probe_paper_caps, CapsCache};
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
+use crate::features::pdf_locate::{LocateRequest, LocateResult};
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 use liteparse::config::{ImageMode, LiteParseConfig, OutputFormat};
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 use liteparse::LiteParse;
@@ -34,9 +36,13 @@ const PDF_PROBE_WORKER_ARG: &str = "--agentero-internal-pdf-recognize-worker";
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_RENDER_WORKER_ARG: &str = "--agentero-internal-pdf-render-worker";
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
+const PDF_LOCATE_WORKER_ARG: &str = "--agentero-internal-pdf-locate-worker";
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_PARSE_TIMEOUT: Duration = Duration::from_secs(120);
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+const PDF_LOCATE_TIMEOUT: Duration = Duration::from_secs(30);
 /// Rendering many pages at 150 DPI can exceed the parse timeout on large PDFs.
 #[cfg(all(
     feature = "desktop",
@@ -369,6 +375,14 @@ enum PdfRenderWorkerResponse {
     Err { message: String },
 }
 
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+enum PdfLocateWorkerResponse {
+    Ok { result: LocateResult },
+    Err { message: String },
+}
+
 /// Keeps a worker temp directory alive (render output PNGs are read by the
 /// parent after the worker exits); removed on drop.
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
@@ -415,6 +429,8 @@ fn pdf_parse_worker_request_from_args(
         PDF_PROBE_WORKER_ARG
     } else if mode == OsStr::new(PDF_RENDER_WORKER_ARG) {
         PDF_RENDER_WORKER_ARG
+    } else if mode == OsStr::new(PDF_LOCATE_WORKER_ARG) {
+        PDF_LOCATE_WORKER_ARG
     } else {
         return Ok(None);
     };
@@ -471,6 +487,11 @@ pub fn try_run_pdf_parse_worker() -> Option<i32> {
                 runtime
                     .block_on(run_liteparse_render_direct(&request.pdf_path, &out_dir))
                     .map(|pages| PdfRenderWorkerResponse::Ok { pages })
+                    .map_err(|error| error.to_string())
+                    .and_then(|r| serde_json::to_value(&r).map_err(|e| e.to_string()))
+            } else if request.worker_arg == PDF_LOCATE_WORKER_ARG {
+                locate_worker_body(&request.pdf_path, &request.response_path)
+                    .map(|result| PdfLocateWorkerResponse::Ok { result })
                     .map_err(|error| error.to_string())
                     .and_then(|r| serde_json::to_value(&r).map_err(|e| e.to_string()))
             } else {
@@ -601,18 +622,22 @@ async fn spawn_pdf_worker(
     timeout_limit: Duration,
 ) -> Result<Vec<u8>, AppError> {
     let (bytes, _dir) =
-        spawn_pdf_worker_with_dir(worker_arg, pdf_path, task_id, timeout_limit).await?;
+        spawn_pdf_worker_with_dir(worker_arg, pdf_path, task_id, timeout_limit, None).await?;
     Ok(bytes)
 }
 
 /// Like [`spawn_pdf_worker`], but hands the worker directory back to the
 /// caller (the render worker leaves page PNGs beside `response.json`).
+///
+/// `request_json` lands in `request.json` inside that directory for modes that
+/// need more input than a PDF path.
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 async fn spawn_pdf_worker_with_dir(
     worker_arg: &str,
     pdf_path: &Path,
     task_id: Option<&str>,
     timeout_limit: Duration,
+    request_json: Option<&str>,
 ) -> Result<(Vec<u8>, WorkerDirGuard), AppError> {
     if pdf_parse_task_is_cancelled(task_id) {
         return Err(AppError::message(CANCELLED_MESSAGE));
@@ -633,6 +658,10 @@ async fn spawn_pdf_worker_with_dir(
     let stderr_path = worker_dir.join("stderr.log");
     let stderr_sink = fs::File::create(&stderr_path)
         .map_err(|error| AppError::message(format!("create PDF parse worker log: {error}")))?;
+    if let Some(payload) = request_json {
+        fs::write(worker_dir.join("request.json"), payload)
+            .map_err(|error| AppError::message(format!("write PDF worker request: {error}")))?;
+    }
 
     let mut command = tokio::process::Command::new(executable);
     command
@@ -666,7 +695,7 @@ async fn spawn_pdf_worker_with_dir(
                 let _ = child.kill().await;
                 let _ = child.wait().await;
                 return Err(AppError::message(format!(
-                    "liteparse timed out after {}s; PDF import completed without PAPER.md",
+                    "isolated PDF worker timed out after {}s",
                     timeout_limit.as_secs()
                 )));
             }
@@ -689,6 +718,50 @@ async fn spawn_pdf_worker_with_dir(
         ))
     })?;
     Ok((bytes, dir_guard))
+}
+
+/// Worker side of quote locating: the parent leaves the `LocateRequest` as
+/// `request.json` beside `response.json`.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn locate_worker_body(pdf_path: &Path, response_path: &Path) -> Result<LocateResult, AppError> {
+    let request_path = response_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("request.json");
+    let raw = fs::read_to_string(&request_path)
+        .map_err(|error| AppError::message(format!("read locate request: {error}")))?;
+    let request: LocateRequest = serde_json::from_str(&raw)
+        .map_err(|error| AppError::message(format!("decode locate request: {error}")))?;
+    // std::fs read for the same reason as the parse path: FPDF_LoadDocument's
+    // path handling is unreliable for non-ASCII paths on Windows.
+    let data = fs::read(pdf_path).map_err(|e| AppError::message(format!("read pdf: {e}")))?;
+    crate::features::pdf_locate::locate_in_pdf(&data, &request)
+}
+
+/// Resolve a quote to page rects in the isolated PDFium worker (killable, with
+/// a hard timeout — an Agent-facing command must not hang on a broken PDF).
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+pub async fn run_pdf_locate(
+    pdf_path: &Path,
+    request: &LocateRequest,
+) -> Result<LocateResult, AppError> {
+    let payload = serde_json::to_string(request)
+        .map_err(|error| AppError::message(format!("serialize locate request: {error}")))?;
+    let (bytes, _dir) = spawn_pdf_worker_with_dir(
+        PDF_LOCATE_WORKER_ARG,
+        pdf_path,
+        None,
+        PDF_LOCATE_TIMEOUT,
+        Some(&payload),
+    )
+    .await?;
+    let response = serde_json::from_slice::<PdfLocateWorkerResponse>(&bytes).map_err(|error| {
+        AppError::message(format!("decode isolated PDF locate response: {error}"))
+    })?;
+    match response {
+        PdfLocateWorkerResponse::Ok { result } => Ok(result),
+        PdfLocateWorkerResponse::Err { message } => Err(AppError::message(message)),
+    }
 }
 
 /// Probe the first pages of a local PDF for metadata recognition.
@@ -729,9 +802,14 @@ pub(crate) async fn run_liteparse_render_pngs(
     pdf_path: &Path,
     task_id: Option<&str>,
 ) -> Result<(Vec<RenderedPngPage>, WorkerDirGuard), AppError> {
-    let (bytes, dir_guard) =
-        spawn_pdf_worker_with_dir(PDF_RENDER_WORKER_ARG, pdf_path, task_id, PDF_RENDER_TIMEOUT)
-            .await?;
+    let (bytes, dir_guard) = spawn_pdf_worker_with_dir(
+        PDF_RENDER_WORKER_ARG,
+        pdf_path,
+        task_id,
+        PDF_RENDER_TIMEOUT,
+        None,
+    )
+    .await?;
     let response = serde_json::from_slice::<PdfRenderWorkerResponse>(&bytes).map_err(|error| {
         AppError::message(format!("decode isolated PDF render response: {error}"))
     })?;
