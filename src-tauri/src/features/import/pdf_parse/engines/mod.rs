@@ -190,4 +190,32 @@ mod tests {
         );
         assert_eq!(provider_for_backend("local"), None);
     }
+
+    /// A cloud engine that cannot even start (no API key) must hand over to
+    /// the local parser and leave the reason in `messages`.
+    ///
+    /// Mutates the process-wide snapshot, so it restores the default; no other
+    /// test reads `PARSER_CONFIG`.
+    #[tokio::test]
+    async fn cloud_failure_falls_back_to_local_with_reason() {
+        configure_parser(ParserEngineConfig {
+            backend: "mineru".to_string(),
+            credentials: HashMap::from([("mineru".to_string(), EngineCredentials::default())]),
+        });
+
+        let mut messages = Vec::new();
+        // The local hop then fails too (no such PDF), which is fine: the
+        // assertion is about the handover, not the local parse.
+        let _ =
+            parse_body_with_engine(Path::new("missing-test-input.pdf"), None, &mut messages).await;
+
+        configure_parser(ParserEngineConfig::default());
+
+        assert!(
+            messages
+                .iter()
+                .any(|m| m.contains("mineru failed") && m.contains("falling back to local")),
+            "expected a mineru fallback note, got {messages:?}"
+        );
+    }
 }

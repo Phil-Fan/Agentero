@@ -20,6 +20,51 @@ const MAX_FAILED_PAGE_RATIO: f64 = 0.3;
 
 pub(crate) struct OpenAiVlmBodyEngine;
 
+/// Endpoint + model resolved from the provider credentials.
+struct VlmTarget {
+    base: String,
+    api_key: String,
+    model: String,
+    prompt: &'static str,
+}
+
+fn resolve_target(ctx: &BodyParseCtx<'_>) -> Result<VlmTarget, AppError> {
+    let api_key = ctx
+        .credentials
+        .api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|k| !k.is_empty())
+        .ok_or_else(|| {
+            AppError::message("OpenAI-compatible OCR requires apiKey (Settings → Layout)")
+        })?
+        .to_string();
+    let base = ctx
+        .credentials
+        .base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_VLM_BASE_URL)
+        .trim_end_matches('/')
+        .to_string();
+    let model = ctx
+        .credentials
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .unwrap_or(DEFAULT_VLM_MODEL)
+        .to_string();
+    let prompt = prompt_for_model(&model);
+    Ok(VlmTarget {
+        base,
+        api_key,
+        model,
+        prompt,
+    })
+}
+
 #[async_trait]
 impl BodyParseEngine for OpenAiVlmBodyEngine {
     fn id(&self) -> &'static str {
@@ -27,105 +72,12 @@ impl BodyParseEngine for OpenAiVlmBodyEngine {
     }
 
     async fn parse(&self, ctx: &BodyParseCtx<'_>) -> Result<BodyParseOutcome, AppError> {
-        let api_key = ctx
-            .credentials
-            .api_key
-            .as_deref()
-            .map(str::trim)
-            .filter(|k| !k.is_empty())
-            .ok_or_else(|| {
-                AppError::message("OpenAI-compatible OCR requires apiKey (Settings → PDF)")
-            })?
-            .to_string();
-        let base = ctx
-            .credentials
-            .base_url
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .unwrap_or(DEFAULT_VLM_BASE_URL)
-            .trim_end_matches('/')
-            .to_string();
-        let model = ctx
-            .credentials
-            .model
-            .as_deref()
-            .map(str::trim)
-            .filter(|m| !m.is_empty())
-            .unwrap_or(DEFAULT_VLM_MODEL)
-            .to_string();
-        let prompt = prompt_for_model(&model);
-
+        let target = resolve_target(ctx)?;
         // Rendering runs in the killable PDFium worker; the guard keeps the
         // PNG directory alive until every page request finished.
         let (pages, guard) =
             super::super::run_liteparse_render_pngs(ctx.pdf_path, ctx.task_id).await?;
-        if pages.is_empty() {
-            return Err(AppError::message("PDF rendered no pages"));
-        }
-        let truncated = pages.len() >= super::super::VLM_MAX_PAGES;
-
-        let client = network::client_builder()
-            .timeout(PAGE_TIMEOUT)
-            .build()
-            .map_err(|e| AppError::message(format!("http client: {e}")))?;
-
-        let total = pages.len();
-        let mut page_futures = Vec::with_capacity(total);
-        for (index, page) in pages.iter().enumerate() {
-            page_futures.push(process_page(
-                index,
-                page,
-                guard.path(),
-                ctx,
-                &client,
-                &base,
-                &api_key,
-                &model,
-                prompt,
-            ));
-        }
-        let results: Vec<(usize, Result<String, AppError>)> = stream::iter(page_futures)
-            .buffer_unordered(PAGE_CONCURRENCY)
-            .collect()
-            .await;
-
-        if ctx.is_cancelled() {
-            return Err(AppError::message(super::super::CANCELLED_MESSAGE));
-        }
-
-        let mut page_texts: Vec<String> = vec![String::new(); total];
-        let mut failed = 0usize;
-        for (index, outcome) in results {
-            match outcome {
-                Ok(text) => page_texts[index] = clean_page_markdown(&text),
-                Err(e) => {
-                    let msg = e.to_string();
-                    if msg.contains(super::super::CANCELLED_MESSAGE) {
-                        return Err(e);
-                    }
-                    failed += 1;
-                    page_texts[index] = format!("<!-- page {}: OCR failed -->", index + 1);
-                }
-            }
-        }
-        if failed as f64 > total as f64 * MAX_FAILED_PAGE_RATIO {
-            return Err(AppError::message(format!(
-                "VLM OCR failed on {failed}/{total} pages"
-            )));
-        }
-
-        let mut markdown = page_texts
-            .into_iter()
-            .filter(|t| !t.trim().is_empty())
-            .collect::<Vec<_>>()
-            .join("\n\n");
-        if truncated {
-            markdown.push_str(&format!(
-                "\n\n<!-- truncated to the first {} pages -->",
-                super::super::VLM_MAX_PAGES
-            ));
-        }
+        let markdown = ocr_rendered_pages(&pages, guard.path(), ctx, &target).await?;
         Ok(BodyParseOutcome {
             markdown,
             body_source: "vlm".to_string(),
@@ -134,17 +86,79 @@ impl BodyParseEngine for OpenAiVlmBodyEngine {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// OCR every rendered page and join the per-page markdown in page order.
+async fn ocr_rendered_pages(
+    pages: &[super::super::RenderedPngPage],
+    dir: &std::path::Path,
+    ctx: &BodyParseCtx<'_>,
+    target: &VlmTarget,
+) -> Result<String, AppError> {
+    if pages.is_empty() {
+        return Err(AppError::message("PDF rendered no pages"));
+    }
+    let truncated = pages.len() >= super::super::VLM_MAX_PAGES;
+    let client = network::client_builder()
+        .timeout(PAGE_TIMEOUT)
+        .build()
+        .map_err(|e| AppError::message(format!("http client: {e}")))?;
+
+    let total = pages.len();
+    let mut page_futures = Vec::with_capacity(total);
+    for (index, page) in pages.iter().enumerate() {
+        page_futures.push(process_page(index, page, dir, ctx, &client, target));
+    }
+    let results: Vec<(usize, Result<String, AppError>)> = stream::iter(page_futures)
+        .buffer_unordered(PAGE_CONCURRENCY)
+        .collect()
+        .await;
+
+    if ctx.is_cancelled() {
+        return Err(AppError::message(super::super::CANCELLED_MESSAGE));
+    }
+
+    let mut page_texts: Vec<String> = vec![String::new(); total];
+    let mut failed = 0usize;
+    for (index, outcome) in results {
+        match outcome {
+            Ok(text) => page_texts[index] = clean_page_markdown(&text),
+            Err(e) => {
+                let msg = e.to_string();
+                if msg.contains(super::super::CANCELLED_MESSAGE) {
+                    return Err(e);
+                }
+                log::warn!(target: "agentero::pdf_parse", "VLM OCR page {} failed: {msg}", index + 1);
+                failed += 1;
+                page_texts[index] = format!("<!-- page {}: OCR failed -->", index + 1);
+            }
+        }
+    }
+    if failed as f64 > total as f64 * MAX_FAILED_PAGE_RATIO {
+        return Err(AppError::message(format!(
+            "VLM OCR failed on {failed}/{total} pages"
+        )));
+    }
+
+    let mut markdown = page_texts
+        .into_iter()
+        .filter(|t| !t.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    if truncated {
+        markdown.push_str(&format!(
+            "\n\n<!-- truncated to the first {} pages -->",
+            super::super::VLM_MAX_PAGES
+        ));
+    }
+    Ok(markdown)
+}
+
 async fn process_page(
     index: usize,
     page: &super::super::RenderedPngPage,
     dir: &std::path::Path,
     ctx: &BodyParseCtx<'_>,
     client: &reqwest::Client,
-    base: &str,
-    api_key: &str,
-    model: &str,
-    prompt: &str,
+    target: &VlmTarget,
 ) -> (usize, Result<String, AppError>) {
     if page.is_solid_fill {
         return (index, Ok(String::new()));
@@ -159,9 +173,9 @@ async fn process_page(
         Ok(bytes) => bytes,
         Err(e) => return (index, Err(AppError::message(format!("read page png: {e}")))),
     };
-    let mut outcome = ocr_page(client, base, api_key, model, prompt, &png).await;
+    let mut outcome = ocr_page(client, target, &png).await;
     if outcome.is_err() && !ctx.is_cancelled() {
-        outcome = ocr_page(client, base, api_key, model, prompt, &png).await;
+        outcome = ocr_page(client, target, &png).await;
     }
     (index, outcome)
 }
@@ -180,10 +194,7 @@ fn prompt_for_model(model: &str) -> &'static str {
 
 async fn ocr_page(
     client: &reqwest::Client,
-    base: &str,
-    api_key: &str,
-    model: &str,
-    prompt: &str,
+    target: &VlmTarget,
     png_bytes: &[u8],
 ) -> Result<String, AppError> {
     let data_url = format!(
@@ -191,19 +202,19 @@ async fn ocr_page(
         base64::engine::general_purpose::STANDARD.encode(png_bytes)
     );
     let body = json!({
-        "model": model,
+        "model": target.model,
         "temperature": 0,
         "messages": [{
             "role": "user",
             "content": [
                 { "type": "image_url", "image_url": { "url": data_url } },
-                { "type": "text", "text": prompt }
+                { "type": "text", "text": target.prompt }
             ]
         }]
     });
     let response = client
-        .post(format!("{base}/chat/completions"))
-        .bearer_auth(api_key)
+        .post(format!("{}/chat/completions", target.base))
+        .bearer_auth(&target.api_key)
         .json(&body)
         .send()
         .await
@@ -232,17 +243,17 @@ async fn ocr_page(
         .ok_or_else(|| AppError::message("Unexpected VLM OCR response: missing content"))
 }
 
-/// Strip DeepSeek-OCR grounding control tokens (keep the referenced text)
-/// and unwrap a whole-page markdown code fence.
+/// Strip DeepSeek-OCR grounding annotations and unwrap a whole-page markdown
+/// code fence.
+///
+/// Grounding output is `<|ref|>label<|/ref|><|det|>[[box]]<|/det|>\ncontent`:
+/// the ref payload is the layout category (`text`, `title`, …), not prose, so
+/// both spans are dropped whole — keeping them would litter the body with
+/// stray "text" / "sub_title" lines.
 fn clean_page_markdown(text: &str) -> String {
-    let mut out = text.replace("<|ref|>", "").replace("<|/ref|>", "");
-    while let Some(start) = out.find("<|det|>") {
-        match out[start..].find("<|/det|>") {
-            Some(end_rel) => out.replace_range(start..start + end_rel + "<|/det|>".len(), ""),
-            None => out.replace_range(start..start + "<|det|>".len(), ""),
-        }
-    }
-    let trimmed = out.trim();
+    let stripped = strip_tagged_span(text, "<|ref|>", "<|/ref|>");
+    let stripped = strip_tagged_span(&stripped, "<|det|>", "<|/det|>");
+    let trimmed = stripped.trim();
     let unfenced = trimmed
         .strip_prefix("```markdown")
         .or_else(|| trimmed.strip_prefix("```md"))
@@ -251,6 +262,23 @@ fn clean_page_markdown(text: &str) -> String {
         .map(str::trim)
         .unwrap_or(trimmed);
     unfenced.to_string()
+}
+
+/// Remove every `open … close` span, including its payload. An unterminated
+/// `open` drops only the marker so the trailing content survives.
+fn strip_tagged_span(text: &str, open: &str, close: &str) -> String {
+    let mut out = text.to_string();
+    while let Some(start) = out.find(open) {
+        let rest = &out[start + open.len()..];
+        match rest.find(close) {
+            Some(offset) => {
+                let end = start + open.len() + offset + close.len();
+                out.replace_range(start..end, "");
+            }
+            None => out.replace_range(start..start + open.len(), ""),
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -272,12 +300,72 @@ mod tests {
 
     #[test]
     fn cleans_grounding_and_fences() {
+        // Real DeepSeek-OCR shape: the ref payload is a layout label, the
+        // prose follows the det span.
         assert_eq!(
-            clean_page_markdown("<|ref|>Title<|/ref|><|det|>[[1,2,3,4]]<|/det|> body"),
-            "Title body"
+            clean_page_markdown(
+                "<|ref|>title<|/ref|><|det|>[[343, 184, 653, 208]]<|/det|>\n# Attention Is All You Need  \n\n<|ref|>text<|/ref|><|det|>[[201, 88, 799, 142]]<|/det|>\nBody line."
+            ),
+            "# Attention Is All You Need  \n\n\nBody line."
         );
         assert_eq!(clean_page_markdown("```markdown\n# H1\n```"), "# H1");
         assert_eq!(clean_page_markdown("plain"), "plain");
+        // Unterminated markers must not swallow the remaining content.
         assert_eq!(clean_page_markdown("<|det|>dangling"), "dangling");
+        assert_eq!(clean_page_markdown("<|ref|>dangling"), "dangling");
+    }
+
+    /// Live end-to-end OCR against a real OpenAI-compatible endpoint.
+    ///
+    /// Renders in-process (the worker subprocess would re-enter this test
+    /// binary), then runs the same OCR path the engine uses.
+    ///
+    /// ```sh
+    /// AGENTERO_VLM_LIVE_PDF=/tmp/x.pdf AGENTERO_VLM_API_KEY=sk-… \
+    ///   cargo test -p agentero --lib -- live_openai_vlm --ignored --nocapture
+    /// ```
+    #[tokio::test]
+    #[ignore = "live network + billed API key"]
+    async fn live_openai_vlm_ocr() {
+        let Ok(pdf) = std::env::var("AGENTERO_VLM_LIVE_PDF") else {
+            panic!("set AGENTERO_VLM_LIVE_PDF");
+        };
+        let api_key = std::env::var("AGENTERO_VLM_API_KEY").expect("set AGENTERO_VLM_API_KEY");
+        let model = std::env::var("AGENTERO_VLM_MODEL").unwrap_or_default();
+        let base_url = std::env::var("AGENTERO_VLM_BASE_URL").unwrap_or_default();
+
+        let dir = std::env::temp_dir().join(format!("vlm-live-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pages = crate::features::import::pdf_parse::run_liteparse_render_direct(
+            std::path::Path::new(&pdf),
+            &dir,
+        )
+        .await
+        .expect("render pages");
+        println!("rendered {} page(s) at {}", pages.len(), dir.display());
+
+        let ctx = BodyParseCtx {
+            pdf_path: std::path::Path::new(&pdf),
+            task_id: None,
+            credentials: super::super::EngineCredentials {
+                api_key: Some(api_key),
+                base_url: (!base_url.is_empty()).then_some(base_url),
+                model: (!model.is_empty()).then_some(model),
+            },
+        };
+        let target = resolve_target(&ctx).expect("resolve target");
+        println!("model={} prompt={:?}", target.model, target.prompt);
+
+        let markdown = ocr_rendered_pages(&pages, &dir, &ctx, &target)
+            .await
+            .expect("ocr pages");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        println!("--- markdown ({} chars) ---\n{markdown}", markdown.len());
+        assert!(!markdown.trim().is_empty(), "markdown must not be empty");
+        assert!(
+            !markdown.contains("OCR failed"),
+            "no page should fall back to the failure marker"
+        );
     }
 }

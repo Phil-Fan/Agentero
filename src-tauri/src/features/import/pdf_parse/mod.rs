@@ -754,7 +754,7 @@ pub(crate) async fn run_liteparse_render_pngs(
 /// `render_pages_to_png` errors on out-of-range page numbers, so a cheap
 /// capped text pass determines how many pages exist (≤ [`VLM_MAX_PAGES`]).
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
-async fn run_liteparse_render_direct(
+pub(crate) async fn run_liteparse_render_direct(
     pdf_path: &Path,
     out_dir: &Path,
 ) -> Result<Vec<RenderedPngPage>, AppError> {

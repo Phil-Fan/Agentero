@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 
 /// Fixed AI Studio PaddleOCR jobs endpoint (not configurable).
 const CLOUD_JOBS_URL: &str = "https://paddleocr.aistudio-app.com/api/v2/ocr/jobs";
+/// Layout-analysis model: the only one that returns `layout_det_res` boxes.
 const CLOUD_MODEL: &str = "PP-StructureV3";
 const CLOUD_POLL_INTERVAL: Duration = Duration::from_secs(3);
 const CLOUD_JOB_DEADLINE: Duration = Duration::from_secs(600);
@@ -177,6 +178,7 @@ async fn submit_job(
     file_bytes: Vec<u8>,
     file_name: String,
     mime: &str,
+    model: &str,
 ) -> Result<String, AppError> {
     // Skip OCR-heavy sub-pipelines we do not consume (matches the official sample).
     let optional_payload = json!({
@@ -193,7 +195,7 @@ async fn submit_job(
                 .mime_str(mime)
                 .map_err(|e| AppError::message(format!("layout_remote: multipart: {e}")))?,
         )
-        .text("model", CLOUD_MODEL)
+        .text("model", model.to_string())
         .text("optionalPayload", optional_payload);
     let response = client
         .post(jobs_url)
@@ -243,6 +245,7 @@ pub(crate) async fn run_paddle_ocr_job(
     file_bytes: Vec<u8>,
     file_name: String,
     mime: &str,
+    model: &str,
     progress: super::ProgressFn<'_>,
     cancel: super::CancelFn<'_>,
 ) -> Result<(String, Option<Value>), AppError> {
@@ -255,7 +258,10 @@ pub(crate) async fn run_paddle_ocr_job(
 
     // 1) Submit the whole-document job (multipart file upload).
     progress("uploading", None, None);
-    let job_id = submit_job(&client, &jobs_url, &auth, file_bytes, file_name, mime).await?;
+    let job_id = submit_job(
+        &client, &jobs_url, &auth, file_bytes, file_name, mime, model,
+    )
+    .await?;
 
     // 2) Poll until done (deadline guards a stuck job).
     let job_url = format!("{}/{}", jobs_url.trim_end_matches('/'), job_id);
@@ -387,6 +393,7 @@ async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, Ap
         pdf_bytes,
         file_name,
         "application/pdf",
+        CLOUD_MODEL,
         &emit_progress,
         &|| false,
     )
@@ -492,6 +499,7 @@ async fn probe(
         image_bytes,
         "probe.jpg".to_string(),
         "image/jpeg",
+        CLOUD_MODEL,
     )
     .await?;
     Ok(LayoutRemoteProbeResult { job_id })

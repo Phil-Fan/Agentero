@@ -72,3 +72,52 @@ impl RemoteLayoutEngine for OpenAiCompatibleEngine {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Live settings-probe check against a real OpenAI-compatible endpoint.
+    ///
+    /// ```sh
+    /// AGENTERO_VLM_API_KEY=sk-… \
+    ///   cargo test -p agentero --lib -- live_openai_compatible_probe --ignored --nocapture
+    /// ```
+    #[tokio::test]
+    #[ignore = "live network + API key"]
+    async fn live_openai_compatible_probe() {
+        let api_key = std::env::var("AGENTERO_VLM_API_KEY").expect("set AGENTERO_VLM_API_KEY");
+        let base_url = std::env::var("AGENTERO_VLM_BASE_URL").unwrap_or_default();
+        let credentials = ProviderCredentials {
+            api_key: Some(api_key),
+            base_url: (!base_url.is_empty()).then_some(base_url),
+        };
+        let args = LayoutRemoteProbeArgs {
+            provider: Some("openaiCompatible".to_string()),
+            image_base64: String::new(),
+            api_key: None,
+        };
+        let result = OpenAiCompatibleEngine
+            .probe(&credentials, args)
+            .await
+            .expect("probe should succeed");
+        println!("probe ok: {}", result.job_id);
+
+        let bad = ProviderCredentials {
+            api_key: Some("sk-definitely-invalid".to_string()),
+            base_url: credentials.base_url.clone(),
+        };
+        let err = OpenAiCompatibleEngine
+            .probe(
+                &bad,
+                LayoutRemoteProbeArgs {
+                    provider: Some("openaiCompatible".to_string()),
+                    image_base64: String::new(),
+                    api_key: None,
+                },
+            )
+            .await
+            .expect_err("an invalid key must not probe green");
+        println!("invalid key rejected: {err}");
+    }
+}
