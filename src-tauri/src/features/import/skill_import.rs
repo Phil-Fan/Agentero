@@ -222,7 +222,7 @@ fn install_from_archive(
             "owner": source.owner,
             "repo": source.repo,
             "reference": reference,
-            "installedAt": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            "installedAt": crate::core::time::now_rfc3339_millis(),
         });
         fs::write(
             target.join("agentero-skill.json"),

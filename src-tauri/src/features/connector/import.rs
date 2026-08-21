@@ -147,7 +147,7 @@ pub async fn import_connector_item_remote_with_cookies(
     let (folder_id, path_rel) =
         unique_remote_paper_path(session.fs.as_ref(), &parent_rel, &id).await?;
     meta.id = folder_id.clone();
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let now = crate::core::time::now_rfc3339_millis();
     meta.added_at = now.clone();
     meta.updated_at = now;
 
@@ -647,7 +647,7 @@ async fn import_standalone_remote(
     let (folder_id, path_rel) =
         unique_remote_paper_path(session.fs.as_ref(), &parent_rel, &id).await?;
     meta.id = folder_id.clone();
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let now = crate::core::time::now_rfc3339_millis();
     meta.added_at = now.clone();
     meta.updated_at = now;
     let title = meta.title.clone();

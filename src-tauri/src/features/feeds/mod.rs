@@ -112,7 +112,7 @@ fn user_agent() -> String {
 }
 
 fn now_rfc3339() -> String {
-    Utc::now().to_rfc3339()
+    crate::core::time::now_rfc3339_millis()
 }
 
 fn http_client() -> Result<reqwest::Client, AppError> {

@@ -576,13 +576,13 @@ fn normalize_rel(path: &str) -> String {
 }
 
 fn now_rfc3339() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    crate::core::time::now_rfc3339_millis()
 }
 
 pub fn since_rfc3339_days(days: u32) -> String {
     let days = i64::from(days.max(1));
     (chrono::Utc::now() - chrono::Duration::days(days))
-        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
 #[cfg(feature = "desktop")]

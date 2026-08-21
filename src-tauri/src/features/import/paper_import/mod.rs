@@ -156,7 +156,7 @@ pub async fn paper_commit(
     let (folder_id, path_rel, paper_dir) = allocate_paper_path(vault, &parent_rel, &meta.id);
     meta.id = folder_id;
     if opts.fresh_timestamps {
-        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let now = crate::core::time::now_rfc3339_millis();
         meta.added_at = now.clone();
         meta.updated_at = now;
     }

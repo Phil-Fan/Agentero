@@ -469,8 +469,7 @@ async fn migrate_one(
     // Zotero sync linkage: fresh imports carry their source itemID so later
     // bidirectional syncs match exactly (fallback stays DOI/arXiv/title).
     record.zotero_item_id = Some(item.item_id);
-    record.zotero_last_synced =
-        Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+    record.zotero_last_synced = Some(crate::core::time::now_rfc3339_millis());
     papers::upsert_paper(vault, &record)?;
     dedup.insert(&meta, &path_rel);
 

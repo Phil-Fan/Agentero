@@ -327,7 +327,7 @@ async fn parse_paper_refs_prepared(
         schema_version: SCHEMA_VERSION,
         source: CiteSource {
             mode,
-            generated_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            generated_at: crate::core::time::now_rfc3339_millis(),
             fingerprint: prepared.fingerprint,
         },
         citations,

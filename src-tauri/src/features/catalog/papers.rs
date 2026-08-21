@@ -599,7 +599,17 @@ pub fn rebuild_from_disk(vault_root: &Path) -> Result<usize, AppError> {
                     let sidecar = super::sidecar::read_sidecar(vault_root, &rel_path);
                     let next = match (existing, sidecar) {
                         // Sidecar newer than the row (e.g. pulled in by sync).
-                        (Some(row), Some(sc)) if sc.updated_at > row.updated_at => Some(sc),
+                        // Compare by parsed instant: legacy sidecars may carry
+                        // second-precision timestamps that never lose (and
+                        // re-pollute) under plain string compare.
+                        (Some(row), Some(sc))
+                            if crate::core::time::rfc3339_after(
+                                &sc.updated_at,
+                                &row.updated_at,
+                            ) =>
+                        {
+                            Some(sc)
+                        }
                         (Some(_), _) => None,
                         (None, Some(sc)) => Some(sc),
                         (None, None) => Some(minimal_record_for(&dir, &rel_path)),
@@ -652,7 +662,7 @@ fn minimal_record_for(dir: &Path, rel_path: &str) -> PaperRecord {
         .and_then(|n| n.to_str())
         .unwrap_or(rel_path)
         .to_string();
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let now = crate::core::time::now_rfc3339_millis();
     PaperRecord {
         path: rel_path.to_string(),
         id: folder_name.clone(),
@@ -800,7 +810,7 @@ pub fn update_meta(
     }
 
     row.meta_source = Some("manual".to_string());
-    row.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    row.updated_at = crate::core::time::now_rfc3339_millis();
     let updated = upsert_paper(vault_root, &row)?;
     if title_changed {
         append_title_alias_best_effort(vault_root, &path, &updated.title);
@@ -841,7 +851,7 @@ pub fn set_is_read(vault_root: &Path, path: &str, is_read: bool) -> Result<Paper
         return Err(AppError::message("paper not found in catalog"));
     };
     row.is_read = is_read;
-    row.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    row.updated_at = crate::core::time::now_rfc3339_millis();
     upsert_paper(vault_root, &row)
 }
 
@@ -854,7 +864,7 @@ pub fn set_tags(vault_root: &Path, path: &str, tags: &[PaperTag]) -> Result<Pape
         return Err(AppError::message("paper not found in catalog"));
     };
     row.tags = normalize_tags(tags);
-    row.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    row.updated_at = crate::core::time::now_rfc3339_millis();
     upsert_paper(vault_root, &row)
 }
 
@@ -867,7 +877,7 @@ pub fn add_tags(vault_root: &Path, path: &str, tags: &[PaperTag]) -> Result<Pape
     let mut next = row.tags.clone();
     next.extend(tags.iter().cloned());
     row.tags = normalize_tags(&next);
-    row.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    row.updated_at = crate::core::time::now_rfc3339_millis();
     upsert_paper(vault_root, &row)
 }
 
@@ -888,7 +898,7 @@ pub fn remove_tags(
         .collect();
     row.tags
         .retain(|existing| !drop.iter().any(|d| d.eq_ignore_ascii_case(&existing.name)));
-    row.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    row.updated_at = crate::core::time::now_rfc3339_millis();
     upsert_paper(vault_root, &row)
 }
 
@@ -1024,7 +1034,7 @@ pub fn move_under_path(vault_root: &Path, from: &str, to: &str) -> Result<usize,
         return Err(AppError::message("from and to are required"));
     }
     let like = format!("{from}/%");
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let now = crate::core::time::now_rfc3339_millis();
     // Exact row -> `to`; nested rows -> `to` + the suffix after `from`.
     // substr uses a 1-based CHARACTER index so non-ASCII folder names are safe.
     let offset = from.chars().count() as i64 + 1;
@@ -1114,6 +1124,15 @@ pub fn set_page_counts(vault_root: &Path, counts: &[(String, i64)]) -> Result<()
 }
 
 fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {
+    let mut r = r.clone();
+    // Legacy sidecars may carry second-precision timestamps; normalize on the
+    // write path so Secs/Millis never mix inside the string-ordered catalog.
+    if let Some(fixed) = crate::core::time::normalize_rfc3339_millis(&r.updated_at) {
+        r.updated_at = fixed;
+    }
+    if let Some(fixed) = crate::core::time::normalize_rfc3339_millis(&r.added_at) {
+        r.added_at = fixed;
+    }
     let authors_json =
         serde_json::to_string(&r.authors).map_err(|e| AppError::message(e.to_string()))?;
     let tags_json = serde_json::to_string(&r.tags).map_err(|e| AppError::message(e.to_string()))?;

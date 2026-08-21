@@ -552,7 +552,7 @@ async fn remote_rescan_impl(
     use papers::PaperRecord;
 
     let mut count = 0usize;
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = crate::core::time::now_rfc3339_millis();
 
     let mut stack = vec!["papers".to_string()];
     while let Some(dir) = stack.pop() {

@@ -60,7 +60,7 @@ pub fn ensure_vault_id(vault: &Path) -> Result<String, AppError> {
     }
     let identity = VaultIdentity {
         id: uuid::Uuid::new_v4().to_string(),
-        created_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        created_at: crate::core::time::now_rfc3339_millis(),
     };
     write_json(&identity_path(vault), &identity)?;
     Ok(identity.id)
@@ -72,7 +72,7 @@ pub fn set_vault_id(vault: &Path, id: &str) -> Result<(), AppError> {
         &identity_path(vault),
         &VaultIdentity {
             id: id.to_string(),
-            created_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            created_at: crate::core::time::now_rfc3339_millis(),
         },
     )
 }

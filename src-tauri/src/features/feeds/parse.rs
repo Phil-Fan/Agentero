@@ -132,7 +132,10 @@ fn parse_entry(entry: Entry) -> Option<ParsedItem> {
     } else {
         title.clone()
     };
-    let published_at = entry.published.or(entry.updated).map(|dt| dt.to_rfc3339());
+    let published_at = entry
+        .published
+        .or(entry.updated)
+        .map(|dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
     let content_html = entry
         .content
         .as_ref()

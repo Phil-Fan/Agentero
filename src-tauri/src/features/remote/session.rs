@@ -303,7 +303,7 @@ mod tests {
         assert!(notes_s.contains("Demo Paper") || notes_s.contains("NOTES"));
 
         // write-through then re-read
-        let stamp = chrono::Utc::now().to_rfc3339();
+        let stamp = crate::core::time::now_rfc3339_millis();
         let body = format!("# remote write test\n\nstamp={stamp}\n");
         session
             .fs
@@ -350,7 +350,7 @@ mod tests {
             "demo-paper folder"
         );
         // Minimal rescan: upsert demo-paper into work catalog then push
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = crate::core::time::now_rfc3339_millis();
         let rec = PaperRecord {
             path: "papers/demo-paper".into(),
             id: "demo-paper".into(),
@@ -511,7 +511,7 @@ mod tests {
         );
 
         // --- 3. write NOTES (write-through) ---
-        let stamp = chrono::Utc::now().to_rfc3339();
+        let stamp = crate::core::time::now_rfc3339_millis();
         let new_notes = format!(
             "# Attention Is All You Need\n\n## Method\nTransformers.\n\n<!-- smoke {stamp} -->\n"
         );
@@ -537,7 +537,7 @@ mod tests {
         );
 
         // --- 4. rescan-like upsert both papers + push catalog ---
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = crate::core::time::now_rfc3339_millis();
         for (rel, id, title) in [
             ("papers/demo-paper", "demo-paper", "Demo Paper on DGX"),
             (

@@ -1004,7 +1004,7 @@ fn update_catalog_body(
     };
     row.body_source = Some(body_source.to_string());
     row.body_quality = Some(body_quality.to_string());
-    row.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    row.updated_at = crate::core::time::now_rfc3339_millis();
     papers::upsert_paper(vault, &row)?;
     Ok(())
 }

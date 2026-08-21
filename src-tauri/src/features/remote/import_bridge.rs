@@ -155,7 +155,7 @@ pub async fn download_paper_assets_remote(
 
     // Touch catalog updated_at if row exists
     if let Ok(Some(mut row)) = papers::get_by_path(&session.work_root, &path_rel) {
-        row.updated_at = chrono::Utc::now().to_rfc3339();
+        row.updated_at = crate::core::time::now_rfc3339_millis();
         let _ = papers::upsert_paper(&session.work_root, &row);
         let mut cat = session.catalog.lock().await;
         let _ = cat.push(session.fs.clone()).await;

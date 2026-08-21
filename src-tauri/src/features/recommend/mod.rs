@@ -597,7 +597,7 @@ pub async fn recommend(
 
     let result = RecommendResult {
         items: scored,
-        computed_at: Utc::now().to_rfc3339(),
+        computed_at: crate::core::time::now_rfc3339_millis(),
         categories,
         corpus_size: corpus_vectors.len(),
         reused_cache: false,
@@ -661,7 +661,7 @@ mod tests {
                 published_at: None,
                 score: 1.0,
             }],
-            computed_at: Utc::now().to_rfc3339(),
+            computed_at: crate::core::time::now_rfc3339_millis(),
             categories: cats.clone(),
             corpus_size: 1,
             reused_cache: true,

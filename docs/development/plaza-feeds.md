@@ -123,6 +123,8 @@ macOS 上即 `~/Library/Application Support/agentero/feeds.sqlite`（与 `usage.
 ### 4.1 表
 
 ```sql
+-- 时间戳统一 `core/time.rs::now_rfc3339_millis()`（RFC 3339 毫秒 + Z）；
+-- schema v3 已把存量时间列规范化为该格式（字符串 ORDER BY 依赖固定宽度）
 CREATE TABLE subscriptions (
   id            TEXT PRIMARY KEY,   -- uuid
   url           TEXT NOT NULL UNIQUE,

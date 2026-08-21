@@ -482,7 +482,7 @@ fn gunzip_limited(bytes: &[u8], limit: u64) -> Result<Vec<u8>, AppError> {
 }
 
 fn now() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    crate::core::time::now_rfc3339_millis()
 }
 
 #[cfg(test)]

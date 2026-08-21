@@ -616,8 +616,7 @@ pub async fn download_paper_assets_with_progress(
             if changed {
                 row.body_source = Some("latex".to_string());
                 row.body_quality = Some("high".to_string());
-                row.updated_at =
-                    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+                row.updated_at = crate::core::time::now_rfc3339_millis();
                 let _ = papers::upsert_paper(&vault, &row);
             }
         }

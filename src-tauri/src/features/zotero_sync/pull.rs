@@ -190,7 +190,7 @@ fn fill_metadata(record: &mut papers::PaperRecord, meta: &PaperMeta) -> bool {
 }
 
 fn now_iso() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    crate::core::time::now_rfc3339_millis()
 }
 
 /// True when `a` parses to a later instant than `b` (missing/unparseable → false).

@@ -718,7 +718,7 @@ pub async fn scan(
             .await;
 
     let cancelled = hooks.is_cancelled();
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = crate::core::time::now_rfc3339_millis();
     let mut seeds_fetched = 0usize;
     for (idx, result) in fetched {
         let p = &library[idx];
@@ -937,7 +937,7 @@ pub async fn scan(
 
 fn cancelled_result(since: &str, library_total: usize) -> CitingScanResult {
     CitingScanResult {
-        generated_at: chrono::Utc::now().to_rfc3339(),
+        generated_at: crate::core::time::now_rfc3339_millis(),
         since_date: since.to_string(),
         library_total,
         cancelled: true,

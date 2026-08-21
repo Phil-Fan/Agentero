@@ -6,6 +6,8 @@
 //! - v4: Zotero sync linkage (`zotero_item_id`, `zotero_last_synced`)
 //! - v5: list-order indexes (`updated_at`, `added_at`, `title`) + `pdf_page_counts`
 //! - v6: arXiv recommendation caches (`embed_cache`, `arxiv_rec_state`)
+//! - v7: data migration — normalize timestamp columns to canonical RFC 3339
+//!   millis (string `ORDER BY updated_at` breaks on mixed precision/offsets)
 
 use crate::core::error::AppError;
 use rusqlite::Connection;
@@ -15,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 /// Current catalog schema version written to `schema_meta`.
-pub const SCHEMA_VERSION: i32 = 6;
+pub const SCHEMA_VERSION: i32 = 7;
 
 const DDL_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -345,6 +347,35 @@ fn migrate(conn: &Connection) -> Result<(), AppError> {
         set_schema_version(conn, 6)?;
     }
 
+    let version = schema_version(conn).unwrap_or(0);
+    if version < 7 {
+        // Data-only migration: legacy writers emitted second precision
+        // (`…:00Z`) and bare `to_rfc3339()` (`…+00:00`, variable fractions);
+        // those do not string-sort against the canonical millis form
+        // (`'+' < '.' < 'Z'`). Rewrite to canonical form; already-canonical
+        // and unparseable values pass through untouched (idempotent).
+        let tx = conn
+            .unchecked_transaction()
+            .map_err(|e| AppError::message(format!("catalog migrate v7 tx: {e}")))?;
+        crate::core::time::normalize_timestamp_columns(
+            &tx,
+            "papers",
+            "path",
+            &["updated_at", "added_at"],
+        )
+        .map_err(|e| AppError::message(format!("catalog migrate v7 papers: {e}")))?;
+        crate::core::time::normalize_timestamp_columns(
+            &tx,
+            "arxiv_rec_state",
+            "id",
+            &["computed_at"],
+        )
+        .map_err(|e| AppError::message(format!("catalog migrate v7 rec state: {e}")))?;
+        tx.commit()
+            .map_err(|e| AppError::message(format!("catalog migrate v7 commit: {e}")))?;
+        set_schema_version(conn, 7)?;
+    }
+
     Ok(())
 }
 
@@ -450,6 +481,120 @@ mod tests {
         drop(conn);
         let conn2 = ensure_catalog(&dir).expect("reopen");
         assert_eq!(schema_version(&conn2).unwrap(), SCHEMA_VERSION);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn migrate_v7_normalizes_legacy_timestamps() {
+        let dir = env::temp_dir().join(format!(
+            "agentero-catalog-v7-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+
+        {
+            let conn = ensure_catalog(&dir).expect("ensure");
+            conn.execute_batch(
+                "INSERT INTO papers (path, id, type, title, added_at, updated_at) VALUES
+                 ('papers/legacy-secs', 'a', 'article', 'A',
+                  '2026-08-20T09:00:00Z', '2026-08-21T10:00:00Z'),
+                 ('papers/legacy-bare', 'b', 'article', 'B',
+                  '2026-08-20T09:00:00.123456+00:00', '2026-08-21T10:00:00.999999+00:00'),
+                 ('papers/canonical', 'c', 'article', 'C',
+                  '2026-08-20T09:00:00.100Z', '2026-08-21T10:00:00.500Z'),
+                 ('papers/garbage', 'd', 'article', 'D', 'not-a-date', 'also not a date');
+                 INSERT INTO arxiv_rec_state (id, computed_at, categories_json, results_json)
+                 VALUES (1, '2026-08-21T09:00:00+00:00', '[]', '[]');",
+            )
+            .unwrap();
+            // Force a v6 database so the next open replays the v7 migration.
+            conn.execute(
+                "UPDATE schema_meta SET value = '6' WHERE key = 'schema_version'",
+                [],
+            )
+            .unwrap();
+        }
+
+        let conn = ensure_catalog(&dir).expect("migrate v7");
+        assert_eq!(schema_version(&conn).unwrap(), 7);
+
+        let get = |path: &str, col: &str| {
+            let sql = format!("SELECT {col} FROM papers WHERE path = '{path}'");
+            conn.query_row(&sql, [], |r| r.get::<_, String>(0)).unwrap()
+        };
+        // Secs precision → zero-padded millis.
+        assert_eq!(
+            get("papers/legacy-secs", "updated_at"),
+            "2026-08-21T10:00:00.000Z"
+        );
+        // Bare to_rfc3339 (+00:00, 6-digit fraction) → millis + Z.
+        assert_eq!(
+            get("papers/legacy-bare", "updated_at"),
+            "2026-08-21T10:00:00.999Z"
+        );
+        assert_eq!(
+            get("papers/legacy-bare", "added_at"),
+            "2026-08-20T09:00:00.123Z"
+        );
+        // Already canonical → untouched.
+        assert_eq!(
+            get("papers/canonical", "updated_at"),
+            "2026-08-21T10:00:00.500Z"
+        );
+        // Unparseable → untouched.
+        assert_eq!(get("papers/garbage", "updated_at"), "also not a date");
+
+        let computed: String = conn
+            .query_row(
+                "SELECT computed_at FROM arxiv_rec_state WHERE id = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(computed, "2026-08-21T09:00:00.000Z");
+
+        // String ORDER BY is now correct: 10:00:00.999Z > 10:00:00.500Z > 10:00:00.000Z.
+        let order: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT path FROM papers WHERE path != 'papers/garbage' ORDER BY updated_at DESC")
+                .unwrap();
+            stmt.query_map([], |r| r.get::<_, String>(0))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+        };
+        assert_eq!(
+            order,
+            vec![
+                "papers/legacy-bare",
+                "papers/canonical",
+                "papers/legacy-secs"
+            ]
+        );
+
+        // Idempotent: re-running the migration must not touch anything.
+        conn.execute(
+            "UPDATE schema_meta SET value = '6' WHERE key = 'schema_version'",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+        let conn = ensure_catalog(&dir).expect("re-migrate");
+        assert_eq!(schema_version(&conn).unwrap(), 7);
+        let get = |path: &str, col: &str| {
+            let sql = format!("SELECT {col} FROM papers WHERE path = '{path}'");
+            conn.query_row(&sql, [], |r| r.get::<_, String>(0)).unwrap()
+        };
+        assert_eq!(
+            get("papers/legacy-secs", "updated_at"),
+            "2026-08-21T10:00:00.000Z"
+        );
+        assert_eq!(get("papers/garbage", "updated_at"), "also not a date");
 
         let _ = fs::remove_dir_all(&dir);
     }

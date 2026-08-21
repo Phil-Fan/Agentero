@@ -164,7 +164,7 @@ pub fn trash_paths(vault_root: &Path, rels: &[String]) -> Result<TrashResult, Ap
 
     let manifest = TrashManifest {
         batch_id: batch_id.clone(),
-        created_at: now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        created_at: crate::core::time::now_rfc3339_millis(),
         items,
     };
     let json =

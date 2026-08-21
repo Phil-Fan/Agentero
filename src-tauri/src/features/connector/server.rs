@@ -524,7 +524,7 @@ async fn save_snapshot(
         "itemType": "webpage",
         "title": body.title.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or(url),
         "url": url,
-        "accessDate": chrono::Utc::now().to_rfc3339(),
+        "accessDate": crate::core::time::now_rfc3339_millis(),
         "attachments": []
     });
     let (handle, _) = match state.ctrl.vault_handle_and_parent() {
