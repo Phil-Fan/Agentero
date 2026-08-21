@@ -180,6 +180,18 @@
 			"providerIdsLabel": "Codex provider ids",
 			"providerIdsPlaceholder": "my_proxy, openai"
 		},
+		"embedding": {
+			"section": "Embedding model",
+			"baseUrl": {
+				"label": "Base URL"
+			},
+			"apiKey": {
+				"label": "API key"
+			},
+			"model": {
+				"label": "Model"
+			}
+		},
 		"desktopOnly": "Agent registry requires the desktop app.",
 		"desktopHint": "Run `pnpm tauri dev` to scan agents on this machine.",
 		"commonAgents": "Common agents",

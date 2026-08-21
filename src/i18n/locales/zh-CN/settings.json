@@ -180,6 +180,18 @@
 			"providerIdsLabel": "Codex 服务商 ID",
 			"providerIdsPlaceholder": "my_proxy, openai"
 		},
+		"embedding": {
+			"section": "Embedding 模型",
+			"baseUrl": {
+				"label": "Base URL"
+			},
+			"apiKey": {
+				"label": "API Key"
+			},
+			"model": {
+				"label": "模型"
+			}
+		},
 		"desktopOnly": "Agent 注册表需要桌面应用。",
 		"desktopHint": "运行 `pnpm tauri dev` 以扫描本机上的 Agent。",
 		"commonAgents": "常用 Agent",

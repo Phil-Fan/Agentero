@@ -1,5 +1,9 @@
 import { DEFAULT_LAYOUT_SETTINGS } from "@/lib/pdf/layout/settings";
-import type { AppSettings, PdfAskSettings } from "@/lib/settings/types";
+import type {
+	AppSettings,
+	EmbeddingSettings,
+	PdfAskSettings,
+} from "@/lib/settings/types";
 import { DEFAULT_LIBRARY_COLUMNS } from "@/lib/settings/types";
 import { DEFAULT_TRANSLATE_SETTINGS } from "@/lib/translate/defaults";
 import { DEFAULT_UI_THEME } from "@/lib/ui/theme";
@@ -7,6 +11,12 @@ import { DEFAULT_UI_THEME } from "@/lib/ui/theme";
 export const DEFAULT_PDF_ASK_SETTINGS: PdfAskSettings = {
 	agentId: "",
 	modelId: "",
+};
+
+export const DEFAULT_EMBEDDING_SETTINGS: EmbeddingSettings = {
+	baseUrl: "",
+	apiKey: "",
+	model: "",
 };
 
 /** Default Translator Runtime endpoint (overridable in Settings). */
@@ -66,6 +76,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	aiResponseLanguage: "auto",
 	agentPersonalPrompt: "",
 	pdfAsk: { ...DEFAULT_PDF_ASK_SETTINGS },
+	embedding: { ...DEFAULT_EMBEDDING_SETTINGS },
 	translate: { ...DEFAULT_TRANSLATE_SETTINGS },
 	layout: { ...DEFAULT_LAYOUT_SETTINGS, providerConfigs: {} },
 };

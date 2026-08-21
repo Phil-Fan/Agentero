@@ -93,6 +93,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub pdf_ask: PdfAskSettings,
     #[serde(default)]
+    pub embedding: EmbeddingSettings,
+    #[serde(default)]
     pub translate: TranslateSettings,
     #[serde(default)]
     pub layout: LayoutSettings,
@@ -114,6 +116,18 @@ pub struct PdfAskSettings {
     pub agent_id: String,
     #[serde(default)]
     pub model_id: String,
+}
+
+/// OpenAI-compatible embedding endpoint (BYOK). All-empty = feature disabled.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddingSettings {
+    #[serde(default)]
+    pub base_url: String,
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default)]
+    pub model: String,
 }
 
 /// One column in the papers Library table: array order = display order.
@@ -238,6 +252,7 @@ impl Default for AppSettings {
             ai_response_language: default_ai_response_language(),
             agent_personal_prompt: String::new(),
             pdf_ask: PdfAskSettings::default(),
+            embedding: EmbeddingSettings::default(),
             translate: TranslateSettings::default(),
             layout: LayoutSettings::default(),
             export_watermark_enabled: false,
@@ -487,6 +502,24 @@ impl AppSettingsStore {
             Some(prompt.to_string())
         }
     }
+
+    /// Resolve the configured embedding endpoint (base URL, API key, model).
+    /// Returns None unless base URL and model are both set.
+    pub fn embedding_config(&self) -> Option<(String, Option<String>, String)> {
+        let guard = self.inner.lock().ok()?;
+        let base_url = guard.embedding.base_url.trim();
+        let model = guard.embedding.model.trim();
+        if base_url.is_empty() || model.is_empty() {
+            return None;
+        }
+        let api_key = guard.embedding.api_key.trim();
+        let key = if api_key.is_empty() || is_translate_api_key_mask(api_key) {
+            None
+        } else {
+            Some(api_key.to_string())
+        };
+        Some((base_url.to_string(), key, model.to_string()))
+    }
 }
 
 fn read_file(path: &PathBuf) -> (AppSettings, bool) {
@@ -572,6 +605,9 @@ fn redact_translate_secrets(mut settings: AppSettings) -> AppSettings {
             cfg.api_key = mask_translate_api_key(&cfg.api_key);
         }
     }
+    if !settings.embedding.api_key.trim().is_empty() {
+        settings.embedding.api_key = mask_translate_api_key(&settings.embedding.api_key);
+    }
     settings
 }
 
@@ -595,6 +631,9 @@ fn merge_translate_secrets(incoming: &mut AppSettings, previous: &AppSettings) {
                 cfg.api_key.clear();
             }
         }
+    }
+    if is_translate_api_key_mask(&incoming.embedding.api_key) {
+        incoming.embedding.api_key = previous.embedding.api_key.clone();
     }
 }
 
@@ -722,6 +761,12 @@ fn normalize(s: &mut AppSettings) {
 
     s.pdf_ask.agent_id = s.pdf_ask.agent_id.trim().to_string();
     s.pdf_ask.model_id = s.pdf_ask.model_id.trim().to_string();
+
+    // Keep trailing slashes on base_url (same reason as translate/layout configs):
+    // normalize runs on every save and echoes back into the settings UI.
+    s.embedding.base_url = s.embedding.base_url.trim().to_string();
+    s.embedding.api_key = s.embedding.api_key.trim().to_string();
+    s.embedding.model = s.embedding.model.trim().to_string();
 
     normalize_translate_provider_configs(&mut s.translate.provider_configs);
     s.translate.agent_id = s.translate.agent_id.trim().to_string();

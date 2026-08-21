@@ -207,6 +207,11 @@ export type AppSettings = {
 	 * Empty agentId / modelId = follow app default agent / that agent's model pref.
 	 */
 	pdfAsk: PdfAskSettings;
+	/**
+	 * OpenAI-compatible embedding endpoint (BYOK) for arxiv daily recommendation
+	 * and other semantic features. All fields empty = feature disabled.
+	 */
+	embedding: EmbeddingSettings;
 	/** Application-level translation service (free MT + BYOA Agent). */
 	translate: TranslateSettings;
 	/** PDF layout-analysis backend (local ONNX or remote PP-StructureV3). */
@@ -219,4 +224,14 @@ export type PdfAskSettings = {
 	agentId: string;
 	/** Empty = follow loadModelPref(agentId). */
 	modelId: string;
+};
+
+/** OpenAI-compatible embedding endpoint (BYOK). All-empty = disabled. */
+export type EmbeddingSettings = {
+	/** Endpoint base, e.g. `https://api.openai.com/v1`. Empty = unset. */
+	baseUrl: string;
+	/** BYOK secret; masked (`*`) when echoed back from the Host. */
+	apiKey: string;
+	/** Embedding model id, e.g. `text-embedding-3-small`, `BAAI/bge-m3`. */
+	model: string;
 };

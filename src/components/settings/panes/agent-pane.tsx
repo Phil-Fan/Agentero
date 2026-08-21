@@ -83,7 +83,8 @@ import {
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
-import type { AppSettings } from "@/lib/settings";
+import type { AppSettings, EmbeddingSettings } from "@/lib/settings";
+import { isTranslateApiKeyMask } from "@/lib/translate";
 import {
 	remoteAgentOpenInstallTerminal,
 	remoteAgentProbe,
@@ -136,6 +137,21 @@ export function AgentPane({
 	/** Draft for optional ACP User-Agent (Codex / mid-station affinity). */
 	const [userAgentDraft, setUserAgentDraft] = useState("");
 	const [userAgentProviderDraft, setUserAgentProviderDraft] = useState("");
+	// Embedding endpoint (BYOK) — local draft, committed on blur. apiKey may be a
+	// host `*` mask on load; sending it back unchanged keeps the stored secret.
+	const embedding = settings.embedding;
+	const [embDraft, setEmbDraft] = useState<EmbeddingSettings>(() => ({
+		...embedding,
+	}));
+	useEffect(() => {
+		setEmbDraft({ ...embedding });
+	}, [embedding]);
+	const commitEmbedding = useCallback(
+		(next: Partial<EmbeddingSettings>) => {
+			patch({ embedding: { ...settings.embedding, ...next } });
+		},
+		[patch, settings.embedding],
+	);
 	const { probingKeys, setProbingKeys, clearProbingKey, clearAllProbingKeys } =
 		useProbingKeys();
 	const autoProbedRef = useRef(false);
@@ -1158,6 +1174,96 @@ export function AgentPane({
 						autoComplete="off"
 						disabled={!isTauri() || !userAgentDraft.trim()}
 						className="h-8 w-56 text-xs"
+					/>
+				</SettingsRow>
+			</SettingsGroup>
+
+			{/* Embedding endpoint (BYOK) for arxiv daily recommendation & semantic features. */}
+			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+				{t("agent.embedding.section")}
+			</p>
+			<SettingsGroup>
+				<SettingsRow
+					label={t("agent.embedding.baseUrl.label")}
+					htmlFor="agent-embedding-base-url"
+				>
+					<Input
+						id="agent-embedding-base-url"
+						value={embDraft.baseUrl}
+						onChange={(e) =>
+							setEmbDraft((prev) => ({ ...prev, baseUrl: e.target.value }))
+						}
+						onBlur={() => {
+							const trimmed = embDraft.baseUrl.trim().replace(/\/+$/, "");
+							if (trimmed !== settings.embedding.baseUrl) {
+								commitEmbedding({ baseUrl: trimmed });
+							}
+						}}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") e.currentTarget.blur();
+						}}
+						placeholder="https://api.openai.com/v1"
+						spellCheck={false}
+						autoComplete="off"
+						className="h-8 w-56 font-mono text-xs placeholder:text-muted-foreground/50"
+					/>
+				</SettingsRow>
+				<SettingsRow
+					label={t("agent.embedding.apiKey.label")}
+					htmlFor="agent-embedding-api-key"
+				>
+					<Input
+						id="agent-embedding-api-key"
+						type="password"
+						value={embDraft.apiKey}
+						onChange={(e) =>
+							setEmbDraft((prev) => ({ ...prev, apiKey: e.target.value }))
+						}
+						onFocus={(e) => {
+							// Select the mask so the next keystroke replaces it entirely.
+							if (isTranslateApiKeyMask(embDraft.apiKey)) {
+								e.currentTarget.select();
+							}
+						}}
+						onBlur={() => {
+							const next = embDraft.apiKey.trim();
+							// Unchanged mask → send as-is so the Host keeps the stored secret.
+							if (next !== settings.embedding.apiKey) {
+								commitEmbedding({ apiKey: next });
+							}
+						}}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") e.currentTarget.blur();
+						}}
+						placeholder="sk-…"
+						spellCheck={false}
+						autoComplete="off"
+						className="h-8 w-56 font-mono text-xs placeholder:text-muted-foreground/50"
+					/>
+				</SettingsRow>
+				<SettingsRow
+					label={t("agent.embedding.model.label")}
+					htmlFor="agent-embedding-model"
+				>
+					<Input
+						id="agent-embedding-model"
+						value={embDraft.model}
+						onChange={(e) =>
+							setEmbDraft((prev) => ({ ...prev, model: e.target.value }))
+						}
+						onBlur={() => {
+							const trimmed = embDraft.model.trim();
+							if (trimmed !== settings.embedding.model) {
+								commitEmbedding({ model: trimmed });
+							}
+						}}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") e.currentTarget.blur();
+						}}
+						placeholder="text-embedding-3-small"
+						spellCheck={false}
+						autoComplete="off"
+						className="h-8 w-56 font-mono text-xs placeholder:text-muted-foreground/50"
 					/>
 				</SettingsRow>
 			</SettingsGroup>

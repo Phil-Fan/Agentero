@@ -38,6 +38,7 @@ export type {
 	AppSettings,
 	AutoUpdateInternalLinks,
 	CommercialTranslateProviderId,
+	EmbeddingSettings,
 	LibraryColumnKey,
 	LibraryColumnPref,
 	LocalePreference,

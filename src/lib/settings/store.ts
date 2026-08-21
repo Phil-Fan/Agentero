@@ -14,6 +14,7 @@ import {
 } from "@/lib/pdf/layout/settings";
 import {
 	clampEditorLineHeight,
+	DEFAULT_EMBEDDING_SETTINGS,
 	DEFAULT_PDF_ASK_SETTINGS,
 	DEFAULT_SETTINGS,
 	DEFAULT_TRANSLATOR_BASE_URL,
@@ -23,6 +24,7 @@ import { normalizeFontFamilyValue } from "@/lib/settings/fonts";
 import {
 	type AppSettings,
 	DEFAULT_LIBRARY_COLUMNS,
+	type EmbeddingSettings,
 	LIBRARY_COLUMN_KEYS,
 	type LibraryColumnKey,
 	type LibraryColumnPref,
@@ -55,6 +57,7 @@ let cache: AppSettings = {
 	translate: { ...DEFAULT_TRANSLATE_SETTINGS },
 	layout: { ...DEFAULT_SETTINGS.layout, providerConfigs: {} },
 	pdfAsk: { ...DEFAULT_PDF_ASK_SETTINGS },
+	embedding: { ...DEFAULT_EMBEDDING_SETTINGS },
 };
 let loaded = false;
 let loadPromise: Promise<AppSettings> | null = null;
@@ -66,6 +69,7 @@ function cloneSettings(s: AppSettings): AppSettings {
 		...s,
 		libraryColumns: s.libraryColumns.map((c) => ({ ...c })),
 		pdfAsk: { ...s.pdfAsk },
+		embedding: { ...s.embedding },
 		translate: { ...s.translate },
 		layout: { ...s.layout, providerConfigs: { ...s.layout.providerConfigs } },
 	};
@@ -413,6 +417,9 @@ function normalizePartial(
 	merged.pdfAsk = normalizePdfAskSettings(
 		(parsed as { pdfAsk?: Partial<PdfAskSettings> }).pdfAsk,
 	);
+	merged.embedding = normalizeEmbeddingSettings(
+		(parsed as { embedding?: Partial<EmbeddingSettings> }).embedding,
+	);
 	merged.translate = normalizeTranslateSettings(parsed.translate);
 	merged.layout = normalizeLayoutSettings(parsed.layout);
 	return merged;
@@ -466,6 +473,20 @@ function normalizePdfAskSettings(
 	if (typeof raw.modelId === "string") {
 		base.modelId = raw.modelId.trim();
 	}
+	return base;
+}
+
+function normalizeEmbeddingSettings(
+	raw: Partial<EmbeddingSettings> | undefined,
+): EmbeddingSettings {
+	const base = { ...DEFAULT_EMBEDDING_SETTINGS };
+	if (!raw || typeof raw !== "object") return base;
+	// No trailing-slash strip here: normalize runs on every keystroke save,
+	// which would eat the "/" while typing e.g. ".../v1". The Host and the
+	// settings UI onBlur already trim trailing slashes.
+	if (typeof raw.baseUrl === "string") base.baseUrl = raw.baseUrl.trim();
+	if (typeof raw.apiKey === "string") base.apiKey = raw.apiKey.trim();
+	if (typeof raw.model === "string") base.model = raw.model.trim();
 	return base;
 }
 
