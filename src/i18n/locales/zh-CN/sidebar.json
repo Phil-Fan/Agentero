@@ -153,7 +153,7 @@
 		"modelscopeDescription": "浏览魔搭每日读论文与中文解读",
 		"skillsDescription": "按科研流程精选的 GitHub Skill 仓库，一点即可导入",
 		"arxivRec": {
-			"label": "arXiv 推荐",
+			"label": "arXiv Daily",
 			"description": "结合你的论文库对当天 arXiv 新论文排序",
 			"refresh": "重新计算推荐",
 			"computing": "正在排序今日论文…",
