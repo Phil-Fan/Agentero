@@ -1202,6 +1202,67 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - **全图**：仅库内 `localMatch` 边；节点为参与至少一条边的 paper；不含 stub、无 role。
   - 中心路径可传 `papers/…/NOTES.md` 等，Host 逐级归一到 catalog paper folder；不在 catalog 中报错。
 
+#### `library_citing_scan`
+
+**反向**引用发现：扫描全库，找出引用了库内论文、但**还没入库**的新论文。与本组其余命令方向相反，且**只能来自在线 API**（本地 TeX/`.bbl` 不含反向引用）。数据源为 Semantic Scholar；OpenAlex 的引用图几乎不含 arXiv 预印本之间的边，不可用。详见 [`citation-parsing.md`](citation-parsing.md) §7。
+
+- **参数**（`args`）：
+
+  ```ts
+  {
+    vaultPath: string;
+    /** 前端后台任务 id：既路由进度事件，也承载取消 */
+    taskId?: string | null;
+    /** 引用论文多新才算「新」，默认 183 */
+    sinceDays?: number | null;
+    /** 返回的候选上限，默认 20 */
+    budget?: number | null;
+    /** 忽略缓存的引用页，重抓全部种子 */
+    force?: boolean;
+  }
+  ```
+
+- **返回**：`{ ok: true; data: CitingScanResult }`，其中：
+
+  ```ts
+  type CitingScanResult = {
+    generatedAt: string;
+    sinceDate: string;          // YYYY-MM-DD
+    libraryTotal: number;
+    seedsTotal: number;         // 合格种子（在 S2、被引 1..=2000）
+    seedsFetched: number;       // 本次真正走网络的（其余命中缓存）
+    skippedMegaCited: number;   // 被引 > 2000 的经典：引用者是跨领域噪音
+    skippedUncited: number;
+    skippedUnknown: number;     // 无标识，或 S2 不认识
+    rawCiting: number;
+    afterFilters: number;       // L0 之后
+    gatePassed: number;         // 过语义门槛之后
+    similarityThreshold?: number;
+    candidates: Array<{
+      s2Id: string;
+      title: string;
+      date: string;
+      arxivId?: string;
+      doi?: string;
+      identifier: string;       // `arXiv:{id}` 或裸 DOI，可直接喂批量入库
+      citedByMine: string[];    // 库内被引论文的 Vault 相对路径
+      weight: number;           // IDF 加权重叠
+      similarity?: number;
+      citationCount: number;
+      oaPdfUrl?: string;
+    }>;
+    cancelled: boolean;
+    messages: string[];
+  };
+  ```
+
+- **行为**
+  - 一个 `paper/batch` 请求拿全库 `citationCount` + SPECTER2 向量，再对合格种子 8 路并发拉 `citations`。
+  - 三层过滤：L0 硬过滤（跳过高被引经典种子；候选按时间窗 / 已入库 / 无可导入标识剔除）→ L1 IDF 加权重叠 → L2 中心化 SPECTER2 max-sim 门槛（阈值由库自身 leave-one-out p10 自校准）。
+  - 排序后经 MMR 多样化截到 `budget`，避免结果被单一方向占满。
+  - 结果与每个种子的引用页写入 `.agentero/citing-scan.json`；下次扫描只重抓 `citationCount` 变化的种子。
+  - `taskId` 非空时：抓取阶段 emit `background-task:progress`（带 `currentCount`/`totalCount`），并在每个种子请求前检查取消。取消返回 `cancelled: true` 且不写缓存。
+
 ### 3.6 论文
 
 论文**集合与元数据**存于 `.agentero/catalog.sqlite`；本组命令读写 catalog，并附带 Vault 相对路径字段。详见 [`catalog.md`](catalog.md)、[`data-model.md`](data-model.md)。

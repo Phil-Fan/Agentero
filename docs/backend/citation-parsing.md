@@ -1,6 +1,6 @@
 # 参考文献解析（Citation Parsing）
 
-> 状态：**M1 + M2 + M3(PDF 内交互) + M4(引用图谱 MVP) 已实现**（M1：Host `features/refs/` — L1 在线 S2/Crossref + L2 本地 bib/bbl/thebibliography + sidecar + 库内匹配，命令契约见 [api.md](api.md) `paper_refs_parse` / `paper_refs_list` / `paper_refs_graph`；M2：右侧栏 References tab 引用卡片，见 [../frontend/shell.md](../frontend/shell.md)；M3：PDF Link annotation 覆盖层 — 点击 GoTo 跳页 / URI 外链、hover 引用锚文本显示元数据预览并联动引用卡片高亮；M4：右侧 Graph 改用引用图谱，非双链图）。剩余草稿：卡片 → PDF 反向 hover 高亮、Agent `#` 提及、Connected Papers 式布局。
+> 状态：**M1 + M2 + M3(PDF 内交互) + M4(引用图谱 MVP) + 反向引用发现 已实现**（M1：Host `features/refs/` — L1 在线 S2/Crossref + L2 本地 bib/bbl/thebibliography + sidecar + 库内匹配，命令契约见 [api.md](api.md) `paper_refs_parse` / `paper_refs_list` / `paper_refs_graph`；M2：右侧栏 References tab 引用卡片，见 [../frontend/shell.md](../frontend/shell.md)；M3：PDF Link annotation 覆盖层 — 点击 GoTo 跳页 / URI 外链、hover 引用锚文本显示元数据预览并联动引用卡片高亮；M4：右侧 Graph 改用引用图谱，非双链图；反向引用发现：`library_citing_scan`，见 §7）。剩余草稿：卡片 → PDF 反向 hover 高亮、Agent `#` 提及、Connected Papers 式布局。
 
 ## 1. 背景与现状
 
@@ -93,7 +93,73 @@
 | M4 | 引用图谱 UI：`paper_refs_graph` + 右侧 Graph 换源（双链图 → 引用图） | 已实现（MVP） |
 | M5 | L3 文本层切分 + Crossref raw string 富化 + references.bib 导出 + 未入库一键导入 | 延后 |
 
-## 7. 风险与开放问题
+## 7. 反向引用发现（谁引用了我的库）
+
+> 状态：**已实现**（Host `features/refs/citing.rs`，命令 `library_citing_scan`，入口在文件树 Library 节点右键）。
+
+方向与本文其余部分**相反**：不是「这篇论文引了谁」，而是「库里的论文被哪些**新论文**引用了、且这些新论文还没入库」。和 M5 的「未入库一键导入」不是同一件事——那个是正向引用的批量版。
+
+### 7.1 数据源：只能用 Semantic Scholar
+
+OpenAlex 的引用图几乎不含 arXiv 预印本之间的引用边。实测同一个 53 篇 vault：2026 年的 37 篇里只有 1 篇在 OpenAlex 有任何引用记录，按文件夹扫 7/10 返回 0；唯一非零的那个文件夹全是跨领域噪音（引用者是结直肠疾病 transformer、嵌段共聚物乳液），因为该文件夹装的是 Attention/GPT-3/BERT/ResNet/Adam 这些经典。
+
+同一批论文在 S2 有数据：
+
+| 论文 | OpenAlex `cited_by` | S2 `citationCount` |
+| --- | --- | --- |
+| DFlash (2602.06036) | 0 | 70 |
+| Dynamic Early Exit (2504.15895) | 1 | 216 |
+| Your LLM Knows the Future (2507.11851) | 0 | 40 |
+
+S2 的接口形状本身不适合批量（`citations` 端点无日期过滤、无排序、`offset+limit < 10000` 硬顶、每篇一个请求），靠两步绕开：
+
+1. 一个 `POST /paper/batch` 请求拿全库 `citationCount` + SPECTER2 向量（≤500 ids/请求）
+2. 只对合格种子逐篇 `GET /paper/{id}/citations`，`limit=1000`，8 路并发
+
+8 路并发实测比串行快 4.6 倍且无持续 429。53 篇 vault 全扫 **40 个请求 / 约 50 秒 / 免费无 key**。
+
+### 7.2 三层过滤
+
+| 层 | 手段 | 额外请求 |
+| --- | --- | --- |
+| L0 | 跳过被引 > 2000 的经典种子（噪音源头）、被引为 0 的种子；候选按时间窗、已入库（DOI/arXiv 双路 + arXiv DOI 别名）、无可导入标识过滤 | 0 |
+| L1 | IDF 加权重叠 `Σ 1/log10(种子被引 + 10)`——引 Attention（18.9 万）权重 0.19，引刚发的新论文权重 1.0 | 0 |
+| L2 | SPECTER2 语义门槛：**先减背景均值再算余弦**（裸余弦全挤在 0.80–0.96，绝对阈值无区分度），取「对我任意一篇的 max-sim」而非质心相似度（库是多主题的），阈值用「我自己论文 leave-one-out max-sim 的 p10」自校准 | 1–2 |
+
+L2 方案实测对比（阈值统一取自己论文 p10）：
+
+| 方案 | 同主题池通过 | GPT-3 引用者噪音池 | ResNet 引用者噪音池 |
+| --- | --- | --- | --- |
+| 裸余弦 → 质心 | 62% | 6% | 0% |
+| 中心化余弦 → 质心 | 57% | 9% | 0% |
+| **中心化 max-sim → 任一篇** | **80%** | **3%** | **0%** |
+
+### 7.3 排序与预算
+
+过门槛后按 `0.65·(w/wmax) + 0.35·(sim/smax)` 排序，取前 150 做 MMR（λ=0.7）多样化，最终截到预算 20 条。
+
+**用固定预算而不是 A/B/C 分级阈值**：预算直接控制用户要看的条数，且省掉按文件夹调阈值——实测阈值会在 0.238~0.597 间漂移。MMR 的作用是防止 20 条被单一方向占满（实测把 Tool 方向的覆盖从 1 条提到 3 条，代价是挤掉 4 条同质论文）。
+
+### 7.4 缓存与增量
+
+`.agentero/citing-scan.json`（参照 `features/doctor/mod.rs` 的 `DOCTOR_STATE_REL` 先例）存每个种子的 `s2Id` / `citationCount` / `fetchedAt` / 引用者元数据，外加上次结果供 UI 直接复用。下次扫描先用 1 个 batch 请求拿最新 `citationCount`，**只重抓被引数变化的种子**，稳态约 10 秒。SPECTER2 向量不落盘（每次 1–2 个请求重取），避免几 MB 的 JSON。
+
+写入是普通 `fs::write` 而非 tmp+rename，原因同 `write_sidecar`：rename 会被 vault watcher 报成「未验证重命名」。缓存可重建，不值得为原子性换这个噪音。
+
+### 7.5 生命周期与进度
+
+前端 `enqueueBackgroundTask` 建任务行（`discoverCitingPapers`，`src/lib/paper/library-actions.ts`），把任务 id 作为 `taskId` 传给命令，Host 用它做两件事：
+
+- **进度**：抓取阶段按完成数 emit `background-task:progress`（带 `currentCount`/`totalCount`），面板显示「引用 · 12/38」。只有带计数的阶段才 emit——没有计数的阶段会掉进面板的字节格式化分支
+- **取消**：每个种子请求前轮询 `agent::background_tasks::is_cancelled`，命中即返回且不写缓存；命令出口无条件 `finish()` 清标记，否则残留的取消标记会秒杀下一个复用该 id 的任务
+
+库级 I/O 互斥复用 `libraryStore.ioBusy`。结果属于扫描时那个 vault，完成回调比对 `getVaultPath()` 不一致就不弹窗。
+
+### 7.6 实测（53 篇 vault）
+
+`53 篇 → 38 个种子`（跳过 5 篇经典、9 篇未被引、1 篇无标识）`→ 1163 篇引用者 → L0 后 445 → 过语义门槛 319 → 展示 20`，自校准阈值 0.376。头部候选是 DeLS-Spec（引用库内 6 篇）、Bastion（5）、DominoTree / D-cut / D²SD（各 4），无跨领域噪音。
+
+## 8. 风险与开放问题
 
 - L1 依赖外部服务可用性与限速（S2 共享池很挤）：失败必须静默落 L2，不弹错误；缓存进 sidecar 避免重复请求。
 - S2 references 顺序与文中 `[n]` 编号可能不一致：编号真相来自 L2 的 bbl/tex 顺序或 L3 文本；纯 L1（无 TeX 的 DOI 论文，M1 阶段无 L3）时卡片可暂无编号、仅按 API 顺序列出。

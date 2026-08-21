@@ -6,7 +6,7 @@
 
 | 节点 | 路径常量 | 行为 |
 |---|---|---|
-| Library | `agentero:library` | 打开全库表格；右键导出 BibTeX |
+| Library | `agentero:library` | 打开全库表格；右键导出 BibTeX / 发现引用我的新论文 |
 | Recycle Bin | `agentero:trash` | 打开回收站视图；右键清空 |
 | 广场 | `agentero:plaza` | 单击切换展开/收起并打开广场首页（与文件夹行相同）；`Globe` 图标。子来源含 Cool Papers、ModelScope 论文、Skill 推荐与 **订阅** |
 
