@@ -159,6 +159,14 @@
 		"newFolderHint": "papers/子文件夹",
 		"invalidFolderPath": "路径必须在 papers/ 下"
 	},
+	"crossref": {
+		"previewLabel": "交叉引用预览",
+		"loading": "正在加载预览…",
+		"kindFigure": "图",
+		"kindTable": "表",
+		"kindEquation": "公式",
+		"kindAlgorithm": "算法"
+	},
 	"figures": {
 		"title": "解析",
 		"panelAria": "本论文的插图、表格、算法与公式",

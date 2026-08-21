@@ -37,7 +37,7 @@ import {
 	type CitationDestKeyMap,
 	citationDestKey,
 } from "@/lib/pdf/citation-dest-keys";
-import { loadCitationDestKeyMap } from "@/lib/pdf/citation-dest-map";
+import { loadPdfDestMaps } from "@/lib/pdf/citation-dest-map";
 
 /** Grace period so the pointer can travel from the link into the card. */
 const CITATION_HIDE_MS = 250;
@@ -158,12 +158,12 @@ export function usePdfCitations({
 		// never blocks the open-PDF critical path (hover previews simply do not
 		// resolve until the map is ready).
 		const cancelIdle = scheduleIdle(() => {
-			void loadCitationDestKeyMap({
+			void loadPdfDestMaps({
 				paperAbsPath,
 				viewerBytes: sourceBytesRef.current,
 			})
-				.then((map) => {
-					if (!cancelled && map) destKeyMapRef.current = map;
+				.then((maps) => {
+					if (!cancelled && maps) destKeyMapRef.current = maps.cites;
 				})
 				.catch((error: unknown) => {
 					// Non-fatal: hover previews simply do not resolve.

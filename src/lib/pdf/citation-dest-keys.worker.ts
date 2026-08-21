@@ -1,17 +1,20 @@
 /**
- * Dedicated worker: parse hyperref `cite.*` named destinations off the main
- * thread.
+ * Dedicated worker: parse hyperref named destinations off the main thread.
  *
  * pdf-lib has no lazy parsing — `PDFDocument.load` walks the whole PDF object
  * tree, which blocks for seconds on 100MB+ papers. The parse runs here and
- * only the small `pageIndex:pdfY → bibtexKey` entry list crosses back.
+ * only the small `pageIndex:pdfY → value` entry lists (citations + cross-refs)
+ * cross back.
  *
  * Entity-file module worker on purpose: blob-URL workers can fail to spawn on
  * Windows WebView2, so this must stay a real file that Vite bundles as its own
  * worker chunk (`new URL(..., import.meta.url)` in `citation-dest-map.ts`).
  */
 
-import { buildCitationDestKeyMap } from "@/lib/pdf/citation-dest-keys";
+import {
+	buildPdfDestMaps,
+	type CrossrefKind,
+} from "@/lib/pdf/citation-dest-keys";
 
 export type CitationDestKeysRequest = {
 	id: number;
@@ -20,7 +23,12 @@ export type CitationDestKeysRequest = {
 };
 
 export type CitationDestKeysResponse =
-	| { id: number; ok: true; entries: [string, string][] }
+	| {
+			id: number;
+			ok: true;
+			cites: [string, string][];
+			crossrefs: [string, CrossrefKind][];
+	  }
 	| { id: number; ok: false; error: string };
 
 /** Typed view of the dedicated-worker scope (tsconfig lib is DOM, not webworker). */
@@ -31,9 +39,14 @@ const scope = self as unknown as {
 
 scope.onmessage = (event) => {
 	const { id, bytes } = event.data;
-	void buildCitationDestKeyMap(bytes)
-		.then((map) => {
-			scope.postMessage({ id, ok: true, entries: [...map.entries()] });
+	void buildPdfDestMaps(bytes)
+		.then((maps) => {
+			scope.postMessage({
+				id,
+				ok: true,
+				cites: [...maps.cites.entries()],
+				crossrefs: [...maps.crossrefs.entries()],
+			});
 		})
 		.catch((error: unknown) => {
 			scope.postMessage({

@@ -12,6 +12,7 @@ import type {
 	PdfAskNormalizedRect,
 	PdfAskThread,
 } from "@/lib/pdf/ask";
+import type { CrossrefKind } from "@/lib/pdf/citation-dest-keys";
 import type { EquationSymbol } from "@/lib/pdf/equation-annotation";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 
@@ -108,6 +109,23 @@ export type CitationPreviewState = {
 	screen: ScreenPoint;
 	/** Sidecar citation the hovered link points at (exact hyperref lookup). */
 	matched: Citation;
+};
+
+/**
+ * Hover card for a `\ref` cross-reference link: a crop of the figure / table /
+ * equation / algorithm the link points at, resolved through the hyperref
+ * cross-reference destination map plus layout regions. `image` is null while
+ * the region crop renders.
+ */
+export type CrossrefPreviewState = {
+	screen: ScreenPoint;
+	kind: CrossrefKind;
+	/** 1-based destination page (display only). */
+	page: number;
+	/** Normalized bbox of the resolved layout region on the destination page. */
+	region: PdfAskNormalizedRect;
+	/** Rendered region crop; null while in flight. */
+	image: PromptImage | null;
 };
 
 export type EditorState = {

@@ -1,5 +1,6 @@
 import { createPluginRegistration } from "@embedpdf/core";
 import { EmbedPDF } from "@embedpdf/core/react";
+import type { PdfLinkAnnoObject } from "@embedpdf/models";
 import { AiManagerPluginPackage } from "@embedpdf/plugin-ai-manager/react";
 import {
 	AnnotationPluginPackage,
@@ -57,6 +58,7 @@ import { usePdfAskThreads } from "@/components/viewer/pdf/hooks/use-pdf-ask-thre
 import { usePdfCards } from "@/components/viewer/pdf/hooks/use-pdf-cards";
 import { usePdfCitations } from "@/components/viewer/pdf/hooks/use-pdf-citations";
 import { usePdfColorScheme } from "@/components/viewer/pdf/hooks/use-pdf-color-scheme";
+import { usePdfCrossrefPreview } from "@/components/viewer/pdf/hooks/use-pdf-crossref-preview";
 import { usePdfFind } from "@/components/viewer/pdf/hooks/use-pdf-find";
 import { usePdfHighlights } from "@/components/viewer/pdf/hooks/use-pdf-highlights";
 import { usePdfLayoutHover } from "@/components/viewer/pdf/hooks/use-pdf-layout-hover";
@@ -671,6 +673,33 @@ function PdfViewerInner({
 		sourceBytes,
 	});
 
+	// Cross-reference (\ref) hover: preview the figure/table/equation crop.
+	// Reuses the same dest-map parse (cached per PDF); a link coordinate is
+	// either a cite.* or a cross-ref destination, so both hover handlers run
+	// on every link and at most one card shows.
+	const {
+		crossrefPreview,
+		cancelCrossrefHide,
+		scheduleCrossrefHide,
+		handleCrossrefLinkHover,
+	} = usePdfCrossrefPreview({
+		docId,
+		hostRef,
+		zoomRef,
+		paperAbsPath,
+		sourceBytes,
+		engineRef,
+		docCapRef,
+	});
+
+	const handleLinkHover = useCallback(
+		(link: PdfLinkAnnoObject | null) => {
+			handleCitationLinkHover(link);
+			handleCrossrefLinkHover(link);
+		},
+		[handleCitationLinkHover, handleCrossrefLinkHover],
+	);
+
 	/**
 	 * Pin geometry is anchor data only. While an answer / translation streams,
 	 * every chunk replaces the whole threads / translates array, but none of the
@@ -1277,7 +1306,7 @@ function PdfViewerInner({
 			onCardHoverEnter: markCardHoverEnter,
 			onCardHoverLeave: scheduleHoverHide,
 			onCitationActivate: handleCitationLinkActivate,
-			onCitationHover: handleCitationLinkHover,
+			onCitationHover: handleLinkHover,
 			onRegionSelect: handleVisualRegionSelect,
 			onLayoutHoverEnter: scheduleLayoutHoverOpen,
 			onLayoutHoverLeave: handleLayoutHoverLeave,
@@ -1292,7 +1321,7 @@ function PdfViewerInner({
 			markCardHoverEnter,
 			scheduleHoverHide,
 			handleCitationLinkActivate,
-			handleCitationLinkHover,
+			handleLinkHover,
 			handleVisualRegionSelect,
 			scheduleLayoutHoverOpen,
 			handleLayoutHoverLeave,
@@ -1444,6 +1473,11 @@ function PdfViewerInner({
 						: undefined,
 					onHoverEnter: cancelCitationHide,
 					onHoverLeave: scheduleCitationHide,
+				}}
+				crossrefPreview={{
+					state: crossrefPreview,
+					onHoverEnter: cancelCrossrefHide,
+					onHoverLeave: scheduleCrossrefHide,
 				}}
 				cardScreen={cardScreen}
 				onCardHoverEnter={markCardHoverEnter}

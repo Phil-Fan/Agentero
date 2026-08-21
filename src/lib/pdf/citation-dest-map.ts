@@ -21,19 +21,19 @@
 import { logger } from "@/lib/core/logger";
 import { findLocalPdfPath, localFileToArrayBuffer } from "@/lib/paper";
 import {
-	buildCitationDestKeyMap,
-	type CitationDestKeyMap,
+	buildPdfDestMaps,
+	type PdfDestMaps,
 } from "@/lib/pdf/citation-dest-keys";
 import type {
 	CitationDestKeysRequest,
 	CitationDestKeysResponse,
 } from "@/lib/pdf/citation-dest-keys.worker";
 
-/** Max cached PDFs; each entry is a small coord → BibTeX-key string map. */
+/** Max cached PDFs; each entry is a small coord → value string map. */
 const CACHE_LIMIT = 16;
 
-/** `pdfPath:byteLength` → parsed map (promise, so concurrent loads dedupe). */
-const cache = new Map<string, Promise<CitationDestKeyMap>>();
+/** `pdfPath:byteLength` → parsed maps (promise, so concurrent loads dedupe). */
+const cache = new Map<string, Promise<PdfDestMaps>>();
 
 // ---- Worker transport ----
 
@@ -44,7 +44,7 @@ let nextRequestId = 1;
 const pending = new Map<
 	number,
 	{
-		resolve: (map: CitationDestKeyMap) => void;
+		resolve: (maps: PdfDestMaps) => void;
 		reject: (error: Error) => void;
 	}
 >();
@@ -72,8 +72,12 @@ function ensureWorker(): Worker | null {
 		const request = pending.get(event.data.id);
 		if (!request) return;
 		pending.delete(event.data.id);
-		if (event.data.ok) request.resolve(new Map(event.data.entries));
-		else request.reject(new Error(event.data.error));
+		if (event.data.ok) {
+			request.resolve({
+				cites: new Map(event.data.cites),
+				crossrefs: new Map(event.data.crossrefs),
+			});
+		} else request.reject(new Error(event.data.error));
 	};
 	worker.onerror = (event) => {
 		// Worker module failed to load/run: fail in-flight requests and fall
@@ -90,18 +94,16 @@ function ensureWorker(): Worker | null {
 }
 
 /**
- * Parse `cite.*` named destinations without blocking the main thread. The
+ * Parse hyperref named destinations without blocking the main thread. The
  * buffer is transferred (zero-copy) — the caller hands over ownership. Falls
  * back to a main-thread parse when workers are unavailable (tests, spawn
  * failure).
  */
-function parseCitationDestKeys(
-	bytes: ArrayBuffer,
-): Promise<CitationDestKeyMap> {
+function parsePdfDestMaps(bytes: ArrayBuffer): Promise<PdfDestMaps> {
 	const w = ensureWorker();
-	if (!w) return buildCitationDestKeyMap(bytes);
+	if (!w) return buildPdfDestMaps(bytes);
 	const id = nextRequestId++;
-	return new Promise<CitationDestKeyMap>((resolve, reject) => {
+	return new Promise<PdfDestMaps>((resolve, reject) => {
 		pending.set(id, { resolve, reject });
 		const request: CitationDestKeysRequest = { id, bytes };
 		w.postMessage(request, [bytes]);
@@ -112,25 +114,26 @@ function parseCitationDestKeys(
  * Cache wrapper: one parse per key, failures evicted so they can be retried.
  * Exported for tests (worker + Tauri fs are unavailable under vitest).
  */
-export function getCitationDestKeyMapCached(
+export function getPdfDestMapsCached(
 	key: string,
 	source: "viewer-bytes" | "disk",
-	parse: () => Promise<CitationDestKeyMap>,
-): Promise<CitationDestKeyMap> {
+	parse: () => Promise<PdfDestMaps>,
+): Promise<PdfDestMaps> {
 	const hit = cache.get(key);
 	if (hit) {
 		logger.debug("citation dest map: cache hit", { key });
 		return hit;
 	}
 	const started = performance.now();
-	const promise = parse().then((map) => {
+	const promise = parse().then((maps) => {
 		logger.debug("citation dest map: built", {
 			key,
 			source,
-			entries: map.size,
+			cites: maps.cites.size,
+			crossrefs: maps.crossrefs.size,
 			duration_ms: Math.round(performance.now() - started),
 		});
-		return map;
+		return maps;
 	});
 	cache.set(key, promise);
 	// Bounded FIFO: maps are tiny, this only guards a pathological session.
@@ -148,7 +151,7 @@ export function clearCitationDestKeyMapCache(): void {
 	cache.clear();
 }
 
-export type LoadCitationDestKeyMapOptions = {
+export type LoadPdfDestMapsOptions = {
 	/** Absolute paper folder of the open PDF. */
 	paperAbsPath: string;
 	/**
@@ -161,35 +164,35 @@ export type LoadCitationDestKeyMapOptions = {
 };
 
 /**
- * Resolve the paper's local PDF and build (or reuse) its citation destination
- * key map. Returns null when no local PDF exists. Rejections propagate so the
- * caller decides how loudly to fail.
+ * Resolve the paper's local PDF and build (or reuse) its destination maps
+ * (citations + cross-references). Returns null when no local PDF exists.
+ * Rejections propagate so the caller decides how loudly to fail.
  */
-export async function loadCitationDestKeyMap({
+export async function loadPdfDestMaps({
 	paperAbsPath,
 	viewerBytes,
-}: LoadCitationDestKeyMapOptions): Promise<CitationDestKeyMap | null> {
+}: LoadPdfDestMapsOptions): Promise<PdfDestMaps | null> {
 	const pdfPath = await findLocalPdfPath(paperAbsPath);
 	if (!pdfPath) return null;
 
 	const reusable =
 		viewerBytes && viewerBytes.byteLength > 0 ? viewerBytes : null;
 	if (reusable) {
-		return getCitationDestKeyMapCached(
+		return getPdfDestMapsCached(
 			`${pdfPath}:${reusable.byteLength}`,
 			"viewer-bytes",
 			// Copy before transferring so the worker cannot detach the viewer's
 			// buffer (a memcpy beats a second full disk read).
-			() => parseCitationDestKeys(reusable.slice(0)),
+			() => parsePdfDestMaps(reusable.slice(0)),
 		);
 	}
 
 	const bytes = await localFileToArrayBuffer(pdfPath);
 	if (!bytes) return null;
-	return getCitationDestKeyMapCached(
+	return getPdfDestMapsCached(
 		`${pdfPath}:${bytes.byteLength}`,
 		"disk",
 		// Freshly read, exclusively owned: transfer without copying.
-		() => parseCitationDestKeys(bytes),
+		() => parsePdfDestMaps(bytes),
 	);
 }

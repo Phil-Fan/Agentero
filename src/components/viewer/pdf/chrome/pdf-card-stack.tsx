@@ -5,6 +5,7 @@ import {
 	type CitationPreviewImportMenu,
 	PdfCitationPreview,
 } from "@/components/viewer/pdf/cards/citation-preview";
+import { PdfCrossrefPreview } from "@/components/viewer/pdf/cards/crossref-preview";
 import { FormulaAnnotationCard } from "@/components/viewer/pdf/cards/formula-annotation-card";
 import { SelectionMenu } from "@/components/viewer/pdf/cards/selection-menu";
 import { TranslateCard } from "@/components/viewer/pdf/cards/translate-card";
@@ -13,6 +14,7 @@ import { VisualTraceCard } from "@/components/viewer/pdf/cards/visual-trace-card
 import type {
 	CardScreenPoint,
 	CitationPreviewState,
+	CrossrefPreviewState,
 	EditorState,
 	FormulaAnnotationPreviewState,
 	SelectionMenuState,
@@ -54,6 +56,11 @@ type PdfCardStackProps = {
 	citationPreview: {
 		state: CitationPreviewState | null;
 		importMenu?: CitationPreviewImportMenu;
+		onHoverEnter: () => void;
+		onHoverLeave: () => void;
+	};
+	crossrefPreview: {
+		state: CrossrefPreviewState | null;
 		onHoverEnter: () => void;
 		onHoverLeave: () => void;
 	};
@@ -113,6 +120,7 @@ export function PdfCardStack({
 	visualDraft,
 	formulaAnnotation,
 	citationPreview,
+	crossrefPreview,
 	cardScreen,
 	onCardHoverEnter,
 	onCardHoverLeave,
@@ -167,6 +175,17 @@ export function PdfCardStack({
 					importMenu={citationPreview.importMenu}
 					onPointerEnter={citationPreview.onHoverEnter}
 					onPointerLeave={citationPreview.onHoverLeave}
+				/>
+			) : null}
+
+			{crossrefPreview.state ? (
+				<PdfCrossrefPreview
+					screen={crossrefPreview.state.screen}
+					kind={crossrefPreview.state.kind}
+					page={crossrefPreview.state.page}
+					image={crossrefPreview.state.image}
+					onPointerEnter={crossrefPreview.onHoverEnter}
+					onPointerLeave={crossrefPreview.onHoverLeave}
 				/>
 			) : null}
 

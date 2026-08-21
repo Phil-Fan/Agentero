@@ -159,6 +159,14 @@
 		"newFolderHint": "papers/subfolder",
 		"invalidFolderPath": "Path must be under papers/"
 	},
+	"crossref": {
+		"previewLabel": "Cross-reference preview",
+		"loading": "Loading preview…",
+		"kindFigure": "Figure",
+		"kindTable": "Table",
+		"kindEquation": "Equation",
+		"kindAlgorithm": "Algorithm"
+	},
 	"figures": {
 		"title": "Analysis",
 		"panelAria": "Figures, tables, algorithms, and formulas of this paper",
