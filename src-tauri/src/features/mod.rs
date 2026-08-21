@@ -32,6 +32,8 @@ pub mod lifecycle;
 pub mod modelscope_proxy;
 pub mod network;
 pub mod open_request;
+#[cfg(feature = "desktop")]
+pub mod recommend;
 pub mod refs;
 #[cfg(feature = "desktop")]
 pub mod remote;

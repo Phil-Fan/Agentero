@@ -152,6 +152,17 @@
 		"modelscope": "ModelScope Papers",
 		"modelscopeDescription": "Browse ModelScope daily papers and Chinese interpretations",
 		"skillsDescription": "Curated GitHub Skill repos for research — click to import",
+		"arxivRec": {
+			"label": "arXiv Daily",
+			"description": "Today's arXiv papers ranked against your library",
+			"refresh": "Recompute recommendations",
+			"computing": "Ranking today's papers…",
+			"idle": "No recommendations yet. Refresh to rank today's arXiv papers against your library.",
+			"needsEmbedding": "Configure an embedding model first — recommendations compare abstracts against your library.",
+			"needsCorpus": "No library abstracts to compare against. Import a few papers first.",
+			"noCandidates": "No new arXiv papers found for the selected categories.",
+			"openSettings": "Open Agent settings"
+		},
 		"feeds": {
 			"label": "Feeds",
 			"description": "Subscribe to RSS / Atom; import papers in one click",

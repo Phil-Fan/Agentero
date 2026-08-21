@@ -7,6 +7,7 @@
 
 import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { PlazaArxivRecView } from "@/components/plaza/plaza-arxiv-rec-view";
 import { PlazaFeedsView } from "@/components/plaza/plaza-feeds-view";
 import { PlazaSkillsView } from "@/components/plaza/plaza-skills-view";
 import { PlazaWebFrame } from "@/components/plaza/plaza-web-frame";
@@ -80,6 +81,10 @@ export function PlazaView({
 
 	if (source?.panel === "feeds") {
 		return <PlazaFeedsView className={className} />;
+	}
+
+	if (source?.panel === "arxivRec") {
+		return <PlazaArxivRecView className={className} />;
 	}
 
 	if (source?.url) {

@@ -5,7 +5,7 @@
 //! @see docs/development/plaza-feeds.md
 
 mod body;
-mod parse;
+pub mod parse;
 mod schema;
 
 #[cfg(feature = "desktop")]

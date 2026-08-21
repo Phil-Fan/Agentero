@@ -9,7 +9,7 @@
  */
 
 import type { ParseKeys } from "i18next";
-import { Rss, Sparkles } from "lucide-react";
+import { Rss, Sparkles, Telescope } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { CoolPapersIcon } from "@/components/icons/cool-papers-icon";
 import { ModelScopeIcon } from "@/components/icons/modelscope-icon";
@@ -34,7 +34,7 @@ export type PlazaSource = {
 	 */
 	url: string | null;
 	/** Native plaza panel (not an iframe). */
-	panel?: "skills" | "feeds";
+	panel?: "skills" | "feeds" | "arxivRec";
 	/**
 	 * Host proxy scheme origin used for embedding. A cross-origin frame cannot
 	 * retarget the site's `target="_blank"` links or report its navigations, so
@@ -95,6 +95,16 @@ export const PLAZA_SOURCES: readonly PlazaSource[] = [
 		panel: "feeds",
 		icon: Rss,
 	},
+	{
+		id: "arxiv-rec",
+		path: sourcePath("arxiv-rec"),
+		label: "arXiv Daily",
+		description: "plaza.arxivRec.description",
+		url: null,
+		embedOrigin: null,
+		panel: "arxivRec",
+		icon: Telescope,
+	},
 ];
 
 /** True for the Plaza parent node and every source under this parent. */
@@ -126,6 +136,8 @@ export function plazaSourceLabel(source: PlazaSource): string {
 			return i18n.t("sidebar:plaza.modelscope");
 		case "feeds":
 			return i18n.t("sidebar:plaza.feeds.label");
+		case "arxiv-rec":
+			return i18n.t("sidebar:plaza.arxivRec.label");
 		default:
 			return source.label;
 	}

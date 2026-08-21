@@ -5,6 +5,7 @@
 //! - v3: `is_read` for paper-reader workflow
 //! - v4: Zotero sync linkage (`zotero_item_id`, `zotero_last_synced`)
 //! - v5: list-order indexes (`updated_at`, `added_at`, `title`) + `pdf_page_counts`
+//! - v6: arXiv recommendation caches (`embed_cache`, `arxiv_rec_state`)
 
 use crate::core::error::AppError;
 use rusqlite::Connection;
@@ -14,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 /// Current catalog schema version written to `schema_meta`.
-pub const SCHEMA_VERSION: i32 = 5;
+pub const SCHEMA_VERSION: i32 = 6;
 
 const DDL_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -99,6 +100,27 @@ CREATE INDEX IF NOT EXISTS idx_papers_title ON papers(title COLLATE NOCASE);
 CREATE TABLE IF NOT EXISTS pdf_page_counts (
     path       TEXT PRIMARY KEY NOT NULL,
     page_count INTEGER NOT NULL
+);
+"#;
+
+/// Schema v6: arXiv recommendation caches.
+/// `embed_cache` keys abstract vectors by (sha256 of the text, model) so the
+/// library corpus is embedded once and later runs only pay for new abstracts.
+/// `vector` is little-endian f32; `arxiv_rec_state` is a single row holding the
+/// last run so opening the page (or the vault) can skip the network entirely.
+const MIGRATE_V5_TO_V6: &str = r#"
+CREATE TABLE IF NOT EXISTS embed_cache (
+    text_hash TEXT NOT NULL,
+    model     TEXT NOT NULL,
+    dim       INTEGER NOT NULL,
+    vector    BLOB NOT NULL,
+    PRIMARY KEY (text_hash, model)
+);
+CREATE TABLE IF NOT EXISTS arxiv_rec_state (
+    id              INTEGER PRIMARY KEY CHECK (id = 1),
+    computed_at     TEXT NOT NULL,
+    categories_json TEXT NOT NULL,
+    results_json    TEXT NOT NULL
 );
 "#;
 
@@ -310,6 +332,19 @@ fn migrate(conn: &Connection) -> Result<(), AppError> {
         set_schema_version(conn, 5)?;
     }
 
+    let version = schema_version(conn).unwrap_or(0);
+    if version < 6 {
+        for stmt in MIGRATE_V5_TO_V6.split(';') {
+            let s = stmt.trim();
+            if s.is_empty() {
+                continue;
+            }
+            conn.execute_batch(&format!("{s};"))
+                .map_err(|e| AppError::message(format!("catalog migrate v6: {e}")))?;
+        }
+        set_schema_version(conn, 6)?;
+    }
+
     Ok(())
 }
 
@@ -400,6 +435,16 @@ mod tests {
             )
             .unwrap();
         assert_eq!(has_zotero, 2);
+
+        // v6 recommendation cache tables exist
+        let has_rec_tables: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('embed_cache', 'arxiv_rec_state')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(has_rec_tables, 2);
 
         // Idempotent second open
         drop(conn);

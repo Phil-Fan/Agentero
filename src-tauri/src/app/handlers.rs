@@ -115,6 +115,8 @@ macro_rules! common_commands {
             crate::features::feeds::commands::feeds_mark_imported,
             crate::features::feeds::commands::feeds_set_pinned,
             crate::features::feeds::commands::feeds_resolve_body,
+            crate::features::recommend::commands::recommend_arxiv,
+            crate::features::recommend::commands::recommend_arxiv_last,
             crate::app::menu::set_locale,
             $($extra),*
         ]
