@@ -1,10 +1,11 @@
 ---
 name: agentero-cli
-version: 6
+version: 7
 description: >-
   Use the Agentero CLI (bin `agentero`) to create, discover, and inspect a local
   research vault and catalog—list/get papers, import by id/URL, check wikilinks,
-  layout regions (figures/tables/formulas), region-anchored marks, download
+  layout regions (figures/tables/formulas), write reading marks (highlight /
+  批注 / translate / ask, positions resolved by the PDF engine), download
   assets, parse PAPER.md, export bib—without BYOA. Prefer --json. Use when
   managing a vault headless, scripting Motif/Agentero, or exploring papers via
   machine APIs ($agentero-cli / /agentero-cli).
@@ -54,13 +55,39 @@ directly; do not invent catalog rows.
 3. **L2** — `{paper}/NOTES.md`
 4. **L2.5** — layout index + marks  
    - `agentero layout list <paper> --json` (sidebar figures/tables/algorithms/formulas)  
-   - `{paper}/marks/*.json` (reader highlights / asks / translates; prefer CLI write)
+   - `{paper}/marks/annotations.json` (highlights / 批注) + `{paper}/marks/<id>.json`
+     (asks / translates) — write these through the CLI, never by hand
 5. **L3** — `{paper}/PAPER.md` (if no TeX)
 6. **L4** — `{paper}/source/**` (TeX preferred when present)
 
 After `paper get --json`, use `data.assets` (`marksDir` = reader annotations),
 `data.suggestedReads` / `paper paths`, then `read_file` those paths. Do **not**
 paste whole sources unless needed.
+
+**Highlight / 批注 / translate a sentence (the CLI resolves the position):**
+
+```bash
+# highlight; add --comment to make it a 批注 (same as a desktop selection note)
+agentero mark add <paper> --kind highlight --quote "…verbatim sentence…" \
+  [--page 3] [--comment "…"] [--mark-color yellow|green|blue|pink|purple] --json
+
+# pin a translation next to the sentence (free MT, no API key)
+agentero mark add <paper> --kind translate --quote "…" [--to zh-CN] --json
+
+# plain text translation, no mark
+agentero translate "…" [--to zh-CN] --json
+
+# note a question to raise later
+agentero mark add <paper> --kind ask --quote "…" --question "…" --json
+```
+
+The quote is located with the PDF text engine, so **copy it verbatim** from
+`PAPER.md` / the TeX source and keep it long enough to be unique. Whitespace,
+case, typographic quotes/dashes, f-ligatures and line-break hyphenation are all
+tolerated; a quote spanning a **page** break is not (search is per page). If several places
+match, add `--page N`, pick one with `--match-index N`, or mark them all with
+`--all`. On `mark_locate_failed` retry with a longer or more distinctive sentence
+— **never** guess coordinates.
 
 **Figures / formulas (preferred over inventing coordinates):**
 
@@ -76,12 +103,16 @@ Requires `{paper}/source/layout-index.json` (written when the desktop runs layou
 analysis). If `layout_index_missing`, tell the user to open the paper in Agentero
 and run Figures analysis — do not invent bboxes.
 
+Highlights/批注 land in `{paper}/marks/annotations.json` (the EmbedPDF transfer
+blob); ask/translate stay per-id `{paper}/marks/<id>.json`. Let the CLI write both
+— never hand-edit the transfer blob. Marks appear in an already-open reader within
+a second or two.
+
 Reader marks under `{paper}/marks/` can be referenced from Markdown as annotation
 wikilinks: `[[papers/…/NOTES@<id>|label]]` / `![[…@<id>]]` (same sugar as the app).
 When you edit NOTES, prefer real ids from `marks/` or the desktop copy action;
 do not invent ids. `agentero wiki check` validates path + fragment **shape** for
 `@id` / `#@id`, but does **not** open marks to verify the id still exists.
-Do **not** write EmbedPDF `marks/annotations.json` by hand.
 
 ## Default agent protocol
 
@@ -139,8 +170,11 @@ Global: `--vault`, `--json` / `--output json`, `-y` / `--yes`, `--translator-url
 | Bib import/export | `agentero import bib <file\|-> --json` / `export bib [-o\|--out file\|-] --json` |
 | Layout regions | `agentero layout list <paper> [--kind figure\|table\|algorithm\|formula] --json` |
 | Layout get | `agentero layout get <paper> <regionId> --json` |
+| Highlight / 批注 | `agentero mark add <paper> --kind highlight --quote "…" [--page N] [--comment …] [--mark-color …] --json` |
+| Translate mark | `agentero mark add <paper> --kind translate --quote "…" [--to zh-CN] --json` |
+| Translate text | `agentero translate "…" [--to zh-CN] --json` |
 | Mark on region | `agentero mark add <paper> --region <id> [--comment …] [--question …] --json` |
-| Mark list/get/delete | `agentero mark list\|get\|delete … --json`（delete 需 `-y`） |
+| Mark list/get/update/delete | `agentero mark list\|get\|update\|delete … --json`（delete 需 `-y`） |
 | Move paper / org folder | `agentero paper move <from> <destParent> --json` |
 | Recycle bin | `agentero trash list --json` / `trash restore <batchId> <stored> --json` |
 | Purge recycle bin | `agentero trash purge [batchId] [stored] -y --json`（省略参数 = 清空全部） |
