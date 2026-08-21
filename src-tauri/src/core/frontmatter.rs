@@ -142,7 +142,10 @@ mod tests {
     #[test]
     fn joins_multi_line_plain_scalars() {
         let block = frontmatter_block("---\ndescription: \"one\n  two\"\n---\n").unwrap();
-        assert_eq!(scalar_field(block, "description").as_deref(), Some("one two"));
+        assert_eq!(
+            scalar_field(block, "description").as_deref(),
+            Some("one two")
+        );
     }
 
     #[test]

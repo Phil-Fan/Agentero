@@ -197,11 +197,7 @@ async fn fetch_candidates(categories: &[String]) -> Result<Vec<Candidate>, AppEr
             let Some(paper_url) = item.paper_url.clone() else {
                 continue;
             };
-            let arxiv_id = paper_url
-                .rsplit('/')
-                .next()
-                .unwrap_or_default()
-                .to_string();
+            let arxiv_id = paper_url.rsplit('/').next().unwrap_or_default().to_string();
             if arxiv_id.is_empty() || seen.iter().any(|s| s == &arxiv_id) {
                 continue;
             }
@@ -331,7 +327,10 @@ async fn embed_batch(
     model: &str,
     texts: &[String],
 ) -> Result<Vec<Vec<f32>>, AppError> {
-    let mut request = client.post(endpoint).json(&EmbedRequest { model, input: texts });
+    let mut request = client.post(endpoint).json(&EmbedRequest {
+        model,
+        input: texts,
+    });
     if let Some(key) = api_key {
         request = request.header("Authorization", format!("Bearer {key}"));
     }
@@ -541,8 +540,14 @@ pub async fn recommend(
         .map(|c| embed_text(&c.title, &c.abstract_text))
         .collect();
 
-    let mut corpus_vectors =
-        embed_all(vault_root, &endpoint, api_key.as_deref(), &model, &corpus_texts).await?;
+    let mut corpus_vectors = embed_all(
+        vault_root,
+        &endpoint,
+        api_key.as_deref(),
+        &model,
+        &corpus_texts,
+    )
+    .await?;
     let mut candidate_vectors = embed_all(
         vault_root,
         &endpoint,

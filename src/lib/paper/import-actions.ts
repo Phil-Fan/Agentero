@@ -165,7 +165,7 @@ export async function lookupSubmit(
 				}
 
 				if (result.errors.length > 0) {
-					notifyError(`${input}: ${result.errors.join("; ")}`);
+					notifyError(result.errors.join("; "));
 				}
 				await opts.onComplete?.(result);
 

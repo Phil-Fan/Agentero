@@ -423,4 +423,74 @@ mod tests {
         assert_eq!(description.chars().count(), MAX_DESCRIPTION_LEN + 1);
         assert!(description.ends_with('…'));
     }
+
+    #[test]
+    fn installs_monorepo_skipping_unusable_skills() {
+        let tag = format!("agentero-skill-install-{}", std::process::id());
+        let vault = std::env::temp_dir().join(&tag);
+        let _ = fs::remove_dir_all(&vault);
+        fs::create_dir_all(&vault).unwrap();
+
+        let long_description = format!("深度研究代理团队。Triggers: {}", "深度研究，".repeat(200));
+        let files = [
+            (
+                "repo-main/deep-research/SKILL.md",
+                format!("---\nname: deep-research\ndescription: \"{long_description}\"\n---\n# Body"),
+            ),
+            (
+                "repo-main/paper-reader/SKILL.md",
+                "---\nname: paper-reader\ndescription: >-\n  Read and explain a\n  research paper.\n---\n# Body".to_string(),
+            ),
+            (
+                "repo-main/templates/SKILL.md",
+                "# Template without frontmatter".to_string(),
+            ),
+        ];
+        let mut tar = tar::Builder::new(Vec::new());
+        for (path, content) in &files {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(content.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            tar.append_data(&mut header, path, content.as_bytes())
+                .unwrap();
+        }
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        std::io::Write::write_all(&mut encoder, &tar.into_inner().unwrap()).unwrap();
+        let archive = encoder.finish().unwrap();
+
+        let discovery_id = uuid::Uuid::new_v4().to_string();
+        let staged = discovery_dir(&discovery_id).unwrap();
+        fs::create_dir_all(&staged).unwrap();
+        fs::write(staged.join("archive.tar.gz"), &archive).unwrap();
+        let source = SkillSource {
+            owner: "acme".into(),
+            repo: "repo".into(),
+            reference: None,
+            subpath: None,
+            skill_names: Vec::new(),
+            source: "https://github.com/acme/repo".into(),
+        };
+        fs::write(
+            staged.join("source.json"),
+            serde_json::to_vec(&serde_json::json!({ "source": source, "reference": "main" }))
+                .unwrap(),
+        )
+        .unwrap();
+
+        let results = install_discovered_skills(&vault, &discovery_id, &["*".to_string()]).unwrap();
+        let mut names: Vec<&str> = results.iter().map(|r| r.name.as_str()).collect();
+        names.sort_unstable();
+        assert_eq!(names, ["deep-research", "paper-reader"]);
+        assert!(vault
+            .join(".agents/skills/deep-research/SKILL.md")
+            .is_file());
+        assert!(vault
+            .join(".agents/skills/deep-research/agentero-skill.json")
+            .is_file());
+        assert!(!vault.join(".agents/skills/templates").exists());
+
+        let _ = fs::remove_dir_all(&vault);
+        let _ = fs::remove_dir_all(&staged);
+    }
 }

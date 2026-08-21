@@ -40,7 +40,7 @@
 2. 解压到临时目录（复用 `extract_tar_safe` 系安全逻辑），递归扫描 `**/SKILL.md`：
    - 有子目录约束（tree URL / `--skill`）→ 只取匹配项；
    - repo 根或指定路径发现 Skill → 返回候选列表，前端弹选择（见 §4）。
-3. 校验 frontmatter：`name` 合法且与目录名一致；不一致时以 `name` 为准命名目标目录。
+3. 校验 frontmatter：`name` 合法且与目录名一致；不一致时以 `name` 为准命名目标目录。frontmatter 解析统一走 `src-tauri/src/core/frontmatter.rs`（`frontmatter_block` + `scalar_field`，支持引号、`>` / `|` 折叠块、多行续行、CRLF，只读顶层键）。`description` 超过 1024 **字符**时按字符截断展示，不再拒绝安装；单个 `SKILL.md` 解析失败只跳过该候选，整个来源没有可用 Skill 才报错。见 [bug_fix/skill-import-description-length.md](../bug_fix/skill-import-description-length.md)。
 4. 将归档和候选 metadata 暂存为一次性 discovery，并返回前端选择；此阶段不写入 Vault。
 5. 用户确认后才落盘 `vault/.agents/skills/<name>/`（整目录拷贝，含 `references/` 等）：
    - 目标已存在 → 默认**不覆盖**，报「已存在，是否更新」（沿用 `ensure_vault` 不覆盖用户文件的原则）；
