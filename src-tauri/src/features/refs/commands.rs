@@ -1,8 +1,9 @@
-//! `paper_refs_parse` / `paper_refs_list` / `paper_refs_graph` — reference commands.
+//! `paper_refs_parse` / `paper_refs_list` / `paper_refs_graph` /
+//! `library_citing_scan` — reference commands.
 
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::core::log_util::{trunc, OpTimer};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Debug, Deserialize)]
@@ -31,6 +32,24 @@ pub struct PaperRefsGraphArgs {
     /// Undirected BFS hops over library-local cite edges (default 1).
     #[serde(default)]
     pub depth: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryCitingScanArgs {
+    pub vault_path: String,
+    /// Background-task id: routes progress events and carries cancellation.
+    #[serde(default)]
+    pub task_id: Option<String>,
+    /// How far back a citing paper still counts as "new" (default 183).
+    #[serde(default)]
+    pub since_days: Option<i64>,
+    /// Maximum candidates returned (default 20).
+    #[serde(default)]
+    pub budget: Option<usize>,
+    /// Ignore cached citation pages and refetch every seed.
+    #[serde(default)]
+    pub force: bool,
 }
 
 /// Parse (or refresh with `force`) the reference sidecar for one paper. Online
@@ -112,4 +131,102 @@ pub async fn paper_refs_graph(args: PaperRefsGraphArgs) -> ApiResult<super::Cite
         op.finish_result(super::build_citation_graph(&vault, center, args.depth))
     })
     .await
+}
+
+/// Progress payload for the background-task panel. Field names must stay in
+/// sync with `BackgroundTaskProgressEvent` in `src/lib/core/background-tasks.ts`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CitingScanProgress {
+    task_id: String,
+    phase: String,
+    downloaded_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total_bytes: Option<u64>,
+    progress: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    current_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total_count: Option<usize>,
+}
+
+/// Scan the whole library for new papers that cite it but are not imported yet.
+#[tauri::command]
+pub async fn library_citing_scan(
+    app: tauri::AppHandle,
+    args: LibraryCitingScanArgs,
+) -> Result<ApiResult<super::citing::CitingScanResult>, String> {
+    let op = OpTimer::start_with(
+        "library_citing_scan",
+        format!(
+            "sinceDays={:?} budget={:?} force={}",
+            args.since_days, args.budget, args.force
+        ),
+    );
+    let vault = PathBuf::from(args.vault_path.trim());
+    if !vault.is_dir() {
+        let err = AppError::message("vault path is not a directory");
+        op.finish_err(&err);
+        return Ok(map_err(err));
+    }
+
+    let mut opts = super::citing::ScanOptions::default();
+    if let Some(days) = args.since_days {
+        opts.since_days = days;
+    }
+    if let Some(budget) = args.budget {
+        opts.budget = budget;
+    }
+    opts.force = args.force;
+
+    let task_id = args.task_id.unwrap_or_default();
+
+    let cancel_id = task_id.clone();
+    let cancelled = move || {
+        !cancel_id.is_empty() && crate::features::agent::background_tasks::is_cancelled(&cancel_id)
+    };
+
+    let progress_app = app.clone();
+    let progress_id = task_id.clone();
+    let progress =
+        move |phase: &str, done: Option<usize>, total: Option<usize>, pct: Option<u8>| {
+            // Phases without counts would fall into the panel's byte-formatting
+            // branch and render a meaningless "0 B"; the caller labels those.
+            let (Some(current), Some(total)) = (done, total) else {
+                return;
+            };
+            if progress_id.is_empty() {
+                return;
+            }
+            use tauri::Emitter;
+            let _ = progress_app.emit(
+                "background-task:progress",
+                CitingScanProgress {
+                    task_id: progress_id.clone(),
+                    phase: phase.to_string(),
+                    downloaded_bytes: 0,
+                    total_bytes: None,
+                    progress: pct,
+                    current_count: Some(current),
+                    total_count: Some(total),
+                },
+            );
+        };
+
+    let result = super::citing::scan(
+        &vault,
+        &opts,
+        super::citing::ScanHooks {
+            cancelled: Some(&cancelled),
+            progress: Some(&progress),
+        },
+    )
+    .await;
+
+    // Always clear the flag: a leftover cancellation would immediately kill the
+    // next task that reuses this id.
+    if !task_id.is_empty() {
+        crate::features::agent::background_tasks::finish(&task_id);
+    }
+    Ok(op.finish_result(result))
 }

@@ -1,4 +1,4 @@
-import { Download, Loader2, Trash2 } from "lucide-react";
+import { Download, Loader2, Radar, Trash2 } from "lucide-react";
 import { type RefObject, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { ViewportFloating } from "@/components/ui/viewport-floating";
@@ -14,10 +14,13 @@ export type TreeContextMenuPortalProps = {
 	menuNodeName?: string;
 	isPaperMenu: boolean;
 	libraryExportBusy: boolean;
+	citingScanBusy: boolean;
 	canPasteAtTarget: boolean;
 	onClose: () => void;
 	/** Each callback is optional — `undefined` hides the matching menu item. */
 	onExportLibrary?: () => void;
+	/** Scan the whole library for new papers citing it. */
+	onDiscoverCiting?: () => void;
 	onEmptyTrash?: () => void;
 	onOpenNotes?: () => void;
 	/** Add the right-clicked file/paper to the Agent chat as a context chip. */
@@ -41,9 +44,11 @@ export function TreeContextMenuPortal({
 	menuNodeName,
 	isPaperMenu,
 	libraryExportBusy,
+	citingScanBusy,
 	canPasteAtTarget,
 	onClose,
 	onExportLibrary,
+	onDiscoverCiting,
 	onEmptyTrash,
 	onOpenNotes,
 	onAddToChat,
@@ -106,26 +111,54 @@ export function TreeContextMenuPortal({
 			className="z-50 min-w-44 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
 		>
 			{isLibraryMenu ? (
-				onExportLibrary ? (
-					<button
-						type="button"
-						role="menuitem"
-						disabled={libraryExportBusy}
-						className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
-						onClick={onExportLibrary}
-					>
-						{libraryExportBusy ? (
-							<Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
-						) : (
-							<Download className="size-3.5 shrink-0" aria-hidden />
-						)}
-						<span>
-							{libraryExportBusy
-								? t("papersLibrary.exporting")
-								: t("papersLibrary.export")}
-						</span>
-					</button>
-				) : null
+				<>
+					{onExportLibrary ? (
+						<button
+							type="button"
+							role="menuitem"
+							disabled={libraryExportBusy}
+							className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+							onClick={onExportLibrary}
+						>
+							{libraryExportBusy ? (
+								<Loader2
+									className="size-3.5 shrink-0 animate-spin"
+									aria-hidden
+								/>
+							) : (
+								<Download className="size-3.5 shrink-0" aria-hidden />
+							)}
+							<span>
+								{libraryExportBusy
+									? t("papersLibrary.exporting")
+									: t("papersLibrary.export")}
+							</span>
+						</button>
+					) : null}
+					{onDiscoverCiting ? (
+						<button
+							type="button"
+							role="menuitem"
+							disabled={citingScanBusy}
+							className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+							onClick={onDiscoverCiting}
+						>
+							{citingScanBusy ? (
+								<Loader2
+									className="size-3.5 shrink-0 animate-spin"
+									aria-hidden
+								/>
+							) : (
+								<Radar className="size-3.5 shrink-0" aria-hidden />
+							)}
+							<span>
+								{citingScanBusy
+									? t("papersLibrary.discoveringCiting")
+									: t("papersLibrary.discoverCiting")}
+							</span>
+						</button>
+					) : null}
+				</>
 			) : isTrashMenu ? (
 				onEmptyTrash ? (
 					<button

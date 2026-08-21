@@ -8,6 +8,7 @@
 
 pub mod bbl;
 pub mod bib;
+pub mod citing;
 #[cfg(feature = "desktop")]
 pub mod commands;
 pub mod latex;

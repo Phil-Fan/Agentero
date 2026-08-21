@@ -87,6 +87,7 @@ macro_rules! common_commands {
             crate::features::refs::commands::paper_refs_parse,
             crate::features::refs::commands::paper_refs_list,
             crate::features::refs::commands::paper_refs_graph,
+            crate::features::refs::commands::library_citing_scan,
             crate::features::coolpapers::commands::paper_coolpapers_notes,
             crate::features::coolpapers::commands::paper_coolpapers_import,
             crate::features::catalog::commands::paper_open_bundle,

@@ -143,6 +143,73 @@ export async function loadPaperRefsReadOnly(
 	return sidecar;
 }
 
+/** A new paper that cites the library but is not imported yet. */
+export type CitingCandidate = {
+	s2Id: string;
+	title: string;
+	date: string;
+	arxivId?: string;
+	doi?: string;
+	/** Ready for `lookupSubmit`: `arXiv:{id}` or a bare DOI. */
+	identifier: string;
+	/** Vault-relative paths of my papers this candidate cites. */
+	citedByMine: string[];
+	/** IDF-weighted overlap; the primary ranking signal. */
+	weight: number;
+	similarity?: number;
+	citationCount: number;
+	oaPdfUrl?: string;
+};
+
+export type CitingScanResult = {
+	generatedAt: string;
+	sinceDate: string;
+	libraryTotal: number;
+	seedsTotal: number;
+	seedsFetched: number;
+	skippedMegaCited: number;
+	skippedUncited: number;
+	skippedUnknown: number;
+	rawCiting: number;
+	afterFilters: number;
+	gatePassed: number;
+	similarityThreshold?: number;
+	candidates: CitingCandidate[];
+	cancelled: boolean;
+	messages: string[];
+};
+
+/**
+ * Reverse citations — who cites *my* library. The opposite direction from the
+ * rest of this module, and online-only: local TeX/`.bbl` cannot know it.
+ *
+ * `taskId` is the background-task id; Host routes progress events to it and
+ * polls it for cancellation.
+ */
+export async function libraryCitingScan(
+	vaultPath: string,
+	opts: {
+		taskId?: string;
+		sinceDays?: number;
+		budget?: number;
+		force?: boolean;
+	} = {},
+): Promise<CitingScanResult> {
+	return await invokeApi<CitingScanResult>(
+		"library_citing_scan",
+		{
+			args: {
+				vaultPath,
+				taskId: opts.taskId ?? null,
+				sinceDays: opts.sinceDays ?? null,
+				budget: opts.budget ?? null,
+				force: opts.force ?? false,
+			},
+		},
+		{ fallback: "library_citing_scan failed" },
+	);
+}
+
 /** Identifier usable by magic-wand import for an unmatched citation. */
 export function citationImportIdentifier(citation: Citation): string | null {
 	const { arxivId, doi } = citation.metadata;

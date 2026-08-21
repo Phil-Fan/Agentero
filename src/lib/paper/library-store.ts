@@ -9,9 +9,15 @@ import { isTauri } from "@/lib/core/tauri";
 import type { PaperMetadata } from "@/lib/paper";
 import { listPapers } from "@/lib/paper/api";
 import type { LocalPdfImportEntry } from "@/lib/paper/lookup";
+import type { CitingScanResult } from "@/lib/paper/refs";
 import { getVaultPath } from "@/lib/vault/store";
 
-export type LibraryIoBusy = "import" | "export" | "import-pdf" | null;
+export type LibraryIoBusy =
+	| "import"
+	| "export"
+	| "import-pdf"
+	| "citing"
+	| null;
 
 export type { LocalPdfImportEntry };
 
@@ -29,6 +35,8 @@ type LibraryStore = {
 	ioBusy: LibraryIoBusy;
 	/** Paper being edited in the Edit Metadata dialog (null = closed). */
 	editMetaDraft: PaperMetadata | null;
+	/** Finished reverse-citation scan shown in its dialog (null = closed). */
+	citingScanDraft: CitingScanResult | null;
 	/** Bump to force RecycleBinView reload after Empty Recycle Bin. */
 	trashReloadSignal: number;
 	/** Catalog rows by vault-relative path (for Zap / is_read). */
@@ -52,6 +60,7 @@ export const libraryStore = createStore<LibraryStore>(() => ({
 	rescanning: false,
 	ioBusy: null,
 	editMetaDraft: null,
+	citingScanDraft: null,
 	trashReloadSignal: 0,
 	paperMetaByRelPath: new Map(),
 }));
@@ -124,6 +133,10 @@ export function setEditMetaDraft(draft: PaperMetadata | null): void {
 	libraryStore.setState({ editMetaDraft: draft });
 }
 
+export function setCitingScanDraft(draft: CitingScanResult | null): void {
+	libraryStore.setState({ citingScanDraft: draft });
+}
+
 export function bumpTrashReloadSignal(): void {
 	libraryStore.setState((s) => ({
 		trashReloadSignal: s.trashReloadSignal + 1,
@@ -186,6 +199,7 @@ export function clearLibraryVaultState(): void {
 		papers: [],
 		paperMetaByRelPath: new Map(),
 		editMetaDraft: null,
+		citingScanDraft: null,
 		loading: false,
 		rescanning: false,
 		ioBusy: null,

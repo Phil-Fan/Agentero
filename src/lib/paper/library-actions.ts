@@ -30,6 +30,7 @@ import {
 import {
 	libraryStore,
 	refreshLibrary,
+	setCitingScanDraft,
 	setLibraryIoBusy,
 	setLibraryPapers,
 	setLibraryRescanning,
@@ -40,6 +41,7 @@ import {
 	paperAssetsReadyForReader,
 	runPaperReaderWorkflow,
 } from "@/lib/paper/reader";
+import { libraryCitingScan } from "@/lib/paper/refs";
 import { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout";
 import { getSettings } from "@/lib/settings/react-store";
 import type { FileNode } from "@/lib/vault";
@@ -57,6 +59,40 @@ import {
 export function currentLookupParentDir(): string {
 	const { vaultPath, treeSelectedPath, tree } = vaultStore.getState();
 	return resolvePapersParentDir(vaultPath, treeSelectedPath, tree);
+}
+
+/**
+ * Find new papers that cite this library but are not imported yet, and open
+ * the candidate list. Online-only and slow enough to need the task panel.
+ */
+export async function discoverCitingPapers(): Promise<void> {
+	const vaultPath = getVaultPath();
+	if (!vaultPath || libraryStore.getState().ioBusy) return;
+	setLibraryIoBusy("citing");
+	try {
+		await enqueueBackgroundTask(
+			{ kind: "lookup", title: i18n.t("app:tasks.citingScan") },
+			async ({ id, setDetail }) => {
+				setDetail(i18n.t("app:tasks.citingScanPhaseMeta"));
+				// Host emits the per-seed counter for the fetch phase directly.
+				const result = await libraryCitingScan(vaultPath, { taskId: id });
+				if (result.cancelled) return null;
+				setDetail(
+					i18n.t("sidebar:papersLibrary.citingScanDone", {
+						count: result.candidates.length,
+					}),
+				);
+				// The result describes the vault it was scanned from; a switch
+				// mid-scan means the dialog would be about the wrong library.
+				if (getVaultPath() === vaultPath) setCitingScanDraft(result);
+				return result;
+			},
+		);
+	} catch (e) {
+		notifyError(e instanceof Error ? e.message : String(e));
+	} finally {
+		setLibraryIoBusy(null);
+	}
 }
 
 /** Rebuild the catalog from papers/ on disk (recover disk-only papers). */

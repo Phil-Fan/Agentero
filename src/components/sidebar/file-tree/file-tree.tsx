@@ -79,6 +79,10 @@ type FileTreeProps = {
 	onExportLibrary?: () => void | Promise<void>;
 	/** True while export (or other library IO) is in progress — disables menu item. */
 	libraryExportBusy?: boolean;
+	/** Find new papers citing the library (Library node context menu). */
+	onDiscoverCiting?: () => void | Promise<void>;
+	/** True while a citation scan is running — disables menu item. */
+	citingScanBusy?: boolean;
 	/**
 	 * Start an inline create rename for a new file/folder under the given parent.
 	 * Parent is derived from the right-clicked path (folder itself, or file's parent).
@@ -175,6 +179,8 @@ export const FileTree = memo(
 			onEmptyTrash,
 			onExportLibrary,
 			libraryExportBusy = false,
+			onDiscoverCiting,
+			citingScanBusy = false,
 			onStartCreate,
 			onDownloadPaperAssets,
 			onDownloadAllMissingAssets,
@@ -295,9 +301,11 @@ export const FileTree = memo(
 				createDraft,
 				renameDraft,
 				libraryExportBusy,
+				citingScanBusy,
 				pathsForAction: selection.pathsForAction,
 				openMovePicker: movePicker.openPicker,
 				onExportLibrary,
+				onDiscoverCiting,
 				onEmptyTrash,
 				onOpenPaperNotes,
 				onStartCreate,

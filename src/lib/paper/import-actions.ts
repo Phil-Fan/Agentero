@@ -13,7 +13,11 @@ import { invokeApi } from "@/lib/core/ipc";
 import { logger } from "@/lib/core/logger";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
 import { currentLookupParentDir } from "@/lib/paper/library-actions";
-import { libraryStore, setLibraryIoBusy } from "@/lib/paper/library-store";
+import {
+	libraryStore,
+	setCitingScanDraft,
+	setLibraryIoBusy,
+} from "@/lib/paper/library-store";
 import {
 	addPapersByIdentifiers,
 	discardSkillDiscovery,
@@ -297,6 +301,20 @@ export function cancelSkillImport(): void {
 	for (const discovery of draft ?? []) {
 		void discardSkillDiscovery(discovery.discoveryId);
 	}
+}
+
+/** Import the checked reverse-citation candidates via the batch importer. */
+export async function confirmCitingImport(
+	identifiers: string[],
+): Promise<void> {
+	setCitingScanDraft(null);
+	if (identifiers.length === 0) return;
+	await lookupSubmit(identifiers, { parentDir: currentLookupParentDir() });
+}
+
+/** Nothing is staged for citing candidates, so closing is enough. */
+export function cancelCitingImport(): void {
+	setCitingScanDraft(null);
 }
 
 /**

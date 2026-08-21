@@ -9,6 +9,7 @@ import { PaperSearchDialog } from "@/components/dialogs/paper-search-dialog";
 import { SkillImportDialog } from "@/components/dialogs/skill-import-dialog";
 import { ZoteroMigrateDialog } from "@/components/dialogs/zotero-migrate-dialog";
 import { ZoteroSyncDialog } from "@/components/dialogs/zotero-sync-dialog";
+import { CitingScanDialog } from "@/components/library/citing-scan-dialog";
 import { EditPaperMetaDialog } from "@/components/library/edit-paper-meta-dialog";
 import { paletteCommands } from "@/components/shell/palette-commands";
 import {
@@ -17,8 +18,10 @@ import {
 	useVaultStore,
 } from "@/hooks/use-app-stores";
 import {
+	cancelCitingImport,
 	cancelPaperSearchImport,
 	cancelSkillImport,
+	confirmCitingImport,
 	confirmPaperSearchImport,
 	confirmSkillImport,
 } from "@/lib/paper/import-actions";
@@ -41,6 +44,7 @@ export function AppDialogs() {
 	const commandMode = useUiStore((s) => s.commandMode);
 	const libraryPapers = useLibraryStore((s) => s.papers);
 	const editMetaDraft = useLibraryStore((s) => s.editMetaDraft);
+	const citingScanDraft = useLibraryStore((s) => s.citingScanDraft);
 	const skillImportDraft = useUiStore((s) => s.skillImportDraft);
 	const paperSearchDraft = useUiStore((s) => s.paperSearchDraft);
 
@@ -68,6 +72,10 @@ export function AppDialogs() {
 				onCancel={cancelPaperSearchImport}
 				onConfirm={confirmPaperSearchImport}
 			/>
+			<CitingScanDialog
+				result={citingScanDraft}
+				onCancel={cancelCitingImport}
+				onConfirm={confirmCitingImport}
 			/>
 
 			<ExternalRenameDialog />

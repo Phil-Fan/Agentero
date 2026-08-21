@@ -48,9 +48,11 @@ export function useTreeContextMenu({
 	createDraft,
 	renameDraft,
 	libraryExportBusy,
+	citingScanBusy,
 	pathsForAction,
 	openMovePicker,
 	onExportLibrary,
+	onDiscoverCiting,
 	onEmptyTrash,
 	onOpenPaperNotes,
 	onStartCreate,
@@ -69,9 +71,11 @@ export function useTreeContextMenu({
 	createDraft: TreeCreateDraft | null;
 	renameDraft?: TreeRenameDraft | null;
 	libraryExportBusy: boolean;
+	citingScanBusy: boolean;
 	pathsForAction: (path: string) => string[];
 	openMovePicker: (paths: string[], anchor?: { x: number; y: number }) => void;
 	onExportLibrary?: () => void | Promise<void>;
+	onDiscoverCiting?: () => void | Promise<void>;
 	onEmptyTrash?: () => void | Promise<void>;
 	onOpenPaperNotes?: (paperDir: string) => void;
 	onStartCreate?: (kind: TreeCreateKind, parentPath: string) => void;
@@ -100,14 +104,20 @@ export function useTreeContextMenu({
 			) {
 				return;
 			}
-			// Library menu only when export is wired.
-			if (path === LIBRARY_VIRTUAL_PATH && !onExportLibrary) return;
+			// Library menu only when it has at least one action wired.
+			if (
+				path === LIBRARY_VIRTUAL_PATH &&
+				!onExportLibrary &&
+				!onDiscoverCiting
+			) {
+				return;
+			}
 			event.preventDefault();
 			event.stopPropagation();
 			setRevealError(null);
 			setMenu({ path, x: event.clientX, y: event.clientY });
 		},
-		[createDraft, renameDraft, onExportLibrary],
+		[createDraft, renameDraft, onExportLibrary, onDiscoverCiting],
 	);
 
 	const reveal = useCallback(
@@ -180,12 +190,19 @@ export function useTreeContextMenu({
 		menuNodeName: menuNode?.name,
 		isPaperMenu,
 		libraryExportBusy,
+		citingScanBusy,
 		canPasteAtTarget,
 		onClose: close,
 		onExportLibrary: onExportLibrary
 			? () => {
 					setMenu(null);
 					void onExportLibrary();
+				}
+			: undefined,
+		onDiscoverCiting: onDiscoverCiting
+			? () => {
+					setMenu(null);
+					void onDiscoverCiting();
 				}
 			: undefined,
 		onEmptyTrash: onEmptyTrash

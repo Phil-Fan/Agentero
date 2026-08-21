@@ -28,6 +28,7 @@ import {
 	lookupSubmit,
 } from "@/lib/paper/import-actions";
 import {
+	discoverCitingPapers,
 	downloadAllMissingAssets,
 	downloadPaperAssetsAction,
 	libraryExport,
@@ -93,6 +94,7 @@ const onDropMove = (paths: string[], targetPath: string) =>
 	void dropMovePaths(paths, targetPath);
 const onEmptyTrash = () => void emptyTrash();
 const onExportLibrary = () => void libraryExport();
+const onDiscoverCiting = () => void discoverCitingPapers();
 
 export function VaultSidebar() {
 	const fileTreeRef = useRef<FileTreeHandle>(null);
@@ -208,6 +210,8 @@ export function VaultSidebar() {
 					onEmptyTrash={onEmptyTrash}
 					onExportLibrary={onExportLibrary}
 					libraryExportBusy={ioBusy === "export"}
+					onDiscoverCiting={onDiscoverCiting}
+					citingScanBusy={ioBusy !== null}
 					onStartCreate={startCreate}
 					onDownloadPaperAssets={downloadPaperAssetsAction}
 					onDownloadAllMissingAssets={downloadAllMissingAssets}
