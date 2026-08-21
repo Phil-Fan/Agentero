@@ -12,7 +12,7 @@
 | Q1 | 树位置 | **Library + Recycle Bin 下方、真实 Vault 根目录上方**（已实现） |
 | Q2 | Cool Papers 呈现 | **内嵌 iframe + Host 代理协议** `agentero-coolpapers://`（已实现；见 §3.2） |
 | Q3 | 入库 | **已实现**：每行注入 `[入库]`，复用现成魔棒（见 §3.2.1） |
-| Q4 | P0 范围 | **已交付：广场壳 + Cool Papers 浏览入库 + Skill 推荐**；播客 / 论文推荐尚未实现 |
+| Q4 | P0 范围 | **已交付：广场壳 + Cool Papers 浏览入库 + Skill 推荐 + 订阅 + arXiv 推荐**；播客尚未实现 |
 | Q5 | ModelScope 论文 | **已实现**：同一代理模式，但站点是 SPA，另有取舍（见 §3.5） |
 | Q6 | 订阅 | **已落地**：广场下单一原生节点，本地 RSS/Atom；见 [`plaza-feeds.md`](plaza-feeds.md) |
 
@@ -68,7 +68,7 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 │   ├── ✨ Skill 推荐           agentero:plaza/skills
 │   ├── 📡 订阅                 agentero:plaza/feeds
 │   ├── 🎙️ 播客                 agentero:plaza/podcasts      ← 占位
-│   └── 🧭 推荐                 agentero:plaza/recommend
+│   └── 🔭 arXiv 推荐            agentero:plaza/arxiv-rec
 ├── papers/
 ├── notes/
 └── …
@@ -93,7 +93,7 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 | Skill 推荐 | `Sparkles` | Skill picks | Skill 推荐 |
 | 订阅 | `Rss` | Feeds | 订阅 |
 | 播客 | `Podcast` | Podcasts | 播客 |
-| 推荐 | `Compass` | For You | 推荐 |
+| 推荐 | `Telescope` | arXiv Daily | arXiv 推荐 |
 
 i18n：`sidebar:plaza.*`。
 
@@ -201,31 +201,44 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 - 空态文案：订阅源、单集列表与播放将在后续版本提供。  
 - 侧栏子节点可点，进入占位页（避免「死链」）。
 
-### 3.4 论文推荐 v0（P0）
+### 3.4 arXiv 推荐（已实现）
 
-**目标**：不依赖外部账号，仅用 **本地 catalog + 轻量信号** 给出可解释的「下一步可读」。
+**目标**：用 Vault 论文库当「兴趣语料」，对当天 arXiv 新论文排序，给出「今天该读什么」。思路对齐 [zotero-arxiv-daily](https://github.com/TideDra/zotero-arxiv-daily)，但语料是本地 catalog 而非 Zotero 云端。
 
-| 信号（v0） | 用法 |
+**管线**（`src-tauri/src/features/recommend/mod.rs`）
+
+| 步骤 | 做法 | 复用 |
+|---|---|---|
+| 候选 | 逐个分类 GET `https://rss.arxiv.org/rss/<cat>`，按 arXiv id 去重，丢弃空摘要 | `feeds::parse::parse_feed_bytes`（已 `clean_summary_text` + `extract_paper_url`） |
+| 语料 | catalog 中有 abstract 的论文，按 `added_at` 倒序，上限 2000 篇 | `papers::list_all_unique_by_id` |
+| 向量 | `POST {baseUrl}/embeddings`（batch，OpenAI 兼容），凭据取自设置 → Agent → Embedding | `network::client_builder`；请求形状抄 `translate_openai_compatible` |
+| 打分 | 归一化后 cosine；语料权重 `w_i = 1/(1+log10(i+1))` 归一化 → `score = Σ sim·w`，降序取 Top-20 | — |
+
+**缓存进 `catalog.sqlite`（schema v6）**，不新建库：
+
+| 表 | 作用 |
 |---|---|
-| 最近打开 / 最近入库 | 「继续阅读」「新入库未读」 |
-| `is_read === false` 且资源齐全 | 「待精读」 |
-| 同 tag 聚类 | 「与标签 X 相关的本地论文」 |
-| 阅读热力为空但已打开 | 「打开过但几乎未标注」 |
+| `embed_cache(text_hash, model, dim, vector)` | 摘要向量，key = sha256(title+abstract) + model；**语料只 embed 一次**，之后每天只为新增摘要付费。`vector` 是小端 f32 |
+| `arxiv_rec_state(id=1, computed_at, categories_json, results_json)` | 上次运行结果，页面/vault 打开可直接渲染 |
 
-**呈现**：分组列表（非 WebView）—
+**陈旧判定**：非 `force` 且 `computed_at` 是**当天**且分类集合未变 → 直接返回存量，完全不碰网络。换分类、跨天、或点刷新才重算。
 
-```
-推荐
-├── 待精读（未读且有 PDF/TeX）
-├── 最近入库
-└── 标签「…」下的其它论文
-```
+**命令**：`recommend_arxiv`（算，含 stale 短路）、`recommend_arxiv_last`（只读存量）。`AppSettingsStore` 必须在 `.await` 之前读（managed state 不能跨 await）。
 
-- 行点击 → **`openPaper`**（本地 PDF\|NOTES），因为条目已在库。  
-- 无足够本地数据：空态引导「用魔棒或 Cool Papers 发现论文，入库后这里会更有用」（Cool Papers 暂不入库时，引导魔棒 / 手动）。  
-- **隐私**：v0 **不上传**库内容到云端；仅本地计算。
+**vault 打开自动刷新**：`src/lib/lifecycle/register.ts` 的 `vault:opened` handler 里 fire-and-forget 调 `recommendArxiv`，仅本地 vault。因为命令自身 stale-only + 未配置早退，这里不做任何判断——作用是**预热当天结果**，让面板下次秒开。
 
-> 说明：P0 推荐是「本地库导读」，不是 Cool Papers 式外网发现。外网推荐留待入库打通之后。
+**页面**（`src/components/plaza/plaza-arxiv-rec-view.tsx`）
+
+- **header**：分类 chip 多选（默认 `ARXIV_FEED_CHIPS`，与订阅共用常量）+ 上次计算时间 + 刷新按钮。**不进 app settings** —— 分类就是页面状态，持久化在 `arxiv_rec_state`。
+- **body**：卡片列表（标题 / arXiv id / 分数 / 摘要三行截断），右上角外链 + 一键入库（走 `lookupSubmit`，与订阅同一条魔棒路线）。
+- **空态分三种**并给对应出路：未配置 embedding → 「打开 Agent 设置」按钮；库里没摘要 → 引导先导入论文；分类下无新论文 → 提示换分类。
+
+**取舍**
+
+- 首次或大库的整库 embedding 会慢一次（上千篇），之后靠 `embed_cache` 只增量；候选每天仅数十篇。接受首启一次性成本，换掉「每次都重算」。
+- 分类/Top-N 不做设置项：Top-20 是常量，分类留在 header。少一层配置面板。
+- 模型换了会导致缓存维度不一致；打分时按维度不匹配记 0 分，不会崩，但建议换模型后点一次刷新。
+- **隐私**：摘要会发给用户自己配置的 embedding 端点（BYOK）。未配置则整个功能静默不跑。
 
 ### 3.5 ModelScope 论文（已实现）
 
@@ -264,7 +277,7 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 
 | 模块 | 关系 |
 |---|---|
-| Library | 推荐 v0 只读 `paper_list` / 热力；不改 catalog schema |
+| Library | arXiv 推荐读 `paper_list` 当语料；缓存表 `embed_cache` / `arxiv_rec_state` 落在 catalog（schema v6），不动 `papers` 表 |
 | 魔棒 / 入库 | **已复用** `lookup_import_batch`：喂上游 URL，见 §3.2.1。订阅论文卡走同一条 |
 | 订阅 | 独立 XDG `feeds.sqlite`，不进 catalog；见 [`plaza-feeds.md`](plaza-feeds.md) |
 | PDF\|NOTES | 推荐打开本地论文时走现有阅读布局 |
@@ -295,7 +308,7 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 |---|---|---|
 | **P0a 壳** | 侧栏广场 + 三子节点；`PlazaView` 首页 + 路由 | 虚拟 path 不写盘；i18n；折叠位置正确 |
 | **P0b Cool Papers** | WebView 浏览 papers.cool + 导航 chrome + 外链 | 可分区浏览站点；失败可恢复 |
-| **P0c 推荐 v0** | 本地启发式分组列表 + openPaper | 有库时有分组；无库时空态 |
+| **P0c arXiv 推荐** | embedding 相似度 + 时间衰减排序 + 一键入库（已交付） | 配好 embedding 后有排序结果；未配置有引导空态 |
 | **P0d 播客** | 占位页 | 可进入、文案清晰 |
 | **P1** | 入库（解析 arXiv / 魔棒管线）、预览抽屉、批量加入 Library | 与魔棒语义一致 |
 | **P2** | 播客实体、Agent 推荐、命令面板、@ 广场条目 | — |
@@ -306,7 +319,7 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 - 广场 → Vault **批量入库**（单条已实现，见 §3.2.1）。  
 - 把 feed 写入 catalog（订阅条目缓存走 XDG，见 [`plaza-feeds.md`](plaza-feeds.md)）。  
 - 播客播放器。订阅管理见 [`plaza-feeds.md`](plaza-feeds.md)，不进本篇原 P0。  
-- 云端协同过滤或上传本地库。  
+- 云端协同过滤，或把本地库上传到 Agentero 自有服务。arXiv 推荐只把摘要发给**用户自己配置的** BYOK embedding 端点；未配置则整个功能不跑。  
 - 注入脚本只做导航上报与 `[入库]`；**不注入任何凭据 / API Key / 登录态**。
 
 ## 8. 实现落点（编码时）
@@ -318,7 +331,7 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 | 文件树 | `src/components/sidebar/file-tree/` |
 | 中间栏 | `src/components/plaza/*` + `doc-view` |
 | 站点内嵌 | `src/components/plaza/plaza-web-frame.tsx`（代理 iframe，两个站点来源共用；没有 Tauri 子 webview 封装） |
-| 推荐 | `src/lib/plaza/recommend.ts` + `src/components/plaza/recommend-view.tsx` |
+| arXiv 推荐 | `src-tauri/src/features/recommend/`（管线 + 命令）、`src/lib/recommend/index.ts`、`src/components/plaza/plaza-arxiv-rec-view.tsx`；缓存表见 `catalog/schema.rs` v6 |
 | 订阅 | [`plaza-feeds.md`](plaza-feeds.md) §6 |
 | i18n | `sidebar` / 独立 `plaza` ns |
 | Roadmap / Todo | 增加「广场 P0」条目 |
@@ -344,4 +357,5 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 *修订：2026-08-14 — 改为代理协议嵌入；壳 + Cool Papers 浏览 + 单条入库已落地；推荐 / 播客未实现。*
 *修订：2026-08-15 — 新增 ModelScope 论文来源；请求管道抽到 `site_proxy.rs` 并转发 method + body。*  
 *修订：2026-08-15 — 订阅列为广场来源，规格拆到 [`plaza-feeds.md`](plaza-feeds.md)。*  
-*修订：2026-08-15 — 订阅 MVP 落地（XDG `feeds.sqlite` + 原生双栏 + 论文入库）。*
+*修订：2026-08-15 — 订阅 MVP 落地（XDG `feeds.sqlite` + 原生双栏 + 论文入库）。*  
+*修订：2026-08-21 — arXiv 推荐落地（embedding + 时间衰减；缓存进 catalog schema v6；`vault:opened` 预热）。*

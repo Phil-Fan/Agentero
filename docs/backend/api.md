@@ -2335,6 +2335,22 @@ CLI 对照：`agentero usage which|timeline|summary|clear`（见 [cli.md](cli.md
 | `feeds_mark_imported` | 标记本机已入库 |
 | `feeds_resolve_body` | 打开详情时抓全文 → Markdown |
 
+### 3.10.5 广场 arXiv 推荐（catalog `embed_cache` / `arxiv_rec_state`）
+
+用 Vault 论文库摘要当语料，对当天 arXiv 新论文做 embedding 相似度 + 时间衰减排序。规格见 [../development/plaza.md](../development/plaza.md) §3.4。
+
+| Command | 说明 |
+|---|---|
+| `recommend_arxiv` | `{ vaultPath, categories?, topN?, force? }` → 排序结果。`categories` 缺省取上次运行、再缺省取 `cs.AI/cs.CL/cs.LG/cs.CV/stat.ML`；`topN` 默认 20（clamp 1–100） |
+| `recommend_arxiv_last` | `{ vaultPath }` → 上次结果或 `null`，只读不算 |
+
+- **陈旧短路**：非 `force` 且 `computed_at` 为当天、分类集合一致时，直接返回存量，不发任何网络请求。所以 `vault:opened` 的预热调用通常是零成本的。
+- **缓存**：`embed_cache(text_hash, model, dim, vector)` 按 sha256(title+abstract)+model 存小端 f32 向量，语料只 embed 一次；`arxiv_rec_state` 单行存上次运行。均在 catalog schema v6。
+- **凭据**：读设置 `embedding`（Base URL / API Key / Model），`POST {baseUrl}/embeddings`。
+- **结构化错误**（前端转空态）：`recommend.no_embedding` 未配置端点、`recommend.empty_corpus` 库里没摘要、`recommend.no_candidates` 分类下无新论文。
+
+前端入口：`src/lib/recommend/`。
+
 ### 3.11 界面与本地化（UI / i18n）
 
 #### `set_locale`（已实现）
