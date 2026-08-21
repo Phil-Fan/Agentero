@@ -270,10 +270,7 @@ impl WikiIndex {
     }
 
     pub fn rebuild(&mut self, vault_path: &str) -> Result<RebuildResult, String> {
-        let root = PathBuf::from(vault_path);
-        if !root.is_dir() {
-            return Err(format!("vault path is not a directory: {vault_path}"));
-        }
+        let root = crate::core::fs::resolve_vault(vault_path).map_err(|e| e.to_string())?;
 
         let files = collect_wiki_target_files(&root).map_err(|e| e.to_string())?;
         if cfg!(test) {
@@ -292,10 +289,7 @@ impl WikiIndex {
     /// Build a complete in-memory snapshot without reading or writing the
     /// derived on-disk cache. Read-only diagnostics use this path.
     pub fn rebuild_read_only(&mut self, vault_path: &str) -> Result<RebuildResult, String> {
-        let root = PathBuf::from(vault_path);
-        if !root.is_dir() {
-            return Err(format!("vault path is not a directory: {vault_path}"));
-        }
+        let root = crate::core::fs::resolve_vault(vault_path).map_err(|e| e.to_string())?;
         let files = collect_wiki_target_files(&root).map_err(|error| error.to_string())?;
         self.rebuild_from(vault_path, &root, files, Vec::new(), None, None)
     }
@@ -305,10 +299,7 @@ impl WikiIndex {
         vault_path: &str,
         cache_path: &Path,
     ) -> Result<RebuildResult, String> {
-        let root = PathBuf::from(vault_path);
-        if !root.is_dir() {
-            return Err(format!("vault path is not a directory: {vault_path}"));
-        }
+        let root = crate::core::fs::resolve_vault(vault_path).map_err(|e| e.to_string())?;
         let files = collect_wiki_target_files(&root).map_err(|error| error.to_string())?;
         if let Err(error) = discard_snapshot(cache_path) {
             log::warn!(target: "agentero::wiki", "{error}");

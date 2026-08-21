@@ -195,16 +195,8 @@ pub async fn parse_paper_body(
     args: PaperParseBodyArgs,
     cache: Option<&CapsCache>,
 ) -> Result<PaperParseResult, AppError> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
-    let path_rel = crate::core::fs::sanitize_vault_rel(&args.path)
-        .map_err(|_| AppError::message("invalid paper path"))?;
-    let paper_dir = vault.join(&path_rel);
-    if !paper_dir.is_dir() {
-        return Err(AppError::message("paper folder not found"));
-    }
+    let vault = crate::core::fs::resolve_vault(&args.vault_path)?;
+    let (paper_dir, path_rel) = crate::core::fs::resolve_paper_dir(&vault, &args.path)?;
     Ok(parse_paper_body_inner(
         &vault,
         &path_rel,

@@ -194,10 +194,7 @@ impl BridgeController {
         host_name: String,
         relay_endpoint: Option<String>,
     ) -> Result<BridgeStatus, AppError> {
-        let vault_root = PathBuf::from(vault_path.trim());
-        if !vault_root.is_dir() {
-            return Err(AppError::message("Bridge vault path is not a directory"));
-        }
+        let vault_root = crate::core::fs::resolve_vault(&vault_path)?;
         let host_name = host_name.trim().to_string();
         if host_name.is_empty() {
             return Err(AppError::message("Bridge host name is required"));

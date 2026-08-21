@@ -6,7 +6,6 @@ use crate::features::wiki::models::{
     WikiRenameHeadingResult, WikiResolveResponse, WikiSearchCandidate, WikiSearchCandidateKind,
 };
 use crate::features::wiki::WikiIndexState;
-use std::path::PathBuf;
 use tauri::State;
 
 #[derive(Debug, serde::Deserialize)]
@@ -152,10 +151,10 @@ pub async fn wiki_rename_heading(
 ) -> Result<ApiResult<WikiRenameHeadingResult>, String> {
     let index = index.handle();
     Ok(run_blocking(move || {
-        let vault = PathBuf::from(&args.vault_path);
-        if !vault.is_dir() {
-            return map_err(AppError::message("vault path is not a directory"));
-        }
+        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(error) => return map_err(error),
+        };
         let mut guard = match index.lock() {
             Ok(guard) => guard,
             Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),

@@ -80,10 +80,10 @@ pub fn doctor_set_dirty_paths(
 #[tauri::command]
 pub async fn doctor_check(args: DoctorCheckArgs) -> ApiResult<DoctorReport> {
     run_blocking(move || {
-        let vault = PathBuf::from(&args.vault_path);
-        if !vault.is_dir() {
-            return map_err(AppError::message("vault path is not a directory"));
-        }
+        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(error) => return map_err(error),
+        };
         match diagnose(&vault) {
             Ok(report) => ApiResult::ok(report),
             Err(error) => map_err(error),
@@ -103,10 +103,10 @@ pub async fn doctor_fix_catalog_duplicates(
     args: DoctorFixCatalogDuplicatesArgs,
 ) -> ApiResult<DuplicateRepairResult> {
     run_blocking(move || {
-        let vault = PathBuf::from(&args.vault_path);
-        if !vault.is_dir() {
-            return map_err(AppError::message("vault path is not a directory"));
-        }
+        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(error) => return map_err(error),
+        };
         match apply_catalog_duplicate_repairs(&vault) {
             Ok(result) => ApiResult::ok(result),
             Err(error) => map_err(error),
@@ -175,10 +175,10 @@ pub async fn doctor_apply_aliases(
 #[tauri::command]
 pub async fn doctor_plan_wikilinks(args: DoctorPlanWikilinksArgs) -> ApiResult<WikilinkRepairPlan> {
     run_blocking(move || {
-        let vault = PathBuf::from(&args.vault_path);
-        if !vault.is_dir() {
-            return map_err(AppError::message("vault path is not a directory"));
-        }
+        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(error) => return map_err(error),
+        };
         match plan_wikilink_repairs(&vault) {
             Ok(plan) => ApiResult::ok(plan),
             Err(error) => ApiResult::err_with_details(

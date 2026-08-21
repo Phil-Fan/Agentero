@@ -7,8 +7,8 @@ mod path;
 
 pub use local::LocalFs;
 pub use path::{
-    join_remote, normalize_rel, path_escapes_root, sanitize_vault_rel, FsCaps, FsDirEntry,
-    FsFileMeta,
+    ensure_vault_dir, join_remote, normalize_rel, path_escapes_root, resolve_paper_dir,
+    resolve_vault, sanitize_vault_rel, FsCaps, FsDirEntry, FsFileMeta,
 };
 
 use crate::core::error::AppError;

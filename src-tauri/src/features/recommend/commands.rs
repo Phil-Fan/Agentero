@@ -2,10 +2,9 @@
 
 use super::{last_result, recommend, RecommendResult};
 use crate::core::blocking::run_blocking;
-use crate::core::error::{map_err, ApiResult, AppError};
+use crate::core::error::{map_err, ApiResult};
 use crate::features::settings::AppSettingsStore;
 use serde::Deserialize;
-use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
 #[derive(Debug, Deserialize)]
@@ -31,10 +30,10 @@ pub async fn recommend_arxiv(
     app: AppHandle,
     args: RecommendArxivArgs,
 ) -> ApiResult<RecommendResult> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return map_err(AppError::message("vault path is not a directory"));
-    }
+    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+        Ok(vault) => vault,
+        Err(e) => return map_err(e),
+    };
     // Read managed state before awaiting: the guard must not cross an await.
     let embedding = app.state::<AppSettingsStore>().embedding_config();
     match recommend(&vault, args.categories, args.top_n, args.force, embedding).await {
@@ -55,10 +54,10 @@ pub async fn recommend_arxiv_last(
     args: RecommendArxivLastArgs,
 ) -> ApiResult<Option<RecommendResult>> {
     run_blocking(move || {
-        let vault = PathBuf::from(args.vault_path.trim());
-        if !vault.is_dir() {
-            return map_err(AppError::message("vault path is not a directory"));
-        }
+        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(e) => return map_err(e),
+        };
         match last_result(&vault) {
             Ok(result) => ApiResult::ok(result),
             Err(e) => map_err(e),

@@ -201,10 +201,7 @@ pub async fn migrate_zotero(
     progress: impl Fn(usize, usize, &str),
     app: Option<&tauri::AppHandle>,
 ) -> Result<ZoteroMigrateResult, AppError> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    let vault = crate::core::fs::resolve_vault(&args.vault_path)?;
     let zotero_dir = PathBuf::from(args.zotero_dir.trim());
     if !zotero_dir.is_dir() {
         return Err(AppError::message(

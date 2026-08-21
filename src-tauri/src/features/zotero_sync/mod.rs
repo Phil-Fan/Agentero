@@ -73,10 +73,8 @@ pub fn sync_zotero(
     args: ZoteroSyncArgs,
     progress: impl Fn(usize, usize, &str),
 ) -> Result<ZoteroSyncResult, AppError> {
-    let vault = Path::new(args.vault_path.trim());
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    let vault = crate::core::fs::resolve_vault(&args.vault_path)?;
+    let vault = vault.as_path();
     let zotero_dir = Path::new(args.zotero_dir.trim());
     if !zotero_dir.is_dir() {
         return Err(AppError::message(

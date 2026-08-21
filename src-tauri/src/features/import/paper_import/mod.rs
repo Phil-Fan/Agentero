@@ -104,9 +104,7 @@ pub async fn paper_commit(
     opts: PaperCommitOptions<'_>,
 ) -> Result<PaperCommitResult, AppError> {
     let vault = opts.vault;
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    crate::core::fs::ensure_vault_dir(vault)?;
     let parent_rel = normalize_parent_dir(opts.parent_dir)?;
     if meta.id.is_empty() {
         return Err(AppError::message("resolved metadata has empty id"));

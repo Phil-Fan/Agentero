@@ -130,13 +130,8 @@ pub async fn vault_tree_build(
             "vault_tree_build",
             format!("vault={}", trunc(&vault_path, 200)),
         );
-        let root = match vault_path_arg(&vault_path) {
-            Ok(root) if root.is_dir() => root,
-            Ok(_) => {
-                let err = AppError::message("vault path is not a directory");
-                op.finish_err(&err);
-                return map_err(err);
-            }
+        let root = match crate::core::fs::resolve_vault(&vault_path) {
+            Ok(root) => root,
             Err(err) => {
                 op.finish_err(&err);
                 return map_err(err);
@@ -222,10 +217,9 @@ pub async fn wiki_move(
 ) -> Result<ApiResult<WikiRenameResult>, String> {
     let index = index.handle();
     Ok(run_blocking(move || {
-        let vault = match vault_path_arg(&args.vault_path) {
-            Ok(vault) if vault.is_dir() => vault,
-            Ok(_) => return map_err(AppError::message("vault path is not a directory")),
-            Err(error) => return map_err(error),
+        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(err) => return map_err(err),
         };
         let mut guard = match index.lock() {
             Ok(guard) => guard,
@@ -269,10 +263,9 @@ pub async fn wiki_external_rename_preview(
     let index = index.handle();
     let repairs = repairs.inner().clone();
     Ok(run_blocking(move || {
-        let vault = match vault_path_arg(&args.vault_path) {
-            Ok(vault) if vault.is_dir() => vault,
-            Ok(_) => return map_err(AppError::message("vault path is not a directory")),
-            Err(error) => return map_err(error),
+        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(err) => return map_err(err),
         };
         let guard = match index.lock() {
             Ok(guard) => guard,
@@ -320,10 +313,9 @@ pub async fn wiki_apply_external_rename_repair(
     let index = index.handle();
     let repairs = repairs.inner().clone();
     Ok(run_blocking(move || {
-        let vault = match vault_path_arg(&args.vault_path) {
-            Ok(vault) if vault.is_dir() => vault,
-            Ok(_) => return map_err(AppError::message("vault path is not a directory")),
-            Err(error) => return map_err(error),
+        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(err) => return map_err(err),
         };
         let transaction = match repairs.get(&args.candidate_id) {
             Ok(transaction) => transaction,

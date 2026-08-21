@@ -143,9 +143,7 @@ pub fn install_discovered_skills(
     discovery_id: &str,
     selected_names: &[String],
 ) -> Result<Vec<SkillImportResult>, AppError> {
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    crate::core::fs::ensure_vault_dir(vault)?;
     let temp = discovery_dir(discovery_id)?;
     let archive = fs::read(temp.join("archive.tar.gz"))?;
     let metadata: serde_json::Value = serde_json::from_slice(&fs::read(temp.join("source.json"))?)?;

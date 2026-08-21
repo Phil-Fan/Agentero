@@ -527,10 +527,10 @@ fn read_source_cache(
 
 /// Build deterministic suggestions and residuals for Agent / manual review.
 pub fn plan_wikilink_repairs(vault: &Path) -> Result<WikilinkRepairPlan, DoctorRepairError> {
-    if !vault.is_dir() {
+    if let Err(e) = crate::core::fs::ensure_vault_dir(vault) {
         return Err(DoctorRepairError::new(
             "invalidVault",
-            "vault path is not a directory",
+            e.to_string(),
             Vec::new(),
         ));
     }
@@ -765,10 +765,10 @@ pub fn apply_wikilink_repairs(
     changes: &[WikilinkRepairChange],
     dirty_paths: &[String],
 ) -> Result<WikilinkRepairResult, DoctorRepairError> {
-    if !vault.is_dir() {
+    if let Err(e) = crate::core::fs::ensure_vault_dir(vault) {
         return Err(DoctorRepairError::new(
             "invalidVault",
-            "vault path is not a directory",
+            e.to_string(),
             Vec::new(),
         ));
     }

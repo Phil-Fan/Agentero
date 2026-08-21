@@ -153,9 +153,7 @@ pub fn set_ignored_alias_paths(
     paths: &[String],
     ignore: bool,
 ) -> Result<DoctorVaultState, AppError> {
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    crate::core::fs::ensure_vault_dir(vault)?;
     let mut state = load_doctor_state(vault);
     let mut set = state
         .ignored_alias_paths
@@ -770,10 +768,10 @@ pub fn apply_alias_repairs(
     changes: &[AliasRepairChange],
     dirty_paths: &[String],
 ) -> Result<AliasRepairResult, DoctorRepairError> {
-    if !vault.is_dir() {
+    if let Err(e) = crate::core::fs::ensure_vault_dir(vault) {
         return Err(DoctorRepairError::new(
             "invalidVault",
-            "vault path is not a directory",
+            e.to_string(),
             Vec::new(),
         ));
     }
@@ -945,9 +943,7 @@ pub fn apply_alias_repairs(
 /// whose path exists on disk (preferred), has the newest `updated_at`, and
 /// is shortest/lexicographically smallest as a final tie-breaker.
 pub fn apply_catalog_duplicate_repairs(vault: &Path) -> Result<DuplicateRepairResult, AppError> {
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    crate::core::fs::ensure_vault_dir(vault)?;
     papers::repair_duplicates(vault)
 }
 

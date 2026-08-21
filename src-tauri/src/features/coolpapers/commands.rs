@@ -1,10 +1,9 @@
 //! `paper_coolpapers_notes` / `paper_coolpapers_import` — papers.cool commands.
 
-use crate::core::error::{map_err, ApiResult, AppError};
+use crate::core::error::{map_err, ApiResult};
 use crate::core::log_util::{trunc, OpTimer};
 use crate::features::import::AssetProgressContext;
 use serde::Deserialize;
-use std::path::PathBuf;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,12 +52,13 @@ pub async fn paper_coolpapers_import(
         "paper_coolpapers_import",
         format!("branch={} id={}", args.branch, trunc(&args.id, 80)),
     );
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        let err = AppError::message("vault path is not a directory");
-        op.finish_err(&err);
-        return Ok(map_err(err));
-    }
+    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+        Ok(vault) => vault,
+        Err(err) => {
+            op.finish_err(&err);
+            return Ok(map_err(err));
+        }
+    };
     let result = super::page::import_page(super::page::ImportPageArgs {
         vault: &vault,
         parent_dir: &args.parent_dir,
@@ -90,12 +90,13 @@ pub async fn paper_coolpapers_notes(
             args.arxiv_id.as_deref().unwrap_or("-")
         ),
     );
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        let err = AppError::message("vault path is not a directory");
-        op.finish_err(&err);
-        return Ok(map_err(err));
-    }
+    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+        Ok(vault) => vault,
+        Err(err) => {
+            op.finish_err(&err);
+            return Ok(map_err(err));
+        }
+    };
     let result = super::fetch_notes(super::FetchNotesRequest {
         vault: &vault,
         paper_rel: &args.path,

@@ -224,12 +224,10 @@ pub async fn job_reconcile_vault(
     caps: State<'_, crate::features::catalog::CapsCache>,
     args: JobReconcileVaultArgs,
 ) -> Result<ApiResult<u32>, String> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return Ok(map_err(crate::core::error::AppError::message(
-            "vault path is not a directory",
-        )));
-    }
+    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+        Ok(vault) => vault,
+        Err(err) => return Ok(map_err(err)),
+    };
     let caps_handle = (*caps).clone();
     let scan_vault = vault.clone();
     let needing = tauri::async_runtime::spawn_blocking(move || {
@@ -268,12 +266,10 @@ pub async fn job_papers_needing_assets(
     caps: State<'_, crate::features::catalog::CapsCache>,
     args: JobPapersNeedingAssetsArgs,
 ) -> Result<ApiResult<Vec<String>>, String> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return Ok(map_err(crate::core::error::AppError::message(
-            "vault path is not a directory",
-        )));
-    }
+    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+        Ok(vault) => vault,
+        Err(err) => return Ok(map_err(err)),
+    };
     let caps_handle = (*caps).clone();
     let scan_vault = vault.clone();
     let needing = tauri::async_runtime::spawn_blocking(move || {

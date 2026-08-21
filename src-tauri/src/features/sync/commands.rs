@@ -59,11 +59,7 @@ fn vault_dir(vault_path: &str) -> Result<PathBuf, AppError> {
     if trimmed.is_empty() || trimmed.starts_with("remote:") {
         return Err(AppError::message("sync requires a local vault"));
     }
-    let dir = PathBuf::from(trimmed);
-    if !dir.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
-    Ok(dir)
+    crate::core::fs::resolve_vault(trimmed)
 }
 
 /// Current sync binding + last-pass info for the settings pane.

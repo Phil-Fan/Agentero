@@ -6,7 +6,7 @@
 
 use crate::core::blocking::run_blocking;
 use crate::core::error::{map_err, ApiResult, AppError};
-use crate::core::fs::sanitize_vault_rel;
+use crate::core::fs::{ensure_vault_dir, resolve_paper_dir, resolve_vault};
 use crate::features::catalog::papers::{self, PaperRecord};
 use crate::features::catalog::reading_activity;
 use crate::features::catalog::{probe_paper_caps, CapsCache};
@@ -35,10 +35,10 @@ pub struct PaperGetArgs {
 #[tauri::command]
 pub async fn paper_get(args: PaperGetArgs) -> ApiResult<PaperRecord> {
     run_blocking(move || {
-        let vault = PathBuf::from(args.vault_path.trim());
-        if !vault.is_dir() {
-            return map_err(AppError::message("vault path is not a directory"));
-        }
+        let vault = match resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(e) => return map_err(e),
+        };
 
         let result = if let Some(path) = args
             .path
@@ -106,17 +106,8 @@ fn paper_open_bundle_inner(
     path_raw: &str,
     cache: Option<&CapsCache>,
 ) -> Result<PaperOpenBundle, AppError> {
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
-    let path_rel = sanitize_vault_rel(path_raw.trim()).map_err(AppError::message)?;
-    if path_rel.is_empty() {
-        return Err(AppError::message("path is required"));
-    }
-    let paper_dir = vault.join(&path_rel);
-    if !paper_dir.is_dir() {
-        return Err(AppError::message("paper folder not found"));
-    }
+    ensure_vault_dir(vault)?;
+    let (paper_dir, path_rel) = resolve_paper_dir(vault, path_raw)?;
     let paper = papers::get_by_path(vault, &path_rel)?
         .ok_or_else(|| AppError::message("paper not found in catalog"))?;
     let caps = cache
@@ -152,10 +143,10 @@ pub struct PaperListArgs {
 #[tauri::command]
 pub async fn paper_list(args: PaperListArgs) -> ApiResult<Vec<PaperRecord>> {
     run_blocking(move || {
-        let vault = PathBuf::from(args.vault_path.trim());
-        if !vault.is_dir() {
-            return map_err(AppError::message("vault path is not a directory"));
-        }
+        let vault = match resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(e) => return map_err(e),
+        };
         match papers::list_all_unique_by_id(&vault) {
             Ok(rows) => ApiResult::ok(rows),
             Err(e) => map_err(e),
@@ -177,10 +168,10 @@ pub struct PaperSetIsReadArgs {
 #[tauri::command]
 pub async fn paper_set_is_read(args: PaperSetIsReadArgs) -> ApiResult<PaperRecord> {
     run_blocking(move || {
-        let vault = PathBuf::from(args.vault_path.trim());
-        if !vault.is_dir() {
-            return map_err(AppError::message("vault path is not a directory"));
-        }
+        let vault = match resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(e) => return map_err(e),
+        };
         let path = args.path.trim().trim_matches('/').replace('\\', "/");
         if path.is_empty() {
             return map_err(AppError::message("path is required"));
@@ -207,10 +198,10 @@ pub struct PaperUpdateMetaArgs {
 #[tauri::command]
 pub async fn paper_update_meta(args: PaperUpdateMetaArgs) -> ApiResult<PaperRecord> {
     run_blocking(move || {
-        let vault = PathBuf::from(args.vault_path.trim());
-        if !vault.is_dir() {
-            return map_err(AppError::message("vault path is not a directory"));
-        }
+        let vault = match resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(e) => return map_err(e),
+        };
         let path = args.path.trim().trim_matches('/').replace('\\', "/");
         if path.is_empty() {
             return map_err(AppError::message("path is required"));
@@ -280,10 +271,7 @@ fn move_inner(
     args: PaperMoveArgs,
     index: &mut crate::features::wiki::index::WikiIndex,
 ) -> Result<PaperMoveResult, AppError> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    let vault = resolve_vault(&args.vault_path)?;
     let (from, new_rel) =
         super::plan_paper_move_under(&vault, &args.from_rel, &args.dest_parent_rel)?;
     if new_rel == from {
@@ -485,10 +473,10 @@ pub struct PaperSetTagsArgs {
 #[tauri::command]
 pub async fn paper_set_tags(args: PaperSetTagsArgs) -> ApiResult<PaperRecord> {
     run_blocking(move || {
-        let vault = PathBuf::from(args.vault_path.trim());
-        if !vault.is_dir() {
-            return map_err(AppError::message("vault path is not a directory"));
-        }
+        let vault = match resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(e) => return map_err(e),
+        };
         let path = args.path.trim().trim_matches('/').replace('\\', "/");
         if path.is_empty() {
             return map_err(AppError::message("path is required"));
@@ -521,13 +509,14 @@ pub async fn paper_rescan(args: PaperRescanArgs) -> ApiResult<PaperRescanResult>
     run_blocking(move || {
         use crate::core::log_util::OpTimer;
 
-        let vault = PathBuf::from(args.vault_path.trim());
         let op = OpTimer::start("paper_rescan");
-        if !vault.is_dir() {
-            let err = AppError::message("vault path is not a directory");
-            op.finish_err(&err);
-            return map_err(err);
-        }
+        let vault = match resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(err) => {
+                op.finish_err(&err);
+                return map_err(err);
+            }
+        };
         match papers::rebuild_from_disk(&vault) {
             Ok(count) => {
                 op.finish_ok_extra(format!("count={count}"));
@@ -554,10 +543,10 @@ pub async fn paper_page_counts(
     args: PaperPageCountsArgs,
 ) -> ApiResult<std::collections::HashMap<String, i64>> {
     run_blocking(move || {
-        let vault = PathBuf::from(args.vault_path.trim());
-        if !vault.is_dir() {
-            return map_err(AppError::message("vault path is not a directory"));
-        }
+        let vault = match resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(e) => return map_err(e),
+        };
         match papers::list_page_counts(&vault) {
             Ok(counts) => ApiResult::ok(counts),
             Err(e) => map_err(e),
@@ -584,16 +573,17 @@ pub async fn paper_reading_activity_batch(
     run_blocking(move || {
         use crate::core::log_util::OpTimer;
 
-        let vault = PathBuf::from(args.vault_path.trim());
         let op = OpTimer::start_with(
             "paper_reading_activity_batch",
             format!("papers={}", args.paths.len()),
         );
-        if !vault.is_dir() {
-            let err = AppError::message("vault path is not a directory");
-            op.finish_err(&err);
-            return map_err(err);
-        }
+        let vault = match resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(err) => {
+                op.finish_err(&err);
+                return map_err(err);
+            }
+        };
         let out = reading_activity::collect_reading_activity(&vault, &args.paths);
         let points: usize = out.values().map(Vec::len).sum();
         op.finish_ok_extra(format!("points={points}"));
@@ -614,10 +604,10 @@ pub struct PaperSetPageCountsArgs {
 #[tauri::command]
 pub async fn paper_set_page_counts(args: PaperSetPageCountsArgs) -> ApiResult<()> {
     run_blocking(move || {
-        let vault = PathBuf::from(args.vault_path.trim());
-        if !vault.is_dir() {
-            return map_err(AppError::message("vault path is not a directory"));
-        }
+        let vault = match resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(e) => return map_err(e),
+        };
         let counts: Vec<(String, i64)> = args
             .counts
             .into_iter()

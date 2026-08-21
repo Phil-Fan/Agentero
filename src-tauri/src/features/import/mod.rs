@@ -298,10 +298,7 @@ pub async fn import_by_identifier_with_progress(
         paper_commit, AssetsPolicy, DedupePolicy, PaperCommitOptions,
     };
 
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    let vault = crate::core::fs::resolve_vault(&args.vault_path)?;
 
     let base = args
         .translator_base_url
@@ -367,10 +364,7 @@ pub async fn import_by_identifier_batch(
     app: Option<&AppHandle>,
     cache: Option<&CapsCache>,
 ) -> Result<LookupImportBatchResult, AppError> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    let vault = crate::core::fs::resolve_vault(&args.vault_path)?;
 
     let skills: Vec<SkillImportResult> = Vec::new();
     let mut skill_candidates: Vec<SkillDiscovery> = Vec::new();
@@ -557,16 +551,8 @@ pub async fn download_paper_assets_with_progress(
     app: Option<&AppHandle>,
     cache: Option<&CapsCache>,
 ) -> Result<AssetDownloadResult, AppError> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
-    let path_rel = crate::core::fs::sanitize_vault_rel(&args.path)
-        .map_err(|_| AppError::message("invalid paper path"))?;
-    let paper_dir = vault.join(&path_rel);
-    if !paper_dir.is_dir() {
-        return Err(AppError::message("paper folder not found"));
-    }
+    let vault = crate::core::fs::resolve_vault(&args.vault_path)?;
+    let (paper_dir, path_rel) = crate::core::fs::resolve_paper_dir(&vault, &args.path)?;
 
     let (id, arxiv_id, pdf_url, doi) = if let Ok(Some(row)) = papers::get_by_path(&vault, &path_rel)
     {
@@ -687,10 +673,7 @@ pub async fn import_local_pdfs(
     app: Option<&AppHandle>,
     cache: Option<&CapsCache>,
 ) -> Result<ImportLocalPdfResult, AppError> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    let vault = crate::core::fs::resolve_vault(&args.vault_path)?;
     let parent_rel = normalize_parent_dir(&args.parent_dir)?;
 
     let task_id = args.task_id.clone();

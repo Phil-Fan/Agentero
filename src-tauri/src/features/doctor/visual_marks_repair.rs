@@ -322,9 +322,7 @@ pub fn apply_visual_mark_repairs(
     changes: &[VisualMarkRepairChange],
     dirty_paths: &[String],
 ) -> Result<VisualMarkRepairResult, AppError> {
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    crate::core::fs::ensure_vault_dir(vault)?;
     let dirty: std::collections::HashSet<String> =
         dirty_paths.iter().map(|p| normalize_rel(p)).collect();
     let mut updated = Vec::new();

@@ -1263,19 +1263,8 @@ pub fn parse_lane(lane: Option<JobLane>) -> JobLane {
 }
 
 pub fn validate_job_paper(vault_path: &str, path_raw: &str) -> Result<(PathBuf, String), AppError> {
-    let vault = PathBuf::from(vault_path.trim());
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
-    let path = crate::core::fs::sanitize_vault_rel(path_raw.trim())
-        .map_err(|_| AppError::message("invalid paper path"))?;
-    if path.is_empty() {
-        return Err(AppError::message("path is required"));
-    }
-    let paper_dir = vault.join(&path);
-    if !paper_dir.is_dir() {
-        return Err(AppError::message("paper folder not found"));
-    }
+    let vault = crate::core::fs::resolve_vault(vault_path)?;
+    let (_, path) = crate::core::fs::resolve_paper_dir(&vault, path_raw)?;
     Ok((vault, path))
 }
 

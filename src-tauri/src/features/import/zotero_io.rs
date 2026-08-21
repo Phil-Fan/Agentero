@@ -11,7 +11,6 @@ use crate::core::error::AppError;
 use crate::features::catalog::papers::{self, PaperRecord};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::path::PathBuf;
 use std::time::Duration;
 #[cfg(feature = "desktop")]
 use tauri::AppHandle;
@@ -74,10 +73,7 @@ pub struct PaperImportResult {
 }
 
 pub async fn export_catalog(args: PaperExportArgs) -> Result<PaperExportResult, AppError> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    let vault = crate::core::fs::resolve_vault(&args.vault_path)?;
     let format = normalize_format(args.format.as_deref().unwrap_or("bibtex"))?;
     let base = resolve_base(args.translator_base_url.as_deref());
 
@@ -135,10 +131,7 @@ pub async fn import_catalog(
     args: PaperImportArgs,
     app: Option<&AppHandle>,
 ) -> Result<PaperImportResult, AppError> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    let vault = crate::core::fs::resolve_vault(&args.vault_path)?;
     let content = args.content.trim();
     if content.is_empty() {
         return Err(AppError::message("import content is empty"));

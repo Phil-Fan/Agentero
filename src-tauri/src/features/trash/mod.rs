@@ -100,9 +100,7 @@ fn write_manifest(batch_dir: &Path, manifest: &TrashManifest) -> Result<(), AppE
 /// the Library stays consistent; both are restored on [`restore_batch`].
 /// Skips empty / traversing / `.agentero` / `papers` root / missing paths.
 pub fn trash_paths(vault_root: &Path, rels: &[String]) -> Result<TrashResult, AppError> {
-    if !vault_root.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    crate::core::fs::ensure_vault_dir(vault_root)?;
     let now = chrono::Utc::now();
     let batch_id = format!(
         "{}-{}",
@@ -182,9 +180,7 @@ pub fn trash_paths(vault_root: &Path, rels: &[String]) -> Result<TrashResult, Ap
 /// Aborts without changes if any original path has since been re-created, so a
 /// restore never clobbers newer content.
 pub fn restore_batch(vault_root: &Path, batch_id: &str) -> Result<usize, AppError> {
-    if !vault_root.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    crate::core::fs::ensure_vault_dir(vault_root)?;
     validate_batch_id(batch_id)?;
     let batch_dir = vault_root.join(TRASH_REL).join(batch_id);
     let manifest = read_manifest(&batch_dir)?;
@@ -254,9 +250,7 @@ pub fn list_trash(vault_root: &Path) -> Result<Vec<TrashEntry>, AppError> {
 /// Restore a single recycle-bin item to its original path (files + catalog rows).
 /// Aborts if the original path has reappeared. Returns the restored rel path.
 pub fn restore_item(vault_root: &Path, batch_id: &str, stored: &str) -> Result<String, AppError> {
-    if !vault_root.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    crate::core::fs::ensure_vault_dir(vault_root)?;
     validate_batch_id(batch_id)?;
     let batch_dir = vault_root.join(TRASH_REL).join(batch_id);
     let mut manifest = read_manifest(&batch_dir)?;
@@ -291,9 +285,7 @@ pub fn restore_item(vault_root: &Path, batch_id: &str, stored: &str) -> Result<S
 
 /// Permanently delete a single recycle-bin item.
 pub fn purge_item(vault_root: &Path, batch_id: &str, stored: &str) -> Result<(), AppError> {
-    if !vault_root.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    crate::core::fs::ensure_vault_dir(vault_root)?;
     validate_batch_id(batch_id)?;
     let batch_dir = vault_root.join(TRASH_REL).join(batch_id);
     let mut manifest = read_manifest(&batch_dir)?;

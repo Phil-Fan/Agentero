@@ -54,12 +54,8 @@ impl WikiHeadingRenameTransaction {
         new_text: &str,
         dirty_paths: &[String],
     ) -> Result<Self, WikiRenameError> {
-        if !vault_root.is_dir() {
-            return Err(WikiRenameError::new(
-                WikiRenameErrorCode::InvalidPath,
-                "vault path is not a directory",
-            ));
-        }
+        crate::core::fs::ensure_vault_dir(vault_root)
+            .map_err(|e| WikiRenameError::new(WikiRenameErrorCode::InvalidPath, e.to_string()))?;
         if index.vault_path.as_deref() != vault_root.to_str() {
             return Err(WikiRenameError::new(
                 WikiRenameErrorCode::IndexStale,

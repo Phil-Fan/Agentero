@@ -49,10 +49,7 @@ pub struct VaultSearchResult {
 
 /// Search the Vault's Markdown files for all whitespace-separated terms (AND).
 pub fn vault_search(args: VaultSearchArgs) -> Result<VaultSearchResult, AppError> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        return Err(AppError::message("vault path is not a directory"));
-    }
+    let vault = crate::core::fs::resolve_vault(&args.vault_path)?;
 
     let terms: Vec<String> = args
         .query

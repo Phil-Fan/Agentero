@@ -4,7 +4,6 @@
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::core::log_util::{trunc, OpTimer};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,12 +61,13 @@ pub async fn paper_refs_parse(
         "paper_refs_parse",
         format!("path={} force={}", trunc(&args.path, 120), args.force),
     );
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        let err = AppError::message("vault path is not a directory");
-        op.finish_err(&err);
-        return Ok(map_err(err));
-    }
+    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+        Ok(vault) => vault,
+        Err(err) => {
+            op.finish_err(&err);
+            return Ok(map_err(err));
+        }
+    };
     Ok(op.finish_result(super::parse_paper_refs(&vault, &args.path, true, args.force).await))
 }
 
@@ -79,12 +79,13 @@ pub async fn paper_refs_list(args: PaperRefsListArgs) -> ApiResult<Option<super:
             "paper_refs_list",
             format!("path={}", trunc(&args.path, 120)),
         );
-        let vault = PathBuf::from(args.vault_path.trim());
-        if !vault.is_dir() {
-            let err = AppError::message("vault path is not a directory");
-            op.finish_err(&err);
-            return map_err(err);
-        }
+        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(err) => {
+                op.finish_err(&err);
+                return map_err(err);
+            }
+        };
         let rel = match crate::core::fs::sanitize_vault_rel(&args.path) {
             Ok(rel) => rel,
             Err(_) => {
@@ -117,12 +118,13 @@ pub async fn paper_refs_graph(args: PaperRefsGraphArgs) -> ApiResult<super::Cite
                 args.depth.unwrap_or(1)
             ),
         );
-        let vault = PathBuf::from(args.vault_path.trim());
-        if !vault.is_dir() {
-            let err = AppError::message("vault path is not a directory");
-            op.finish_err(&err);
-            return map_err(err);
-        }
+        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+            Ok(vault) => vault,
+            Err(err) => {
+                op.finish_err(&err);
+                return map_err(err);
+            }
+        };
         let center = args
             .center
             .as_deref()
@@ -163,12 +165,13 @@ pub async fn library_citing_scan(
             args.since_days, args.budget, args.force
         ),
     );
-    let vault = PathBuf::from(args.vault_path.trim());
-    if !vault.is_dir() {
-        let err = AppError::message("vault path is not a directory");
-        op.finish_err(&err);
-        return Ok(map_err(err));
-    }
+    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
+        Ok(vault) => vault,
+        Err(err) => {
+            op.finish_err(&err);
+            return Ok(map_err(err));
+        }
+    };
 
     let mut opts = super::citing::ScanOptions::default();
     if let Some(days) = args.since_days {
