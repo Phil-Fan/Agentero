@@ -20,5 +20,6 @@
 | [mark-cli-roadmap.md](mark-cli-roadmap.md) | \#170 阅读标注**内置进 CLI**（方案/命令面/边界）+ 基础→上层→Skill；与 [CLI 文档](../backend/cli.md) 分发衔接 |
 | [mark-locate-lazy.md](mark-locate-lazy.md) | 文字定位：打开 PDF 再算（惰性，默认主路径） |
 | [mark-locate-eager.md](mark-locate-eager.md) | 文字定位：标注时算（即时 B1 viewer / 可选 B2 headless） |
+| [refactor-audit-2026-08.md](refactor-audit-2026-08.md) | 工程实现审计：重复代码 / 耦合度 / 质量简洁性六维调研 + TS/RS 类型单源（tauri-specta）方案 + P0–P3 重构路线图 |
 
 macOS 签名与公证（已实现流程说明）在 [`../bug_fix/macos-signing.md`](../bug_fix/macos-signing.md)。
