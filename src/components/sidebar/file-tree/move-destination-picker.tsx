@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PopoverContent } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePapersOrgFolders } from "@/hooks/use-papers-org-folders";
 import { normalizePath } from "@/lib/core/path";
 import { cn } from "@/lib/core/utils";
@@ -55,34 +54,32 @@ export function MoveDestinationPicker({
 				<p className="font-medium text-xs text-foreground">
 					{t("fileTree.moveToFolder", { count: sourcePaths.length })}
 				</p>
-				<ScrollArea className="h-40 rounded-md border">
-					<div className="space-y-0.5 p-1">
-						{folders.map((folder) => {
-							const active = !typed && selectedFolder === folder;
-							return (
-								<button
-									key={folder}
-									type="button"
-									disabled={busy}
-									className={cn(
-										"flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors hover:bg-accent",
-										active && "bg-muted",
-									)}
-									onClick={() => handleSelect(folder)}
-								>
-									<span className="flex-1 truncate font-mono">
-										{folder === "papers"
-											? t("fileTree.movePicker.papersRoot")
-											: folder}
-									</span>
-									{active ? (
-										<Check className="size-3 shrink-0 text-primary" />
-									) : null}
-								</button>
-							);
-						})}
-					</div>
-				</ScrollArea>
+				<div className="agentero-scroll max-h-[min(50vh,18rem)] space-y-0.5 overflow-y-auto overscroll-contain rounded-md border p-1">
+					{folders.map((folder) => {
+						const active = !typed && selectedFolder === folder;
+						return (
+							<button
+								key={folder}
+								type="button"
+								disabled={busy}
+								className={cn(
+									"group flex w-full items-start gap-2 rounded px-2 py-1 text-left text-xs transition-colors hover:bg-accent",
+									active && "bg-muted",
+								)}
+								onClick={() => handleSelect(folder)}
+							>
+								<span className="min-w-0 flex-1 truncate font-mono group-hover:overflow-visible group-hover:whitespace-normal group-hover:break-all">
+									{folder === "papers"
+										? t("fileTree.movePicker.papersRoot")
+										: folder}
+								</span>
+								{active ? (
+									<Check className="mt-0.5 size-3 shrink-0 text-primary" />
+								) : null}
+							</button>
+						);
+					})}
+				</div>
 				<div className="space-y-1">
 					<Label
 						htmlFor="move-new-folder"
