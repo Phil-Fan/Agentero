@@ -204,6 +204,9 @@ pub struct LayoutProviderConfig {
     pub base_url: String,
     #[serde(default)]
     pub model: String,
+    /// OCR prompt override; empty → the engine derives one from the model id.
+    #[serde(default)]
+    pub prompt: String,
 }
 
 impl Default for AppSettings {
@@ -469,6 +472,19 @@ impl AppSettingsStore {
             None
         } else {
             Some(model.to_string())
+        }
+    }
+
+    /// Resolve a layout-provider OCR prompt override (empty → None).
+    pub fn layout_prompt(&self, provider: &str) -> Option<String> {
+        let key = layout_provider_settings_key(provider)?;
+        let guard = self.inner.lock().ok()?;
+        let cfg = guard.layout.provider_configs.get(key)?;
+        let prompt = cfg.prompt.trim();
+        if prompt.is_empty() {
+            None
+        } else {
+            Some(prompt.to_string())
         }
     }
 }
@@ -738,6 +754,7 @@ fn normalize_layout_provider_configs(configs: &mut HashMap<String, LayoutProvide
         // runs on every save and echoes back into the settings UI.
         cfg.base_url = cfg.base_url.trim().to_string();
         cfg.model = cfg.model.trim().to_string();
+        cfg.prompt = cfg.prompt.trim().to_string();
     }
 }
 
@@ -869,6 +886,7 @@ mod tests {
                 api_key: "  sk-x  ".into(),
                 base_url: " https://api.siliconflow.cn/v1 ".into(),
                 model: "  deepseek-ai/DeepSeek-OCR  ".into(),
+                prompt: "  Convert to markdown.  ".into(),
             },
         );
         s.layout
@@ -881,6 +899,7 @@ mod tests {
         assert_eq!(cfg.api_key, "sk-x");
         assert_eq!(cfg.base_url, "https://api.siliconflow.cn/v1");
         assert_eq!(cfg.model, "deepseek-ai/DeepSeek-OCR");
+        assert_eq!(cfg.prompt, "Convert to markdown.");
 
         let mut ok = AppSettings::default();
         ok.layout.parser_backend = "openaiCompatible".into();

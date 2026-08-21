@@ -29,7 +29,10 @@ export type ProviderCardDescriptor = {
 	id: LayoutProviderId;
 	requiresApiKey: boolean;
 	supportsBaseUrl: boolean;
-	requiresModel?: boolean;
+	/** Model id is user-selectable (body-parse engines only). */
+	supportsModel?: boolean;
+	/** OCR prompt is user-overridable (VLM engines only). */
+	supportsPrompt?: boolean;
 };
 
 export const LAYOUT_PROVIDERS: Record<LayoutBackend, LayoutProviderDescriptor> =
@@ -72,13 +75,19 @@ export const PARSER_PROVIDERS: Record<
 	ProviderCardDescriptor | null
 > = {
 	local: null,
-	paddle: { id: "paddle", requiresApiKey: true, supportsBaseUrl: false },
+	paddle: {
+		id: "paddle",
+		requiresApiKey: true,
+		supportsBaseUrl: false,
+		supportsModel: true,
+	},
 	mineru: { id: "mineru", requiresApiKey: true, supportsBaseUrl: true },
 	openaiCompatible: {
 		id: "openaiCompatible",
 		requiresApiKey: true,
 		supportsBaseUrl: true,
-		requiresModel: true,
+		supportsModel: true,
+		supportsPrompt: true,
 	},
 };
 
@@ -90,6 +99,46 @@ export function parserProviderFor(
 			backend
 		] ?? null
 	);
+}
+
+/** A layout backend rendered as a credential card (no model / prompt). */
+export function layoutProviderCard(
+	descriptor: LayoutProviderDescriptor,
+): ProviderCardDescriptor | null {
+	if (!isRemoteLayoutProvider(descriptor)) return null;
+	return {
+		id: descriptor.id,
+		requiresApiKey: descriptor.requiresApiKey,
+		supportsBaseUrl: descriptor.supportsBaseUrl,
+	};
+}
+
+/**
+ * One card per provider, unioning the fields each role needs. The layout and
+ * body-parse engines can point at the same provider, and that single card must
+ * still expose the model / prompt inputs the parser role requires.
+ */
+export function mergeProviderCards(
+	cards: readonly (ProviderCardDescriptor | null)[],
+): ProviderCardDescriptor[] {
+	const merged = new Map<LayoutProviderId, ProviderCardDescriptor>();
+	for (const card of cards) {
+		if (!card) continue;
+		const previous = merged.get(card.id);
+		merged.set(
+			card.id,
+			previous
+				? {
+						id: card.id,
+						requiresApiKey: previous.requiresApiKey || card.requiresApiKey,
+						supportsBaseUrl: previous.supportsBaseUrl || card.supportsBaseUrl,
+						supportsModel: previous.supportsModel || card.supportsModel,
+						supportsPrompt: previous.supportsPrompt || card.supportsPrompt,
+					}
+				: card,
+		);
+	}
+	return [...merged.values()];
 }
 
 export function isRemoteLayoutProvider(

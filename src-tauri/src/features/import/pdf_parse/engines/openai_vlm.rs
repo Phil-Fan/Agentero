@@ -25,7 +25,7 @@ struct VlmTarget {
     base: String,
     api_key: String,
     model: String,
-    prompt: &'static str,
+    prompt: String,
 }
 
 fn resolve_target(ctx: &BodyParseCtx<'_>) -> Result<VlmTarget, AppError> {
@@ -56,7 +56,15 @@ fn resolve_target(ctx: &BodyParseCtx<'_>) -> Result<VlmTarget, AppError> {
         .filter(|m| !m.is_empty())
         .unwrap_or(DEFAULT_VLM_MODEL)
         .to_string();
-    let prompt = prompt_for_model(&model);
+    // An explicit prompt wins; otherwise fall back to the per-model default.
+    let prompt = ctx
+        .credentials
+        .prompt
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| prompt_for_model(&model).to_string());
     Ok(VlmTarget {
         base,
         api_key,
@@ -208,7 +216,7 @@ async fn ocr_page(
             "role": "user",
             "content": [
                 { "type": "image_url", "image_url": { "url": data_url } },
-                { "type": "text", "text": target.prompt }
+                { "type": "text", "text": target.prompt.as_str() }
             ]
         }]
     });
@@ -253,6 +261,9 @@ async fn ocr_page(
 fn clean_page_markdown(text: &str) -> String {
     let stripped = strip_tagged_span(text, "<|ref|>", "<|/ref|>");
     let stripped = strip_tagged_span(&stripped, "<|det|>", "<|/det|>");
+    // PaddleOCR-VL emits `<|LOC_123|>` box tokens when driven by a prompt it
+    // does not recognize; they are pure noise in a body document.
+    let stripped = strip_tagged_span(&stripped, "<|LOC_", "|>");
     let trimmed = stripped.trim();
     let unfenced = trimmed
         .strip_prefix("```markdown")
@@ -309,6 +320,11 @@ mod tests {
             "# Attention Is All You Need  \n\n\nBody line."
         );
         assert_eq!(clean_page_markdown("```markdown\n# H1\n```"), "# H1");
+        // PaddleOCR-VL box tokens (emitted for unrecognized prompts).
+        assert_eq!(
+            clean_page_markdown("Attention Is All You Need<|LOC_342|><|LOC_185|>"),
+            "Attention Is All You Need"
+        );
         assert_eq!(clean_page_markdown("plain"), "plain");
         // Unterminated markers must not swallow the remaining content.
         assert_eq!(clean_page_markdown("<|det|>dangling"), "dangling");
@@ -333,6 +349,7 @@ mod tests {
         let api_key = std::env::var("AGENTERO_VLM_API_KEY").expect("set AGENTERO_VLM_API_KEY");
         let model = std::env::var("AGENTERO_VLM_MODEL").unwrap_or_default();
         let base_url = std::env::var("AGENTERO_VLM_BASE_URL").unwrap_or_default();
+        let prompt = std::env::var("AGENTERO_VLM_PROMPT").unwrap_or_default();
 
         let dir = std::env::temp_dir().join(format!("vlm-live-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -351,6 +368,7 @@ mod tests {
                 api_key: Some(api_key),
                 base_url: (!base_url.is_empty()).then_some(base_url),
                 model: (!model.is_empty()).then_some(model),
+                prompt: (!prompt.is_empty()).then_some(prompt),
             },
         };
         let target = resolve_target(&ctx).expect("resolve target");

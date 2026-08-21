@@ -560,11 +560,13 @@ function normalizeLayoutProviderConfigs(
 			apiKey?: unknown;
 			baseUrl?: unknown;
 			model?: unknown;
+			prompt?: unknown;
 		};
 		out[id] = {
 			apiKey: typeof cfg.apiKey === "string" ? cfg.apiKey.trim() : "",
 			baseUrl: typeof cfg.baseUrl === "string" ? cfg.baseUrl.trim() : "",
 			model: typeof cfg.model === "string" ? cfg.model.trim() : "",
+			prompt: typeof cfg.prompt === "string" ? cfg.prompt.trim() : "",
 		};
 	}
 	return out;

@@ -37,8 +37,10 @@ export type LayoutProviderConfig = {
 	apiKey: string;
 	/** Optional endpoint override; empty → provider default. */
 	baseUrl: string;
-	/** Model id (OpenAI-compatible OCR only); empty → provider default. */
+	/** Model id; empty → provider default. */
 	model: string;
+	/** OCR prompt override; empty → derived from the model id. */
+	prompt: string;
 };
 
 export type LayoutSettings = {
@@ -61,7 +63,7 @@ export const LAYOUT_PADDLE_JOBS_URL =
 export const LAYOUT_PROVIDER_DOCS_URLS: Record<LayoutProviderId, string> = {
 	paddle: "https://aistudio.baidu.com/account/accessToken",
 	mineru: "https://mineru.net/apiManage/token",
-	openaiCompatible: "https://cloud.siliconflow.cn/account/ak",
+	openaiCompatible: "https://cloud.siliconflow.cn/i/b9LPNHTG",
 };
 
 /** Official endpoints, shown as the Base URL placeholder (override-capable providers only). */
@@ -72,11 +74,16 @@ export const LAYOUT_PROVIDER_DEFAULT_BASE_URLS: Partial<
 	openaiCompatible: "https://api.siliconflow.cn/v1",
 };
 
-/** SiliconFlow-hosted OCR models offered as datalist presets. */
-export const VLM_MODEL_PRESETS = [
-	"PaddlePaddle/PaddleOCR-VL-1.5",
-	"deepseek-ai/DeepSeek-OCR",
-] as const;
+/** Model-id suggestions offered as a datalist per provider. */
+export const PROVIDER_MODEL_PRESETS: Partial<
+	Record<LayoutProviderId, readonly string[]>
+> = {
+	paddle: ["PaddleOCR-VL-1.6", "PaddleOCR-VL-1.5"],
+	openaiCompatible: [
+		"PaddlePaddle/PaddleOCR-VL-1.5",
+		"deepseek-ai/DeepSeek-OCR",
+	],
+};
 
 export function isLayoutBackend(value: unknown): value is LayoutBackend {
 	return (

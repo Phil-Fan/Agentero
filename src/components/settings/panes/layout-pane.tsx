@@ -28,9 +28,10 @@ import {
 	probeLayoutProvider,
 } from "@/lib/pdf/layout/provider-config";
 import {
-	isRemoteLayoutProvider,
 	LAYOUT_PROVIDERS,
+	layoutProviderCard,
 	layoutProviderFor,
+	mergeProviderCards,
 	type ProviderCardDescriptor,
 	parserProviderFor,
 } from "@/lib/pdf/layout/providers";
@@ -41,7 +42,7 @@ import {
 	LAYOUT_PROVIDER_DOCS_URLS,
 	type LayoutProviderConfig,
 	PARSER_BACKENDS,
-	VLM_MODEL_PRESETS,
+	PROVIDER_MODEL_PRESETS,
 } from "@/lib/pdf/layout/settings";
 import type { AppSettings } from "@/lib/settings";
 
@@ -57,6 +58,7 @@ const EMPTY_PROVIDER_CONFIG: LayoutProviderConfig = {
 	apiKey: "",
 	baseUrl: "",
 	model: "",
+	prompt: "",
 };
 
 type ProbeStatus = "idle" | "probing" | "ok" | "fail";
@@ -96,13 +98,13 @@ export function LayoutPane({
 }) {
 	const { t } = useTranslation("settings");
 	const layout = settings.layout;
-	const provider = layoutProviderFor(layout.backend);
-	const remoteProvider =
-		provider && isRemoteLayoutProvider(provider) ? provider : null;
-	const parserProvider = parserProviderFor(layout.parserBackend);
-	// Same provider powers both engines → a single credential card is enough.
-	const showParserCard =
-		parserProvider !== null && parserProvider.id !== remoteProvider?.id;
+	const layoutDescriptor = layoutProviderFor(layout.backend);
+	// One card per provider: when both engines share a provider the merged
+	// card still shows the model / prompt inputs the parser role needs.
+	const cards = mergeProviderCards([
+		layoutDescriptor ? layoutProviderCard(layoutDescriptor) : null,
+		parserProviderFor(layout.parserBackend),
+	]);
 
 	return (
 		<div className="space-y-6">
@@ -168,22 +170,14 @@ export function LayoutPane({
 				</SettingsRow>
 			</SettingsGroup>
 
-			{remoteProvider ? (
+			{cards.map((card) => (
 				<ProviderConfigCard
-					key={remoteProvider.id}
-					provider={remoteProvider}
+					key={card.id}
+					provider={card}
 					settings={settings}
 					patch={patch}
 				/>
-			) : null}
-			{showParserCard ? (
-				<ProviderConfigCard
-					key={`parser-${parserProvider.id}`}
-					provider={parserProvider}
-					settings={settings}
-					patch={patch}
-				/>
-			) : null}
+			))}
 		</div>
 	);
 }
@@ -209,6 +203,9 @@ function ProviderConfigCard({
 	const displayBaseUrl =
 		draft.baseUrl !== undefined ? draft.baseUrl : stored.baseUrl;
 	const displayModel = draft.model !== undefined ? draft.model : stored.model;
+	const displayPrompt =
+		draft.prompt !== undefined ? draft.prompt : stored.prompt;
+	const modelPresets = PROVIDER_MODEL_PRESETS[provider.id] ?? [];
 	const configured = displayApiKey.trim().length > 0;
 
 	const runProbe = useCallback(
@@ -238,9 +235,12 @@ function ProviderConfigCard({
 		const baseUrl = provider.supportsBaseUrl
 			? (draft.baseUrl !== undefined ? draft.baseUrl : stored.baseUrl).trim()
 			: "";
-		const model = provider.requiresModel
+		const model = provider.supportsModel
 			? (draft.model !== undefined ? draft.model : stored.model).trim()
 			: stored.model;
+		const prompt = provider.supportsPrompt
+			? (draft.prompt !== undefined ? draft.prompt : stored.prompt).trim()
+			: stored.prompt;
 		if (!apiKey) {
 			setStatus("idle");
 			return;
@@ -248,7 +248,7 @@ function ProviderConfigCard({
 		const { displayLayout } = await persistLayoutProviderConfig({
 			settings,
 			provider: provider.id,
-			config: { apiKey, baseUrl, model },
+			config: { apiKey, baseUrl, model, prompt },
 		});
 		patch({ layout: displayLayout });
 		setDraft({});
@@ -369,7 +369,7 @@ function ProviderConfigCard({
 							/>
 						</div>
 					) : null}
-					{provider.requiresModel ? (
+					{provider.supportsModel ? (
 						<div className="flex items-center gap-2">
 							<Label
 								htmlFor={`layout-provider-${provider.id}-model`}
@@ -381,7 +381,7 @@ function ProviderConfigCard({
 								id={`layout-provider-${provider.id}-model`}
 								type="text"
 								value={displayModel}
-								placeholder={VLM_MODEL_PRESETS[0]}
+								placeholder={modelPresets[0]}
 								list={`layout-provider-${provider.id}-model-presets`}
 								className="h-8 min-w-0 flex-1 font-mono text-xs placeholder:text-muted-foreground/50"
 								spellCheck={false}
@@ -391,10 +391,32 @@ function ProviderConfigCard({
 								}
 							/>
 							<datalist id={`layout-provider-${provider.id}-model-presets`}>
-								{VLM_MODEL_PRESETS.map((preset) => (
+								{modelPresets.map((preset) => (
 									<option key={preset} value={preset} />
 								))}
 							</datalist>
+						</div>
+					) : null}
+					{provider.supportsPrompt ? (
+						<div className="flex items-center gap-2">
+							<Label
+								htmlFor={`layout-provider-${provider.id}-prompt`}
+								className="w-20 shrink-0 font-normal text-muted-foreground text-xs"
+							>
+								{t("layout.providerConfig.prompt.label")}
+							</Label>
+							<Input
+								id={`layout-provider-${provider.id}-prompt`}
+								type="text"
+								value={displayPrompt}
+								placeholder={t("layout.providerConfig.prompt.placeholder")}
+								className="h-8 min-w-0 flex-1 font-mono text-xs placeholder:text-muted-foreground/50"
+								spellCheck={false}
+								autoComplete="off"
+								onChange={(e) =>
+									setDraft((prev) => ({ ...prev, prompt: e.target.value }))
+								}
+							/>
 						</div>
 					) : null}
 				</div>

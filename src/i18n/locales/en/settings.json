@@ -364,31 +364,31 @@
 		"backend": {
 			"label": "Analysis engine",
 			"local": "On-device",
-			"paddle": "Paddle API",
-			"mineru": "MinerU (Cloud API)"
+			"paddle": "Paddle",
+			"mineru": "MinerU"
 		},
 		"parserBackend": {
 			"label": "Body parse engine",
-			"local": "On-device (liteparse)",
-			"paddle": "Paddle API",
-			"mineru": "MinerU (Cloud API)",
-			"openaiCompatible": "OpenAI-compatible (VLM OCR)"
+			"local": "On-device",
+			"paddle": "Paddle",
+			"mineru": "MinerU",
+			"openaiCompatible": "OpenAI-compatible"
 		},
 		"providerConfig": {
 			"section": "Provider settings",
 			"providerName": {
-				"paddle": "PP-StructureV3",
+				"paddle": "Paddle",
 				"mineru": "MinerU",
 				"openaiCompatible": "OpenAI-compatible"
 			},
 			"confirm": "Confirm",
 			"openDocs": "Open provider website",
-			"openDocsLabel": "Get an access token",
+			"openDocsLabel": "Get an API key",
 			"notConfigured": "Not configured",
 			"apiKey": {
 				"label": "API key",
 				"placeholder": {
-					"paddle": "Enter your PP-StructureV3 access token",
+					"paddle": "Enter your Paddle access token",
 					"mineru": "Enter your MinerU API token",
 					"openaiCompatible": "Enter your API key (e.g. SiliconFlow)"
 				}
@@ -398,6 +398,10 @@
 			},
 			"model": {
 				"label": "Model"
+			},
+			"prompt": {
+				"label": "Prompt",
+				"placeholder": "Auto, based on the model"
 			},
 			"probeIdle": "Not checked yet",
 			"probeOk": "Available",

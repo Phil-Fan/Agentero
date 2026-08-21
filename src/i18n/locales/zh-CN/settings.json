@@ -364,31 +364,31 @@
 		"backend": {
 			"label": "解析方式",
 			"local": "本地推理",
-			"paddle": "Paddle API",
-			"mineru": "MinerU（云端 API）"
+			"paddle": "Paddle",
+			"mineru": "MinerU"
 		},
 		"parserBackend": {
 			"label": "正文解析引擎",
-			"local": "本地解析（liteparse）",
-			"paddle": "Paddle API",
-			"mineru": "MinerU（云端 API）",
-			"openaiCompatible": "OpenAI 兼容（VLM OCR）"
+			"local": "本地解析",
+			"paddle": "Paddle",
+			"mineru": "MinerU",
+			"openaiCompatible": "OpenAI 兼容"
 		},
 		"providerConfig": {
 			"section": "服务商配置",
 			"providerName": {
-				"paddle": "PP-StructureV3",
+				"paddle": "Paddle",
 				"mineru": "MinerU",
-				"openaiCompatible": "OpenAI 兼容服务"
+				"openaiCompatible": "OpenAI 兼容"
 			},
 			"confirm": "确定",
 			"openDocs": "打开服务商网站",
-			"openDocsLabel": "获取访问令牌",
+			"openDocsLabel": "获取 API Key",
 			"notConfigured": "未配置",
 			"apiKey": {
 				"label": "API Key",
 				"placeholder": {
-					"paddle": "填写 PP-StructureV3 访问令牌",
+					"paddle": "填写 Paddle 访问令牌",
 					"mineru": "填写 MinerU API Token",
 					"openaiCompatible": "填写 API Key（如硅基流动）"
 				}
@@ -398,6 +398,10 @@
 			},
 			"model": {
 				"label": "模型"
+			},
+			"prompt": {
+				"label": "提示词",
+				"placeholder": "留空则按模型自动选择"
 			},
 			"probeIdle": "尚未检测",
 			"probeOk": "可用",

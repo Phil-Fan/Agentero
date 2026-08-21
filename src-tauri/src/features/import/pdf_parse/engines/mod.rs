@@ -36,6 +36,8 @@ pub struct EngineCredentials {
     pub api_key: Option<String>,
     pub base_url: Option<String>,
     pub model: Option<String>,
+    /// OCR prompt override; `None` → the engine derives one from the model id.
+    pub prompt: Option<String>,
 }
 
 pub struct BodyParseCtx<'a> {
@@ -112,6 +114,7 @@ pub fn refresh_parser_config(store: &AppSettingsStore) {
                 api_key: store.layout_api_key(provider),
                 base_url: store.layout_base_url(provider),
                 model: store.layout_model(provider),
+                prompt: store.layout_prompt(provider),
             },
         );
     }
