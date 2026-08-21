@@ -52,7 +52,7 @@ export type PaperMetadata = {
 	/** Remote HTML URL only (e.g. https://arxiv.org/html/1706.03762) */
 	html_url?: string;
 	source_url?: string;
-	body_source?: "latex" | "html" | "pdf" | "ocr";
+	body_source?: "latex" | "html" | "pdf" | "ocr" | "mineru" | "paddle" | "vlm";
 	body_quality?: "high" | "medium" | "low";
 	bibtex_key?: string;
 	citation_count?: number;

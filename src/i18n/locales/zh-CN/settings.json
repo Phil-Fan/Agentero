@@ -367,11 +367,19 @@
 			"paddle": "Paddle API",
 			"mineru": "MinerU（云端 API）"
 		},
+		"parserBackend": {
+			"label": "正文解析引擎",
+			"local": "本地解析（liteparse）",
+			"paddle": "Paddle API",
+			"mineru": "MinerU（云端 API）",
+			"openaiCompatible": "OpenAI 兼容（VLM OCR）"
+		},
 		"providerConfig": {
 			"section": "服务商配置",
 			"providerName": {
 				"paddle": "PP-StructureV3",
-				"mineru": "MinerU"
+				"mineru": "MinerU",
+				"openaiCompatible": "OpenAI 兼容服务"
 			},
 			"confirm": "确定",
 			"openDocs": "打开服务商网站",
@@ -381,11 +389,15 @@
 				"label": "API Key",
 				"placeholder": {
 					"paddle": "填写 PP-StructureV3 访问令牌",
-					"mineru": "填写 MinerU API Token"
+					"mineru": "填写 MinerU API Token",
+					"openaiCompatible": "填写 API Key（如硅基流动）"
 				}
 			},
 			"baseUrl": {
 				"label": "Base URL"
+			},
+			"model": {
+				"label": "模型"
 			},
 			"probeIdle": "尚未检测",
 			"probeOk": "可用",

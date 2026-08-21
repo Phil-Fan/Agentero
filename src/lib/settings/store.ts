@@ -9,6 +9,7 @@ import {
 	DEFAULT_LAYOUT_SETTINGS,
 	isLayoutBackend,
 	isLayoutProviderId,
+	isParserBackend,
 	type LayoutSettings,
 } from "@/lib/pdf/layout/settings";
 import {
@@ -538,6 +539,9 @@ function normalizeLayoutSettings(
 	if (isLayoutBackend(raw.backend)) {
 		base.backend = raw.backend;
 	}
+	if (isParserBackend(raw.parserBackend)) {
+		base.parserBackend = raw.parserBackend;
+	}
 	base.providerConfigs = normalizeLayoutProviderConfigs(
 		(raw as { providerConfigs?: unknown }).providerConfigs,
 	);
@@ -552,10 +556,15 @@ function normalizeLayoutProviderConfigs(
 	for (const [id, value] of Object.entries(raw)) {
 		if (!isLayoutProviderId(id)) continue;
 		if (!value || typeof value !== "object") continue;
-		const cfg = value as { apiKey?: unknown; baseUrl?: unknown };
+		const cfg = value as {
+			apiKey?: unknown;
+			baseUrl?: unknown;
+			model?: unknown;
+		};
 		out[id] = {
 			apiKey: typeof cfg.apiKey === "string" ? cfg.apiKey.trim() : "",
 			baseUrl: typeof cfg.baseUrl === "string" ? cfg.baseUrl.trim() : "",
+			model: typeof cfg.model === "string" ? cfg.model.trim() : "",
 		};
 	}
 	return out;

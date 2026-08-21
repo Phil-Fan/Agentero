@@ -31,13 +31,17 @@ import {
 	isRemoteLayoutProvider,
 	LAYOUT_PROVIDERS,
 	layoutProviderFor,
-	type RemoteLayoutProviderDescriptor,
+	type ProviderCardDescriptor,
+	parserProviderFor,
 } from "@/lib/pdf/layout/providers";
 import {
 	isLayoutBackend,
+	isParserBackend,
 	LAYOUT_PROVIDER_DEFAULT_BASE_URLS,
 	LAYOUT_PROVIDER_DOCS_URLS,
 	type LayoutProviderConfig,
+	PARSER_BACKENDS,
+	VLM_MODEL_PRESETS,
 } from "@/lib/pdf/layout/settings";
 import type { AppSettings } from "@/lib/settings";
 
@@ -52,6 +56,7 @@ function openExternalUrl(url: string): void {
 const EMPTY_PROVIDER_CONFIG: LayoutProviderConfig = {
 	apiKey: "",
 	baseUrl: "",
+	model: "",
 };
 
 type ProbeStatus = "idle" | "probing" | "ok" | "fail";
@@ -94,6 +99,10 @@ export function LayoutPane({
 	const provider = layoutProviderFor(layout.backend);
 	const remoteProvider =
 		provider && isRemoteLayoutProvider(provider) ? provider : null;
+	const parserProvider = parserProviderFor(layout.parserBackend);
+	// Same provider powers both engines → a single credential card is enough.
+	const showParserCard =
+		parserProvider !== null && parserProvider.id !== remoteProvider?.id;
 
 	return (
 		<div className="space-y-6">
@@ -127,12 +136,50 @@ export function LayoutPane({
 						</SelectContent>
 					</Select>
 				</SettingsRow>
+				<SettingsRow
+					label={t("layout.parserBackend.label")}
+					htmlFor="layout-parser-backend"
+				>
+					<Select
+						value={layout.parserBackend}
+						onValueChange={(value) => {
+							if (isParserBackend(value)) {
+								patch({ layout: { ...layout, parserBackend: value } });
+							}
+						}}
+					>
+						<SelectTrigger
+							id="layout-parser-backend"
+							size="sm"
+							className="min-w-[200px] max-w-[280px]"
+						>
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent className="max-h-72">
+							{PARSER_BACKENDS.map((backend) => (
+								<SelectItem key={backend} value={backend}>
+									{t(
+										`layout.parserBackend.${backend}` as "layout.parserBackend.local",
+									)}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</SettingsRow>
 			</SettingsGroup>
 
 			{remoteProvider ? (
 				<ProviderConfigCard
 					key={remoteProvider.id}
 					provider={remoteProvider}
+					settings={settings}
+					patch={patch}
+				/>
+			) : null}
+			{showParserCard ? (
+				<ProviderConfigCard
+					key={`parser-${parserProvider.id}`}
+					provider={parserProvider}
 					settings={settings}
 					patch={patch}
 				/>
@@ -146,7 +193,7 @@ function ProviderConfigCard({
 	settings,
 	patch,
 }: {
-	provider: RemoteLayoutProviderDescriptor;
+	provider: ProviderCardDescriptor;
 	settings: AppSettings;
 	patch: (p: Partial<AppSettings>) => void;
 }) {
@@ -161,6 +208,7 @@ function ProviderConfigCard({
 		draft.apiKey !== undefined ? draft.apiKey : stored.apiKey;
 	const displayBaseUrl =
 		draft.baseUrl !== undefined ? draft.baseUrl : stored.baseUrl;
+	const displayModel = draft.model !== undefined ? draft.model : stored.model;
 	const configured = displayApiKey.trim().length > 0;
 
 	const runProbe = useCallback(
@@ -190,6 +238,9 @@ function ProviderConfigCard({
 		const baseUrl = provider.supportsBaseUrl
 			? (draft.baseUrl !== undefined ? draft.baseUrl : stored.baseUrl).trim()
 			: "";
+		const model = provider.requiresModel
+			? (draft.model !== undefined ? draft.model : stored.model).trim()
+			: stored.model;
 		if (!apiKey) {
 			setStatus("idle");
 			return;
@@ -197,7 +248,7 @@ function ProviderConfigCard({
 		const { displayLayout } = await persistLayoutProviderConfig({
 			settings,
 			provider: provider.id,
-			config: { apiKey, baseUrl },
+			config: { apiKey, baseUrl, model },
 		});
 		patch({ layout: displayLayout });
 		setDraft({});
@@ -316,6 +367,34 @@ function ProviderConfigCard({
 									setDraft((prev) => ({ ...prev, baseUrl: e.target.value }))
 								}
 							/>
+						</div>
+					) : null}
+					{provider.requiresModel ? (
+						<div className="flex items-center gap-2">
+							<Label
+								htmlFor={`layout-provider-${provider.id}-model`}
+								className="w-20 shrink-0 font-normal text-muted-foreground text-xs"
+							>
+								{t("layout.providerConfig.model.label")}
+							</Label>
+							<Input
+								id={`layout-provider-${provider.id}-model`}
+								type="text"
+								value={displayModel}
+								placeholder={VLM_MODEL_PRESETS[0]}
+								list={`layout-provider-${provider.id}-model-presets`}
+								className="h-8 min-w-0 flex-1 font-mono text-xs placeholder:text-muted-foreground/50"
+								spellCheck={false}
+								autoComplete="off"
+								onChange={(e) =>
+									setDraft((prev) => ({ ...prev, model: e.target.value }))
+								}
+							/>
+							<datalist id={`layout-provider-${provider.id}-model-presets`}>
+								{VLM_MODEL_PRESETS.map((preset) => (
+									<option key={preset} value={preset} />
+								))}
+							</datalist>
 						</div>
 					) : null}
 				</div>

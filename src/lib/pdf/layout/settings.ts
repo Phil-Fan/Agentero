@@ -4,8 +4,12 @@
  * real API key; the WebView only ever sees a `*` mask.
  */
 
-/** Layout provider ids with remote credentials. */
-export const LAYOUT_PROVIDER_IDS = ["paddle", "mineru"] as const;
+/** Layout provider ids with remote credentials (shared with the body parser). */
+export const LAYOUT_PROVIDER_IDS = [
+	"paddle",
+	"mineru",
+	"openaiCompatible",
+] as const;
 export type LayoutProviderId = (typeof LAYOUT_PROVIDER_IDS)[number];
 
 /**
@@ -13,22 +17,39 @@ export type LayoutProviderId = (typeof LAYOUT_PROVIDER_IDS)[number];
  * - `paddle`: remote PP-StructureV3 async job API (`/api/v2/ocr/jobs`).
  * - `mineru`: remote MinerU batch extract API (`/api/v4/file-urls/batch`).
  */
-export const LAYOUT_BACKENDS = ["local", ...LAYOUT_PROVIDER_IDS] as const;
+export const LAYOUT_BACKENDS = ["local", "paddle", "mineru"] as const;
 export type LayoutBackend = (typeof LAYOUT_BACKENDS)[number];
+
+/**
+ * PAPER.md body-parse engine (`local` = liteparse; the rest run in the cloud
+ * and fall back to local on failure). `openaiCompatible` is per-page VLM OCR
+ * through an OpenAI-style `/chat/completions` endpoint (SiliconFlow preset).
+ */
+export const PARSER_BACKENDS = [
+	"local",
+	"paddle",
+	"mineru",
+	"openaiCompatible",
+] as const;
+export type ParserBackend = (typeof PARSER_BACKENDS)[number];
 
 export type LayoutProviderConfig = {
 	apiKey: string;
 	/** Optional endpoint override; empty → provider default. */
 	baseUrl: string;
+	/** Model id (OpenAI-compatible OCR only); empty → provider default. */
+	model: string;
 };
 
 export type LayoutSettings = {
 	backend: LayoutBackend;
+	parserBackend: ParserBackend;
 	providerConfigs: Partial<Record<LayoutProviderId, LayoutProviderConfig>>;
 };
 
 export const DEFAULT_LAYOUT_SETTINGS: LayoutSettings = {
 	backend: "local",
+	parserBackend: "local",
 	providerConfigs: {},
 };
 
@@ -40,6 +61,7 @@ export const LAYOUT_PADDLE_JOBS_URL =
 export const LAYOUT_PROVIDER_DOCS_URLS: Record<LayoutProviderId, string> = {
 	paddle: "https://aistudio.baidu.com/account/accessToken",
 	mineru: "https://mineru.net/apiManage/token",
+	openaiCompatible: "https://cloud.siliconflow.cn/account/ak",
 };
 
 /** Official endpoints, shown as the Base URL placeholder (override-capable providers only). */
@@ -47,12 +69,26 @@ export const LAYOUT_PROVIDER_DEFAULT_BASE_URLS: Partial<
 	Record<LayoutProviderId, string>
 > = {
 	mineru: "https://mineru.net",
+	openaiCompatible: "https://api.siliconflow.cn/v1",
 };
+
+/** SiliconFlow-hosted OCR models offered as datalist presets. */
+export const VLM_MODEL_PRESETS = [
+	"PaddlePaddle/PaddleOCR-VL-1.5",
+	"deepseek-ai/DeepSeek-OCR",
+] as const;
 
 export function isLayoutBackend(value: unknown): value is LayoutBackend {
 	return (
 		typeof value === "string" &&
 		(LAYOUT_BACKENDS as readonly string[]).includes(value)
+	);
+}
+
+export function isParserBackend(value: unknown): value is ParserBackend {
+	return (
+		typeof value === "string" &&
+		(PARSER_BACKENDS as readonly string[]).includes(value)
 	);
 }
 

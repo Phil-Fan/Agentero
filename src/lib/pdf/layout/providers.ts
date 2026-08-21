@@ -7,6 +7,7 @@ import type { LayoutSidecarMode } from "@/lib/pdf/layout/io";
 import type {
 	LayoutBackend,
 	LayoutProviderId,
+	ParserBackend,
 } from "@/lib/pdf/layout/settings";
 
 export type LayoutProviderDescriptor = {
@@ -19,8 +20,16 @@ export type LayoutProviderDescriptor = {
 };
 
 export type RemoteLayoutProviderDescriptor = LayoutProviderDescriptor & {
-	id: LayoutProviderId;
+	id: Exclude<LayoutBackend, "local">;
 	kind: "remote";
+};
+
+/** Credential-card shape shared by the layout and body-parser provider UIs. */
+export type ProviderCardDescriptor = {
+	id: LayoutProviderId;
+	requiresApiKey: boolean;
+	supportsBaseUrl: boolean;
+	requiresModel?: boolean;
 };
 
 export const LAYOUT_PROVIDERS: Record<LayoutBackend, LayoutProviderDescriptor> =
@@ -54,6 +63,32 @@ export function layoutProviderFor(
 	return (
 		(LAYOUT_PROVIDERS as Record<string, LayoutProviderDescriptor>)[backend] ??
 		null
+	);
+}
+
+/** PAPER.md body-parser provider cards (`local` needs no credentials). */
+export const PARSER_PROVIDERS: Record<
+	ParserBackend,
+	ProviderCardDescriptor | null
+> = {
+	local: null,
+	paddle: { id: "paddle", requiresApiKey: true, supportsBaseUrl: false },
+	mineru: { id: "mineru", requiresApiKey: true, supportsBaseUrl: true },
+	openaiCompatible: {
+		id: "openaiCompatible",
+		requiresApiKey: true,
+		supportsBaseUrl: true,
+		requiresModel: true,
+	},
+};
+
+export function parserProviderFor(
+	backend: string,
+): ProviderCardDescriptor | null {
+	return (
+		(PARSER_PROVIDERS as Record<string, ProviderCardDescriptor | null>)[
+			backend
+		] ?? null
 	);
 }
 

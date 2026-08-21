@@ -125,7 +125,7 @@ export function LayoutStep({
 		const { displayLayout } = await persistLayoutProviderConfig({
 			settings,
 			provider: provider.id,
-			config: { apiKey, baseUrl },
+			config: { apiKey, baseUrl, model: stored?.model ?? "" },
 			backend: provider.id,
 		});
 		patch({ layout: displayLayout });
