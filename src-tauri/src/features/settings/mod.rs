@@ -178,6 +178,9 @@ pub struct TranslateProviderConfig {
 pub struct LayoutSettings {
     #[serde(default = "default_layout_backend")]
     pub backend: String,
+    /// PAPER.md body-parse engine: `local` | `paddle` | `mineru` | `openaiCompatible`.
+    #[serde(default = "default_parser_backend")]
+    pub parser_backend: String,
     #[serde(default)]
     pub provider_configs: HashMap<String, LayoutProviderConfig>,
 }
@@ -186,6 +189,7 @@ impl Default for LayoutSettings {
     fn default() -> Self {
         Self {
             backend: default_layout_backend(),
+            parser_backend: default_parser_backend(),
             provider_configs: HashMap::new(),
         }
     }
@@ -198,6 +202,8 @@ pub struct LayoutProviderConfig {
     pub api_key: String,
     #[serde(default)]
     pub base_url: String,
+    #[serde(default)]
+    pub model: String,
 }
 
 impl Default for AppSettings {
@@ -325,6 +331,9 @@ fn default_translate_source() -> String {
 fn default_layout_backend() -> String {
     "local".into()
 }
+fn default_parser_backend() -> String {
+    "local".into()
+}
 
 /// In-memory + file-backed settings store.
 pub struct AppSettingsStore {
@@ -413,6 +422,16 @@ impl AppSettingsStore {
             .unwrap_or_else(default_layout_backend)
     }
 
+    /// PAPER.md body-parse engine backend (`local` when unset).
+    pub fn parser_backend(&self) -> String {
+        self.inner
+            .lock()
+            .ok()
+            .map(|guard| guard.layout.parser_backend.clone())
+            .filter(|backend| !backend.trim().is_empty())
+            .unwrap_or_else(default_parser_backend)
+    }
+
     /// Resolve a layout-provider API key by provider id (e.g. `paddle`).
     /// Used by the layout_remote commands so the WebView never needs the key.
     pub fn layout_api_key(&self, provider: &str) -> Option<String> {
@@ -437,6 +456,19 @@ impl AppSettingsStore {
             None
         } else {
             Some(base_url.to_string())
+        }
+    }
+
+    /// Resolve a layout-provider model id by provider id (empty → None).
+    pub fn layout_model(&self, provider: &str) -> Option<String> {
+        let key = layout_provider_settings_key(provider)?;
+        let guard = self.inner.lock().ok()?;
+        let cfg = guard.layout.provider_configs.get(key)?;
+        let model = cfg.model.trim();
+        if model.is_empty() {
+            None
+        } else {
+            Some(model.to_string())
         }
     }
 }
@@ -507,6 +539,7 @@ pub fn layout_provider_settings_key(provider: &str) -> Option<&'static str> {
     match provider.trim().to_ascii_lowercase().as_str() {
         "paddle" => Some("paddle"),
         "mineru" => Some("mineru"),
+        "openaicompatible" => Some("openaiCompatible"),
         _ => None,
     }
 }
@@ -689,17 +722,22 @@ fn normalize(s: &mut AppSettings) {
     if !LAYOUT_BACKENDS.contains(&s.layout.backend.as_str()) {
         s.layout.backend = default_layout_backend();
     }
+    const PARSER_BACKENDS: &[&str] = &["local", "paddle", "mineru", "openaiCompatible"];
+    if !PARSER_BACKENDS.contains(&s.layout.parser_backend.as_str()) {
+        s.layout.parser_backend = default_parser_backend();
+    }
     normalize_layout_provider_configs(&mut s.layout.provider_configs);
 }
 
 fn normalize_layout_provider_configs(configs: &mut HashMap<String, LayoutProviderConfig>) {
-    const PROVIDERS: &[&str] = &["paddle", "mineru"];
+    const PROVIDERS: &[&str] = &["paddle", "mineru", "openaiCompatible"];
     configs.retain(|k, _| PROVIDERS.contains(&k.as_str()));
     for cfg in configs.values_mut() {
         cfg.api_key = cfg.api_key.trim().to_string();
         // Keep trailing slashes (same reason as translate configs): normalize
         // runs on every save and echoes back into the settings UI.
         cfg.base_url = cfg.base_url.trim().to_string();
+        cfg.model = cfg.model.trim().to_string();
     }
 }
 
@@ -819,6 +857,43 @@ mod tests {
             Some("openaiCompatible")
         );
         assert_eq!(commercial_provider_settings_key("deeplx"), None);
+    }
+
+    #[test]
+    fn normalize_parser_backend_and_openai_compatible_config() {
+        let mut s = AppSettings::default();
+        s.layout.parser_backend = "bogus".into();
+        s.layout.provider_configs.insert(
+            "openaiCompatible".into(),
+            LayoutProviderConfig {
+                api_key: "  sk-x  ".into(),
+                base_url: " https://api.siliconflow.cn/v1 ".into(),
+                model: "  deepseek-ai/DeepSeek-OCR  ".into(),
+            },
+        );
+        s.layout
+            .provider_configs
+            .insert("unknown".into(), LayoutProviderConfig::default());
+        normalize(&mut s);
+        assert_eq!(s.layout.parser_backend, "local");
+        assert!(!s.layout.provider_configs.contains_key("unknown"));
+        let cfg = s.layout.provider_configs.get("openaiCompatible").unwrap();
+        assert_eq!(cfg.api_key, "sk-x");
+        assert_eq!(cfg.base_url, "https://api.siliconflow.cn/v1");
+        assert_eq!(cfg.model, "deepseek-ai/DeepSeek-OCR");
+
+        let mut ok = AppSettings::default();
+        ok.layout.parser_backend = "openaiCompatible".into();
+        normalize(&mut ok);
+        assert_eq!(ok.layout.parser_backend, "openaiCompatible");
+    }
+
+    #[test]
+    fn layout_provider_key_accepts_openai_compatible() {
+        assert_eq!(
+            layout_provider_settings_key("OPENAICOMPATIBLE"),
+            Some("openaiCompatible")
+        );
     }
 
     #[test]
