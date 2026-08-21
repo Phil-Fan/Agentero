@@ -9,6 +9,7 @@ import {
 	Check,
 	Download,
 	ExternalLink,
+	Languages,
 	Loader2,
 	RefreshCw,
 } from "lucide-react";
@@ -34,6 +35,7 @@ import {
 	recommendArxivLast,
 } from "@/lib/recommend";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
+import { runTranslate } from "@/lib/translate";
 import { getVaultPath } from "@/lib/vault/store";
 
 /** Empty-state reason, so the panel can offer the matching next action. */
@@ -48,6 +50,8 @@ export function PlazaArxivRecView({ className }: { className?: string }) {
 	const [computedAt, setComputedAt] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [emptyReason, setEmptyReason] = useState<EmptyReason>(null);
+	const [translations, setTranslations] = useState<Record<string, string>>({});
+	const [translating, setTranslating] = useState(false);
 	const loadedRef = useRef(false);
 
 	const handleError = useCallback((error: unknown) => {
@@ -121,6 +125,38 @@ export function PlazaArxivRecView({ className }: { className?: string }) {
 		[categories, run],
 	);
 
+	const translateAll = useCallback(async () => {
+		if (translating || items.length === 0) return;
+		setTranslating(true);
+		const results = await Promise.allSettled(
+			items.map((item) =>
+				runTranslate({
+					text: item.abstract,
+					context: { surface: "arxiv-rec", paperId: item.arxivId },
+				}),
+			),
+		);
+		const next: Record<string, string> = { ...translations };
+		let failed = 0;
+		items.forEach((item, i) => {
+			const r = results[i];
+			if (r.status === "fulfilled") {
+				next[item.arxivId] = r.value;
+			} else {
+				failed += 1;
+			}
+		});
+		setTranslations(next);
+		setTranslating(false);
+		if (failed > 0) {
+			notifyError(
+				failed === items.length
+					? "Translation failed"
+					: `Translation failed for ${failed} of ${items.length} papers`,
+			);
+		}
+	}, [items, translating, translations]);
+
 	return (
 		<div className={cn("flex h-full min-h-0 flex-col", className)}>
 			<div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b px-2.5 py-2">
@@ -158,6 +194,33 @@ export function PlazaArxivRecView({ className }: { className?: string }) {
 								type="button"
 								variant="ghost"
 								size="icon-sm"
+								disabled={translating || busy || items.length === 0}
+								aria-label={
+									translating
+										? t("plaza.arxivRec.translating")
+										: t("plaza.arxivRec.translate")
+								}
+								onClick={() => void translateAll()}
+							>
+								{translating ? (
+									<Loader2 className="size-3.5 animate-spin" aria-hidden />
+								) : (
+									<Languages className="size-3.5" aria-hidden />
+								)}
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>
+							{translating
+								? t("plaza.arxivRec.translating")
+								: t("plaza.arxivRec.translate")}
+						</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-sm"
 								disabled={busy}
 								aria-label={t("plaza.arxivRec.refresh")}
 								onClick={() => void run(categories)}
@@ -180,7 +243,11 @@ export function PlazaArxivRecView({ className }: { className?: string }) {
 				) : (
 					<div className="grid gap-2">
 						{items.map((item) => (
-							<RecommendCard key={item.arxivId} item={item} />
+							<RecommendCard
+								key={item.arxivId}
+								item={item}
+								translation={translations[item.arxivId]}
+							/>
 						))}
 					</div>
 				)}
@@ -224,7 +291,13 @@ function EmptyState({ reason, busy }: { reason: EmptyReason; busy: boolean }) {
 	);
 }
 
-function RecommendCard({ item }: { item: RecommendItem }) {
+function RecommendCard({
+	item,
+	translation,
+}: {
+	item: RecommendItem;
+	translation?: string;
+}) {
 	const { t } = useTranslation("sidebar");
 	const [busy, setBusy] = useState(false);
 	const [imported, setImported] = useState(false);
@@ -259,13 +332,8 @@ function RecommendCard({ item }: { item: RecommendItem }) {
 					{item.title}
 				</span>
 			</div>
-			<div className="mt-0.5 flex items-center gap-1.5 text-muted-foreground text-xs">
-				<span className="font-mono">{item.arxivId}</span>
-				<span aria-hidden>·</span>
-				<span className="font-mono tabular-nums">{item.score.toFixed(3)}</span>
-			</div>
-			<p className="mt-1 line-clamp-3 text-muted-foreground text-xs leading-snug">
-				{item.abstract}
+			<p className="mt-1 text-muted-foreground text-xs leading-snug">
+				{translation ?? item.abstract}
 			</p>
 			<div className="absolute top-2 right-2 flex items-center gap-0.5">
 				<Tooltip>

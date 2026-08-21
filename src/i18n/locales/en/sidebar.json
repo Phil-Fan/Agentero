@@ -156,6 +156,8 @@
 			"label": "arXiv Daily",
 			"description": "Today's arXiv papers ranked against your library",
 			"refresh": "Recompute recommendations",
+			"translate": "Translate all abstracts",
+			"translating": "Translating…",
 			"computing": "Ranking today's papers…",
 			"idle": "No recommendations yet. Refresh to rank today's arXiv papers against your library.",
 			"needsEmbedding": "Configure an embedding model first — recommendations compare abstracts against your library.",

@@ -156,6 +156,8 @@
 			"label": "arXiv Daily",
 			"description": "结合你的论文库对当天 arXiv 新论文排序",
 			"refresh": "重新计算推荐",
+			"translate": "翻译全部摘要",
+			"translating": "正在翻译…",
 			"computing": "正在排序今日论文…",
 			"idle": "暂无推荐。点击刷新，结合论文库对当天 arXiv 新论文排序。",
 			"needsEmbedding": "请先配置 Embedding 模型 —— 推荐需要把新论文摘要与你的论文库比对。",
