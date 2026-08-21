@@ -8,6 +8,7 @@ pub mod layout;
 pub mod mark;
 pub mod open;
 pub mod paper;
+pub mod translate;
 pub mod trash;
 pub mod tree;
 pub mod usage;

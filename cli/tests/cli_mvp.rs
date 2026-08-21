@@ -20,6 +20,57 @@ fn create_vault(dir: &Path) {
         .stdout(predicate::str::contains("\"ok\": true"));
 }
 
+/// Minimal PDF (200x100 pt pages, Helvetica 12) with a real xref table, so
+/// PDFium loads it without reconstruction. One page per entry, text drawn at
+/// 20,60 in PDF space.
+fn tiny_pdf_pages(texts: &[&str]) -> Vec<u8> {
+    // 1 catalog, 2 page tree, 3 font, then (page, contents) pairs from 4.
+    let first_page_obj = 4;
+    let kids: Vec<String> = (0..texts.len())
+        .map(|i| format!("{} 0 R", first_page_obj + i * 2))
+        .collect();
+
+    let mut objects = vec![
+        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+        format!(
+            "<< /Type /Pages /Kids [{}] /Count {} >>",
+            kids.join(" "),
+            texts.len()
+        ),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string(),
+    ];
+    for (i, text) in texts.iter().enumerate() {
+        let contents_obj = first_page_obj + i * 2 + 1;
+        objects.push(format!(
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents {contents_obj} 0 R \
+              /Resources << /Font << /F1 3 0 R >> >> >>"
+        ));
+        let content = format!("BT /F1 12 Tf 20 60 Td ({text}) Tj ET\n");
+        objects.push(format!(
+            "<< /Length {} >>\nstream\n{content}endstream",
+            content.len()
+        ));
+    }
+
+    let mut out = String::from("%PDF-1.4\n");
+    let mut offsets = Vec::with_capacity(objects.len());
+    for (i, body) in objects.iter().enumerate() {
+        offsets.push(out.len());
+        out.push_str(&format!("{} 0 obj\n{body}\nendobj\n", i + 1));
+    }
+    let xref_at = out.len();
+    out.push_str(&format!("xref\n0 {}\n", objects.len() + 1));
+    out.push_str("0000000000 65535 f \n");
+    for offset in &offsets {
+        out.push_str(&format!("{offset:010} 00000 n \n"));
+    }
+    out.push_str(&format!(
+        "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n",
+        objects.len() + 1
+    ));
+    out.into_bytes()
+}
+
 #[test]
 fn vault_create_which_info_check() {
     let tmp = tempdir().unwrap();
@@ -1118,6 +1169,17 @@ fn layout_list_and_mark_add_region() {
     let paper = vault.join("papers").join("demo");
     fs::create_dir_all(paper.join("source")).unwrap();
     fs::write(paper.join("NOTES.md"), "# Demo\n").unwrap();
+    // Region geometry is normalized; the CLI measures the page with the PDF
+    // engine before writing highlight annotations.
+    fs::write(
+        paper.join("demo.pdf"),
+        tiny_pdf_pages(&[
+            "Table 1 baseline results",
+            "Figure 3 attention heads",
+            "Equation one follows here",
+        ]),
+    )
+    .unwrap();
     seed_paper(&vault, "papers/demo", "demo", "Demo Paper");
 
     // Missing index → structured error
@@ -1271,17 +1333,34 @@ fn layout_list_and_mark_add_region() {
         .clone();
     let added: Value = serde_json::from_slice(&added).unwrap();
     assert_eq!(added["ok"], true);
-    assert_eq!(added["data"]["mark"]["kind"], "highlight");
-    assert_eq!(added["data"]["mark"]["geometry"], "resolved");
-    assert_eq!(added["data"]["mark"]["page"], 2);
-    assert_eq!(added["data"]["mark"]["color"], "yellow"); // default --mark-color
-    assert_eq!(added["data"]["mark"]["layoutRef"]["regionId"], "figure-3");
-    assert_eq!(added["data"]["mark"]["comment"], "核心图");
-    let mark_id = added["data"]["mark"]["id"].as_str().unwrap();
-    assert!(paper
+    assert_eq!(added["data"]["kind"], "highlight");
+    let ids = added["data"]["ids"].as_array().unwrap();
+    assert_eq!(ids.len(), 1);
+    let mark_id = ids[0].as_str().unwrap().to_string();
+
+    // Highlights/批注 are EmbedPDF annotations, not per-id mark files.
+    let annotations_path = paper.join("marks").join("annotations.json");
+    assert!(annotations_path.is_file());
+    assert!(!paper
         .join("marks")
         .join(format!("{mark_id}.json"))
         .is_file());
+    let items: Value =
+        serde_json::from_str(&fs::read_to_string(&annotations_path).unwrap()).unwrap();
+    let items = items.as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    let anno = &items[0]["annotation"];
+    assert_eq!(anno["id"], mark_id.as_str());
+    assert_eq!(anno["type"], 9); // PdfAnnotationSubtype.HIGHLIGHT
+    assert_eq!(anno["pageIndex"], 1); // region page 2
+    assert_eq!(anno["contents"], "核心图");
+    assert_eq!(anno["custom"]["quote"], "Figure 3: Heads");
+    assert_eq!(anno["custom"]["paletteKey"], "yellow");
+    let seg = &anno["segmentRects"][0];
+    // bbox x 0.1 of a 200pt page, y 0.2 of 100pt.
+    assert!((seg["origin"]["x"].as_f64().unwrap() - 20.0).abs() < 0.5);
+    assert!((seg["origin"]["y"].as_f64().unwrap() - 20.0).abs() < 0.5);
+    assert!((seg["size"]["width"].as_f64().unwrap() - 100.0).abs() < 0.5);
 
     let marks = agentero()
         .args([
@@ -1308,15 +1387,118 @@ fn layout_list_and_mark_add_region() {
             "mark",
             "delete",
             "demo",
-            mark_id,
+            &mark_id,
             "--json",
         ])
         .assert()
         .success();
-    assert!(!paper
-        .join("marks")
-        .join(format!("{mark_id}.json"))
-        .is_file());
+    let after: Value =
+        serde_json::from_str(&fs::read_to_string(&annotations_path).unwrap()).unwrap();
+    assert!(after.as_array().unwrap().is_empty());
+}
+
+/// The Agent path: a plain sentence becomes a highlight with engine-resolved
+/// geometry, and a comment rides along as the 批注 body.
+#[test]
+fn mark_add_quote_locates_text_and_writes_annotation() {
+    let tmp = tempdir().unwrap();
+    let vault = tmp.path().join("v");
+    create_vault(&vault);
+
+    let paper = vault.join("papers").join("attn");
+    fs::create_dir_all(&paper).unwrap();
+    fs::write(paper.join("NOTES.md"), "# Attn\n").unwrap();
+    fs::write(
+        paper.join("attn.pdf"),
+        tiny_pdf_pages(&["Attention is all you need", "We propose a novel mechanism"]),
+    )
+    .unwrap();
+    seed_paper(&vault, "papers/attn", "attn", "Attention");
+
+    let added = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "mark",
+            "add",
+            "attn",
+            "--quote",
+            "propose a novel mechanism",
+            "--comment",
+            "核心贡献",
+            "--mark-color",
+            "green",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let added: Value = serde_json::from_slice(&added).unwrap();
+    assert_eq!(added["ok"], true);
+    let id = added["data"]["ids"][0].as_str().unwrap().to_string();
+
+    let items: Value = serde_json::from_str(
+        &fs::read_to_string(paper.join("marks").join("annotations.json")).unwrap(),
+    )
+    .unwrap();
+    let anno = &items.as_array().unwrap()[0]["annotation"];
+    assert_eq!(anno["id"], id.as_str());
+    assert_eq!(anno["pageIndex"], 1); // second page
+    assert_eq!(anno["contents"], "核心贡献");
+    assert_eq!(anno["strokeColor"], "#86efac"); // HIGHLIGHT_HEX.green
+    let seg = &anno["segmentRects"][0];
+    let x = seg["origin"]["x"].as_f64().unwrap();
+    let y = seg["origin"]["y"].as_f64().unwrap();
+    // Text is drawn at 20,60 in PDF space on a 100pt page → top-left y ≈ 28.
+    assert!(x > 10.0 && x < 200.0, "x {x}");
+    assert!(y > 10.0 && y < 50.0, "y {y}");
+
+    // A quote that is not in the PDF must fail loudly and write nothing.
+    let missing = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "mark",
+            "add",
+            "attn",
+            "--quote",
+            "this sentence does not exist anywhere",
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .get_output()
+        .stdout
+        .clone();
+    let missing: Value = serde_json::from_slice(&missing).unwrap();
+    assert_eq!(missing["ok"], false);
+    assert_eq!(missing["error"]["code"], "mark_locate_failed");
+
+    // Comment updates land on the annotation, not a sibling file.
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "mark",
+            "update",
+            "attn",
+            &id,
+            "--comment",
+            "改过的批注",
+            "--json",
+        ])
+        .assert()
+        .success();
+    let items: Value = serde_json::from_str(
+        &fs::read_to_string(paper.join("marks").join("annotations.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        items.as_array().unwrap()[0]["annotation"]["contents"],
+        "改过的批注"
+    );
 }
 
 /// Mark ids are nanoids and that alphabet includes `-`, so ~1 in 64 starts with

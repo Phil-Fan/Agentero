@@ -226,6 +226,20 @@ enum Commands {
         #[command(subcommand)]
         cmd: commands::mark::MarkCmd,
     },
+    /// Translate text with free machine translation (no API key).
+    Translate {
+        /// Text to translate.
+        text: String,
+        /// Target language (default zh-CN).
+        #[arg(long = "to", value_name = "LANG", default_value = "zh-CN")]
+        to: String,
+        /// Source language (default auto).
+        #[arg(long = "from", value_name = "LANG", default_value = "auto")]
+        from: String,
+        /// Pick one free engine instead of racing the defaults.
+        #[arg(long = "provider", value_name = "ID")]
+        provider: Option<String>,
+    },
     /// Device-local activity log (XDG usage.sqlite).
     Usage {
         #[command(subcommand)]
@@ -422,6 +436,7 @@ fn command_label(cmd: &Commands) -> &'static str {
         Commands::Doctor { .. } => "cli.doctor",
         Commands::Layout { .. } => "cli.layout",
         Commands::Mark { .. } => "cli.mark",
+        Commands::Translate { .. } => "cli.translate",
         Commands::Usage { .. } => "cli.usage",
         Commands::Feed { .. } => "cli.feed",
         Commands::Open { .. } => "cli.open",
@@ -459,6 +474,12 @@ async fn run(command: Commands, globals: &GlobalOpts) -> Result<serde_json::Valu
         Commands::Doctor { cmd } => commands::doctor::run(cmd, globals),
         Commands::Layout { cmd } => commands::layout::run(cmd, globals),
         Commands::Mark { cmd } => commands::mark::run(cmd, globals).await,
+        Commands::Translate {
+            text,
+            to,
+            from,
+            provider,
+        } => commands::translate::run(&text, &to, &from, provider.as_deref(), globals).await,
         Commands::Usage { cmd } => commands::usage::run(cmd, globals),
         Commands::Feed { cmd } => commands::feed::run(cmd, globals).await,
         Commands::Open { path } => commands::open::run(&path, globals),
