@@ -12,6 +12,17 @@ const TAG_COLOR_IDS: &[&str] = &[
     "red", "orange", "yellow", "green", "teal", "blue", "indigo", "purple",
 ];
 
+/// Canonical `papers` column list shared by every SELECT / INSERT in this
+/// module. Order MUST match `map_row`'s positional `row.get(i)` indexes.
+const PAPER_COLUMNS: &str = "\
+    path, id, type, title, authors_json, year, abstract, tags_json, \
+    arxiv_id, doi, pdf_url, html_url, source_url, \
+    body_source, body_quality, bibtex_key, citation_count, status, summary, \
+    added_at, updated_at, \
+    creators_json, date, isbn, issn, pmid, publication, volume, issue, pages, \
+    publisher, place, series, language, zotero_item_type, meta_source, extra, \
+    is_read, zotero_item_id, zotero_last_synced";
+
 /// One catalog tag: display name + optional color id.
 /// JSON: bare string when uncolored; `{"name","color"}` when colored.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -200,21 +211,14 @@ pub fn get_by_id(vault_root: &Path, id: &str) -> Result<Option<PaperRecord>, App
 pub fn list_by_id(vault_root: &Path, id: &str) -> Result<Vec<PaperRecord>, AppError> {
     with_catalog(vault_root, |conn| {
         let mut stmt = conn
-            .prepare(
+            .prepare(&format!(
                 r#"
-            SELECT
-                path, id, type, title, authors_json, year, abstract, tags_json,
-                arxiv_id, doi, pdf_url, html_url, source_url,
-                body_source, body_quality, bibtex_key, citation_count, status, summary,
-                added_at, updated_at,
-                creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
-                publisher, place, series, language, zotero_item_type, meta_source, extra,
-                is_read, zotero_item_id, zotero_last_synced
+            SELECT {PAPER_COLUMNS}
             FROM papers
             WHERE id = ?1
             ORDER BY path ASC
             "#,
-            )
+            ))
             .map_err(AppError::from)?;
 
         let rows = stmt
@@ -241,14 +245,7 @@ pub fn find_by_identifier(
     }
     let sql = format!(
         r#"
-        SELECT
-            path, id, type, title, authors_json, year, abstract, tags_json,
-            arxiv_id, doi, pdf_url, html_url, source_url,
-            body_source, body_quality, bibtex_key, citation_count, status, summary,
-            added_at, updated_at,
-            creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
-            publisher, place, series, language, zotero_item_type, meta_source, extra,
-            is_read
+        SELECT {PAPER_COLUMNS}
         FROM papers
         WHERE {column} = ?1
         ORDER BY path ASC
@@ -276,20 +273,13 @@ pub fn list_all(vault_root: &Path) -> Result<Vec<PaperRecord>, AppError> {
 /// Catalog state as a side effect.
 pub fn list_all_conn(conn: &Connection) -> Result<Vec<PaperRecord>, AppError> {
     let mut stmt = conn
-        .prepare(
+        .prepare(&format!(
             r#"
-            SELECT
-                path, id, type, title, authors_json, year, abstract, tags_json,
-                arxiv_id, doi, pdf_url, html_url, source_url,
-                body_source, body_quality, bibtex_key, citation_count, status, summary,
-                added_at, updated_at,
-                creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
-                publisher, place, series, language, zotero_item_type, meta_source, extra,
-                is_read, zotero_item_id, zotero_last_synced
+            SELECT {PAPER_COLUMNS}
             FROM papers
             ORDER BY updated_at DESC, title COLLATE NOCASE ASC
             "#,
-        )
+        ))
         .map_err(AppError::from)?;
 
     let rows = stmt
@@ -983,21 +973,14 @@ pub fn list_under_path(vault_root: &Path, path: &str) -> Result<Vec<PaperRecord>
     let like = format!("{path}/%");
     with_catalog(vault_root, |conn| {
         let mut stmt = conn
-            .prepare(
+            .prepare(&format!(
                 r#"
-            SELECT
-                path, id, type, title, authors_json, year, abstract, tags_json,
-                arxiv_id, doi, pdf_url, html_url, source_url,
-                body_source, body_quality, bibtex_key, citation_count, status, summary,
-                added_at, updated_at,
-                creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
-                publisher, place, series, language, zotero_item_type, meta_source, extra,
-                is_read, zotero_item_id, zotero_last_synced
+            SELECT {PAPER_COLUMNS}
             FROM papers
             WHERE path = ?1 OR path LIKE ?2
             ORDER BY path ASC
             "#,
-            )
+            ))
             .map_err(AppError::from)?;
         let rows = stmt
             .query_map(params![path, like], map_row)
@@ -1142,16 +1125,9 @@ fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {
         .map_err(|e| AppError::message(e.to_string()))?;
 
     conn.execute(
-        r#"
-        INSERT INTO papers (
-            path, id, type, title, authors_json, year, abstract, tags_json,
-            arxiv_id, doi, pdf_url, html_url, source_url,
-            body_source, body_quality, bibtex_key, citation_count, status, summary,
-            added_at, updated_at,
-            creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
-            publisher, place, series, language, zotero_item_type, meta_source, extra,
-            is_read, zotero_item_id, zotero_last_synced
-        ) VALUES (
+        &format!(
+            r#"
+        INSERT INTO papers ({PAPER_COLUMNS}) VALUES (
             ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
             ?9, ?10, ?11, ?12, ?13,
             ?14, ?15, ?16, ?17, ?18, ?19,
@@ -1200,6 +1176,7 @@ fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {
             zotero_item_id = excluded.zotero_item_id,
             zotero_last_synced = excluded.zotero_last_synced
         "#,
+        ),
         params![
             r.path,
             r.id,
@@ -1251,9 +1228,9 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PaperRecord> {
     let authors_json: String = row.get(4)?;
     let tags_json: String = row.get(7)?;
     let creators_json: Option<String> = row.get(21)?;
-    let is_read_i: i32 = row.get(37).unwrap_or(0);
-    let zotero_item_id: Option<i64> = row.get(38).ok().flatten();
-    let zotero_last_synced: Option<String> = row.get(39).ok().flatten();
+    let is_read_i: i32 = row.get(37)?;
+    let zotero_item_id: Option<i64> = row.get(38)?;
+    let zotero_last_synced: Option<String> = row.get(39)?;
     Ok(PaperRecord {
         path: row.get(0)?,
         id: row.get(1)?,
@@ -1302,19 +1279,12 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PaperRecord> {
 
 fn get_conn(conn: &Connection, path: &str) -> Result<Option<PaperRecord>, AppError> {
     let mut stmt = conn
-        .prepare(
+        .prepare(&format!(
             r#"
-            SELECT
-                path, id, type, title, authors_json, year, abstract, tags_json,
-                arxiv_id, doi, pdf_url, html_url, source_url,
-                body_source, body_quality, bibtex_key, citation_count, status, summary,
-                added_at, updated_at,
-                creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
-                publisher, place, series, language, zotero_item_type, meta_source, extra,
-                is_read, zotero_item_id, zotero_last_synced
+            SELECT {PAPER_COLUMNS}
             FROM papers WHERE path = ?1
             "#,
-        )
+        ))
         .map_err(AppError::from)?;
 
     let row = stmt
@@ -1731,6 +1701,33 @@ mod tests {
         assert_eq!(report.duplicate_ids[0].key, "shared");
         assert_eq!(report.duplicate_ids[0].rows.len(), 2);
         assert!(report.duplicate_paths.is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn find_by_identifier_returns_zotero_fields() {
+        let dir = env::temp_dir().join(format!("agentero-find-id-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        {
+            let conn = ensure_catalog(&dir).unwrap();
+            conn.execute(
+                "INSERT INTO papers (path, id, type, title, doi, added_at, updated_at, \
+                 zotero_item_id, zotero_last_synced) VALUES \
+                 ('papers/z', 'z', 'article', 'Zotero Paper', '10.1/z', 't', 't', 12345, \
+                 '2024-01-01T00:00:00Z')",
+                [],
+            )
+            .unwrap();
+        }
+
+        let row = find_by_identifier(&dir, "doi", "10.1/z").unwrap().unwrap();
+        assert_eq!(row.zotero_item_id, Some(12345));
+        assert_eq!(
+            row.zotero_last_synced.as_deref(),
+            Some("2024-01-01T00:00:00Z")
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
