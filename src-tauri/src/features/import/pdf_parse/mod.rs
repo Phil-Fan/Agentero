@@ -32,13 +32,26 @@ const PDF_PARSE_WORKER_ARG: &str = "--agentero-internal-pdf-parse-worker";
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_PROBE_WORKER_ARG: &str = "--agentero-internal-pdf-recognize-worker";
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
+const PDF_RENDER_WORKER_ARG: &str = "--agentero-internal-pdf-render-worker";
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_PARSE_TIMEOUT: Duration = Duration::from_secs(120);
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
+/// Rendering many pages at 150 DPI can exceed the parse timeout on large PDFs.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+const PDF_RENDER_TIMEOUT: Duration = Duration::from_secs(300);
+/// Page cap for the VLM OCR engine (per-page cloud requests are costly).
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+pub(crate) const VLM_MAX_PAGES: usize = 100;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+const RENDER_DPI: f32 = 150.0;
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const MAX_CONCURRENT_PDF_PARSE: usize = 2;
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDFIUM_LIB_PATH_ENV: &str = "PDFIUM_LIB_PATH";
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+pub mod engines;
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 #[derive(Debug)]
@@ -243,7 +256,14 @@ async fn parse_paper_body_inner(
         }
     };
 
-    match run_liteparse_markdown(&pdf_path, task_id).await {
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    let parse_result = engines::parse_body_with_engine(&pdf_path, task_id, &mut out.messages)
+        .await
+        .map(|o| (o.markdown, o.body_source, o.body_quality));
+    #[cfg(any(target_os = "ios", target_os = "android"))]
+    let parse_result = run_liteparse_markdown(&pdf_path, task_id).await;
+
+    match parse_result {
         Ok((markdown, body_source, body_quality)) => {
             if markdown.trim().is_empty() {
                 out.fail("liteparse returned empty text".into());
@@ -333,6 +353,47 @@ enum PdfProbeWorkerResponse {
     Err { message: String },
 }
 
+/// One page rendered to PNG by the render worker; `file` is the PNG name
+/// inside the worker directory.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RenderedPngPage {
+    pub page_num: u32,
+    pub width: u32,
+    pub height: u32,
+    pub file: String,
+    pub is_solid_fill: bool,
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+enum PdfRenderWorkerResponse {
+    Ok { pages: Vec<RenderedPngPage> },
+    Err { message: String },
+}
+
+/// Keeps a worker temp directory alive (render output PNGs are read by the
+/// parent after the worker exits); removed on drop.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[derive(Debug)]
+pub(crate) struct WorkerDirGuard(PathBuf);
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+impl WorkerDirGuard {
+    pub(crate) fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+impl Drop for WorkerDirGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 #[derive(Debug, PartialEq, Eq)]
 struct PdfParseWorkerRequest {
@@ -354,6 +415,8 @@ fn pdf_parse_worker_request_from_args(
         PDF_PARSE_WORKER_ARG
     } else if mode == OsStr::new(PDF_PROBE_WORKER_ARG) {
         PDF_PROBE_WORKER_ARG
+    } else if mode == OsStr::new(PDF_RENDER_WORKER_ARG) {
+        PDF_RENDER_WORKER_ARG
     } else {
         return Ok(None);
     };
@@ -399,6 +462,17 @@ pub fn try_run_pdf_parse_worker() -> Option<i32> {
                 runtime
                     .block_on(run_liteparse_probe_direct(&request.pdf_path))
                     .map(|pages| PdfProbeWorkerResponse::Ok { pages })
+                    .map_err(|error| error.to_string())
+                    .and_then(|r| serde_json::to_value(&r).map_err(|e| e.to_string()))
+            } else if request.worker_arg == PDF_RENDER_WORKER_ARG {
+                let out_dir = request
+                    .response_path
+                    .parent()
+                    .map(Path::to_path_buf)
+                    .unwrap_or_else(std::env::temp_dir);
+                runtime
+                    .block_on(run_liteparse_render_direct(&request.pdf_path, &out_dir))
+                    .map(|pages| PdfRenderWorkerResponse::Ok { pages })
                     .map_err(|error| error.to_string())
                     .and_then(|r| serde_json::to_value(&r).map_err(|e| e.to_string()))
             } else {
@@ -528,6 +602,20 @@ async fn spawn_pdf_worker(
     task_id: Option<&str>,
     timeout_limit: Duration,
 ) -> Result<Vec<u8>, AppError> {
+    let (bytes, _dir) =
+        spawn_pdf_worker_with_dir(worker_arg, pdf_path, task_id, timeout_limit).await?;
+    Ok(bytes)
+}
+
+/// Like [`spawn_pdf_worker`], but hands the worker directory back to the
+/// caller (the render worker leaves page PNGs beside `response.json`).
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+async fn spawn_pdf_worker_with_dir(
+    worker_arg: &str,
+    pdf_path: &Path,
+    task_id: Option<&str>,
+    timeout_limit: Duration,
+) -> Result<(Vec<u8>, WorkerDirGuard), AppError> {
     if pdf_parse_task_is_cancelled(task_id) {
         return Err(AppError::message(CANCELLED_MESSAGE));
     }
@@ -541,17 +629,12 @@ async fn spawn_pdf_worker(
     fs::create_dir_all(&worker_dir).map_err(|error| {
         AppError::message(format!("create PDF parse worker directory: {error}"))
     })?;
+    // Removes the directory on every early-error path and once the caller drops it.
+    let dir_guard = WorkerDirGuard(worker_dir.clone());
     let response_path = worker_dir.join("response.json");
     let stderr_path = worker_dir.join("stderr.log");
-    let stderr_sink = match fs::File::create(&stderr_path) {
-        Ok(file) => file,
-        Err(error) => {
-            let _ = fs::remove_dir_all(&worker_dir);
-            return Err(AppError::message(format!(
-                "create PDF parse worker log: {error}"
-            )));
-        }
-    };
+    let stderr_sink = fs::File::create(&stderr_path)
+        .map_err(|error| AppError::message(format!("create PDF parse worker log: {error}")))?;
 
     let mut command = tokio::process::Command::new(executable);
     command
@@ -566,15 +649,9 @@ async fn spawn_pdf_worker(
         command.env(PDFIUM_LIB_PATH_ENV, dir);
     }
 
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(error) => {
-            let _ = fs::remove_dir_all(&worker_dir);
-            return Err(AppError::message(format!(
-                "start isolated PDF parser: {error}"
-            )));
-        }
-    };
+    let mut child = command
+        .spawn()
+        .map_err(|error| AppError::message(format!("start isolated PDF parser: {error}")))?;
 
     let timeout = tokio::time::sleep(timeout_limit);
     tokio::pin!(timeout);
@@ -583,20 +660,13 @@ async fn spawn_pdf_worker(
     let status = loop {
         tokio::select! {
             result = child.wait() => {
-                break match result {
-                    Ok(status) => status,
-                    Err(error) => {
-                        let _ = fs::remove_dir_all(&worker_dir);
-                        return Err(AppError::message(format!(
-                            "wait for isolated PDF parser: {error}"
-                        )));
-                    }
-                };
+                break result.map_err(|error| AppError::message(format!(
+                    "wait for isolated PDF parser: {error}"
+                )))?;
             }
             _ = &mut timeout => {
                 let _ = child.kill().await;
                 let _ = child.wait().await;
-                let _ = fs::remove_dir_all(&worker_dir);
                 return Err(AppError::message(format!(
                     "liteparse timed out after {}s; PDF import completed without PAPER.md",
                     timeout_limit.as_secs()
@@ -606,7 +676,6 @@ async fn spawn_pdf_worker(
                 if pdf_parse_task_is_cancelled(task_id) {
                     let _ = child.kill().await;
                     let _ = child.wait().await;
-                    let _ = fs::remove_dir_all(&worker_dir);
                     return Err(AppError::message(CANCELLED_MESSAGE));
                 }
             }
@@ -620,9 +689,8 @@ async fn spawn_pdf_worker(
         AppError::message(format!(
             "isolated PDF parser produced no response ({status}, {error}){tail}"
         ))
-    });
-    let _ = fs::remove_dir_all(&worker_dir);
-    bytes
+    })?;
+    Ok((bytes, dir_guard))
 }
 
 /// Probe the first pages of a local PDF for metadata recognition.
@@ -651,6 +719,69 @@ pub async fn run_liteparse_probe(
     Err(AppError::message(
         "PDF metadata recognition runs on the paired desktop host",
     ))
+}
+
+/// Render a local PDF's pages to PNG files in the isolated PDFium worker
+/// (capped at [`VLM_MAX_PAGES`]). The returned guard owns the PNG directory.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+pub(crate) async fn run_liteparse_render_pngs(
+    pdf_path: &Path,
+    task_id: Option<&str>,
+) -> Result<(Vec<RenderedPngPage>, WorkerDirGuard), AppError> {
+    let (bytes, dir_guard) =
+        spawn_pdf_worker_with_dir(PDF_RENDER_WORKER_ARG, pdf_path, task_id, PDF_RENDER_TIMEOUT)
+            .await?;
+    let response = serde_json::from_slice::<PdfRenderWorkerResponse>(&bytes).map_err(|error| {
+        AppError::message(format!("decode isolated PDF render response: {error}"))
+    })?;
+    match response {
+        PdfRenderWorkerResponse::Ok { pages } => Ok((pages, dir_guard)),
+        PdfRenderWorkerResponse::Err { message } => Err(AppError::message(message)),
+    }
+}
+
+/// Worker body for the render mode: write per-page PNGs into `out_dir`.
+///
+/// `render_pages_to_png` errors on out-of-range page numbers, so a cheap
+/// capped text pass determines how many pages exist (≤ [`VLM_MAX_PAGES`]).
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+async fn run_liteparse_render_direct(
+    pdf_path: &Path,
+    out_dir: &Path,
+) -> Result<Vec<RenderedPngPage>, AppError> {
+    let data = fs::read(pdf_path).map_err(|e| AppError::message(format!("read pdf: {e}")))?;
+    let input = liteparse::types::PdfInput::Bytes(data);
+    let page_count =
+        liteparse::extract::extract_pages_from_input(&input, None, VLM_MAX_PAGES, None)
+            .map_err(|e| AppError::message(format!("liteparse page scan: {e}")))?
+            .len();
+    if page_count == 0 {
+        return Err(AppError::message("PDF has no pages"));
+    }
+    let numbers: Vec<u32> = (1..=page_count as u32).collect();
+    let rendered = liteparse::render::render_pages_to_png(
+        &input,
+        Some(&numbers),
+        RENDER_DPI,
+        None,
+        false,
+        false,
+    )
+    .map_err(|e| AppError::message(format!("liteparse render: {e}")))?;
+    let mut pages = Vec::with_capacity(rendered.len());
+    for page in rendered {
+        let file = format!("page-{:04}.png", page.page_num);
+        fs::write(out_dir.join(&file), &page.png_bytes)
+            .map_err(|e| AppError::message(format!("write page png: {e}")))?;
+        pages.push(RenderedPngPage {
+            page_num: page.page_num,
+            width: page.width,
+            height: page.height,
+            file,
+            is_solid_fill: page.is_solid_fill,
+        });
+    }
+    Ok(pages)
 }
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
@@ -925,6 +1056,16 @@ mod tests {
         .unwrap();
         assert_eq!(request.pdf_path, PathBuf::from("input.pdf"));
         assert_eq!(request.response_path, PathBuf::from("response.json"));
+
+        let render = pdf_parse_worker_request_from_args(vec![
+            OsString::from("agentero"),
+            OsString::from(PDF_RENDER_WORKER_ARG),
+            OsString::from("input.pdf"),
+            OsString::from("response.json"),
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(render.worker_arg, PDF_RENDER_WORKER_ARG);
 
         let incomplete = vec![
             OsString::from("agentero"),

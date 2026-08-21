@@ -91,6 +91,8 @@ pub fn settings_set(
     match store.set(settings) {
         Ok(s) => {
             let _ = agents.set_proxy(s.network_proxy_enabled, s.network_proxy_url.clone());
+            #[cfg(not(target_os = "android"))]
+            crate::features::import::pdf_parse::engines::refresh_parser_config(&store);
             // `set_port` is async (it may rebind the listener); the result was
             // always discarded here and the controller emits its own status
             // event, so run it on the runtime instead of blocking this handler.
