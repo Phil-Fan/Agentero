@@ -12,7 +12,13 @@ use tauri::{AppHandle, Emitter};
 pub mod commands;
 pub mod engine;
 pub mod mineru;
+pub mod openai_compatible;
 pub mod paddle;
+
+/// Cloud-job progress callback: `(phase, extracted_pages, total_pages)`.
+pub(crate) type ProgressFn<'a> = &'a (dyn Fn(&str, Option<u64>, Option<u64>) + Send + Sync);
+/// Cooperative-cancel check polled between cloud-job phases.
+pub(crate) type CancelFn<'a> = &'a (dyn Fn() -> bool + Send + Sync);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

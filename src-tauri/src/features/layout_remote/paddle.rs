@@ -4,6 +4,7 @@
 //! `GET {base}/api/v2/ocr/jobs/{jobId}` → download the JSONL result.
 
 use crate::core::error::AppError;
+use crate::features::import::pdf_parse::CANCELLED_MESSAGE;
 use crate::features::layout_remote::engine::{AnalyzeCtx, ProviderCredentials, RemoteLayoutEngine};
 use crate::features::layout_remote::{
     emit_cloud_progress, parse_det_boxes, LayoutRemoteAnalyzePdfResult, LayoutRemotePageResult,
@@ -233,57 +234,36 @@ fn resolve_cloud_target(api_key: Option<&str>) -> Result<(String, String), AppEr
     Ok((CLOUD_JOBS_URL.to_string(), format!("bearer {api_key}")))
 }
 
-async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, AppError> {
-    let AnalyzeCtx {
-        app,
-        credentials,
-        args,
-    } = ctx;
-    let (jobs_url, auth) = resolve_cloud_target(credentials.api_key.as_deref())?;
-    if args.pdf_base64.trim().is_empty() {
-        return Err(AppError::message("layout_remote: PDF is empty"));
-    }
-    if args.pdf_base64.len() > MAX_PDF_BASE64_CHARS {
-        return Err(AppError::message("layout_remote: PDF too large"));
-    }
-    let pdf_bytes = base64::engine::general_purpose::STANDARD
-        .decode(args.pdf_base64.trim())
-        .map_err(|e| AppError::message(format!("layout_remote: invalid PDF base64: {e}")))?;
-
+/// Whole-document PP-StructureV3 job: multipart upload → poll → download the
+/// JSONL result. Shared by the layout analyze path and the PAPER.md body-parse
+/// engine (which reads per-page markdown from the same JSONL). Returns the raw
+/// JSONL text plus the job-level `dataInfo` (rendered page sizes).
+pub(crate) async fn run_paddle_ocr_job(
+    api_key: Option<&str>,
+    file_bytes: Vec<u8>,
+    file_name: String,
+    mime: &str,
+    progress: super::ProgressFn<'_>,
+    cancel: super::CancelFn<'_>,
+) -> Result<(String, Option<Value>), AppError> {
+    let (jobs_url, auth) = resolve_cloud_target(api_key)?;
     let client = network::client_builder()
         .timeout(CLOUD_REQUEST_TIMEOUT)
         .redirect(Policy::limited(5))
         .build()
         .map_err(|e| AppError::message(format!("http client: {e}")))?;
 
-    let request_id = args.request_id.clone();
-    let emit_progress = |phase: &str, extracted: Option<u64>, total: Option<u64>| {
-        emit_cloud_progress(&app, phase, extracted, total, request_id.clone());
-    };
-
     // 1) Submit the whole-document job (multipart file upload).
-    emit_progress("uploading", None, None);
-    let file_name = args
-        .file_name
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or("paper.pdf")
-        .to_string();
-    let job_id = submit_job(
-        &client,
-        &jobs_url,
-        &auth,
-        pdf_bytes,
-        file_name,
-        "application/pdf",
-    )
-    .await?;
+    progress("uploading", None, None);
+    let job_id = submit_job(&client, &jobs_url, &auth, file_bytes, file_name, mime).await?;
 
     // 2) Poll until done (deadline guards a stuck job).
     let job_url = format!("{}/{}", jobs_url.trim_end_matches('/'), job_id);
     let started = Instant::now();
     let (json_url, data_info) = loop {
+        if cancel() {
+            return Err(AppError::message(CANCELLED_MESSAGE));
+        }
         if started.elapsed() > CLOUD_JOB_DEADLINE {
             return Err(AppError::message("Paddle job timed out"));
         }
@@ -313,11 +293,11 @@ async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, Ap
             .and_then(Value::as_str)
             .unwrap_or("")
             .to_string();
-        let progress = data.get("extractProgress");
-        let extracted = progress
+        let extract_progress = data.get("extractProgress");
+        let extracted = extract_progress
             .and_then(|p| p.get("extractedPages"))
             .and_then(Value::as_u64);
-        let total = progress
+        let total = extract_progress
             .and_then(|p| p.get("totalPages"))
             .and_then(Value::as_u64);
         match state.as_str() {
@@ -328,7 +308,7 @@ async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, Ap
                     .and_then(Value::as_str)
                     .ok_or_else(|| AppError::message("Paddle job done without result URL"))?
                     .to_string();
-                emit_progress("done", extracted, total);
+                progress("done", extracted, total);
                 break (url, data.get("dataInfo").cloned());
             }
             "failed" => {
@@ -338,12 +318,12 @@ async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, Ap
                     .unwrap_or("unknown error");
                 return Err(AppError::message(format!("Paddle job failed: {msg}")));
             }
-            _ => emit_progress(&state, extracted, total),
+            _ => progress(&state, extracted, total),
         }
     };
 
     // 3) Download the JSONL result; each line carries page results.
-    emit_progress("downloading", None, None);
+    progress("downloading", None, None);
     let result_response = client
         .get(&json_url)
         .send()
@@ -370,6 +350,47 @@ async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, Ap
     } else {
         log::info!(target: "agentero::layout_remote", "raw cloud result saved to {debug_path:?}");
     }
+
+    Ok((result_text, data_info))
+}
+
+async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, AppError> {
+    let AnalyzeCtx {
+        app,
+        credentials,
+        args,
+    } = ctx;
+    if args.pdf_base64.trim().is_empty() {
+        return Err(AppError::message("layout_remote: PDF is empty"));
+    }
+    if args.pdf_base64.len() > MAX_PDF_BASE64_CHARS {
+        return Err(AppError::message("layout_remote: PDF too large"));
+    }
+    let pdf_bytes = base64::engine::general_purpose::STANDARD
+        .decode(args.pdf_base64.trim())
+        .map_err(|e| AppError::message(format!("layout_remote: invalid PDF base64: {e}")))?;
+
+    let request_id = args.request_id.clone();
+    let emit_progress = move |phase: &str, extracted: Option<u64>, total: Option<u64>| {
+        emit_cloud_progress(&app, phase, extracted, total, request_id.clone());
+    };
+    let file_name = args
+        .file_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("paper.pdf")
+        .to_string();
+
+    let (result_text, data_info) = run_paddle_ocr_job(
+        credentials.api_key.as_deref(),
+        pdf_bytes,
+        file_name,
+        "application/pdf",
+        &emit_progress,
+        &|| false,
+    )
+    .await?;
 
     let mut pages: Vec<LayoutRemotePageResult> = Vec::new();
     let mut dim_sources: Vec<&'static str> = Vec::new();

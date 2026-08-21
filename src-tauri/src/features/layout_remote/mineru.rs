@@ -6,6 +6,7 @@
 //! `*middle.json` (per-page sizes).
 
 use crate::core::error::AppError;
+use crate::features::import::pdf_parse::CANCELLED_MESSAGE;
 use crate::features::layout_remote::engine::{AnalyzeCtx, ProviderCredentials, RemoteLayoutEngine};
 use crate::features::layout_remote::{
     emit_cloud_progress, LayoutRemoteAnalyzePdfResult, LayoutRemoteBox, LayoutRemotePageResult,
@@ -250,7 +251,7 @@ fn build_pages(
 }
 
 /// Find a zip entry by name suffix (MinerU prefixes entries with the task id).
-fn read_zip_entry_by_suffix(bytes: &[u8], suffix: &str) -> Result<String, AppError> {
+pub(crate) fn read_zip_entry_by_suffix(bytes: &[u8], suffix: &str) -> Result<String, AppError> {
     let cursor = std::io::Cursor::new(bytes);
     let mut archive = zip::ZipArchive::new(cursor)
         .map_err(|e| AppError::message(format!("MinerU result zip open failed: {e}")))?;
@@ -357,7 +358,6 @@ async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, Ap
         credentials,
         args,
     } = ctx;
-    let (base, auth) = resolve_target(&credentials)?;
     if args.pdf_base64.trim().is_empty() {
         return Err(AppError::message("layout_remote: PDF is empty"));
     }
@@ -368,20 +368,10 @@ async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, Ap
         .decode(args.pdf_base64.trim())
         .map_err(|e| AppError::message(format!("layout_remote: invalid PDF base64: {e}")))?;
 
-    let client = network::client_builder()
-        .timeout(MINERU_REQUEST_TIMEOUT)
-        .redirect(Policy::limited(5))
-        .build()
-        .map_err(|e| AppError::message(format!("http client: {e}")))?;
-
     let request_id = args.request_id.clone();
-    let emit_progress = |phase: &str, extracted: Option<u64>, total: Option<u64>| {
+    let emit_progress = move |phase: &str, extracted: Option<u64>, total: Option<u64>| {
         emit_cloud_progress(&app, phase, extracted, total, request_id.clone());
     };
-
-    // 1) Request the presigned upload URL, then PUT the raw PDF bytes
-    //    (no Content-Type — the presigned signature does not cover one).
-    emit_progress("uploading", None, None);
     let file_name = args
         .file_name
         .as_deref()
@@ -389,7 +379,45 @@ async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, Ap
         .filter(|s| !s.is_empty())
         .unwrap_or("paper.pdf")
         .to_string();
-    let (batch_id, upload_url) = request_upload_url(&client, &base, &auth, &file_name).await?;
+
+    let zip_bytes =
+        run_mineru_extract(&credentials, pdf_bytes, &file_name, &emit_progress, &|| {
+            false
+        })
+        .await?;
+
+    // Extract content_list.json + middle.json and map to page boxes.
+    let result = parse_result_zip(&zip_bytes)?;
+    log::info!(
+        target: "agentero::layout_remote",
+        "mineru result: pages={} boxes={}",
+        result.pages.len(),
+        result.pages.iter().map(|p| p.boxes.len()).sum::<usize>()
+    );
+    Ok(result)
+}
+
+/// Whole-document MinerU extract: presigned upload → poll → download the
+/// result zip. Shared by the layout analyze path and the PAPER.md body-parse
+/// engine (which reads `full.md` from the same zip).
+pub(crate) async fn run_mineru_extract(
+    credentials: &ProviderCredentials,
+    pdf_bytes: Vec<u8>,
+    file_name: &str,
+    progress: super::ProgressFn<'_>,
+    cancel: super::CancelFn<'_>,
+) -> Result<Vec<u8>, AppError> {
+    let (base, auth) = resolve_target(credentials)?;
+    let client = network::client_builder()
+        .timeout(MINERU_REQUEST_TIMEOUT)
+        .redirect(Policy::limited(5))
+        .build()
+        .map_err(|e| AppError::message(format!("http client: {e}")))?;
+
+    // 1) Request the presigned upload URL, then PUT the raw PDF bytes
+    //    (no Content-Type — the presigned signature does not cover one).
+    progress("uploading", None, None);
+    let (batch_id, upload_url) = request_upload_url(&client, &base, &auth, file_name).await?;
     let upload = client
         .put(&upload_url)
         .body(pdf_bytes)
@@ -407,6 +435,9 @@ async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, Ap
     let poll_url = format!("{base}/api/v4/extract-results/batch/{batch_id}");
     let started = Instant::now();
     let zip_url = loop {
+        if cancel() {
+            return Err(AppError::message(CANCELLED_MESSAGE));
+        }
         if started.elapsed() > MINERU_JOB_DEADLINE {
             return Err(AppError::message("MinerU task timed out"));
         }
@@ -437,7 +468,7 @@ async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, Ap
             .and_then(Value::as_array)
             .and_then(|r| {
                 r.iter()
-                    .find(|e| e.get("file_name").and_then(Value::as_str) == Some(&file_name))
+                    .find(|e| e.get("file_name").and_then(Value::as_str) == Some(file_name))
                     .or_else(|| r.first())
             })
             .cloned()
@@ -447,11 +478,11 @@ async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, Ap
             .and_then(Value::as_str)
             .unwrap_or("")
             .to_string();
-        let progress = result.get("extract_progress");
-        let extracted = progress
+        let extract_progress = result.get("extract_progress");
+        let extracted = extract_progress
             .and_then(|p| p.get("extracted_pages"))
             .and_then(Value::as_u64);
-        let total = progress
+        let total = extract_progress
             .and_then(|p| p.get("total_pages"))
             .and_then(Value::as_u64);
         match classify_extract_state(&state) {
@@ -461,7 +492,7 @@ async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, Ap
                     .and_then(Value::as_str)
                     .ok_or_else(|| AppError::message("MinerU task done without result URL"))?
                     .to_string();
-                emit_progress("done", extracted, total);
+                progress("done", extracted, total);
                 break url;
             }
             ExtractState::Failed => {
@@ -472,12 +503,12 @@ async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, Ap
                     .unwrap_or("unknown error");
                 return Err(AppError::message(format!("MinerU task failed: {msg}")));
             }
-            ExtractState::InProgress => emit_progress(&state, extracted, total),
+            ExtractState::InProgress => progress(&state, extracted, total),
         }
     };
 
     // 3) Download the result zip (presigned URL, no auth header).
-    emit_progress("downloading", None, None);
+    progress("downloading", None, None);
     let zip_response = client
         .get(&zip_url)
         .send()
@@ -501,16 +532,7 @@ async fn analyze_pdf(ctx: AnalyzeCtx) -> Result<LayoutRemoteAnalyzePdfResult, Ap
         }
         zip_bytes.extend_from_slice(&chunk);
     }
-
-    // 4) Extract content_list.json + middle.json and map to page boxes.
-    let result = parse_result_zip(&zip_bytes)?;
-    log::info!(
-        target: "agentero::layout_remote",
-        "mineru result: pages={} boxes={}",
-        result.pages.len(),
-        result.pages.iter().map(|p| p.boxes.len()).sum::<usize>()
-    );
-    Ok(result)
+    Ok(zip_bytes)
 }
 
 /// Probe outcome for the settings connectivity check.
