@@ -21,6 +21,7 @@ import {
 	installDiscoveredSkills,
 	type LocalPdfImportEntry,
 	type LookupBatchAddResult,
+	type PaperSearchCandidate,
 } from "@/lib/paper/lookup";
 import { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout";
 import { getSettings } from "@/lib/settings/react-store";
@@ -29,9 +30,12 @@ import {
 	isImportTempPath,
 } from "@/lib/shell/external-file-drop";
 import {
+	addPaperSearchDraft,
 	bumpLookupOpenSignal,
+	clearPaperSearchDraft,
 	layout,
 	setSkillImportDraft,
+	shiftPaperSearchDraft,
 	uiStore,
 } from "@/lib/shell/ui-store";
 import { joinVaultPath } from "@/lib/vault";
@@ -67,6 +71,7 @@ export async function lookupSubmit(
 	}
 	if (texts.length === 0) return;
 	const settings = getSettings();
+	const parentDir = opts.parentDir ?? currentLookupParentDir();
 
 	for (const text of texts) {
 		const input = text.trim();
@@ -81,7 +86,7 @@ export async function lookupSubmit(
 				setDetail(i18n.t("app:tasks.lookupFetching", { id: input }));
 				const result = await addPapersByIdentifiers({
 					vaultRoot: vaultPath,
-					parentDir: opts.parentDir ?? currentLookupParentDir(),
+					parentDir,
 					texts: [input],
 					settings,
 					progressTaskId: id,
@@ -95,6 +100,20 @@ export async function lookupSubmit(
 							count: result.skillCandidates.reduce(
 								(total: number, discovery) =>
 									total + discovery.candidates.length,
+								0,
+							),
+						}),
+					);
+				}
+
+				if (result.searchCandidates.length > 0) {
+					addPaperSearchDraft(
+						result.searchCandidates.map((group) => ({ ...group, parentDir })),
+					);
+					setDetail(
+						i18n.t("sidebar:lookup.searchCandidatesFound", {
+							count: result.searchCandidates.reduce(
+								(total: number, group) => total + group.candidates.length,
 								0,
 							),
 						}),
@@ -196,6 +215,19 @@ export async function lookupSubmit(
 			notifyError(`${input}: ${e instanceof Error ? e.message : String(e)}`);
 		});
 	}
+}
+
+/** Picked a title-search candidate → import it as a normal identifier. */
+export async function confirmPaperSearchImport(
+	candidate: PaperSearchCandidate,
+	parentDir: string,
+): Promise<void> {
+	shiftPaperSearchDraft();
+	await lookupSubmit([candidate.identifier], { parentDir });
+}
+
+export function cancelPaperSearchImport(): void {
+	clearPaperSearchDraft();
 }
 
 export async function confirmSkillImport(

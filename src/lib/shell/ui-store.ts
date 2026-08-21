@@ -5,7 +5,7 @@
  */
 
 import { createStore } from "zustand/vanilla";
-import type { SkillDiscovery } from "@/lib/paper/lookup";
+import type { PaperSearchGroup, SkillDiscovery } from "@/lib/paper/lookup";
 import type { PaletteMode } from "@/lib/shell/commands/types";
 
 export type RightSidebarTab =
@@ -57,6 +57,9 @@ export type AgentSessionOpenRequest = {
 	paperAbsPath?: string;
 };
 
+/** A title-search result set awaiting the user's pick, plus its destination. */
+export type PaperSearchDraftGroup = PaperSearchGroup & { parentDir: string };
+
 type UiStore = {
 	sidebarCollapsed: boolean;
 	/** Right sidebar (⌘L): Agent (default), Annotations, References (+ citation graph), or Figures. */
@@ -79,6 +82,8 @@ type UiStore = {
 	commandMode: PaletteMode;
 	settingsOpen: boolean;
 	skillImportDraft: SkillDiscovery[] | null;
+	/** Title-search candidates queued for the picker; the head is shown first. */
+	paperSearchDraft: PaperSearchDraftGroup[] | null;
 	/** PDF visual-trace → Agent session open (consumed once). */
 	agentSessionOpenRequest: AgentSessionOpenRequest | null;
 };
@@ -96,6 +101,7 @@ export const uiStore = createStore<UiStore>(() => ({
 	commandMode: "go",
 	settingsOpen: false,
 	skillImportDraft: null,
+	paperSearchDraft: null,
 	agentSessionOpenRequest: null,
 }));
 
@@ -150,6 +156,25 @@ export function setSettingsOpenState(open: boolean): void {
 
 export function setSkillImportDraft(draft: SkillDiscovery[] | null): void {
 	uiStore.setState({ skillImportDraft: draft });
+}
+
+export function addPaperSearchDraft(groups: PaperSearchDraftGroup[]): void {
+	if (groups.length === 0) return;
+	uiStore.setState((s) => ({
+		paperSearchDraft: [...(s.paperSearchDraft ?? []), ...groups],
+	}));
+}
+
+/** Drop the group the user just resolved; null once the queue drains. */
+export function shiftPaperSearchDraft(): void {
+	uiStore.setState((s) => {
+		const rest = (s.paperSearchDraft ?? []).slice(1);
+		return { paperSearchDraft: rest.length > 0 ? rest : null };
+	});
+}
+
+export function clearPaperSearchDraft(): void {
+	uiStore.setState({ paperSearchDraft: null });
 }
 
 /**

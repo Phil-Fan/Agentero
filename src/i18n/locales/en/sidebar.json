@@ -269,8 +269,8 @@
 		"conflictsTitle": "{{count}} conflicts (skipped — resolve manually)"
 	},
 	"lookup": {
-		"magicWand": "Add by identifier",
-		"placeholder": "arXiv / DOI, GitHub Skill URL, or npx skills add…",
+		"magicWand": "Add by identifier or title",
+		"placeholder": "arXiv / DOI, paper title, GitHub Skill URL…",
 		"add": "Add",
 		"adding": "Adding…",
 		"addTo": "Add to {{path}}",
@@ -288,7 +288,13 @@
 		"skillImportInstalled": "Installed",
 		"skillImportSelectAll": "Select all",
 		"skillImportSelectNone": "Select none",
-		"skillCandidatesFound": "Found {{count}} Skill candidates. Choose which to install."
+		"skillCandidatesFound": "Found {{count}} Skill candidates. Choose which to install.",
+		"searchTitle": "Results for “{{query}}”",
+		"searchCancel": "Cancel",
+		"searchConfirm": "Add",
+		"searchCitations_one": "{{count}} citation",
+		"searchCitations_other": "{{count}} citations",
+		"searchCandidatesFound": "Found {{count}} matching papers. Choose one to add."
 	},
 	"graph": {
 		"title": "Citation graph",

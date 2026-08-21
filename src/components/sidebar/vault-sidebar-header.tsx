@@ -148,9 +148,13 @@ export const VaultSidebarHeader = memo(function VaultSidebarHeader({
 		setLookupError(null);
 	}, [lookupOpenSignal, isDemo, busy]);
 
+	/**
+	 * Split on line/list separators only — spaces belong to titles and to
+	 * `npx skills add …`. The Host expands space-separated identifier lists.
+	 */
 	const parseLookupTexts = (text: string): string[] =>
 		text
-			.split(/[\s,;，；\n\r]+/)
+			.split(/[\n\r,;，；]+/)
 			.map((t) => t.trim())
 			.filter(Boolean);
 

@@ -16,6 +16,7 @@ pub(crate) mod map;
 pub(crate) mod parse;
 pub(crate) mod pdf_recognize;
 mod skill_import;
+pub(crate) mod title_search;
 #[cfg(feature = "desktop")]
 pub(crate) mod zotero_db;
 pub(crate) mod zotero_io;
@@ -30,6 +31,7 @@ pub use skill_import::{
     discard_skill_discovery, discover_skill_source, install_discovered_skills, SkillCandidate,
     SkillDiscovery, SkillImportResult,
 };
+pub use title_search::{PaperSearchCandidate, PaperSearchGroup};
 #[cfg(feature = "desktop")]
 pub use zotero_db::{
     migrate_zotero, scan_zotero, MigrateProgress, ZoteroMigrateArgs, ZoteroMigrateResult,
@@ -274,6 +276,9 @@ pub struct LookupImportBatchResult {
     pub skills: Vec<SkillImportResult>,
     #[serde(default)]
     pub skill_candidates: Vec<SkillDiscovery>,
+    /// Free-text inputs resolved to importable candidates awaiting user choice.
+    #[serde(default)]
+    pub search_candidates: Vec<PaperSearchGroup>,
     #[serde(default)]
     pub skipped: Vec<SkippedImport>,
     #[serde(default)]
@@ -383,6 +388,8 @@ pub async fn import_by_identifier_batch(
         }
     }
 
+    let search_candidates = resolve_search_queries(&preflight.queries, &mut preflight.errors).await;
+
     let to_import: Vec<(String, LookupImportArgs)> = preflight
         .papers
         .into_iter()
@@ -409,6 +416,7 @@ pub async fn import_by_identifier_batch(
             imported: Vec::new(),
             skills,
             skill_candidates,
+            search_candidates,
             skipped,
             errors,
         });
@@ -453,9 +461,35 @@ pub async fn import_by_identifier_batch(
         imported,
         skills,
         skill_candidates,
+        search_candidates,
         skipped,
         errors,
     })
+}
+
+/// Top-N candidates shown in the magic-wand picker.
+const SEARCH_CANDIDATE_LIMIT: usize = 3;
+
+/// Resolve free-text queries to importable candidates. Empty results and search
+/// failures become errors so a title that matches nothing is never a silent no-op.
+pub(crate) async fn resolve_search_queries(
+    queries: &[String],
+    errors: &mut Vec<String>,
+) -> Vec<PaperSearchGroup> {
+    let mut groups = Vec::new();
+    for query in queries {
+        match title_search::search_papers(query, SEARCH_CANDIDATE_LIMIT).await {
+            Ok(candidates) if candidates.is_empty() => {
+                errors.push(format!("{query}: no search results"));
+            }
+            Ok(candidates) => groups.push(PaperSearchGroup {
+                query: query.clone(),
+                candidates,
+            }),
+            Err(e) => errors.push(format!("{query}: {e}")),
+        }
+    }
+    groups
 }
 
 fn emit_batch_progress(

@@ -47,6 +47,26 @@ export type SkillDiscovery = {
 	candidates: SkillCandidate[];
 };
 
+/** One importable hit from a magic-wand title search. */
+export type PaperSearchCandidate = {
+	title: string;
+	authors: string[];
+	year?: number;
+	venue?: string;
+	doi?: string;
+	arxivId?: string;
+	citationCount?: number;
+	url?: string;
+	/** Text handed back to the identifier pipeline on confirm. */
+	identifier: string;
+	source: "s2" | "arxiv";
+};
+
+export type PaperSearchGroup = {
+	query: string;
+	candidates: PaperSearchCandidate[];
+};
+
 export type PaperAssetsDownloadResult = {
 	pdf: boolean;
 	tex: boolean;
@@ -97,6 +117,7 @@ export type LookupBatchAddResult = {
 	imported: LookupAddResult[];
 	skills: SkillImportResult[];
 	skillCandidates: SkillDiscovery[];
+	searchCandidates: PaperSearchGroup[];
 	skipped: { raw: string; kind: string; value: string; reason: string }[];
 	errors: string[];
 };
@@ -148,6 +169,7 @@ export async function addPapersByIdentifiers(opts: {
 		imported: result.imported.map(toLookupAddResult),
 		skills: result.skills ?? [],
 		skillCandidates: result.skillCandidates ?? [],
+		searchCandidates: result.searchCandidates ?? [],
 		skipped: result.skipped,
 		errors: result.errors,
 	};

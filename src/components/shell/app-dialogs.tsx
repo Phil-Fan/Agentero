@@ -5,6 +5,7 @@
 
 import { CommandPalette } from "@/components/dialogs/command-palette";
 import { ExternalRenameDialog } from "@/components/dialogs/external-rename-dialog";
+import { PaperSearchDialog } from "@/components/dialogs/paper-search-dialog";
 import { SkillImportDialog } from "@/components/dialogs/skill-import-dialog";
 import { ZoteroMigrateDialog } from "@/components/dialogs/zotero-migrate-dialog";
 import { ZoteroSyncDialog } from "@/components/dialogs/zotero-sync-dialog";
@@ -16,7 +17,9 @@ import {
 	useVaultStore,
 } from "@/hooks/use-app-stores";
 import {
+	cancelPaperSearchImport,
 	cancelSkillImport,
+	confirmPaperSearchImport,
 	confirmSkillImport,
 } from "@/lib/paper/import-actions";
 import { paperMetaChange } from "@/lib/paper/library-actions";
@@ -39,6 +42,7 @@ export function AppDialogs() {
 	const libraryPapers = useLibraryStore((s) => s.papers);
 	const editMetaDraft = useLibraryStore((s) => s.editMetaDraft);
 	const skillImportDraft = useUiStore((s) => s.skillImportDraft);
+	const paperSearchDraft = useUiStore((s) => s.paperSearchDraft);
 
 	return (
 		<>
@@ -58,6 +62,12 @@ export function AppDialogs() {
 				discoveries={skillImportDraft}
 				onCancel={cancelSkillImport}
 				onConfirm={confirmSkillImport}
+			/>
+			<PaperSearchDialog
+				groups={paperSearchDraft}
+				onCancel={cancelPaperSearchImport}
+				onConfirm={confirmPaperSearchImport}
+			/>
 			/>
 
 			<ExternalRenameDialog />

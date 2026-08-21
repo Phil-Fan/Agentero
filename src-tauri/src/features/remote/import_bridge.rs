@@ -86,6 +86,8 @@ pub async fn import_by_identifier_batch_remote(
     );
     let skipped = preflight.skipped;
     let mut errors = preflight.errors;
+    let search_candidates =
+        crate::features::import::resolve_search_queries(&preflight.queries, &mut errors).await;
 
     for pending in preflight.papers {
         let single = LookupImportArgs {
@@ -105,6 +107,7 @@ pub async fn import_by_identifier_batch_remote(
         imported,
         skills: Vec::new(),
         skill_candidates: Vec::new(),
+        search_candidates,
         skipped,
         errors,
     })

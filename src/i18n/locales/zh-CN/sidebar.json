@@ -269,8 +269,8 @@
 		"conflictsTitle": "{{count}} 个冲突（已跳过，请手动处理）"
 	},
 	"lookup": {
-		"magicWand": "按标识符添加论文",
-		"placeholder": "输入论文或 Skill 链接",
+		"magicWand": "按标识符或标题添加论文",
+		"placeholder": "输入论文标识符、标题或 Skill 链接",
 		"add": "添加",
 		"adding": "添加中…",
 		"addTo": "加入 {{path}}",
@@ -288,7 +288,12 @@
 		"skillImportInstalled": "已安装",
 		"skillImportSelectAll": "全选",
 		"skillImportSelectNone": "全不选",
-		"skillCandidatesFound": "找到 {{count}} 个 Skill 候选，请选择要安装的项目。"
+		"skillCandidatesFound": "找到 {{count}} 个 Skill 候选，请选择要安装的项目。",
+		"searchTitle": "“{{query}}”的搜索结果",
+		"searchCancel": "取消",
+		"searchConfirm": "添加",
+		"searchCitations_other": "被引 {{count}} 次",
+		"searchCandidatesFound": "找到 {{count}} 篇匹配论文，请选择要添加的一篇。"
 	},
 	"graph": {
 		"title": "引用图谱",
