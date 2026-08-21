@@ -151,7 +151,7 @@ export function usePdfMarksIo({
 	// always carry fresh array identity; only commit state when the content
 	// actually changed — otherwise a refresh re-renders the whole viewer and
 	// the pages visibly twitch.
-	const lastMarksPollRef = useRef("{asks:[],traces:[]}");
+	const lastMarksPollRef = useRef("{asks:[],traces:[],translates:[]}");
 	useEffect(() => {
 		if (!paperAbsPath || !marksLoadedRef.current || !isActive) return;
 		let cancelled = false;
@@ -159,11 +159,12 @@ export function usePdfMarksIo({
 			void Promise.all([
 				listPdfAskThreads(paperAbsPath),
 				listPdfVisualTraces(paperAbsPath),
-			]).then(([asks, traces]) => {
+				listPdfTranslates(paperAbsPath),
+			]).then(([asks, traces, translates]) => {
 				if (cancelled) return;
 				let fingerprint: string;
 				try {
-					fingerprint = JSON.stringify({ asks, traces });
+					fingerprint = JSON.stringify({ asks, traces, translates });
 				} catch {
 					fingerprint = "";
 				}
@@ -173,6 +174,7 @@ export function usePdfMarksIo({
 				lastMarksPollRef.current = fingerprint;
 				setThreads(asks);
 				setVisualTraces(traces);
+				setTranslates(translates);
 			});
 		};
 		// Immediate refresh on become-active (covers Agent multi-turn writes

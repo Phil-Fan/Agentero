@@ -40,7 +40,9 @@ import {
 } from "react";
 import { isLinkObject } from "@/components/viewer/pdf/layers/citation-links";
 import type { PdfViewerProps } from "@/components/viewer/pdf/types";
+import { listenSafe } from "@/lib/core/tauri-events";
 import {
+	ANNOTATIONS_FILE,
 	type HighlightCustom,
 	hasAnnotationsFile,
 	highlightViewFromObject,
@@ -56,9 +58,19 @@ import {
 } from "@/lib/pdf/highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import type { NormalizedRect } from "@/lib/pdf/selection";
+import { marksDir } from "@/lib/pdf/selection";
+import { isRecentSelfWrite } from "@/lib/pdf/selection/marks-io";
+import {
+	VAULT_FILE_CHANGED_EVENT,
+	type VaultFileChangedPayload,
+} from "@/lib/vault/fs-watch";
+import { joinVaultPath, normalizePathKey } from "@/lib/vault/path";
 
 /** Coalesce annotation bursts (drag-create, multi-page highlight) into one export. */
 const HIGHLIGHT_SAVE_DEBOUNCE_MS = 600;
+
+/** One CLI invocation can append several highlights; coalesce the watcher burst. */
+const ANNOTATIONS_REIMPORT_BURST_MS = 200;
 
 type AnnotationCapabilityProvides = ReturnType<
 	typeof useAnnotationCapability
@@ -253,6 +265,69 @@ export function usePdfHighlights({
 		paperAbsPath,
 		rebuildHighlights,
 	]);
+
+	// The CLI/Agent appends highlights straight into `marks/annotations.json`
+	// (`agentero mark add --kind highlight`). The import above runs once per
+	// mount, so without this an open viewer would neither show those highlights
+	// nor keep them: its next debounced export would overwrite the file.
+	useEffect(() => {
+		if (!paperAbsPath || !annotationCap || totalPages <= 0) return;
+		const target = normalizePathKey(
+			joinVaultPath(marksDir(paperAbsPath), ANNOTATIONS_FILE),
+		);
+		let cancelled = false;
+		let burstTimer: number | null = null;
+
+		const schedule = () => {
+			if (burstTimer !== null) return;
+			burstTimer = window.setTimeout(() => {
+				burstTimer = null;
+				void reimport();
+			}, ANNOTATIONS_REIMPORT_BURST_MS);
+		};
+
+		const reimport = async () => {
+			// The mount-time import is still filling the scope; comparing against
+			// it now would re-import the same ids. Wait one burst and retry.
+			if (importingRef.current) {
+				schedule();
+				return;
+			}
+			const scope = annotationCap.forDocument(docId);
+			const known = new Set(scope.getAnnotations().map((a) => a.object.id));
+			const items = await loadAnnotationItems(paperAbsPath);
+			if (cancelled) return;
+			const fresh = items.filter(
+				(i) => i.annotation?.id && !known.has(i.annotation.id),
+			);
+			if (!fresh.length) return;
+			importingRef.current = true;
+			scope.importAnnotations(fresh);
+			setTimeout(() => {
+				importingRef.current = false;
+				rebuildHighlights();
+			}, 0);
+		};
+
+		const unsub = listenSafe<VaultFileChangedPayload>(
+			VAULT_FILE_CHANGED_EVENT,
+			(payload) => {
+				const paths = [...payload.paths];
+				if (payload.rename) {
+					paths.push(payload.rename.from, payload.rename.to);
+				}
+				const hit = paths.filter((p) => normalizePathKey(p) === target);
+				if (!hit.length) return;
+				if (hit.every((p) => isRecentSelfWrite(p))) return;
+				schedule();
+			},
+		);
+		return () => {
+			cancelled = true;
+			if (burstTimer !== null) window.clearTimeout(burstTimer);
+			unsub();
+		};
+	}, [annotationCap, docId, paperAbsPath, totalPages, rebuildHighlights]);
 
 	const createHighlights = useCallback(
 		(pages: FormattedSelection[], color: HighlightColor, quote: string) => {
