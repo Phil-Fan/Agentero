@@ -169,11 +169,18 @@ email 用 `mailto:` 链接便于点击发信；每行**必须**写「来源」�
   - **简介**：一段话概述其学术背景与近期工作（基于主页 / Scholar / 机构页等公开资料）。
 - **一作作者的 Publication 全量表（必做）**：为本文一作列出其发表过的**全部** publication，
   用表格呈现，**本人为一作 / 共同一作的排在前面**，其余按发表年份倒序。
-  - 数据源：OpenAlex 最全 —— `https://api.openalex.org/works?filter=author.id:{AUTHOR_ID}&per-page=200&sort=publication_date:desc`
-    （从本文 authorships 拿到该作者 OpenAlex id）；可用 DBLP / Google Scholar 交叉补全。
-  - 判定「一作」：OpenAlex `authorships[].author_position == "first"`（或作者列表首位）。
+  - **首选 DBLP 去歧义作者页**（对同名最可靠）：先按姓名 + **机构**匹配到正确的作者
+    （DBLP 用数字后缀区分，如 `Yujia Zheng 0001`，并带 affiliation 备注），
+    经 `https://dblp.org/search/author/api?q={NAME}&format=json` 拿到 pid，再取
+    `https://dblp.org/pid/{PID}.xml` 的全部条目。
+  - **去重**：DBLP 常把会议正式版与 CoRR/arXiv 预印本各列一条，**同标题合并**，保留正式发表处。
+  - **判定一作**：作者列表首位是否为该作者。
+  - Google Scholar profile（作者自维护，最贴合本人）可交叉补全 DBLP 未收录项。
+  - ⚠️ **不要用 OpenAlex `filter=author.id:` 直接拉列表**：对常见中文名，OpenAlex 的作者
+    聚类会把**多个同名的人**（甚至跨领域论文）混进同一 id（实测一个「Yujia Zheng」id 混入
+    光学 / 生物医学等无关论文）。若非用不可，须按机构 / 合作者 / 领域过滤并逐条核对。
   - 建议列：`一作? | 年份 | 标题 | 发表处(会议/期刊) | 链接(DOI/arXiv)`；
-    `一作?` 用 `✓` / 空标记。条目很多时可注明「按 OpenAlex 收录，截至 {date}」。
+    `一作?` 用 `✓` / 空标记。条目很多时注明「据 DBLP，截至 {date}」。
   - 标题 / 会议 / 链接保持原文，不臆造缺失的年份或出处。
 - 每条信息标注来源（如 `机构主页`、`Google Scholar`、`GitHub`、`PDF p.1`）。
 - 抓取的网页快照等大文件也放 `attachments/`；不要写进 NOTES 或论文根目录。
