@@ -15,6 +15,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { broadcastOpenAgentWithPrompt } from "@/lib/agent/composer-seed";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { errorText } from "@/lib/core/error";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import {
 	type DoctorReport,
@@ -119,7 +120,7 @@ export function DoctorWikilinkSection({
 				);
 			}
 		} catch (error) {
-			notifyError(error instanceof Error ? error.message : String(error));
+			notifyError(errorText(error));
 			setWikiProgress(null);
 		} finally {
 			onPlanningChange(false);
@@ -180,7 +181,7 @@ export function DoctorWikilinkSection({
 			);
 			await onRefresh();
 		} catch (error) {
-			notifyError(error instanceof Error ? error.message : String(error));
+			notifyError(errorText(error));
 		} finally {
 			setWikiApplying(false);
 		}

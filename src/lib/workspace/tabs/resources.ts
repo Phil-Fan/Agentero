@@ -1,5 +1,6 @@
 import i18n from "@/i18n";
 import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
+import { errorText } from "@/lib/core/error";
 import { invokeApi } from "@/lib/core/ipc";
 import { toVaultRelative } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
@@ -434,7 +435,7 @@ export async function loadTabResources(
 	} catch (e) {
 		return {
 			...base,
-			error: e instanceof Error ? e.message : String(e),
+			error: errorText(e),
 		};
 	}
 }

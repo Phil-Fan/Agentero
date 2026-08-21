@@ -21,6 +21,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { errorText } from "@/lib/core/error";
 import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { cn } from "@/lib/core/utils";
@@ -67,7 +68,7 @@ export function PlazaArxivRecView({ className }: { className?: string }) {
 			setEmptyReason("noCandidates");
 			return;
 		}
-		notifyError(error instanceof Error ? error.message : String(error));
+		notifyError(errorText(error));
 	}, []);
 
 	const run = useCallback(
@@ -320,7 +321,7 @@ function RecommendCard({
 				},
 			});
 		} catch (error) {
-			notifyError(error instanceof Error ? error.message : String(error));
+			notifyError(errorText(error));
 			setBusy(false);
 		}
 	}, [busy, imported, item.url]);

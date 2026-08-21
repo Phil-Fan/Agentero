@@ -9,6 +9,7 @@
  * native viewer and freeze the SPA.
  */
 
+import { errorText } from "@/lib/core/error";
 import {
 	dataTransferLooksLikeOsFiles,
 	hasPdfExtension,
@@ -240,9 +241,7 @@ export async function resolveDroppedPdfPaths(
 			);
 			push(staged, entry.name || basenameOf(staged));
 		} catch (e) {
-			errors.push(
-				`${entry.name || "file"}: ${e instanceof Error ? e.message : String(e)}`,
-			);
+			errors.push(`${entry.name || "file"}: ${errorText(e)}`);
 		}
 	}
 

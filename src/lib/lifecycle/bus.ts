@@ -1,3 +1,4 @@
+import { errorText } from "@/lib/core/error";
 import { logger } from "@/lib/core/logger";
 import type {
 	FactLifecycleEvent,
@@ -53,7 +54,7 @@ function runTeardown(event: LifecycleEvent, record: Registration): void {
 		teardown();
 	} catch (e) {
 		logger.error(`lifecycle teardown failed event=${event}`, {
-			error: e instanceof Error ? e.message : String(e),
+			error: errorText(e),
 		});
 	}
 }
@@ -100,7 +101,7 @@ export async function emit<E extends FactLifecycleEvent>(
 			await record.run(payload);
 		} catch (e) {
 			logger.error(`lifecycle handler failed event=${event}`, {
-				error: e instanceof Error ? e.message : String(e),
+				error: errorText(e),
 			});
 		}
 	}
@@ -131,7 +132,7 @@ export function emitScoped<E extends ScopedLifecycleEvent>(
 				result = await record.run(payload);
 			} catch (e) {
 				logger.error(`lifecycle handler failed event=${event}`, {
-					error: e instanceof Error ? e.message : String(e),
+					error: errorText(e),
 				});
 				continue;
 			}

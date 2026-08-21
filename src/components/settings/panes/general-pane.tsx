@@ -19,6 +19,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useTauriEvent } from "@/hooks/use-tauri-event";
 import { clearUsage } from "@/lib/activity";
+import { errorText } from "@/lib/core/error";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import {
@@ -296,7 +297,7 @@ function ConnectorSettingsBlock({
 				notifyError(next.lastError);
 			}
 		} catch (e) {
-			notifyError(e instanceof Error ? e.message : String(e));
+			notifyError(errorText(e));
 			patch({ connectorEnabled: false });
 		} finally {
 			setBusy(false);
@@ -314,7 +315,7 @@ function ConnectorSettingsBlock({
 		try {
 			setStatus(await connectorSetPort(port));
 		} catch (e) {
-			notifyError(e instanceof Error ? e.message : String(e));
+			notifyError(errorText(e));
 		}
 	};
 

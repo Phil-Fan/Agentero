@@ -20,6 +20,7 @@ import {
 	startBackgroundTask,
 	updateBackgroundTask,
 } from "@/lib/core/background-tasks";
+import { errorText } from "@/lib/core/error";
 import { invokeApi } from "@/lib/core/ipc";
 import { logger } from "@/lib/core/logger";
 import { listenSafe } from "@/lib/core/tauri-events";
@@ -80,7 +81,7 @@ function dispatchJobOffer(offer: JobOfferPayload): void {
 	inFlightOffers.add(offer.jobId);
 	void executor(offer)
 		.catch(async (error) => {
-			const message = error instanceof Error ? error.message : String(error);
+			const message = errorText(error);
 			logger.error("job executor failed", {
 				kind: offer.kind,
 				jobId: offer.jobId,
@@ -121,7 +122,7 @@ async function claimRunningJobOffers(): Promise<void> {
 		}
 	} catch (error) {
 		logger.warn("claiming running job offers failed", {
-			error: error instanceof Error ? error.message : String(error),
+			error: errorText(error),
 		});
 	}
 }
@@ -230,7 +231,7 @@ export function startJobTaskProjection(): void {
 			}
 		} catch (error) {
 			logger.warn("job task projection failed to start", {
-				error: error instanceof Error ? error.message : String(error),
+				error: errorText(error),
 			});
 		}
 	})();
@@ -302,7 +303,7 @@ function requestJobCancel(jobId: string): void {
 	).catch((error) =>
 		logger.warn("job cancellation failed", {
 			jobId,
-			error: error instanceof Error ? error.message : String(error),
+			error: errorText(error),
 		}),
 	);
 }

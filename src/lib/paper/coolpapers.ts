@@ -8,6 +8,7 @@
 
 import i18n from "@/i18n";
 import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
+import { errorText } from "@/lib/core/error";
 import { invokeApi } from "@/lib/core/ipc";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
 import { arxivUrls } from "@/lib/paper/arxiv";
@@ -94,6 +95,6 @@ export async function fetchCoolPapersNotes(meta: PaperMetadata): Promise<void> {
 		}
 		notifySuccess(i18n.t("app:coolPapers.appended"));
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	}
 }

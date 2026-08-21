@@ -6,6 +6,7 @@ import {
 	startBackgroundTask,
 	updateBackgroundTask,
 } from "@/lib/core/background-tasks";
+import { errorText } from "@/lib/core/error";
 import { invokeApi } from "@/lib/core/ipc";
 import { logger } from "@/lib/core/logger";
 import { isTauri } from "@/lib/core/tauri";
@@ -141,7 +142,7 @@ export async function ensureLayoutModel(): Promise<LayoutModelStatus | null> {
 				}
 				return result;
 			} catch (e) {
-				const msg = e instanceof Error ? e.message : String(e);
+				const msg = errorText(e);
 				if (msg.includes("cancelled")) {
 					updateBackgroundTask(LAYOUT_MODEL_TASK_ID, {
 						status: "cancelled",
@@ -173,7 +174,7 @@ export function prefetchLayoutModel(): void {
 			ensurePanelRow();
 			await ensureLayoutModel();
 		} catch (e) {
-			const msg = e instanceof Error ? e.message : String(e);
+			const msg = errorText(e);
 			if (msg.includes("cancelled")) return;
 			logger.warn("layout model prefetch failed", { error: msg });
 		}

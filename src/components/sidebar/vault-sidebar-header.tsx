@@ -2,6 +2,7 @@
  * Vault title bar: switch vault dropdown + magic-wand import popover.
  * Stateless relative to FileTree (no shared internal state).
  */
+
 import {
 	Check,
 	ChevronsUpDown,
@@ -44,6 +45,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { errorText } from "@/lib/core/error";
 import { formatShortcutById } from "@/lib/shell/shortcuts";
 import { vaultDisplayName } from "@/lib/vault";
 import {
@@ -168,7 +170,7 @@ export const VaultSidebarHeader = memo(function VaultSidebarHeader({
 			setLookupText("");
 			setWandOpen(false);
 		} catch (e) {
-			setLookupError(e instanceof Error ? e.message : String(e));
+			setLookupError(errorText(e));
 		} finally {
 			setLookupBusy(false);
 		}

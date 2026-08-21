@@ -2,6 +2,7 @@ import { RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { errorText } from "@/lib/core/error";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { type DoctorIssue, doctorFixCatalogDuplicates } from "@/lib/doctor/api";
 import { DoctorSection, IssueRows } from "./doctor-sections";
@@ -56,7 +57,7 @@ export function DoctorCatalogSection({
 			);
 			await onRefresh();
 		} catch (error) {
-			notifyError(error instanceof Error ? error.message : String(error));
+			notifyError(errorText(error));
 		} finally {
 			setCatalogFixing(false);
 		}

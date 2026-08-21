@@ -2,6 +2,7 @@
  * Tree drag and drop: internal vault move between rows, plus OS PDF drop onto
  * a `papers/` org folder (import confirm happens in the parent).
  */
+
 import {
 	type DragEvent as ReactDragEvent,
 	useCallback,
@@ -14,6 +15,7 @@ import {
 	isPhysicalPointInRect,
 	subscribeTauriFileDrop,
 } from "@/lib/agent/tauri-file-drop";
+import { errorText } from "@/lib/core/error";
 import { dataTransferTypes } from "@/lib/core/file-accept";
 import { notifyError } from "@/lib/core/notify";
 import { dirnameOf } from "@/lib/core/path";
@@ -256,7 +258,7 @@ export function useTreeDragDrop({
 						}
 						onDropLocalPdfs(pdfs, dest);
 					} catch (err) {
-						notifyError(err instanceof Error ? err.message : String(err));
+						notifyError(errorText(err));
 					}
 				})();
 			}

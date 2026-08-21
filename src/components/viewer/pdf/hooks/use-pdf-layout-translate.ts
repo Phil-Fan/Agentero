@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { errorText } from "@/lib/core/error";
 import { notifyError } from "@/lib/core/notify";
 import {
 	applyLayoutTranslateSidecar,
@@ -180,7 +181,7 @@ export function usePdfLayoutTranslate({
 		})()
 			.catch((e) => {
 				if (ac.signal.aborted) return;
-				const message = e instanceof Error ? e.message : String(e);
+				const message = errorText(e);
 				notifyError(t("pdf.layoutTranslate.failed"), { description: message });
 				setLayoutTranslateJob((prev) => ({
 					status: "done",
@@ -289,7 +290,7 @@ export function usePdfLayoutTranslate({
 			})()
 				.catch((e) => {
 					if (ac.signal.aborted) return;
-					const message = e instanceof Error ? e.message : String(e);
+					const message = errorText(e);
 					notifyError(t("pdf.layoutTranslate.failed"), {
 						description: message,
 					});

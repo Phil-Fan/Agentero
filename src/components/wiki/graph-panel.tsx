@@ -2,7 +2,6 @@ import { Focus, LibraryBig, Network } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type ForceGraph2D from "react-force-graph-2d";
 import { useTranslation } from "react-i18next";
-
 import { PaneHeader } from "@/components/shell/pane-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +10,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { errorText } from "@/lib/core/error";
 import { cn } from "@/lib/core/utils";
 import {
 	type CiteGraphNode,
@@ -225,7 +225,7 @@ export function GraphPanel({
 			})
 			.catch((e) => {
 				if (!cancelled) {
-					setError(e instanceof Error ? e.message : String(e));
+					setError(errorText(e));
 				}
 			});
 		return () => {
@@ -250,7 +250,7 @@ export function GraphPanel({
 			} catch (e) {
 				if (cancelled) return;
 				setData(null);
-				setError(e instanceof Error ? e.message : String(e));
+				setError(errorText(e));
 			} finally {
 				if (!cancelled) setLoading(false);
 			}

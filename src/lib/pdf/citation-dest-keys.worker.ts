@@ -11,6 +11,7 @@
  * worker chunk (`new URL(..., import.meta.url)` in `citation-dest-map.ts`).
  */
 
+import { errorText } from "@/lib/core/error";
 import {
 	buildPdfDestMaps,
 	type CrossrefKind,
@@ -52,7 +53,7 @@ scope.onmessage = (event) => {
 			scope.postMessage({
 				id,
 				ok: false,
-				error: error instanceof Error ? error.message : String(error),
+				error: errorText(error),
 			});
 		});
 };

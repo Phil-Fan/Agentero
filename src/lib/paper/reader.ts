@@ -7,6 +7,7 @@
  * agent template. This module must not restate it, or the two halves of the same
  * prompt can disagree about whether `$` / `/` activates anything.
  */
+
 import { invoke } from "@tauri-apps/api/core";
 import i18n from "@/i18n";
 import {
@@ -26,6 +27,7 @@ import {
 	enqueueBackgroundTask,
 	updateBackgroundTask,
 } from "@/lib/core/background-tasks";
+import { errorText } from "@/lib/core/error";
 import { isTauri } from "@/lib/core/tauri";
 import { setPaperIsRead } from "@/lib/paper/api";
 import { loadPaperMetadata } from "@/lib/paper/load-meta";
@@ -155,7 +157,7 @@ async function waitForAgentSession(
 					}),
 				);
 			} catch (e) {
-				finishErr(e instanceof Error ? e.message : String(e));
+				finishErr(errorText(e));
 			}
 		})();
 	});

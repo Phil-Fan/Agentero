@@ -9,6 +9,7 @@ import {
 	enqueueBackgroundTask,
 	isBackgroundTaskCancelledError,
 } from "@/lib/core/background-tasks";
+import { errorText } from "@/lib/core/error";
 import { invokeApi } from "@/lib/core/ipc";
 import { logger } from "@/lib/core/logger";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
@@ -188,7 +189,7 @@ export async function lookupSubmit(
 						);
 					} catch (e) {
 						logger.warn("post-import asset check failed", {
-							error: e instanceof Error ? e.message : String(e),
+							error: errorText(e),
 						});
 					}
 					const needingSet = new Set(
@@ -207,7 +208,7 @@ export async function lookupSubmit(
 						).catch((e) =>
 							logger.warn("post-import download enqueue failed", {
 								rel,
-								error: e instanceof Error ? e.message : String(e),
+								error: errorText(e),
 							}),
 						);
 					}
@@ -216,7 +217,7 @@ export async function lookupSubmit(
 			{ concurrency: settings.batchImportConcurrency },
 		).catch((e) => {
 			if (isBackgroundTaskCancelledError(e)) return;
-			notifyError(`${input}: ${e instanceof Error ? e.message : String(e)}`);
+			notifyError(`${input}: ${errorText(e)}`);
 		});
 	}
 }
@@ -282,7 +283,7 @@ export async function confirmSkillImport(
 			}),
 		);
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	}
 }
 
@@ -371,7 +372,7 @@ export async function importLocalPdf(opts?: {
 		}
 	} catch (e) {
 		if (isBackgroundTaskCancelledError(e)) return;
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	} finally {
 		setLibraryIoBusy(null);
 		void cleanupImportTempPaths(stagingPaths);

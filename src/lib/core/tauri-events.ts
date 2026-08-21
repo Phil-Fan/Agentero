@@ -36,3 +36,16 @@ export function listenSafe<T>(
 		),
 	);
 }
+
+/** Emit a global Tauri wire event. No-op outside the Tauri shell; failures are non-fatal. */
+export function broadcastSafe(event: string, payload?: unknown): void {
+	if (!isTauri()) return;
+	void (async () => {
+		try {
+			const { emit } = await import("@tauri-apps/api/event");
+			await emit(event, payload);
+		} catch {
+			// non-fatal
+		}
+	})();
+}

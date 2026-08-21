@@ -15,6 +15,7 @@
 
 import i18n from "@/i18n";
 import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
+import { errorText } from "@/lib/core/error";
 import { invokeApi } from "@/lib/core/ipc";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
 import { lookupSubmit } from "@/lib/paper/import-actions";
@@ -74,7 +75,7 @@ function importViaLookup(request: PlazaImportRequest): Promise<boolean> {
 		void lookupSubmit([request.url], {
 			onComplete: (result) => settle(result.imported.length > 0),
 		}).catch((error) => {
-			notifyError(error instanceof Error ? error.message : String(error));
+			notifyError(errorText(error));
 			settle(false);
 		});
 	});
@@ -149,7 +150,7 @@ export async function importPlazaPaper(
 			? await importViaLookup(request)
 			: await importViaPage(request, vaultPath);
 	} catch (error) {
-		notifyError(error instanceof Error ? error.message : String(error));
+		notifyError(errorText(error));
 		return false;
 	}
 }
@@ -159,6 +160,6 @@ export async function importPlazaSkillRepo(url: string): Promise<void> {
 	try {
 		await lookupSubmit([url]);
 	} catch (error) {
-		notifyError(error instanceof Error ? error.message : String(error));
+		notifyError(errorText(error));
 	}
 }

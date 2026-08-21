@@ -4,6 +4,7 @@
  * @see docs/development/plaza-feeds.md
  */
 
+import { errorText } from "@/lib/core/error";
 import { invokeApi } from "@/lib/core/ipc";
 import { notifyError } from "@/lib/core/notify";
 import { lookupSubmit } from "@/lib/paper/import-actions";
@@ -238,7 +239,7 @@ export function importFeedPaper(item: FeedItem): Promise<boolean> {
 				settle(ok);
 			},
 		}).catch((error) => {
-			notifyError(error instanceof Error ? error.message : String(error));
+			notifyError(errorText(error));
 			settle(false);
 		});
 	});

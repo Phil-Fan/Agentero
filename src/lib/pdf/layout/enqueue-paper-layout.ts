@@ -6,6 +6,7 @@
 
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import i18n from "@/i18n";
+import { errorText } from "@/lib/core/error";
 import { invokeApi } from "@/lib/core/ipc";
 import {
 	type JobOfferPayload,
@@ -57,7 +58,7 @@ async function runLayoutAnalyzeExecutor(offer: JobOfferPayload): Promise<void> {
 		jobReport(args).catch((error) => {
 			logger.warn("layout analyze job report failed", {
 				jobId: offer.jobId,
-				error: error instanceof Error ? error.message : String(error),
+				error: errorText(error),
 			});
 		});
 
@@ -98,7 +99,7 @@ async function runLayoutAnalyzeExecutor(offer: JobOfferPayload): Promise<void> {
 				state: "succeeded",
 			});
 		} catch (e) {
-			const message = e instanceof Error ? e.message : String(e);
+			const message = errorText(e);
 			const state = message.toLowerCase().includes("cancel")
 				? "cancelled"
 				: "failed";
@@ -156,7 +157,7 @@ export function enqueuePaperLayoutAnalysis(opts: {
 		} catch (e) {
 			logger.warn("enqueue paper layout analysis failed", {
 				paperAbsPath,
-				error: e instanceof Error ? e.message : String(e),
+				error: errorText(e),
 			});
 		} finally {
 			queuedPapers.delete(paperAbsPath);

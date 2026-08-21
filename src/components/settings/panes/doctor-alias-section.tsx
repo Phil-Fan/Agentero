@@ -19,6 +19,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { errorText } from "@/lib/core/error";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import {
 	type AliasRepairCandidate,
@@ -102,7 +103,7 @@ export function DoctorAliasSection({
 			);
 			await onRefresh();
 		} catch (error) {
-			notifyError(error instanceof Error ? error.message : String(error));
+			notifyError(errorText(error));
 		} finally {
 			setApplying(false);
 		}
@@ -119,7 +120,7 @@ export function DoctorAliasSection({
 			);
 			await onRefresh();
 		} catch (error) {
-			notifyError(error instanceof Error ? error.message : String(error));
+			notifyError(errorText(error));
 		}
 	};
 

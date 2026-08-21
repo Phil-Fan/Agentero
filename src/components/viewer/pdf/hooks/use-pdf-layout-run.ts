@@ -20,6 +20,7 @@ import {
 	enqueueBackgroundTask,
 	isBackgroundTaskCancelledError,
 } from "@/lib/core/background-tasks";
+import { errorText } from "@/lib/core/error";
 import { notifyError } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import {
@@ -268,7 +269,7 @@ export function usePdfLayoutRun({
 				).catch((e) => {
 					if (isBackgroundTaskCancelledError(e)) return;
 					if (opts?.notifyOnError !== false) {
-						const message = e instanceof Error ? e.message : String(e);
+						const message = errorText(e);
 						notifyError(t("pdf.layout.failed"), { description: message });
 					}
 				});
@@ -278,7 +279,7 @@ export function usePdfLayoutRun({
 			void runCore().catch((e) => {
 				if (isBackgroundTaskCancelledError(e)) return;
 				if (opts?.notifyOnError === false) return;
-				const message = e instanceof Error ? e.message : String(e);
+				const message = errorText(e);
 				notifyError(t("pdf.layout.failed"), { description: message });
 			});
 		},

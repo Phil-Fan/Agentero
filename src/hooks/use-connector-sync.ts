@@ -17,6 +17,7 @@ import {
 	startBackgroundTask,
 	updateBackgroundTask,
 } from "@/lib/core/background-tasks";
+import { errorText } from "@/lib/core/error";
 import { notifyError } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { listenSafe } from "@/lib/core/tauri-events";
@@ -80,7 +81,7 @@ export function useConnectorSync(): void {
 				}
 			})
 			.catch((e) => {
-				notifyError(e instanceof Error ? e.message : String(e));
+				notifyError(errorText(e));
 			});
 	}, [connectorEnabled]);
 

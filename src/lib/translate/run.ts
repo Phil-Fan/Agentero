@@ -1,4 +1,5 @@
 import i18n from "@/i18n";
+import { errorText } from "@/lib/core/error";
 import { loadSettings } from "@/lib/settings";
 import { langsFromSettings } from "@/lib/translate/lang";
 import {
@@ -54,7 +55,7 @@ export async function runTranslate(
 	try {
 		await service.translate(task, runOpts);
 	} catch (e) {
-		const message = e instanceof Error ? e.message : String(e);
+		const message = errorText(e);
 		task.error = message;
 		throw e instanceof Error ? e : new Error(message);
 	}

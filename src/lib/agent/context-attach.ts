@@ -9,6 +9,7 @@
  */
 
 import { isTauri } from "@/lib/core/tauri";
+import { broadcastSafe } from "@/lib/core/tauri-events";
 
 export const AGENT_ATTACH_CONTEXT_EVENT = "agent:attach-context";
 
@@ -54,17 +55,9 @@ export function broadcastAgentAttachContext(paths: string[]): void {
 	const normalized = paths.filter(Boolean);
 	if (!normalized.length) return;
 	setPendingAgentContextPaths(normalized);
-	if (!isTauri()) return;
-	void (async () => {
-		try {
-			const { emit } = await import("@tauri-apps/api/event");
-			await emit(AGENT_ATTACH_CONTEXT_EVENT, {
-				paths: normalized,
-			} satisfies AgentAttachContextPayload);
-		} catch {
-			// non-fatal
-		}
-	})();
+	broadcastSafe(AGENT_ATTACH_CONTEXT_EVENT, {
+		paths: normalized,
+	} satisfies AgentAttachContextPayload);
 }
 
 export async function listenAgentAttachContext(

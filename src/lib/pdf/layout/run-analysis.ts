@@ -5,6 +5,7 @@ import type {
 	LayoutAnalysisScope,
 	LayoutTask,
 } from "@embedpdf/plugin-layout-analysis";
+import { errorText } from "@/lib/core/error";
 
 import { logger } from "@/lib/core/logger";
 import { isTauri } from "@/lib/core/tauri";
@@ -438,7 +439,7 @@ export async function runDocumentLayoutAnalysis(
 			logger.warn("layout model ensure returned not ready", s);
 		}
 	} catch (e) {
-		const message = e instanceof Error ? e.message : String(e);
+		const message = errorText(e);
 		logger.warn("layout model ensure failed", { error: message });
 		setLayoutAnalysisUi({ stage: "error", message }, documentId);
 		options.onError?.(message, false);
@@ -575,13 +576,13 @@ export async function runDocumentLayoutAnalysis(
 					try {
 						await writeLayoutSidecar(options.paperAbsPath, rawRegions);
 					} catch (e) {
-						const message = e instanceof Error ? e.message : String(e);
+						const message = errorText(e);
 						logger.warn("layout sidecar write failed", { error: message });
 					}
 					try {
 						await writeLayoutIndexFromRaw(options.paperAbsPath, rawRegions);
 					} catch (e) {
-						const message = e instanceof Error ? e.message : String(e);
+						const message = errorText(e);
 						logger.warn("layout index write failed", { error: message });
 					}
 					setLayoutDocumentResult(result);
@@ -609,7 +610,7 @@ export async function runDocumentLayoutAnalysis(
 						cancelClosedDocument();
 						return;
 					}
-					const message = err instanceof Error ? err.message : String(err);
+					const message = errorText(err);
 					setLayoutAnalysisUi({ stage: "error", message }, documentId);
 					options.onError?.(message, false);
 				});
@@ -763,13 +764,13 @@ async function finalizeRemoteLayoutRegions(args: {
 	try {
 		await writeLayoutSidecar(options.paperAbsPath, enriched, args.sidecarMode);
 	} catch (e) {
-		const message = e instanceof Error ? e.message : String(e);
+		const message = errorText(e);
 		logger.warn("layout sidecar write failed", { error: message });
 	}
 	try {
 		await writeLayoutIndexFromRaw(options.paperAbsPath, enriched);
 	} catch (e) {
-		const message = e instanceof Error ? e.message : String(e);
+		const message = errorText(e);
 		logger.warn("layout index write failed", { error: message });
 	}
 
@@ -946,7 +947,7 @@ function startRemoteLayoutAnalysis(
 				});
 				return;
 			}
-			const message = error instanceof Error ? error.message : String(error);
+			const message = errorText(error);
 			setLayoutAnalysisUi({ stage: "error", message }, documentId);
 			options.onError?.(message, false);
 			task.settle({ type: "error", reason: { message } });

@@ -10,6 +10,7 @@ import {
 	listenAgentFailed,
 	runOnce,
 } from "@/lib/agent";
+import { errorText } from "@/lib/core/error";
 import { logger } from "@/lib/core/logger";
 import { LAYOUT_SIDEBAR_MIN_SCORE } from "@/lib/pdf/layout/constants";
 import {
@@ -518,7 +519,7 @@ export function persistLayoutTranslateSidecarBestEffort(
 		void writeLayoutTranslateSidecar(paperAbsPath, key, items, options).catch(
 			(error) => {
 				logger.warn("layout translate cache write failed", {
-					error: error instanceof Error ? error.message : String(error),
+					error: errorText(error),
 				});
 			},
 		);
@@ -815,7 +816,7 @@ export async function runLayoutRegionTranslate(options: {
 			item.status = "skipped";
 		} else {
 			item.status = "error";
-			item.error = e instanceof Error ? e.message : String(e);
+			item.error = errorText(e);
 		}
 	};
 

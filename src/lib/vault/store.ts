@@ -6,6 +6,7 @@
  */
 
 import { createStore } from "zustand/vanilla";
+import { errorText } from "@/lib/core/error";
 import { notifyError } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { collectPaperFoldersFromTree } from "@/lib/paper";
@@ -205,7 +206,7 @@ export async function refreshTree(
 			if (quiet) {
 				// best-effort background refresh
 			} else {
-				const message = e instanceof Error ? e.message : String(e);
+				const message = errorText(e);
 				notifyError(message);
 				// Keep the previous tree: a transient remote miss must not blank the sidebar.
 			}
@@ -243,7 +244,7 @@ export async function loadDirChildren(dirPath: string): Promise<void> {
 			setTree(removeTreeNode(vaultStore.getState().tree, dirPath));
 			return;
 		}
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	}
 }
 

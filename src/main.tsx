@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { errorText } from "@/lib/core/error";
 import { initLogger, logger } from "@/lib/core/logger";
 import { notifyAction, notifyError } from "@/lib/core/notify";
 import { initAutoHideScrollbars } from "@/lib/core/scrollbars";
@@ -226,7 +227,7 @@ async function checkForStartupUpdate(): Promise<void> {
 		);
 	} catch (error) {
 		logger.warn("op end updater_startup_check ok=false", {
-			error: error instanceof Error ? error.message : String(error),
+			error: errorText(error),
 		});
 	}
 }
@@ -239,7 +240,7 @@ void boot().catch((e) => {
 	console.error("[boot] failed", e);
 	const root = document.getElementById("root");
 	if (root) {
-		root.textContent = `Failed to start: ${e instanceof Error ? e.message : String(e)}`;
+		root.textContent = `Failed to start: ${errorText(e)}`;
 		root.setAttribute(
 			"style",
 			"padding:24px;font:13px system-ui;white-space:pre-wrap;",

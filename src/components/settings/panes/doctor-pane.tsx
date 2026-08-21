@@ -9,6 +9,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { errorText } from "@/lib/core/error";
 import { notifyError } from "@/lib/core/notify";
 import { type DoctorReport, doctorCheck } from "@/lib/doctor/api";
 import { DoctorAliasSection } from "./doctor-alias-section";
@@ -37,7 +38,7 @@ export function DoctorPane({
 		try {
 			setReport(await doctorCheck(vaultPath));
 		} catch (error) {
-			notifyError(error instanceof Error ? error.message : String(error));
+			notifyError(errorText(error));
 		} finally {
 			setLoading(false);
 		}

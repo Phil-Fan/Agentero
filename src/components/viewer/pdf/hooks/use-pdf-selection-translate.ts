@@ -42,6 +42,7 @@ import {
 	listenAgentStream,
 	runOnce,
 } from "@/lib/agent";
+import { errorText } from "@/lib/core/error";
 import { notifyError } from "@/lib/core/notify";
 import type { PdfAskAnchor } from "@/lib/pdf/ask/types";
 import type { ActiveSelectionCard } from "@/lib/pdf/selection";
@@ -360,7 +361,7 @@ export function usePdfSelectionTranslate({
 							return;
 						}
 					} catch (e) {
-						const message = e instanceof Error ? e.message : String(e);
+						const message = errorText(e);
 						notifyError(message);
 						markTranslateFailure(rec.id, message);
 					}
@@ -391,7 +392,7 @@ export function usePdfSelectionTranslate({
 					setTranslateStreaming(false);
 					setTranslateError(null);
 				} catch (e) {
-					const message = e instanceof Error ? e.message : String(e);
+					const message = errorText(e);
 					notifyError(message);
 					markTranslateFailure(rec.id, message);
 				}

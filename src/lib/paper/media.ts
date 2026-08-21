@@ -1,4 +1,5 @@
 import { readDir } from "@tauri-apps/plugin-fs";
+import { errorText } from "@/lib/core/error";
 import { logger } from "@/lib/core/logger";
 import { joinPath } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
@@ -41,7 +42,7 @@ async function tryReadVaultBytes(absPath: string): Promise<Uint8Array | null> {
 		// silent fall back to a remote URL (which can fail CORS) is diagnosable.
 		logger.warn("pdf: read local bytes failed", {
 			path: absPath,
-			error: e instanceof Error ? e.message : String(e),
+			error: errorText(e),
 		});
 		return null;
 	}
@@ -174,7 +175,7 @@ export async function findLocalPdfPath(
 	} catch (e) {
 		logger.warn("pdf: list paper dir failed", {
 			dir: root,
-			error: e instanceof Error ? e.message : String(e),
+			error: errorText(e),
 		});
 		return null;
 	}

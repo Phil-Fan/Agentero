@@ -7,6 +7,7 @@
 import i18n from "@/i18n";
 import { track } from "@/lib/activity";
 import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
+import { errorText } from "@/lib/core/error";
 import { invokeApi } from "@/lib/core/ipc";
 import { logger } from "@/lib/core/logger";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
@@ -89,7 +90,7 @@ export async function discoverCitingPapers(): Promise<void> {
 			},
 		);
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	} finally {
 		setLibraryIoBusy(null);
 	}
@@ -138,7 +139,7 @@ export async function libraryExport(): Promise<void> {
 			},
 		);
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	} finally {
 		setLibraryIoBusy(null);
 	}
@@ -172,7 +173,7 @@ export async function libraryImport(): Promise<void> {
 			);
 		}
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	} finally {
 		setLibraryIoBusy(null);
 	}
@@ -242,11 +243,11 @@ export async function downloadPaperAssetsAction(node: FileNode): Promise<void> {
 					}
 				})
 				.catch((e) => {
-					notifyError(e instanceof Error ? e.message : String(e));
+					notifyError(errorText(e));
 				});
 		}
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	}
 }
 
@@ -274,7 +275,7 @@ export async function readPaper(node: FileNode): Promise<void> {
 			}
 		})
 		.catch((e) => {
-			notifyError(e instanceof Error ? e.message : String(e));
+			notifyError(errorText(e));
 		});
 }
 
@@ -297,7 +298,7 @@ export async function downloadAllMissingAssets(): Promise<void> {
 			{ fallback: "collect papers needing assets failed" },
 		);
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 		return;
 	}
 	if (!queue.length) return;
@@ -311,7 +312,7 @@ export async function downloadAllMissingAssets(): Promise<void> {
 		).catch((e) =>
 			logger.warn("bulk download enqueue failed", {
 				rel,
-				error: e instanceof Error ? e.message : String(e),
+				error: errorText(e),
 			}),
 		);
 	}
@@ -399,7 +400,7 @@ export async function paperTagsChange(
 		);
 		return { ...paperMeta, ...updated, path: updated.path ?? path };
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 		return null;
 	}
 }
@@ -451,7 +452,7 @@ export async function paperMetaChange(
 		);
 		return { ...paperMeta, ...updated, path: updated.path ?? path };
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 		return null;
 	}
 }

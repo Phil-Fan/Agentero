@@ -5,9 +5,10 @@
  * Desktop attach button uses Tauri native dialog filters (hard type restrict).
  * HTML `accept` remains for paste/drop validation and non-Tauri fallback.
  */
-import type { FileUIPart } from "ai";
 
+import type { FileUIPart } from "ai";
 import type { PromptImage } from "@/lib/agent/api";
+import { errorText } from "@/lib/core/error";
 import { fileMatchesAccept, hasImageExtension } from "@/lib/core/file-accept";
 import { basenameOf } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
@@ -123,9 +124,7 @@ export async function readComposerImageFiles(
 				}),
 			);
 		} catch (error) {
-			errors.push(
-				`${basenameOf(path) || path}: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			errors.push(`${basenameOf(path) || path}: ${errorText(error)}`);
 		}
 	}
 	if (!files.length && errors.length) {

@@ -5,6 +5,7 @@
  * Plain browser / tests: `console.*` fallback.
  */
 
+import { errorText } from "@/lib/core/error";
 import { isTauri } from "@/lib/core/tauri";
 
 type Level = "trace" | "debug" | "info" | "warn" | "error";
@@ -107,7 +108,7 @@ export async function logOp<T>(
 		return result;
 	} catch (e) {
 		const ms = Math.round(performance.now() - start);
-		const err = e instanceof Error ? e.message : String(e);
+		const err = errorText(e);
 		logger.error(
 			`op end ${name} ok=false duration_ms=${ms}${fieldStr} error=${trunc(err, 300)}`,
 		);

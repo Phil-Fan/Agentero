@@ -4,6 +4,7 @@
  */
 
 import { isTauri } from "@/lib/core/tauri";
+import { broadcastSafe } from "@/lib/core/tauri-events";
 
 export const AGENT_OPEN_WITH_PROMPT_EVENT = "agent:open-with-prompt";
 
@@ -44,19 +45,11 @@ export function subscribePendingAgentComposerPrompt(
 
 /** Settings (or any window): ask main to open Agent with this prompt. */
 export function broadcastOpenAgentWithPrompt(text: string): void {
-	if (!isTauri()) return;
 	const trimmed = text.trim();
 	if (!trimmed) return;
-	void (async () => {
-		try {
-			const { emit } = await import("@tauri-apps/api/event");
-			await emit(AGENT_OPEN_WITH_PROMPT_EVENT, {
-				text: trimmed,
-			} satisfies AgentOpenWithPromptPayload);
-		} catch {
-			// non-fatal
-		}
-	})();
+	broadcastSafe(AGENT_OPEN_WITH_PROMPT_EVENT, {
+		text: trimmed,
+	} satisfies AgentOpenWithPromptPayload);
 }
 
 export async function listenOpenAgentWithPrompt(

@@ -45,6 +45,7 @@ import {
 	type PromptImage,
 	runOnce,
 } from "@/lib/agent";
+import { errorText } from "@/lib/core/error";
 import { notifyError } from "@/lib/core/notify";
 import {
 	createEmptyThread,
@@ -384,7 +385,7 @@ export function usePdfAskThreads({
 						modelId: resolved.modelId,
 					});
 				} catch (e) {
-					const message = e instanceof Error ? e.message : String(e);
+					const message = errorText(e);
 					notifyError(message);
 					setAskError(message);
 				}
@@ -420,7 +421,7 @@ export function usePdfAskThreads({
 						baseMessages,
 					);
 				} catch (e) {
-					const message = e instanceof Error ? e.message : String(e);
+					const message = errorText(e);
 					notifyError(message);
 					setAskError(message);
 				}

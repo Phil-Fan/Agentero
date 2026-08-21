@@ -6,6 +6,7 @@
  * run unless `force` is set, so calling this on vault open is cheap.
  */
 
+import { errorText } from "@/lib/core/error";
 import { invokeApi } from "@/lib/core/ipc";
 
 /** Categories the Host falls back to when neither caller nor state has any. */
@@ -55,7 +56,7 @@ export function isNoCandidatesError(error: unknown): boolean {
 }
 
 function errorMessage(error: unknown): string {
-	return (error instanceof Error ? error.message : String(error)).trim();
+	return errorText(error).trim();
 }
 
 export async function recommendArxiv(opts: {

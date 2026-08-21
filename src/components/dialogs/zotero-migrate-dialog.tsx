@@ -33,6 +33,7 @@ import {
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import i18n from "@/i18n";
 import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
+import { errorText } from "@/lib/core/error";
 import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { isTauri } from "@/lib/core/tauri";
 import {
@@ -170,7 +171,7 @@ export function ZoteroMigrateDialog({
 		try {
 			applyScan(picked, await scanZotero(picked));
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			setError(errorText(e));
 		} finally {
 			setScanning(false);
 		}
@@ -334,7 +335,7 @@ export function ZoteroMigrateDialog({
 			setResult(res);
 			setBusy(false);
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			setError(errorText(e));
 			setBusy(false);
 		}
 	};

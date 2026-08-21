@@ -6,6 +6,7 @@
 import type { AgentSessionRecord } from "@/lib/agent/agent-session-store";
 import type { ChatLine } from "@/lib/agent/chat-state";
 import { isTauri } from "@/lib/core/tauri";
+import { broadcastSafe } from "@/lib/core/tauri-events";
 
 export const WORKSPACE_ACTIVE_CHANGED_EVENT = "workspace:active-changed";
 export const AGENT_OPEN_SESSION_EVENT = "agent:open-session";
@@ -32,15 +33,7 @@ export type AgentSessionHandoffPayload = {
 export function broadcastWorkspaceActive(
 	payload: WorkspaceActiveChangedPayload,
 ): void {
-	if (!isTauri()) return;
-	void (async () => {
-		try {
-			const { emit } = await import("@tauri-apps/api/event");
-			await emit(WORKSPACE_ACTIVE_CHANGED_EVENT, payload);
-		} catch {
-			// non-fatal
-		}
-	})();
+	broadcastSafe(WORKSPACE_ACTIVE_CHANGED_EVENT, payload);
 }
 
 /** Subscribe in feature windows (and tests). */
@@ -60,15 +53,7 @@ export async function listenWorkspaceActive(
 
 /** Forward PDF pin → Agent open requests into a popped-out agent window. */
 export function broadcastAgentOpenSession(payload: unknown): void {
-	if (!isTauri()) return;
-	void (async () => {
-		try {
-			const { emit } = await import("@tauri-apps/api/event");
-			await emit(AGENT_OPEN_SESSION_EVENT, payload);
-		} catch {
-			// non-fatal
-		}
-	})();
+	broadcastSafe(AGENT_OPEN_SESSION_EVENT, payload);
 }
 
 export async function listenAgentOpenSession(
@@ -86,15 +71,7 @@ export async function listenAgentOpenSession(
 export function broadcastAgentSessionHandoff(
 	payload: AgentSessionHandoffPayload,
 ): void {
-	if (!isTauri()) return;
-	void (async () => {
-		try {
-			const { emit } = await import("@tauri-apps/api/event");
-			await emit(AGENT_SESSION_HANDOFF_EVENT, payload);
-		} catch {
-			// non-fatal
-		}
-	})();
+	broadcastSafe(AGENT_SESSION_HANDOFF_EVENT, payload);
 }
 
 /**

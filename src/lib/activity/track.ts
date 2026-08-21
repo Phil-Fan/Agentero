@@ -5,6 +5,7 @@
 
 import { type ActivityRecord, recordActivityEvents } from "@/lib/activity/api";
 import { type ActivityKind, isActivityKind } from "@/lib/activity/kinds";
+import { errorText } from "@/lib/core/error";
 import { logger } from "@/lib/core/logger";
 import { toVaultRelative } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
@@ -126,7 +127,7 @@ export async function flushActivity(): Promise<void> {
 		await recordActivityEvents(batch);
 	} catch (error) {
 		logger.warn("activity flush failed", {
-			error: error instanceof Error ? error.message : String(error),
+			error: errorText(error),
 		});
 	} finally {
 		flushing = false;

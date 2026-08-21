@@ -14,6 +14,7 @@ import {
 	LayoutAnalysisPluginPackage,
 } from "@embedpdf/plugin-layout-analysis";
 import { RenderPluginPackage } from "@embedpdf/plugin-render";
+import { errorText } from "@/lib/core/error";
 
 import { logger } from "@/lib/core/logger";
 import { findLocalPdfPath, localFileToArrayBuffer } from "@/lib/paper";
@@ -73,7 +74,7 @@ export async function getHeadlessPdfEngine(): Promise<PdfEngine> {
 			return engine;
 		} catch (e) {
 			logger.warn("headless layout: worker engine failed, using direct", {
-				error: e instanceof Error ? e.message : String(e),
+				error: errorText(e),
 			});
 			const pdfiumWasmUrl = (await import("@embedpdf/pdfium/pdfium.wasm?url"))
 				.default;

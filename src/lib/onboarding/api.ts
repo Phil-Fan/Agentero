@@ -4,20 +4,13 @@
  */
 
 import { isTauri } from "@/lib/core/tauri";
+import { broadcastSafe } from "@/lib/core/tauri-events";
 
 export const ONBOARDING_REQUEST_EVENT = "onboarding:request";
 
 /** Settings (or any window): ask main to reopen the first-run wizard. */
 export function broadcastOnboardingRequest(): void {
-	if (!isTauri()) return;
-	void (async () => {
-		try {
-			const { emit } = await import("@tauri-apps/api/event");
-			await emit(ONBOARDING_REQUEST_EVENT);
-		} catch {
-			// non-fatal
-		}
-	})();
+	broadcastSafe(ONBOARDING_REQUEST_EVENT);
 }
 
 /** Main window only: resolve when the wizard should be force-opened. */

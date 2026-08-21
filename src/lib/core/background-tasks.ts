@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { createStore } from "zustand/vanilla";
 import i18n from "@/i18n";
+import { errorText } from "@/lib/core/error";
 import { logger } from "@/lib/core/logger";
 import { isTauri } from "@/lib/core/tauri";
 
@@ -526,7 +527,7 @@ export async function enqueueBackgroundTask<T>(
 			}
 			throw new BackgroundTaskCancelledError();
 		}
-		const msg = e instanceof Error ? e.message : String(e);
+		const msg = errorText(e);
 		failBackgroundTask(id, msg);
 		throw e;
 	} finally {

@@ -28,6 +28,7 @@ import { EmbedStatus } from "@/components/editor/embeds/embed-status";
 import { useWikiEmbedProjection } from "@/components/editor/embeds/projection-context";
 import { WikiAnnotationEmbed } from "@/components/editor/embeds/wiki-annotation-embed";
 import { useMarkdownExportMode } from "@/components/editor/markdown-export-mode-context";
+import { errorText } from "@/lib/core/error";
 import { createKeyedCache } from "@/lib/core/keyed-cache";
 import { cn } from "@/lib/core/utils";
 import type { AnnotationRefKind } from "@/lib/pdf/annotation-ref";
@@ -184,7 +185,7 @@ function loadEmbedState(
 			.catch(
 				(error): EmbedLoadState => ({
 					kind: "error",
-					detail: error instanceof Error ? error.message : String(error),
+					detail: errorText(error),
 				}),
 			),
 	);

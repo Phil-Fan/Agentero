@@ -7,6 +7,7 @@ import {
 	useEffect,
 	useState,
 } from "react";
+import { errorText } from "@/lib/core/error";
 import { logger } from "@/lib/core/logger";
 
 type PdfEngineContextValue = {
@@ -113,9 +114,9 @@ async function initPdfEngine(): Promise<ProbedPdfEngine> {
 			workerEngineUsable = false;
 			if (probe) disposePdfEngine(probe);
 			logger.warn(
-				`[pdf] worker engine unavailable, falling back to main thread: ${
-					error instanceof Error ? error.message : String(error)
-				}`,
+				`[pdf] worker engine unavailable, falling back to main thread: ${errorText(
+					error,
+				)}`,
 			);
 		}
 	}

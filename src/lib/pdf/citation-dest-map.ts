@@ -18,6 +18,7 @@
  * moves off it.
  */
 
+import { errorText } from "@/lib/core/error";
 import { logger } from "@/lib/core/logger";
 import { findLocalPdfPath, localFileToArrayBuffer } from "@/lib/paper";
 import {
@@ -63,7 +64,7 @@ function ensureWorker(): Worker | null {
 		);
 	} catch (error) {
 		logger.warn("citation dest map: worker spawn failed", {
-			error: error instanceof Error ? error.message : String(error),
+			error: errorText(error),
 		});
 		workerFailed = true;
 		return null;

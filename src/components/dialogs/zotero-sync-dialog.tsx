@@ -15,6 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSettings } from "@/hooks/use-app-stores";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
+import { errorText } from "@/lib/core/error";
 import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { isTauri } from "@/lib/core/tauri";
 import { pickZoteroDir } from "@/lib/paper/import/zotero-migrate";
@@ -157,7 +158,7 @@ export function ZoteroSyncDialog({
 			setResult(res);
 			onDone();
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			setError(errorText(e));
 		} finally {
 			setBusy(false);
 			setProgress(null);

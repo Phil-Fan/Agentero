@@ -30,6 +30,7 @@ import { pageElByIndex, rectRightScreen } from "@/components/viewer/pdf/coords";
 import { getLinkDestination } from "@/components/viewer/pdf/layers/citation-links";
 import { renderPdfRegionPromptImage } from "@/components/viewer/pdf/region-crop";
 import type { CrossrefPreviewState } from "@/components/viewer/pdf/types";
+import { errorText } from "@/lib/core/error";
 import { logger } from "@/lib/core/logger";
 import {
 	type CrossrefDestMap,
@@ -116,7 +117,7 @@ export function usePdfCrossrefPreview({
 				})
 				.catch((error: unknown) => {
 					logger.warn("crossref dest map failed", {
-						error: error instanceof Error ? error.message : String(error),
+						error: errorText(error),
 					});
 				});
 		});

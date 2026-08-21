@@ -45,6 +45,7 @@ import {
 	addVisualDraft,
 	type PdfVisualDraft,
 } from "@/lib/agent/visual-context-store";
+import { errorText } from "@/lib/core/error";
 import { notifyError } from "@/lib/core/notify";
 import {
 	createNoteTrace,
@@ -170,7 +171,7 @@ export function usePdfVisualMarks({
 			if (paperAbsPath) {
 				void writePdfVisualTrace(paperAbsPath, mark).catch((error) => {
 					console.warn("[visual-mark] save note failed", error);
-					notifyError(error instanceof Error ? error.message : String(error));
+					notifyError(errorText(error));
 				});
 			}
 			setVisualCardExpanded(false);
@@ -381,7 +382,7 @@ export function usePdfVisualMarks({
 			if (paperAbsPath) {
 				void writePdfVisualTrace(paperAbsPath, next).catch((error) => {
 					console.warn("[visual-mark] update comment failed", error);
-					notifyError(error instanceof Error ? error.message : String(error));
+					notifyError(errorText(error));
 				});
 			}
 		},
@@ -503,7 +504,7 @@ export function usePdfVisualMarks({
 						visualDrafts,
 					});
 				} catch (e) {
-					const message = e instanceof Error ? e.message : String(e);
+					const message = errorText(e);
 					notifyError(message);
 					setVisualError(message);
 				}

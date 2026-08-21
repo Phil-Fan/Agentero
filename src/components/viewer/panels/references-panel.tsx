@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-
 import { PaneHeader } from "@/components/shell/pane-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +21,7 @@ import { CitationImportPopover } from "@/components/viewer/citation-import-menu"
 import { GraphPanel } from "@/components/wiki/graph-panel";
 import { useCitationImport } from "@/hooks/use-citation-import";
 import { usePaperRefsSidecar } from "@/hooks/use-paper-refs-sidecar";
+import { errorText } from "@/lib/core/error";
 import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { cn } from "@/lib/core/utils";
@@ -98,7 +98,7 @@ export function ReferencesPanel({
 				if (paperPathRef.current === paperPath) setSidecar(parsed);
 			} catch (error) {
 				notifyError(t("references.parseFailed"), {
-					description: error instanceof Error ? error.message : String(error),
+					description: errorText(error),
 				});
 			} finally {
 				setParsing(false);

@@ -7,6 +7,7 @@
 
 import i18n from "@/i18n";
 import { notePaperFocus, track } from "@/lib/activity";
+import { errorText } from "@/lib/core/error";
 import { notifyError, notifyUndo, notifyWarning } from "@/lib/core/notify";
 import { closeTopOverlay } from "@/lib/core/overlay-stack";
 import { isTauri } from "@/lib/core/tauri";
@@ -813,7 +814,7 @@ export async function navigateWiki(nav: WikiNavTarget): Promise<void> {
 		await refreshTree(vaultPath);
 		openPath(full);
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	}
 }
 
@@ -938,7 +939,7 @@ export function persistFile(
 				setTabs((prev) => syncTabSeedsForPath(prev, path, md));
 				return true;
 			} catch (e) {
-				notifyError(e instanceof Error ? e.message : String(e));
+				notifyError(errorText(e));
 				return false;
 			}
 		});

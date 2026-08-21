@@ -31,6 +31,7 @@ import {
 	type PairingRequest,
 } from "@/lib/bridge/host";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { errorText } from "@/lib/core/error";
 import { notifyError } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import {
@@ -79,9 +80,7 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 
 	useEffect(() => {
 		if (!isTauri()) return;
-		void refresh().catch((error) =>
-			notifyError(error instanceof Error ? error.message : String(error)),
-		);
+		void refresh().catch((error) => notifyError(errorText(error)));
 		const unlisten: Array<() => void> = [];
 		void listenPairingRequest((request) => {
 			setPending((current) => [
@@ -104,7 +103,7 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 			await bridgeStart({ vaultPath, hostName, relayEndpoint: DEFAULT_RELAY });
 			await refresh();
 		} catch (error) {
-			notifyError(error instanceof Error ? error.message : String(error));
+			notifyError(errorText(error));
 		} finally {
 			setBusy(false);
 		}
@@ -116,7 +115,7 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 			await bridgeStop();
 			await refresh();
 		} catch (error) {
-			notifyError(error instanceof Error ? error.message : String(error));
+			notifyError(errorText(error));
 		} finally {
 			setBusy(false);
 		}
@@ -130,7 +129,7 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 			);
 			await refresh();
 		} catch (error) {
-			notifyError(error instanceof Error ? error.message : String(error));
+			notifyError(errorText(error));
 		}
 	};
 
@@ -139,7 +138,7 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 			await bridgeRevokeDevice(deviceId);
 			await refresh();
 		} catch (error) {
-			notifyError(error instanceof Error ? error.message : String(error));
+			notifyError(errorText(error));
 		}
 	};
 

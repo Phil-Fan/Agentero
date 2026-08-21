@@ -7,6 +7,7 @@
 import i18n from "@/i18n";
 import { clearSelections } from "@/lib/agent/selection-store";
 import { clearVisualDrafts } from "@/lib/agent/visual-context-store";
+import { errorText } from "@/lib/core/error";
 import {
 	notifyAction,
 	notifyError,
@@ -145,7 +146,7 @@ export async function openVault(): Promise<void> {
 		if (!path) return;
 		await activateVault(path);
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	} finally {
 		setVaultBusy(false);
 	}
@@ -222,7 +223,7 @@ export async function openLocalVaultPath(
 		}
 		await activateVault(trimmed);
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	} finally {
 		setVaultBusy(false);
 	}
@@ -241,7 +242,7 @@ export async function newWindow(): Promise<void> {
 		}
 		await openNewWindow();
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	}
 }
 
@@ -953,7 +954,7 @@ export async function confirmCreate(name: string): Promise<void> {
 			setTreeSelectedPath(full);
 		}
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	} finally {
 		setVaultBusy(false);
 	}
@@ -976,7 +977,7 @@ export async function createNewVault(): Promise<void> {
 		const openAbs = `${root.replace(/[\\/]+$/, "")}${sep}${openRel.replace(/\//g, sep)}`;
 		openPath(openAbs);
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	} finally {
 		setVaultBusy(false);
 	}
@@ -997,7 +998,7 @@ export async function migrateZoteroFromWelcome(): Promise<void> {
 		await activateVault(root);
 		setZoteroOpen(true);
 	} catch (e) {
-		notifyError(e instanceof Error ? e.message : String(e));
+		notifyError(errorText(e));
 	} finally {
 		setVaultBusy(false);
 	}

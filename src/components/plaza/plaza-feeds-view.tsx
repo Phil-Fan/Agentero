@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ViewportFloating } from "@/components/ui/viewport-floating";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { errorText } from "@/lib/core/error";
 import { notifyError } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
 import {
@@ -303,10 +304,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 				setItems(rows);
 				setOpenItem(null);
 			} catch (error) {
-				toastHostError(
-					error instanceof Error ? error.message : String(error),
-					t,
-				);
+				toastHostError(errorText(error), t);
 			}
 		},
 		[t],
@@ -327,10 +325,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 				if (!cancelled) setItems(rows);
 			} catch (error) {
 				if (!cancelled) {
-					toastHostError(
-						error instanceof Error ? error.message : String(error),
-						t,
-					);
+					toastHostError(errorText(error), t);
 				}
 			} finally {
 				if (!cancelled) setLoading(false);
@@ -374,10 +369,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 				setSelectedId(sub.id);
 				await loadItems(sub.id);
 			} catch (error) {
-				toastHostError(
-					error instanceof Error ? error.message : String(error),
-					t,
-				);
+				toastHostError(errorText(error), t);
 			} finally {
 				setBusy(false);
 			}
@@ -394,7 +386,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 			setSubs([...result.subscriptions].sort(compareFeedSubs));
 			await loadItems(selectedId);
 		} catch (error) {
-			toastHostError(error instanceof Error ? error.message : String(error), t);
+			toastHostError(errorText(error), t);
 		} finally {
 			setRefreshing(false);
 		}
@@ -412,10 +404,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 					await loadItems(selectedId);
 				}
 			} catch (error) {
-				toastHostError(
-					error instanceof Error ? error.message : String(error),
-					t,
-				);
+				toastHostError(errorText(error), t);
 			}
 		},
 		[loadItems, selectedId, t],
@@ -439,10 +428,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 			try {
 				applySub(await feedsSetPinned(id, pinned));
 			} catch (error) {
-				toastHostError(
-					error instanceof Error ? error.message : String(error),
-					t,
-				);
+				toastHostError(errorText(error), t);
 			}
 		},
 		[applySub, t],
@@ -464,7 +450,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 			);
 			setRenameTarget(null);
 		} catch (error) {
-			toastHostError(error instanceof Error ? error.message : String(error), t);
+			toastHostError(errorText(error), t);
 		}
 	}, [applySub, renameTarget, renameTitle, t]);
 

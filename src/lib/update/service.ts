@@ -1,4 +1,5 @@
 import type { Update } from "@tauri-apps/plugin-updater";
+import { errorText } from "@/lib/core/error";
 import { logger } from "@/lib/core/logger";
 import { isTauri } from "@/lib/core/tauri";
 import { ensureSettingsLoaded } from "@/lib/settings/store";
@@ -97,7 +98,7 @@ export async function checkForUpdate(): Promise<UpdateSnapshot> {
 			});
 		} catch (error) {
 			logger.warn("op end updater_check ok=false", {
-				error: error instanceof Error ? error.message : String(error),
+				error: errorText(error),
 			});
 			return emit({ phase: "error", errorOperation: "check" });
 		} finally {
@@ -159,7 +160,7 @@ export async function installAvailableUpdate(): Promise<UpdateSnapshot> {
 		} catch (error) {
 			logger.error("op end updater_install ok=false", {
 				version: update.version,
-				error: error instanceof Error ? error.message : String(error),
+				error: errorText(error),
 			});
 			await closeAvailableUpdate();
 			return emit({ phase: "error", errorOperation: "install" });

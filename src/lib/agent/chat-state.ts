@@ -258,9 +258,7 @@ export function errorChatLine(text: string): ChatLine {
 }
 
 /** Coerce unknown thrown values into a display string. */
-export function errorText(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
+export { errorText } from "@/lib/core/error";
 
 /**
  * Background workflows (paper-reader, visual pin chat, etc.) must not appear

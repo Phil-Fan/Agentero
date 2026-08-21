@@ -80,6 +80,7 @@ import {
 	USER_AGENT_PRESETS,
 	upsertAgent,
 } from "@/lib/agent";
+import { errorText } from "@/lib/core/error";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
@@ -186,7 +187,7 @@ export function AgentPane({
 				setUserAgentProviderDraft(scan.userAgentProviderIds ?? "");
 				return scan;
 			} catch (e) {
-				notifyError(e instanceof Error ? e.message : String(e));
+				notifyError(errorText(e));
 				return null;
 			}
 		}, [t]);
@@ -212,7 +213,7 @@ export function AgentPane({
 						: prev,
 				);
 			} catch (e) {
-				notifyError(e instanceof Error ? e.message : String(e));
+				notifyError(errorText(e));
 			}
 		},
 		[userAgentDraft, userAgentProviderDraft],
@@ -252,7 +253,7 @@ export function AgentPane({
 							prev ? patchCatalogProbe(prev, entry.templateId, result) : prev,
 						);
 					} catch (e) {
-						const err = e instanceof Error ? e.message : String(e);
+						const err = errorText(e);
 						setCatalog((prev) =>
 							prev
 								? patchCatalogProbe(prev, entry.templateId, {
@@ -274,7 +275,7 @@ export function AgentPane({
 							prev ? patchCustomProbe(prev, agent.id, result) : prev,
 						);
 					} catch (e) {
-						const err = e instanceof Error ? e.message : String(e);
+						const err = errorText(e);
 						setCatalog((prev) =>
 							prev
 								? patchCustomProbe(prev, agent.id, {
@@ -373,7 +374,7 @@ export function AgentPane({
 			await scanOnce();
 			await refreshPdfAskRegistry();
 		} catch (e) {
-			notifyError(e instanceof Error ? e.message : String(e));
+			notifyError(errorText(e));
 		} finally {
 			setSavingDefaultValue(null);
 		}
@@ -473,7 +474,7 @@ export function AgentPane({
 				),
 			);
 		} catch (e) {
-			notifyError(e instanceof Error ? e.message : String(e));
+			notifyError(errorText(e));
 		} finally {
 			unlisten?.();
 			clearLifecycleProgress(entry.templateId);
@@ -499,7 +500,7 @@ export function AgentPane({
 					);
 				})
 				.catch((e) => {
-					notifyError(e instanceof Error ? e.message : String(e));
+					notifyError(errorText(e));
 					setUninstallTarget(null);
 				});
 			return;
@@ -530,7 +531,7 @@ export function AgentPane({
 				await scanOnce();
 				notifySuccess(t("agent.removeSuccess", { name: target.entry.name }));
 			} catch (e) {
-				notifyError(e instanceof Error ? e.message : String(e));
+				notifyError(errorText(e));
 			} finally {
 				setUninstallBusy(false);
 				setUninstallTarget(null);
@@ -543,7 +544,7 @@ export function AgentPane({
 			await scanOnce();
 			notifySuccess(t("agent.removeSuccess", { name: target.name }));
 		} catch (e) {
-			notifyError(e instanceof Error ? e.message : String(e));
+			notifyError(errorText(e));
 		} finally {
 			setUninstallBusy(false);
 			setUninstallTarget(null);
@@ -571,7 +572,7 @@ export function AgentPane({
 				await scanOnce();
 			}
 		} catch (e) {
-			notifyError(e instanceof Error ? e.message : String(e));
+			notifyError(errorText(e));
 		} finally {
 			setLoading(false);
 			clearAllProbingKeys();
@@ -1328,7 +1329,7 @@ export function RemoteAgentPane({
 			setEntries(scan.entries);
 			return scan.entries;
 		} catch (e) {
-			notifyError(e instanceof Error ? e.message : String(e));
+			notifyError(errorText(e));
 			return null;
 		}
 	}, [sessionId, t]);
@@ -1369,7 +1370,7 @@ export function RemoteAgentPane({
 						const result = await remoteAgentProbe(sessionId, entry.templateId);
 						patchEntryProbe(entry.templateId, result);
 					} catch (e) {
-						const err = e instanceof Error ? e.message : String(e);
+						const err = errorText(e);
 						patchEntryProbe(entry.templateId, {
 							agentId: entry.templateId,
 							available: false,
@@ -1418,7 +1419,7 @@ export function RemoteAgentPane({
 		try {
 			await remoteAgentOpenInstallTerminal(sessionId, entry.templateId);
 		} catch (e) {
-			notifyError(e instanceof Error ? e.message : String(e));
+			notifyError(errorText(e));
 		}
 	};
 

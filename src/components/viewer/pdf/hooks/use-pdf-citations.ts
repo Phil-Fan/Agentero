@@ -30,6 +30,7 @@ import { getLinkDestination } from "@/components/viewer/pdf/layers/citation-link
 import type { CitationPreviewState } from "@/components/viewer/pdf/types";
 import { useCitationImport } from "@/hooks/use-citation-import";
 import { usePaperRefsSidecar } from "@/hooks/use-paper-refs-sidecar";
+import { errorText } from "@/lib/core/error";
 import { logger } from "@/lib/core/logger";
 import { openExternalUrl } from "@/lib/core/open-external";
 import type { Citation } from "@/lib/paper/refs";
@@ -168,7 +169,7 @@ export function usePdfCitations({
 				.catch((error: unknown) => {
 					// Non-fatal: hover previews simply do not resolve.
 					logger.warn("citation dest key map failed", {
-						error: error instanceof Error ? error.message : String(error),
+						error: errorText(error),
 					});
 				});
 		});

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-
 import { useVaultStore } from "@/hooks/use-app-stores";
 import { usePapersOrgFolders } from "@/hooks/use-papers-org-folders";
+import { errorText } from "@/lib/core/error";
 import { notifyError } from "@/lib/core/notify";
 import { resolvePapersParentDir } from "@/lib/paper/detect";
 import { lookupSubmit } from "@/lib/paper/import-actions";
@@ -66,15 +66,14 @@ export function useCitationImport(
 							if (paperPathRef.current === origin) setSidecar(parsed);
 						} catch (error) {
 							notifyError(t("references.importFailed"), {
-								description:
-									error instanceof Error ? error.message : String(error),
+								description: errorText(error),
 							});
 						}
 					},
 				});
 			} catch (error) {
 				notifyError(t("references.importFailed"), {
-					description: error instanceof Error ? error.message : String(error),
+					description: errorText(error),
 				});
 			} finally {
 				setImportingId(null);

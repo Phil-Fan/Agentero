@@ -7,6 +7,7 @@
  * projected row.
  */
 
+import { errorText } from "@/lib/core/error";
 import { invokeApi } from "@/lib/core/ipc";
 import { logger } from "@/lib/core/logger";
 
@@ -52,7 +53,7 @@ export function enqueuePaperPdfParse(opts: EnqueuePaperPdfParseOptions): void {
 			logger.warn("enqueue paper pdf parse failed", {
 				vaultPath,
 				paperRelPath,
-				error: e instanceof Error ? e.message : String(e),
+				error: errorText(e),
 			});
 		} finally {
 			queuedPapers.delete(key);
