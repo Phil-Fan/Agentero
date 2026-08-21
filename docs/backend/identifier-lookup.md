@@ -228,7 +228,16 @@ UI 阅读：优先 catalog 远程 URL；`source/` 为 arXiv TeX 归档；`PAPER.
 | **arXiv** | `1706.03762`、`arXiv:1706.03762v1`、abs URL | arXiv Search Translator 或 Agentero arXiv API |
 | **ADS Bibcode** | `2015ApJ...810...89S` | ADS 相关 Search Translator |
 
-批量：魔棒输入框现已支持一次粘贴多个标识符，可用以下分隔符拆分（正则 `/[\s,;，；\n\r]+/`）：空格、逗号 `,`、分号 `;`、中文逗号 `，`、中文分号 `；`、换行 / 回车。Parser 会逐 token 调用 `extract_primary_identifier`，并按去 version 的 arXiv ID / DOI / ISBN / PMID 等做去重。PMID 仍可在 Runtime 侧按批合并（Zotero 习惯每批 ≤200）。
+批量：魔棒输入框支持一次粘贴多个标识符，按**换行 / 回车、逗号 `,`、分号 `;`、中文逗号 `，`、中文分号 `；`**拆分（正则 `/[\n\r,;，；]+/`）。空格**不再**是分隔符 —— 论文标题与 `npx skills add …` 都含空格，必须整段送到 Host。Host 侧 `classify_segment`（`src-tauri/src/features/import/batch.rs`）按以下顺序判定每一段：
+
+1. 单 token → `extract_primary_identifier`，命中即标识符，否则转标题搜索。
+2. 多 token 且整段是 Skill 来源（`npx skills add …`）→ 单条 Skill。
+3. 多 token 且**每个** token 都能解析出标识符 → 展开为多条（保住"空格分隔多个 ID"的粘贴习惯）。
+4. 其余 → 标题/关键词查询（见 3.4）。
+
+> 多 token 不做整段匹配：`clean_doi` / `clean_isbn` 会扫描整个字符串，整段匹配会把列表其余部分或整句标题一起吞掉。
+
+去重按去 version 的 arXiv ID / DOI / ISBN / PMID 等进行。PMID 仍可在 Runtime 侧按批合并（Zotero 习惯每批 ≤200）。
 
 ### 3.2 解析优先级（对齐 Zotero `extractIdentifiers`）
 
@@ -260,6 +269,21 @@ interface ParsedIdentifier {
   raw: string;
 }
 ```
+
+### 3.4 标题搜索回退
+
+**Zotero translator 无法承担这一步。** translation-server 的 `POST /search`（§4.2）是标识符入口，Zotero Search Translators 只做「标识符 → 元数据」，没有自由文本检索能力；Agentero 本地也没有 JS runtime 来跑 translator。因此标题搜索必须直连检索 API。
+
+兼容性通过分工保留：**搜索只负责「文本 → 候选标识符」**，用户选中后把 `identifier`（arXiv ID 优先，其次 DOI）重新提交 `lookup_import_batch`，Translator 仍是元数据的唯一事实来源，入库管道不分叉。
+
+- 实现：`src-tauri/src/features/import/title_search.rs`
+- 数据源：Semantic Scholar Graph API `/paper/search` 为主；报错或 0 结果时回退 **arXiv** `search_query=ti:"…"&sortBy=relevance`。两者均免 key，复用 `features::network::client_builder()` 与信号量限流（并发 2）。
+  > **S2 无 key 的搜索接口限流极严（实测连续 3 次均 429）**，所以 arXiv 才是线上的常走路径。不选 Crossref 兜底：NeurIPS proceedings 之类没有 Crossref DOI，搜 "Attention is all you need" 时正确论文**根本不在** Crossref 结果集里，只会返回一堆同名论文。
+  > arXiv 的 Atom 需要按 `<entry>` 切块解析 —— `map::map_arxiv_atom` 只处理单条响应，不能复用。
+- 排序：保留 provider 的相关度顺序，但把**标题与 query 归一化后完全相等**的条目提到最前（归一化 = 小写、去非字母数字、压空格）。同名论文很多，这一步防止真正那篇被埋掉。
+- **过滤掉既无 DOI 也无 arXiv ID 的条目** —— 没有标识符就无法入库，不能出现在候选里。
+- Top 3 返回给前端（`SEARCH_CANDIDATE_LIMIT`）；无结果或搜索失败写入 `errors`，不静默。单源失败走 `log::warn!`，否则 S2 的 429 完全不可见。
+- 副作用：拼错的标识符（如 `1706.0376`）现在会走搜索并得到「无结果」，比原来的 `unrecognized identifier` 更可读。
 
 ---
 
@@ -707,6 +731,7 @@ arXiv URL 推导：
 - [x] 无 TeX 时 liteparse → `PAPER.md`（下载后自动）
 - [x] `⇧⌘I` 魔棒快捷键
 - [x] 魔棒批量入库：多标识符粘贴、去重、批量下载、进度聚合
+- [x] 标题/关键词搜索回退：Top 3 候选单选弹窗 → 回填标识符入库（#326）
 - [ ] 重复提示增强（单条弹层内）、入库任务可取消
 
 ### Phase D — 可选

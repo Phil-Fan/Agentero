@@ -5,7 +5,7 @@
 ## 魔棒
 
 - 入口：侧栏 `WandSparkles` / `⇧⌘I`。
-- 粘贴一个或多个论文标识符或 Skill 来源（空格/逗号/分号/换行）；去重后顺序处理。
+- 粘贴一个或多个论文标识符、Skill 来源，或直接输入论文标题（按逗号/分号/换行分隔；空格不再分隔，留给标题与 `npx skills add …`）；去重后顺序处理。
 - 目标：`papers/` 或当前选中的 Papers 子文件夹。
 - 弹层内 **FileUp**：多选本地 PDF。
 - 成功后：局部刷新 `papers/` 子树、Wiki、Library；**不**自动打开论文（并行入库时抢焦点会让文件树反复跳转），批量也**不**自动连跑精读。
@@ -17,6 +17,14 @@
 - 入口：打开论文后的右侧 **References** 面板，未入库引用卡片上的 Import 按钮。
 - 复用魔棒 identifier lookup 管线（与其它入口一样，入库后不打开新论文）。
 - 成功后：刷新 Vault 树、Wiki 索引、Library，并重解析当前论文 references 以更新 `localMatch`；当前阅读的论文保持打开。
+
+### 标题搜索
+
+- 输入识别不到标识符时自动走标题/关键词搜索（Semantic Scholar → arXiv 兜底，见 [../backend/identifier-lookup.md](../backend/identifier-lookup.md) § 3.4）。
+- 弹出**单选**窗口列 Top 3：标题、作者 · 年份 · 出处、arXiv/DOI 徽标与被引数。确认后按候选的标识符走常规入库管线，落回发起搜索时的目标文件夹。
+- 取消直接丢弃，无 Host 侧临时态需要清理。
+- 一次粘贴多个标题时按队列逐个弹窗，处理完一个自动显示下一个。
+- 无匹配结果时不弹窗，走错误 Toast。
 
 ### Skill 导入
 
@@ -53,4 +61,5 @@ PDF 解析最多等待 120 秒，取消任务会终止当前解析子进程。�
 
 - `src/lib/paper/lookup.ts`、`import-actions.ts`、`import/`
 - `src/components/sidebar/` 魔棒 Popover
+- `src/components/dialogs/paper-search-dialog.tsx` 标题搜索候选单选窗
 - `src/components/library/library-pdf-drop-surface.tsx` Library 拖入
