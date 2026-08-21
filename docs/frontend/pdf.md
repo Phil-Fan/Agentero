@@ -59,6 +59,21 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 - 视觉裁剪按用户框选的实际区域生成截图（不隐式外扩），最长边 1600 px；不以 base64 写入 mark JSON。活动 PDF 的 marks 轮询只读取 metadata，悬浮卡片、打开 Agent 与 Wiki 嵌入按需读取图片。图片缺失时仍保留位置、批注和多轮 transcript。
 - **写进笔记**：批注面板复制 / `[[@id]]` / `![[…@id]]`，见 [wiki.md](wiki.md) 编辑器 `@` 说明。
 
+## CLI / Agent 写入的标注
+
+`agentero mark add` 用 PDFium 文字引擎按 quote 定位后直接写盘（见 [backend/cli.md](../backend/cli.md)）：
+高亮/批注追加到 `marks/annotations.json`，ask / translate 落 per-id `marks/<id>.json`。
+
+阅读器两条吸收路径：
+
+- `annotations.json`：挂载时导入一次；此外监听 Vault watcher 对该文件的**外部**变更
+  （跳过本应用自身写入的 echo，200ms 合并），只导入内存里还没有的 annotation id。
+  没有这一步，论文开着时 CLI 追加的高亮既看不见，还会被下一次 debounce 导出覆盖。
+- per-id mark：活动 tab 的 marks 刷新同时重读 ask / visual / translate。
+
+历史遗留的 per-id `kind: highlight` mark 仍由 `migrateHighlightMarks` 在 `annotations.json`
+缺失/为空时一次性投影并删除源文件；新写入不再走这条路。
+
 ## 代码
 
 | 路径 | 职责 |

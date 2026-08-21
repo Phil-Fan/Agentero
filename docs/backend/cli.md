@@ -26,7 +26,8 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 | `wiki` | 只读双链语义检查 |
 | `doctor` | 聚合诊断与显式确认的论文 aliases / 视觉批注格式修复 |
 | `layout` | 侧栏同构版面索引：`list` / `get`（figure / table / algorithm / formula） |
-| `mark` | 阅读标注：`list` / `get` / `add --region` / `delete`（区域锚点优先） |
+| `mark` | 阅读标注：`list` / `get` / `add`（`--quote` 文字锚点或 `--region` 区域锚点）/ `update` / `delete` |
+| `translate` | 免费机器翻译纯文本（无需 API Key，不读桌面 settings） |
 | `usage` | 本机活动日志：`which` / `timeline` / `summary` / `clear`（XDG `usage.sqlite`） |
 | `feed` | 广场订阅：`add` / `list` / `remove`（XDG `feeds.sqlite`，与 UI 共用） |
 
@@ -42,22 +43,65 @@ agentero layout list papers/demo --json
 agentero layout list papers/demo --kind figure --kind formula --json
 agentero layout get  papers/demo figure-3 --json
 
-# 按区域钉批注（geometry=resolved，拷贝 bbox；不写 annotations.json）
+# 按区域钉批注（bbox 归一，页面尺寸由 PDF 引擎测量）
 agentero mark add papers/demo --region figure-3 --comment "核心图" --json
 agentero mark add papers/demo --region formula-p3-… --question "推导？" --json
 agentero mark list papers/demo --json
 agentero mark delete papers/demo <id> -y --json
 ```
 
-Mark id 是 nanoid，字母表含 `-`，约 1/64 的 id 以 `-` 开头。`mark get` / `mark delete` 的 id 位置参数按 `allow_hyphen_values` 接收，无需 `--` 分隔。
+Mark id 是 nanoid，字母表含 `-`，约 1/64 的 id 以 `-` 开头。`mark get` / `mark update` / `mark delete` 的 id 位置参数按 `allow_hyphen_values` 接收，无需 `--` 分隔。
 
 | `--kind`（layout list） | 含义 |
 |---|---|
 | `figure` | 侧栏插图分区（image + chart） |
 | `image` / `chart` / `table` / `algorithm` / `formula` | 精确 kind |
 
-无 `layout-index.json` 时返回 `layout_index_missing`（提示先在 App 打开论文跑版面分析）。  
-正文句子高亮 / `translate` 命令见规划 [#170](https://github.com/poco-ai/Agentero/issues/170) 与 [mark-cli-roadmap.md](../development/mark-cli-roadmap.md)。
+无 `layout-index.json` 时返回 `layout_index_missing`（提示先在 App 打开论文跑版面分析）。
+
+### 文字高亮 / 批注 / 翻译（已实现）
+
+`--quote` 走 PDF 文字引擎（PDFium，与阅读器 ⌘F 同源）定位，两趟匹配：
+
+1. **严格**：折叠空白、默认忽略大小写，并把印刷体变体折回 ASCII（`’`→`'`、各类破折号→`-`、`ﬁ`/`ﬂ` 连字展开）——Agent 的 quote 抄自 TeX/`PAPER.md`，与排版后的字符不同。
+2. **宽松回退**（严格零命中才跑）：再丢掉连字符、空格，以及 PDFium 解码失败的字符（`U+FFFE` 等 noncharacter）。跨行连字符（`token-to-` 换行 `token`）和坏 ToUnicode 字体靠这趟救回。
+
+命中后由 `FPDFText_CountRects` 取每个可视行一个框，经 `bounds_to_viewport` 翻到左上原点再归一。
+CLI **不手算坐标**，也不接受外部传入坐标。跨页的句子仍搜不到（逐页搜索）。
+
+```bash
+# 高亮；加 --comment 即批注（等价于桌面划词后写评论）
+agentero mark add papers/demo --kind highlight --quote "we propose a novel …" \
+  --page 3 --comment "核心贡献" --mark-color yellow --json
+
+# 同句多处命中：--page 过滤、--match-index 选第几处、--all 全标
+agentero mark add papers/demo --kind highlight --quote "attention" --all --json
+
+# 钉翻译（免费 MT）/ 提问壳
+agentero mark add papers/demo --kind translate --quote "…" --to zh-CN --json
+agentero mark add papers/demo --kind ask --quote "…" --question "为什么？" --json
+
+# 改评论 / 改颜色
+agentero mark update papers/demo <id> --comment "改过的批注" --mark-color green --json
+
+# 纯文本翻译，不落 mark
+agentero translate "Hello world" --to zh-CN --json
+```
+
+| 落盘 | 内容 |
+|---|---|
+| `{paper}/marks/annotations.json` | 高亮 / 批注（EmbedPDF annotation 传输格式，页面点坐标；CLI 追加时按 id 去重 + 原子写） |
+| `{paper}/marks/<id>.json` | ask / translate（归一 0–1 rects，与桌面划词同一 schema） |
+
+零命中返回 `mark_locate_failed`（业务错误，退出码 1）且**不落盘**——让 Agent 换更独特的
+句子重试，而不是写一条没有位置的垃圾 mark。论文无本地 PDF 时返回 `paper_pdf_missing`。
+
+定位跑在与 `PAPER.md` 解析同一套隔离 worker 子进程里（`--agentero-internal-pdf-locate-worker`，
+30s 硬超时），PDFium 卡死不会拖住 CLI。翻译只用免费引擎（`translate_text` 的 FREE_PROVIDERS，
+zh 目标走并行竞速）；商业 BYOK Key 只在桌面 settings 里，CLI 拿不到也不去读。
+
+阅读器侧：打开论文时导入 `annotations.json`，并监听该文件的**外部**变更增量导入，
+所以论文开着时跑 CLI 也能在 1~2 秒内看到黄底（见 [frontend/pdf.md](../frontend/pdf.md)）。
 
 ```bash
 # CLI 以 `default-features = false` 依赖 `agentero_lib`，headless 构建不走 tauri-build，无需 externalBin 占位。
