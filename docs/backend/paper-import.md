@@ -81,12 +81,25 @@ Skill 不写入 catalog、不创建 `papers/` 条目、不执行 `scripts/`。�
 |---|---|---|---|
 | `local`（默认） | liteparse worker 子进程 + PDFium | `pdf` / `ocr` | `medium` / `low` |
 | `mineru` | 复用 MinerU 批量提取（上传 → 轮询 → 结果 zip），读取 zip 内 `full.md` | `mineru` | `high` |
-| `paddle` | 复用 PP-StructureV3 异步任务，拼接 JSONL 中每页 `markdown.text` | `paddle` | `high` |
+| `paddle` | 复用 AI Studio 异步任务，拼接 JSONL 中每页 `markdown.text`。正文模型默认 `PaddleOCR-VL-1.6`（`PP-StructureV3` 只产出版面框，不产 markdown），可用 `providerConfigs.paddle.model` 覆盖 | `paddle` | `high` |
 | `openaiCompatible` | 渲染 worker 逐页出 150 DPI PNG（上限 100 页）→ OpenAI 兼容 `/chat/completions` 多模态 OCR（预设硅基流动；`PaddlePaddle/PaddleOCR-VL-1.5` 提示词 `OCR:`，`deepseek-ai/DeepSeek-OCR` 用 grounding 提示词，按 model id 自动选择） | `vlm` | `medium` |
 
 - **回退**：云端引擎失败或产出空 markdown 时自动回退本地 liteparse，原因追加进 `messages`；用户取消不回退。`body_source` 始终记录实际来源。
 - **凭据注入**：引擎配置以进程级快照持有（启动与 `settings_set` 时从 `AppSettingsStore` 刷新，模式同 `network::configure_proxy`），明文 key 不出 Host。
+- **DeepSeek grounding 清洗**：grounding 输出形如 `<|ref|>label<|/ref|><|det|>[[box]]<|/det|>\n正文`，`<|ref|>` 内是版面**类别名**（`text` / `title`）而非正文，两段都整体丢弃，否则正文里会混入 `text` / `sub_title` 噪声行。
 - **实现**：`src-tauri/src/features/import/pdf_parse/engines/`（`BodyParseEngine` trait + local / mineru / paddle / openai_vlm）；云端上传/轮询复用 `layout_remote` 的 `run_mineru_extract` / `run_paddle_ocr_job`。
+- **Live 验证**（`#[ignore]`，需自备 key，密钥只走环境变量）：
+
+  ```bash
+  AGENTERO_VLM_LIVE_PDF=<pdf> AGENTERO_VLM_API_KEY=<key> [AGENTERO_VLM_MODEL=…] \
+    cargo test -p agentero --lib -- live_openai_vlm --ignored --nocapture
+  AGENTERO_MINERU_LIVE_PDF=<pdf> AGENTERO_MINERU_API_KEY=<key> \
+    cargo test -p agentero --lib -- live_mineru --ignored --nocapture
+  AGENTERO_PADDLE_LIVE_PDF=<pdf> AGENTERO_PADDLE_API_KEY=<key> [AGENTERO_PADDLE_MODEL=…] \
+    cargo test -p agentero --lib -- live_paddle --ignored --nocapture
+  ```
+
+  VLM live 测试在进程内直接渲染（worker 子进程会重入 test 二进制），其余与线上路径一致。
 
 ## PDFium 随包分发
 
