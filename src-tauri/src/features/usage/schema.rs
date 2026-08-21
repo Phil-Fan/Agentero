@@ -162,7 +162,6 @@ fn prune(conn: &Connection) -> Result<(), AppError> {
 
 /// `papers/<id>/…` → `papers/<id>`; anything else stays `None`.
 // Used by event writes and paper-level rollups.
-#[allow(dead_code)]
 pub fn paper_path_of(path: &str) -> Option<String> {
     let path = path.trim().replace('\\', "/");
     let path = path.trim_matches('/');

@@ -13,7 +13,6 @@ mod download;
 pub(crate) mod windows_path;
 
 use crate::core::error::AppError;
-use crate::core::install_dirs::{ABS_BIN_DIRS, HOME_BIN_DIRS};
 use download::{
     download_and_extract, host_triple, managed_binary_name, release_download_url,
     release_tag_page_url, versions_equal,
@@ -573,21 +572,6 @@ pub(crate) async fn ensure_cli_binary<R: Runtime>(
         )));
     }
     Ok((dest, "download-install"))
-}
-
-/// Optional helper: list user bin candidates (for diagnostics).
-#[allow(dead_code)]
-pub fn user_bin_candidates() -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    if let Some(home) = dirs::home_dir() {
-        for rel in HOME_BIN_DIRS {
-            out.push(home.join(rel));
-        }
-    }
-    for abs in ABS_BIN_DIRS {
-        out.push(PathBuf::from(abs));
-    }
-    out
 }
 
 #[cfg(test)]

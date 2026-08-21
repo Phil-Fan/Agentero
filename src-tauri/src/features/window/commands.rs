@@ -289,21 +289,6 @@ pub async fn feature_window_open(
     Ok(())
 }
 
-/// Close a singleton feature window if open.
-#[tauri::command]
-pub async fn feature_window_close(app: AppHandle, view: String) -> Result<(), String> {
-    let op = OpTimer::start("feature_window_close");
-    validate_feature_view(&view)?;
-    let label = feature_window_label(&view);
-    if let Some(win) = app.get_webview_window(&label) {
-        win.close().map_err(|e| e.to_string())?;
-        op.finish_ok_extra(format!("closed view={view}"));
-    } else {
-        op.finish_ok_extra(format!("missing view={view}"));
-    }
-    Ok(())
-}
-
 /// Open (or focus) a per-path document window.
 ///
 /// See [`window_new`] for why this must stay `async`.

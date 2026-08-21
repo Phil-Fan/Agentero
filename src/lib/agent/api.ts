@@ -407,13 +407,6 @@ export async function setDefaultAgent(
 	return invokeAgentApi("agent_set_default", { id });
 }
 
-export async function setAgentProxy(
-	proxyEnabled: boolean,
-	proxyUrl: string,
-): Promise<{ proxyEnabled: boolean; proxyUrl: string }> {
-	return invokeAgentApi("agent_set_proxy", { proxyEnabled, proxyUrl });
-}
-
 /** Persist optional ACP User-Agent override for Codex / mid-station affinity. */
 export async function setAgentUserAgent(
 	userAgent: string,
@@ -466,18 +459,6 @@ export async function toolUninstallInfo(
 	templateId: string,
 ): Promise<UninstallInfo | null> {
 	return invokeAgentApi("agent_tool_uninstall_info", { templateId });
-}
-
-/** Whether silent install/update is available for this catalog template. */
-export async function toolLifecycleSupported(
-	templateId: string,
-): Promise<boolean> {
-	return invokeAgentApi("agent_tool_lifecycle_supported", { templateId });
-}
-
-/** Platform-specific manual install commands (copyable help text). */
-export async function toolInstallCommands(): Promise<string> {
-	return invokeAgentApi("agent_tool_install_commands", {});
 }
 
 export type PromptImage = {

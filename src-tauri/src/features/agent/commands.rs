@@ -30,13 +30,6 @@ pub struct EnabledResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AgentProxyResponse {
-    pub proxy_enabled: bool,
-    pub proxy_url: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct AgentUserAgentResponse {
     pub user_agent: String,
     pub user_agent_provider_ids: String,
@@ -143,21 +136,6 @@ pub fn agent_set_enabled(
 ) -> ApiResult<EnabledResponse> {
     match registry.set_enabled(enabled) {
         Ok(s) => ApiResult::ok(EnabledResponse { enabled: s.enabled }),
-        Err(e) => map_err(e),
-    }
-}
-
-#[tauri::command]
-pub fn agent_set_proxy(
-    registry: State<'_, AgentRegistry>,
-    proxy_enabled: bool,
-    proxy_url: String,
-) -> ApiResult<AgentProxyResponse> {
-    match registry.set_proxy(proxy_enabled, proxy_url) {
-        Ok(s) => ApiResult::ok(AgentProxyResponse {
-            proxy_enabled: s.proxy_enabled,
-            proxy_url: s.proxy_url,
-        }),
         Err(e) => map_err(e),
     }
 }
@@ -270,14 +248,6 @@ pub async fn agent_run_tool_lifecycle(
     }
 }
 
-/// Whether a catalog template supports silent install/update.
-#[tauri::command]
-pub fn agent_tool_lifecycle_supported(template_id: String) -> ApiResult<bool> {
-    ApiResult::ok(crate::features::agent::tool_lifecycle::supports_lifecycle(
-        &template_id,
-    ))
-}
-
 /// What a silent uninstall of this template would remove (npm commands and
 /// managed dirs); null when the template has no managed uninstall.
 #[tauri::command]
@@ -287,12 +257,6 @@ pub fn agent_tool_uninstall_info(
     ApiResult::ok(crate::features::agent::tool_lifecycle::uninstall_info(
         &template_id,
     ))
-}
-
-/// Platform-specific manual install commands (copyable help text). No side effects.
-#[tauri::command]
-pub fn agent_tool_install_commands() -> ApiResult<String> {
-    ApiResult::ok(crate::features::agent::tool_lifecycle::manual_install_commands_text())
 }
 
 /// Ensure catalog agent is registered, then run ACP initialize probe.

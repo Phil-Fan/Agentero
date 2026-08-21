@@ -8,7 +8,7 @@ use crate::features::network;
 use flate2::read::GzDecoder;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::io;
 use std::path::Path;
 use std::time::Duration;
 use tar::Archive;
@@ -303,15 +303,6 @@ async fn fetch_text(
     let bytes = fetch_bytes(client, url, tag_page).await?;
     String::from_utf8(bytes)
         .map_err(|e| AppError::message(format!("checksum file is not UTF-8: {e}")))
-}
-
-/// Write bytes through a reader into a file (test helper surface).
-#[allow(dead_code)]
-pub fn write_all(path: &Path, mut r: impl Read) -> Result<(), AppError> {
-    let mut f = File::create(path)?;
-    io::copy(&mut r, &mut f)?;
-    f.flush()?;
-    Ok(())
 }
 
 #[cfg(test)]

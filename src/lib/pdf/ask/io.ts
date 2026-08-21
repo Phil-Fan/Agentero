@@ -1,15 +1,10 @@
 import { nanoid } from "nanoid";
-import {
-	parsePdfAskThread,
-	threadPin,
-	threadPreview,
-} from "@/lib/pdf/ask/schema";
+import { parsePdfAskThread } from "@/lib/pdf/ask/schema";
 import type {
 	PdfAskAnchor,
 	PdfAskMessage,
 	PdfAskNormalizedRect,
 	PdfAskThread,
-	PdfAskThreadSummary,
 } from "@/lib/pdf/ask/types";
 import { createMarkStore } from "@/lib/pdf/marks/io";
 
@@ -137,18 +132,3 @@ export const listPdfAskThreads = store.list;
 export const readPdfAskThread = store.read;
 export const writePdfAskThread = store.write;
 export const deletePdfAskThread = store.remove;
-
-export function toSummaries(threads: PdfAskThread[]): PdfAskThreadSummary[] {
-	return threads.map((t) => {
-		const pin = threadPin(t);
-		return {
-			id: t.id,
-			page: t.anchor.page,
-			x: pin.x,
-			y: pin.y,
-			preview: threadPreview(t),
-			updatedAt: t.updatedAt,
-			status: t.status,
-		};
-	});
-}

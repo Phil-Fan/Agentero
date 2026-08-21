@@ -47,17 +47,3 @@ export type PdfAskThread = {
 	anchor: PdfAskAnchor;
 	messages: PdfAskMessage[];
 };
-
-export type PdfAskThreadSummary = {
-	id: string;
-	page: number;
-	/**
-	 * Pin position on the page (0–1), near the selection —
-	 * typically the right side of the anchor rects.
-	 */
-	x: number;
-	y: number;
-	preview: string;
-	updatedAt: string;
-	status: PdfAskStatus;
-};

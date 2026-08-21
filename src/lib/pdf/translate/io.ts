@@ -48,6 +48,5 @@ export function createTranslateRecord(input: {
 }
 
 export const listPdfTranslates = store.list;
-export const readPdfTranslate = store.read;
 export const writePdfTranslate = store.write;
 export const deletePdfTranslate = store.remove;

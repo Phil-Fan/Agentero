@@ -153,11 +153,6 @@ export type BacklinksResponse = {
 	backlinks: Backlink[];
 };
 
-export type OutgoingLinksResponse = {
-	path: string;
-	outgoing: ResolvedLink[];
-};
-
 export type WikiSearchCandidate = {
 	kind: "file" | "heading" | "block" | "alias" | "annotation";
 	path: string;
@@ -953,20 +948,6 @@ export async function getBacklinks(
 		return { path: toVaultRelative(vaultPath, path), backlinks: [] };
 	}
 	return invokeWikiApi<BacklinksResponse>("graph_get_backlinks", {
-		vaultPath,
-		path,
-	});
-}
-
-export async function getOutgoingLinks(
-	vaultPath: string | null,
-	path: string,
-): Promise<OutgoingLinksResponse> {
-	if (!path) return { path: "", outgoing: [] };
-	if (!vaultPath || !isTauri()) {
-		return { path: toVaultRelative(vaultPath, path), outgoing: [] };
-	}
-	return invokeWikiApi<OutgoingLinksResponse>("wiki_get_outgoing", {
 		vaultPath,
 		path,
 	});

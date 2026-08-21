@@ -2,7 +2,7 @@ use crate::core::blocking::run_blocking;
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::features::wiki::heading_rename::run_heading_rename_transaction;
 use crate::features::wiki::models::{
-    BacklinksResponse, InternalLinkSyntax, OutgoingLinksResponse, RebuildResult, WikiEmbedResponse,
+    BacklinksResponse, InternalLinkSyntax, RebuildResult, WikiEmbedResponse,
     WikiRenameHeadingResult, WikiResolveResponse, WikiSearchCandidate, WikiSearchCandidateKind,
 };
 use crate::features::wiki::WikiIndexState;
@@ -41,29 +41,6 @@ pub async fn graph_get_backlinks(
             return map_err(AppError::message(e));
         }
         ApiResult::ok(guard.get_backlinks(&vault_path, &path))
-    })
-    .await)
-}
-
-/// Return every explicit occurrence authored by `path`, including unresolved and
-/// invalid-fragment diagnostics. This is intentionally separate from Graph, whose
-/// file-level projection may deduplicate edges.
-#[tauri::command]
-pub async fn wiki_get_outgoing(
-    index: State<'_, WikiIndexState>,
-    vault_path: String,
-    path: String,
-) -> Result<ApiResult<OutgoingLinksResponse>, String> {
-    let index = index.handle();
-    Ok(run_blocking(move || {
-        let mut guard = match index.lock() {
-            Ok(g) => g,
-            Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
-        };
-        if let Err(e) = guard.ensure_vault(&vault_path) {
-            return map_err(AppError::message(e));
-        }
-        ApiResult::ok(guard.get_outgoing(&vault_path, &path))
     })
     .await)
 }

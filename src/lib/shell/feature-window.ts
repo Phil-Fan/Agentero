@@ -116,18 +116,6 @@ export async function openFeatureWindow(view: FeatureViewType): Promise<void> {
 	}
 }
 
-export async function closeFeatureWindow(view: FeatureViewType): Promise<void> {
-	if (!isTauri()) return;
-	try {
-		const { invoke } = await import("@tauri-apps/api/core");
-		await invoke("feature_window_close", { view });
-		const { setFeaturePoppedOut } = await import("@/lib/shell/ui-store");
-		setFeaturePoppedOut(view, false);
-	} catch (e) {
-		notifyError(String(e));
-	}
-}
-
 /**
  * Probe whether the singleton feature Webview exists and focus it.
  * Only clears `featurePoppedOut` when the label is confirmed missing — not on

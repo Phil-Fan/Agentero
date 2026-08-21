@@ -68,8 +68,6 @@
 		"title": "Chain of Thought"
 	},
 	"promptInput": {
-		"addAttachments": "Add photos or files",
-		"takeScreenshot": "Take screenshot",
 		"placeholder": "What would you like to know?",
 		"uploadFiles": "Upload files",
 		"stop": "Stop",

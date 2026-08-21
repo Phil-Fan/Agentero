@@ -68,8 +68,6 @@
 		"title": "思维链"
 	},
 	"promptInput": {
-		"addAttachments": "添加照片或文件",
-		"takeScreenshot": "截屏",
 		"placeholder": "想了解些什么？",
 		"uploadFiles": "上传文件",
 		"stop": "停止",
