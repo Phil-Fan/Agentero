@@ -171,6 +171,9 @@ impl Telemetry {
             let mut event = posthog_rs::Event::new("app started", distinct_id.as_str());
             let mut props = extra;
             if let Some(obj) = props.as_object_mut() {
+                if let Some(sid) = obj.remove("session_id") {
+                    obj.insert("$session_id".into(), sid);
+                }
                 obj.insert(
                     "$set".into(),
                     json!({
@@ -220,7 +223,7 @@ impl Telemetry {
         };
         for proj in projections {
             let mut event = posthog_rs::Event::new(proj.name, inner.distinct_id.as_str());
-            let _ = event.insert_prop("session_id", inner.session_id.clone());
+            let _ = event.insert_prop("$session_id", inner.session_id.clone());
             let _ = event.insert_prop("app_version", APP_VERSION);
             if let Some(facet) = &proj.facet {
                 let _ = event.insert_prop("facet", facet.clone());
@@ -257,7 +260,7 @@ impl Telemetry {
             return;
         };
         let mut event = posthog_rs::Event::new("app exited", inner.distinct_id.as_str());
-        let _ = event.insert_prop("session_id", inner.session_id.clone());
+        let _ = event.insert_prop("$session_id", inner.session_id.clone());
         let _ = event.insert_prop("session_duration_ms", duration_ms);
         let _ = event.insert_prop("app_version", APP_VERSION);
         client.capture(event);

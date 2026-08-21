@@ -28,19 +28,19 @@
 | `locale` | `AppSettings.locale` |
 | `timezone` | 本地 UTC 偏移（如 `+08:00`） |
 | `tauri_version` | `tauri::VERSION` |
-| `session_id` | 本次运行生成的 UUID |
+| `$session_id` | 本次运行生成的 UUID（PostHog 保留属性，Sessions 口径依赖它） |
 
 Person 属性：`$set` → `app_version` / `os_name` / `os_version` / `arch` / `device_model`；`$set_once` → `first_app_version`。
 
 ### `app exited`（`RunEvent::Exit` 回调中发送并 flush）
 
-`session_id`、`session_duration_ms`、`app_version`。
+`$session_id`、`session_duration_ms`、`app_version`。
 
 `app started` / `app exited` 与本机 [usage.md](usage.md) 同源：`Telemetry::start` / `shutdown` **始终**写入本地 `app.started` / `app.exited`（本地记录无开关），在 `telemetryEnabled` 且 release + 有 key 时再发 PostHog。出站事件名保持空格形式，以免断历史。
 
 ### 行为事件投影（`Telemetry::capture_activity`）
 
-前端行为事件经 `activity_record_events` 落本地库后，Host 用 `usage::telemetry_projection` 把**登记的 kind** 投影成脱敏 PostHog 事件（非移动端；`telemetryEnabled` 关或无 key 时整体 no-op）。投影**只**携带 `kind`→事件名、`facet` / `status` / `qty`（均由 `usage/events.rs::project_extra` 分桶/截断/白名单产出）与分桶后的 `dur_bucket`，外加 `distinct_id` / `session_id` / `app_version`。未登记的 kind 一律不发（安全默认）。
+前端行为事件经 `activity_record_events` 落本地库后，Host 用 `usage::telemetry_projection` 把**登记的 kind** 投影成脱敏 PostHog 事件（非移动端；`telemetryEnabled` 关或无 key 时整体 no-op）。投影**只**携带 `kind`→事件名、`facet` / `status` / `qty`（均由 `usage/events.rs::project_extra` 分桶/截断/白名单产出）与分桶后的 `dur_bucket`，外加 `distinct_id` / `$session_id` / `app_version`。未登记的 kind 一律不发（安全默认）。
 
 | kind | 事件名 | 出站属性 |
 |---|---|---|
@@ -59,6 +59,8 @@ Person 属性：`$set` → `app_version` / `os_name` / `os_version` / `arch` / `
 不投影：`paper.focus` / `paper.blur`、`paper.edit-meta`，以及尚未接线的 kind。
 
 **DAU 口径**：不设心跳事件。DAU = 当天产生任意上述行为事件或 `app started` 的 unique `distinct_id`。桌面常驻应用只要当天有真实操作即计入；完全零操作的一天不计（可接受）。
+
+**Sessions 口径**：出站事件统一携带 PostHog 保留属性 `$session_id`（每次启动生成的新 UUID，随所有事件发送），PostHog 的 Sessions insight / Trends "Sessions" 指标据此聚合。本地 usage 库的 extra 字段仍为 `session_id`，两者互不影响。
 
 ## 隐私边界
 
