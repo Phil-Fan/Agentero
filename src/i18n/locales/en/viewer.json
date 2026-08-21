@@ -211,18 +211,6 @@
 		"showOverlay": "Show raw layout detections ≥30% on PDF (debug)",
 		"hideOverlay": "Hide raw layout detections on PDF"
 	},
-	"equationAnnotation": {
-		"title": "Formula legend",
-		"aria": "Symbol meanings from Annotation.md",
-		"hoverAria": "Show formula symbol legend",
-		"openFile": "Open Annotation.md",
-		"close": "Close",
-		"empty": "No symbols in Annotation.md yet.",
-		"emptyMeaning": "—",
-		"colSymbol": "Symbol",
-		"colMeaning": "Meaning",
-		"colPlain": "Plain language"
-	},
 	"selection": {
 		"menuLabel": "Selection actions",
 		"color": {

@@ -235,7 +235,6 @@ UI / Host 动作
 | `window.new` | 多窗采用 |
 | `pdf.find` | ⌘F；采用率有用，对 Memory 弱 |
 | `pdf.outline` / `pdf.immersive` / `pdf.page_theme` | 阅读 chrome |
-| `formula.card` | 公式解析卡打开；`source=formula` 的 mark 已覆盖「批注公式」 |
 | `citation.goto` | 文中引用跳页 / 外链 |
 | `layout.figure.focus` | 侧栏点开图/表 |
 | `agent.permission` | ask 模式回应；`option_kind` |

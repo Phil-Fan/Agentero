@@ -279,7 +279,7 @@ cargo test -p agentero-cli
 | 7.3.1 | 中间栏·PDF | 按 `⌘.` 框选某插图/表/算法区域，输入备注保存 | `marks/<id>.json` 写入 `kind: visual` v2；页边针出现；可再次编辑备注 | ☐ |
 | 7.3.2 | 中间栏·PDF | 框选区域后按 `⌘Enter` 向 Agent 提问 | 视觉上下文进入 Agent 会话；回答后同一 mark 可续聊 | ☐ |
 | 7.3.3 | 右栏·Figures | 打开带插图的 paper，点「分析」 | 列出 figure/table/algorithm/formula；点击跳转到对应位置 | ☐ |
-| 7.3.4 | 中间栏·PDF | 论文目录有 `Annotation.md` 时，悬停有编号公式 | 弹出「公式解析」卡片；符号列可渲染；点击可打开 `Annotation.md` | ☐ |
+| 7.3.4 | 中间栏·PDF | 悬停有编号公式命中框并单击 | 与插图一致：出现「单击进行批注」提示，单击打开视觉批注编辑器 | ☐ |
 | 7.3.5 | 中间栏·PDF | 点工具栏 Languages 全文翻译 | 按阅读顺序分批出译文并盖在 bbox 上（非整页等齐）；再点可停止/清除；磁盘 `source/layout-translate.json` 有缓存 | ☐ |
 
 ### 7.4 图片与 MD 插图

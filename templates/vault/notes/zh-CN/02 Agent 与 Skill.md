@@ -37,7 +37,6 @@ Agent 回复过程中仍可继续输入，后续消息会进入队列，当前�
 内置 Skill 包括：
 
 - `paper-reader` — 精读论文并写入 `NOTES.md`。
-- `equation-annotation` — 抽取公式与变量含义，写入 `Annotation.md`。
 - `agentero-cli` — 通过 CLI 执行 Vault 操作。
 - `vault-normalizer` — 将现有研究目录整理为 Agentero Vault 布局。
 - `deep-research` — 多轮研究并带引用。

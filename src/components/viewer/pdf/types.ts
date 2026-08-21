@@ -13,7 +13,6 @@ import type {
 	PdfAskThread,
 } from "@/lib/pdf/ask";
 import type { CrossrefKind } from "@/lib/pdf/citation-dest-keys";
-import type { EquationSymbol } from "@/lib/pdf/equation-annotation";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 
 /** Imperative surface consumed through `pdf-viewer-registry`. */
@@ -140,13 +139,4 @@ export type VisualDraftEditorState = {
 	page: number;
 	region: PdfAskNormalizedRect;
 	image: PromptImage;
-};
-
-/** Hover card for formula regions when `{paper}/Annotation.md` has symbols. */
-export type FormulaAnnotationPreviewState = {
-	screen: ScreenPoint;
-	regionId: string;
-	page: number;
-	region: PdfAskNormalizedRect;
-	symbols: EquationSymbol[];
 };

@@ -6,7 +6,6 @@ import {
 	PdfCitationPreview,
 } from "@/components/viewer/pdf/cards/citation-preview";
 import { PdfCrossrefPreview } from "@/components/viewer/pdf/cards/crossref-preview";
-import { FormulaAnnotationCard } from "@/components/viewer/pdf/cards/formula-annotation-card";
 import { SelectionMenu } from "@/components/viewer/pdf/cards/selection-menu";
 import { TranslateCard } from "@/components/viewer/pdf/cards/translate-card";
 import { VisualAnnotationEditor } from "@/components/viewer/pdf/cards/visual-annotation-editor";
@@ -16,7 +15,6 @@ import type {
 	CitationPreviewState,
 	CrossrefPreviewState,
 	EditorState,
-	FormulaAnnotationPreviewState,
 	SelectionMenuState,
 	VisualDraftEditorState,
 } from "@/components/viewer/pdf/types";
@@ -44,14 +42,6 @@ type PdfCardStackProps = {
 		/** Discard the pending crop. */
 		onDelete: () => void;
 		onClose: () => void;
-	};
-	formulaAnnotation: {
-		state: FormulaAnnotationPreviewState | null;
-		/** Absent when the paper folder is unknown. */
-		onOpenFile?: () => void;
-		onClose: () => void;
-		onHoverEnter: () => void;
-		onHoverLeave: () => void;
 	};
 	citationPreview: {
 		state: CitationPreviewState | null;
@@ -118,7 +108,6 @@ type PdfCardStackProps = {
 export function PdfCardStack({
 	selectionMenu,
 	visualDraft,
-	formulaAnnotation,
 	citationPreview,
 	crossrefPreview,
 	cardScreen,
@@ -154,17 +143,6 @@ export function PdfCardStack({
 					onSendNow={visualDraft.onSendNow}
 					onDelete={visualDraft.onDelete}
 					onClose={visualDraft.onClose}
-				/>
-			) : null}
-
-			{formulaAnnotation.state ? (
-				<FormulaAnnotationCard
-					screen={formulaAnnotation.state.screen}
-					symbols={formulaAnnotation.state.symbols}
-					onOpenFile={formulaAnnotation.onOpenFile}
-					onClose={formulaAnnotation.onClose}
-					onPointerEnter={formulaAnnotation.onHoverEnter}
-					onPointerLeave={formulaAnnotation.onHoverLeave}
 				/>
 			) : null}
 

@@ -82,11 +82,11 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/pdf/hooks/use-pdf-text-selection.ts` | 选区检测、划词菜单状态与复制拦截 |
 | `src/components/viewer/pdf/hooks/use-pdf-ask-threads.ts` | 划词提问工作流：建/续/停、ACP 流监听、`marks/<id>.json` 落盘 |
 | `src/components/viewer/pdf/hooks/use-pdf-selection-translate.ts` | 划词翻译工作流与结果卡状态 |
-| `src/components/viewer/pdf/hooks/use-pdf-region-framing.ts` | ⌘. 框选模式与单次裁剪（产出草稿交给 hover hook） |
+| `src/components/viewer/pdf/hooks/use-pdf-region-framing.ts` | ⌘. 框选模式与单次裁剪（产出草稿交给 visual draft hook） |
 | `src/components/viewer/pdf/hooks/use-pdf-visual-marks.ts` | visual mark 工作流：草稿落盘 / 加入对话 / 续聊 / pin 卡片 |
 | `src/components/viewer/pdf/hooks/use-pdf-layout-regions.ts` | layout store 订阅与按页分桶（hover 命中框 / Eye 叠加层） |
 | `src/components/viewer/pdf/hooks/use-pdf-layout-run.ts` | 版面分析运行：sidecar 优先、headless 队列、可中止任务 |
-| `src/components/viewer/pdf/hooks/use-pdf-layout-hover.ts` | 公式 hover 图例与两张卡（`visualDraftEditor` 与 `formulaAnnotationPreview` 互斥的唯一 owner）、`Annotation.md` 符号表 |
+| `src/components/viewer/pdf/hooks/use-pdf-visual-draft.ts` | 裁剪草稿卡状态（`visualDraftEditor`）与区域屏幕锚点 |
 | `src/components/viewer/pdf/hooks/use-pdf-layout-translate.ts` | 全文翻译任务与工具栏三态标签 |
 | `src/components/viewer/pdf/hooks/use-pdf-page-text.ts` | 按需加载页文字矩形（页边针是否压字） |
 | `src/components/viewer/pdf/hooks/use-pdf-citations.ts` | 文中引用 hover 预览与跳转 |
@@ -101,7 +101,6 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/panels/annotations-panel.tsx` | 批注 / 提问 / visual mark 总览（右栏） |
 | `src/components/viewer/panels/references-panel.tsx` | 参考文献解析与入库（右栏） |
 | `src/components/viewer/pdf-viewer-registry.ts` | 按 tab 注册 `PdfViewerHandle`，供 shell / 命令面板调用 |
-| `src/lib/pdf/equation-annotation/` | `Annotation.md` 符号表解析与加载 |
 | `src/lib/agent/visual-context-store.ts` | Agent composer 视觉批注草稿 |
 | `src/lib/pdf/agent-trace/` | visual mark 契约（v2 + 读兼容 v1）/ mark 资产 IO / prompt / Open-in-Agent / 会话 pending |
 | `src/lib/pdf/highlight/` | 高亮 / 批注 |
@@ -127,7 +126,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 
 要点：先文字角色再联图；图题须整框在 figure bbox 内；图无 title 丢弃；默认置信度 30%；Paper PDF 的初步解析结果缓存到 `{paper}/source/layout.json`，后续 merge/filter 可重复计算。全文翻译先归一化文字层原文（断词 / ligature / 页眉页脚残留），把跨栏跨页的续段合并成一个翻译单元，再按阅读顺序**分批**请求（`buildTranslateBatches`，批内 `[[n]]` 标记保上下文，解析失败回退逐段），缓存独立写入 `{paper}/source/layout-translate.json`，按 provider / 语言 / region 原文校验后复用。详见 [translate.md](translate.md)。
 
-**单击视觉批注：** hover 插图 / 表 / 算法 / 无符号表公式的命中框时，框上出现 primary 描边（即将裁剪的确切 bbox）与右上角「单击进行批注」提示；单击裁剪该区域并打开 `VisualAnnotationEditor`（与手动框选相同；不自动发送 Agent），草稿卡保持打开直到手动关闭。框选模式或已有草稿卡时命中框不挂载。
+**单击视觉批注：** hover 插图 / 表 / 算法 / 公式的命中框时，框上出现 primary 描边（即将裁剪的确切 bbox）与右上角「单击进行批注」提示；单击裁剪该区域并打开 `VisualAnnotationEditor`（与手动框选相同；不自动发送 Agent），草稿卡保持打开直到手动关闭。框选模式或已有草稿卡时命中框不挂载。
 
 交互细节（均有对应实现约束）：
 
@@ -137,27 +136,8 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | 键盘 | 命中框在 Tab 序列内，Enter / Space 裁剪；`MouseEvent.detail === 0` 直接放行容差判定 | 键盘激活没有指针位移可测 |
 | 焦点 | 描边与提示同时响应 `group-hover` 与 `group-focus-visible` | 半透明 UA 焦点环压在不可预测的页面内容上不可靠 |
 | 提示阈值 | 区域实际尺寸小于 `LAYOUT_HINT_MIN_REGION_W/H_PX`（120×28）时不画 chip，并配 `max-w` + `truncate` 兜底 | chip 是固定字号标签，容器随缩放变化，小区域下会溢出压住邻近内容 |
-| 光标 | 图 / 表 / 算法用 `cursor-crosshair`，公式图例用 `cursor-help` | pointer 光标留给会跳转的引用链接 |
+| 光标 | 全部命中框用 `cursor-crosshair` | pointer 光标留给会跳转的引用链接 |
 | 裁剪中 | `visualCropRegion` 在页上画描边 + spinner（`role="status"`） | PDFium `renderPageRect` 是异步的，否则单击后到卡片出现之间毫无反馈 |
-
-公式图例命中框没有单击动作，因此 `onFocus` / `onBlur` 承担键盘可达性（聚焦即走同一 dwell 逻辑）。
-
-**Hover 公式解析：** 当论文目录存在 `Annotation.md`（由 `equation-annotation` Skill 生成的符号词典）且解析到符号表时，hover **有编号公式** 不打开视觉批注，改为弹出「公式解析」卡片：展示符号 / 含义 / 通俗理解对照（符号列 KaTeX 渲染）。卡片可打开 `Annotation.md`。
-
-Hover UX（与单击批注分离）：
-
-| 项 | 值 |
-|---|---|
-| 打开 dwell | ~280ms（无裁图，tooltip 式） |
-| 移走关闭 | 离开公式 hit 或卡片后 ~320ms（够穿越到卡片空隙） |
-| 回到公式 / 卡片 | 取消关闭；同一公式重新进入立即保持打开 |
-| 切换公式 | 图例已开时 hover 另一公式立即切换（无二次 dwell） |
-| 滚动 / 缩放 | 卡片随 bbox 重定位；滚动刚结束的短窗口内不启动 dwell |
-| Escape | 立即关闭 |
-| hit 层 | 图例打开时仍挂载，负责 leave/enter，不依赖第二层 hover surface |
-| 页上框 | 与视觉批注相同的 primary 描边框，标出当前公式区域 |
-
-无 `Annotation.md` 或表为空时，公式与插图 / 表 / 算法一致：单击打开视觉批注。实现：`src/lib/pdf/equation-annotation/`、`formula-annotation-card.tsx`、`LAYOUT_FORMULA_HOVER_*`。
 
 Host 下载/解析：[../backend/paper-import.md](../backend/paper-import.md)。
 

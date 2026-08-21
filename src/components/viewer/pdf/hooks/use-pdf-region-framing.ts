@@ -5,12 +5,7 @@
  * Split from {@link usePdfVisualMarks} because it is a different lifecycle: an
  * armed input mode plus one in-flight PDFium crop, with no knowledge of marks,
  * agents or persistence. It produces a draft and hands it to
- * {@link usePdfLayoutHover}, which owns the draft state so its exclusivity with
- * the formula glossary card stays in one place.
- *
- * The two mirrors it writes (`regionSelectingRef`, `visualCropPendingRef`) are
- * created by the parent because the layout-hover guard reads the same ref
- * objects and is declared first.
+ * {@link usePdfVisualDraft}, which owns the draft state.
  */
 
 import type { PdfEngine } from "@embedpdf/models";
@@ -19,10 +14,10 @@ import type { useInteractionManagerCapability } from "@embedpdf/plugin-interacti
 import type { useSelectionCapability } from "@embedpdf/plugin-selection/react";
 import {
 	type Dispatch,
-	type RefObject,
 	type SetStateAction,
 	useCallback,
 	useEffect,
+	useRef,
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -58,25 +53,20 @@ export type UsePdfRegionFramingOptions = {
 	interactionCap: InteractionManagerCapability;
 	/** Text-selection cluster: framing a region dismisses an open menu. */
 	setSelectionMenu: Dispatch<SetStateAction<SelectionMenuState | null>>;
-	/** Draft card transitions; owned by {@link usePdfLayoutHover}. */
+	/** Draft card transitions; owned by {@link usePdfVisualDraft}. */
 	openVisualDraftEditor: (draft: VisualDraftEditorState) => void;
 	closeVisualDraftEditor: () => void;
-	/** Closed before a crop starts: a legend must not survive into a draft. */
-	closeFormulaAnnotationPreview: () => void;
 	/** Screen anchor beside a page-normalized region (draft card placement). */
 	screenPointForRegion: (
 		pageIndex0: number,
 		region: PdfAskNormalizedRect,
 	) => ScreenPoint;
-	/** Mirrors written here and read by the layout-hover guard. */
-	regionSelectingRef: RefObject<boolean>;
-	visualCropPendingRef: RefObject<boolean>;
 };
 
 export type PdfRegionFraming = {
 	/** Region framing (marquee) mode is armed. */
 	regionSelecting: boolean;
-	/** A crop is in flight; blocks re-entry and layout hover. */
+	/** A crop is in flight; blocks re-entry. */
 	visualCropPending: boolean;
 	/**
 	 * Region whose crop is in flight (null when idle). Rendered on the page so a
@@ -106,10 +96,7 @@ export function usePdfRegionFraming({
 	setSelectionMenu,
 	openVisualDraftEditor,
 	closeVisualDraftEditor,
-	closeFormulaAnnotationPreview,
 	screenPointForRegion,
-	regionSelectingRef,
-	visualCropPendingRef,
 }: UsePdfRegionFramingOptions): PdfRegionFraming {
 	const { t } = useTranslation("viewer");
 	const [regionSelecting, setRegionSelecting] = useState(false);
@@ -118,7 +105,8 @@ export function usePdfRegionFraming({
 		page: number;
 		region: PdfAskNormalizedRect;
 	} | null>(null);
-	regionSelectingRef.current = regionSelecting;
+	/** Latest in-flight crop flag for the async guards below. */
+	const visualCropPendingRef = useRef(visualCropPending);
 	visualCropPendingRef.current = visualCropPending;
 
 	// Disarm framing when the active PDF document changes.
@@ -134,13 +122,7 @@ export function usePdfRegionFraming({
 		closeVisualDraftEditor();
 		selectionCap?.clear(docId);
 		setRegionSelecting((active) => !active);
-	}, [
-		closeVisualDraftEditor,
-		selectionCap,
-		docId,
-		setSelectionMenu,
-		visualCropPendingRef,
-	]);
+	}, [closeVisualDraftEditor, selectionCap, docId, setSelectionMenu]);
 
 	/** Crop a region and open the visual-annotation draft editor (does not send). */
 	const beginVisualAnnotation = useCallback(
@@ -155,9 +137,6 @@ export function usePdfRegionFraming({
 			setVisualCropPending(true);
 			setVisualCropRegion({ page, region });
 			setRegionSelecting(false);
-			// Visual draft and formula legend are mutually exclusive; close the
-			// legend up front so it does not linger for the length of the crop.
-			closeFormulaAnnotationPreview();
 			try {
 				const image = await renderPdfRegionPromptImage({
 					engine,
@@ -188,16 +167,7 @@ export function usePdfRegionFraming({
 				setVisualCropRegion(null);
 			}
 		},
-		[
-			engine,
-			docCap,
-			docId,
-			t,
-			closeFormulaAnnotationPreview,
-			openVisualDraftEditor,
-			screenPointForRegion,
-			visualCropPendingRef,
-		],
+		[engine, docCap, docId, t, openVisualDraftEditor, screenPointForRegion],
 	);
 
 	const handleVisualRegionSelect = useCallback(

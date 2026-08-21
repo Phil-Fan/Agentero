@@ -6,7 +6,6 @@ Create Vault seeds these when missing. Pick with `$` in Composer.
 | --- | --- |
 | `paper-reader` | 精读 → `{paper}/NOTES.md`，只创建可解析双链 |
 | `author-lookup` | 一作 / 通讯 email·主页·GitHub·ORCID·OpenReview → `NOTES.md`，作者信息报告 → `attachments/` |
-| `equation-annotation` | 公式与变量释义 → `{paper}/Annotation.md`（en / zh-CN 单语） |
 | `agentero-cli` | headless `agentero` CLI，含只读双链检查；按平台播种（POSIX `agentero` / Windows `agentero-cli`） |
 | `vault-normalizer` | 整理现有研究目录并对比迁移前后的双链诊断 |
 | `idea-evaluator` | 研究 idea 评审 |
@@ -38,4 +37,4 @@ remove `version` or set it higher than the template after editing.
 **License: [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)**  
 Full text: [`LICENSE-Supervisor-Skills.txt`](LICENSE-Supervisor-Skills.txt)
 
-`paper-reader` / `equation-annotation` / `agentero-cli` / `vault-normalizer` are first-party (Agentero license).
+`paper-reader` / `author-lookup` / `agentero-cli` / `vault-normalizer` are first-party (Agentero license).

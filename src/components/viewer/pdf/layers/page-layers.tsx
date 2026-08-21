@@ -41,7 +41,6 @@ import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
 import type { HighlightColor } from "@/lib/pdf/highlight/palette";
 import {
-	isFormulaLayoutKind,
 	isLayoutRegionActivation,
 	LAYOUT_HINT_MIN_REGION_H_PX,
 	LAYOUT_HINT_MIN_REGION_W_PX,
@@ -79,7 +78,6 @@ export type PdfPageMarksSlice = {
 	visualDraftRegion: PageRegion;
 	/** Region whose crop is in flight; gets a spinner frame. */
 	visualCropRegion: PageRegion;
-	formulaAnnotationRegion: PageRegion;
 	focusedLayoutRegion: PdfLayoutRegion | null;
 	pinsByPage: ReadonlyMap<number, SelectionPin[]>;
 	citationLinks: ReadonlyMap<number, PdfLinkAnnoObject[]>;
@@ -99,7 +97,6 @@ export type PdfPageLayoutSlice = {
 		number,
 		{ active: boolean; running: boolean }
 	>;
-	equationSymbolCount: number;
 };
 
 /** Interaction modes that unmount or gate page layers. */
@@ -116,9 +113,7 @@ export type PdfPageHandlers = {
 	onCitationActivate: (link: PdfLinkAnnoObject) => void;
 	onCitationHover: (link: PdfLinkAnnoObject | null) => void;
 	onRegionSelect: (page: number, region: PdfAskNormalizedRect) => void;
-	onLayoutHoverEnter: (region: PdfLayoutRegion) => void;
-	onLayoutHoverLeave: (regionId: string) => void;
-	/** Click a figure / table / algorithm hit target → crop + draft card. */
+	/** Click a figure / table / algorithm / formula hit target → crop + draft card. */
 	onLayoutRegionClick: (region: PdfLayoutRegion) => void;
 	onTogglePageLayoutTranslate: (pageIndex: number) => void;
 	/** Delete a highlight annotation directly from its on-page selection menu. */
@@ -246,10 +241,6 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 	const visualCropRegionOnPage =
 		marks.visualCropRegion?.page === pageNumber
 			? marks.visualCropRegion.region
-			: null;
-	const formulaAnnotationRegionOnPage =
-		marks.formulaAnnotationRegion?.page === pageNumber
-			? marks.formulaAnnotationRegion.region
 			: null;
 	const focusedLayoutOnPage =
 		marks.focusedLayoutRegion?.pageIndex === pageIndex
@@ -401,20 +392,14 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 				 * Largest first so smaller boxes stack on top and win pointer hits.
 				 * Hidden when framing or a visual draft is open (not during crop:
 				 * unmount leave must not cancel an in-flight crop).
-				 * Formula legend keeps hits mounted so leave/enter can switch
-				 * equations and drive hide without a second hover surface.
-				 * Figures / tables / algorithms crop on click; hover and keyboard
-				 * focus preview the exact bbox that would be cropped.
+				 * All kinds crop on click; hover and keyboard focus preview the
+				 * exact bbox that would be cropped.
 				 */}
 				{!mode.regionSelecting && !mode.visualDraftOpen
 					? layout.hoverableRegionsByPage.get(pageIndex)?.map((region) => {
-							const formulaLegend =
-								isFormulaLayoutKind(region.kind) &&
-								layout.equationSymbolCount > 0;
 							// Fixed-size chip in a zoom-scaled box: only draw it where
 							// it actually fits inside the region.
 							const showHint =
-								!formulaLegend &&
 								region.bbox.w * width >= LAYOUT_HINT_MIN_REGION_W_PX &&
 								region.bbox.h * height >= LAYOUT_HINT_MIN_REGION_H_PX;
 							return (
@@ -422,84 +407,51 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 									key={`layout-hit-${region.id}`}
 									type="button"
 									data-layout-hit={region.id}
-									aria-label={
-										formulaLegend
-											? t("equationAnnotation.hoverAria")
-											: t("figures.clickAnnotateAria", {
-													kind: t(layoutKindI18nKey(region.kind)),
-												})
-									}
-									className={cn(
-										"group absolute z-[2] rounded-none border-0 bg-transparent p-0 transition-colors",
-										// Click crops in place; pointer cursor is reserved for
-										// navigation (citation links).
-										formulaLegend
-											? "cursor-help hover:bg-primary/5"
-											: "cursor-crosshair hover:bg-primary/5",
-									)}
+									aria-label={t("figures.clickAnnotateAria", {
+										kind: t(layoutKindI18nKey(region.kind)),
+									})}
+									// Click crops in place; pointer cursor is reserved for
+									// navigation (citation links).
+									className="group absolute z-[2] cursor-crosshair rounded-none border-0 bg-transparent p-0 transition-colors hover:bg-primary/5"
 									style={{
 										left: `${region.bbox.x * 100}%`,
 										top: `${region.bbox.y * 100}%`,
 										width: `${region.bbox.w * 100}%`,
 										height: `${region.bbox.h * 100}%`,
 									}}
-									onPointerEnter={() => handlers.onLayoutHoverEnter(region)}
-									onPointerLeave={() => handlers.onLayoutHoverLeave(region.id)}
-									// Formula legend has no click action, so focus is what makes
-									// it reachable without a pointer.
-									onFocus={
-										formulaLegend
-											? () => handlers.onLayoutHoverEnter(region)
-											: undefined
-									}
-									onBlur={
-										formulaLegend
-											? () => handlers.onLayoutHoverLeave(region.id)
-											: undefined
-									}
-									onPointerDown={
-										formulaLegend
-											? undefined
-											: (event) => {
-													pointerOriginRef.current = {
-														x: event.clientX,
-														y: event.clientY,
-													};
-												}
-									}
-									onClick={
-										formulaLegend
-											? undefined
-											: (event) => {
-													const origin = pointerOriginRef.current;
-													pointerOriginRef.current = null;
-													// A drag that merely started here is not a click.
-													if (
-														!isLayoutRegionActivation({
-															detail: event.detail,
-															origin,
-															end: { x: event.clientX, y: event.clientY },
-														})
-													) {
-														return;
-													}
-													event.preventDefault();
-													event.stopPropagation();
-													handlers.onLayoutRegionClick(region);
-												}
-									}
+									onPointerDown={(event) => {
+										pointerOriginRef.current = {
+											x: event.clientX,
+											y: event.clientY,
+										};
+									}}
+									onClick={(event) => {
+										const origin = pointerOriginRef.current;
+										pointerOriginRef.current = null;
+										// A drag that merely started here is not a click.
+										if (
+											!isLayoutRegionActivation({
+												detail: event.detail,
+												origin,
+												end: { x: event.clientX, y: event.clientY },
+											})
+										) {
+											return;
+										}
+										event.preventDefault();
+										event.stopPropagation();
+										handlers.onLayoutRegionClick(region);
+									}}
 								>
 									{/*
 									 * Frame the exact crop bounds before the click commits, and
 									 * give keyboard focus a visible landmark over unpredictable
 									 * page content.
 									 */}
-									{formulaLegend ? null : (
-										<span
-											className="pointer-events-none absolute inset-0 border border-primary/45 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-											aria-hidden="true"
-										/>
-									)}
+									<span
+										className="pointer-events-none absolute inset-0 border border-primary/45 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+										aria-hidden="true"
+									/>
 									{showHint ? (
 										<span
 											className="pointer-events-none absolute top-1 right-1 max-w-[calc(100%-0.5rem)] truncate rounded border border-border/60 bg-background/90 px-1.5 py-0.5 font-medium text-[10px] text-foreground/90 opacity-0 shadow-sm backdrop-blur-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
@@ -582,25 +534,8 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 						/>
 					</div>
 				) : null}
-				{/*
-				 * Formula legend: keep the same primary visual frame as visual-ask
-				 * so the hovered equation is clearly boxed on the page.
-				 * Hits own enter/leave; frame is visual-only.
-				 */}
-				{formulaAnnotationRegionOnPage ? (
-					<div
-						className="pointer-events-none absolute z-[2] rounded-none border border-primary/40 bg-primary/5 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
-						style={{
-							left: `${formulaAnnotationRegionOnPage.x * 100}%`,
-							top: `${formulaAnnotationRegionOnPage.y * 100}%`,
-							width: `${formulaAnnotationRegionOnPage.w * 100}%`,
-							height: `${formulaAnnotationRegionOnPage.h * 100}%`,
-						}}
-						aria-hidden="true"
-					/>
-				) : null}
 				{/* Figures sidebar selection: EmbedPDF layout hue for kind. */}
-				{focusedLayoutOnPage && !formulaAnnotationRegionOnPage ? (
+				{focusedLayoutOnPage ? (
 					<div
 						className="pointer-events-none absolute z-[2] rounded-none border shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
 						style={{

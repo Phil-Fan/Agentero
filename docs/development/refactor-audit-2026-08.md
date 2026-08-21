@@ -38,7 +38,7 @@
 | 4 | 三个同构 useEffect 绕过 `useTauriEvent` | `use-agent-permission-surfaces.ts:102-162`、`use-paper-refs-sidecar.ts:44-60` | 完全复制，且有监听器泄漏隐患 |
 | 5 | 拖拽高亮 hook | `use-composer-file-drag.ts` vs `use-library-pdf-drop.ts` | ~80% 相同 |
 | 6 | Tauri broadcast/listen 样板 | 6 组 × ~18 行；`core/tauri-events.ts` 有 `listenSafe` 缺对称 `broadcastSafe` | 模式复制 |
-| 7 | `VAULT_FILE_CHANGED` 事件匹配 | `use-pdf-layout-run.ts:327`、`use-pdf-marks-io.ts:196`、`use-pdf-layout-hover.ts:159` | 核心逻辑 3 份 |
+| 7 | `VAULT_FILE_CHANGED` 事件匹配 | `use-pdf-layout-run.ts:327`、`use-pdf-marks-io.ts:196`（第三处随公式解析卡删除） | 核心逻辑 2 份 |
 | 8 | layout 解析三件套 `isObject/isFiniteNumber/parseBbox` | `io.ts:53`、`layout-index.ts:210`、`layout-translate.ts:259` | 一字不差 ×3 |
 | 9 | bbox 几何微重复 | 交集六行样板 ×5、union ×3（clamp 语义不一） | 部分重叠 |
 | 10 | reading-order 比较器 | 完整三级版 3 处 + 变体 4 处 | 部分重叠 |

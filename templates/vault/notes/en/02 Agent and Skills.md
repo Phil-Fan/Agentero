@@ -37,7 +37,6 @@ Alternatively, paste the URL of a Skill into the Magic Wand. Agentero downloads 
 Bundled Skills include:
 
 - `paper-reader` — deep-read a paper and write `NOTES.md`.
-- `equation-annotation` — extract equations and symbol meanings into `Annotation.md`.
 - `agentero-cli` — run Vault operations through the CLI.
 - `vault-normalizer` — reorganize an existing research directory into the Agentero Vault layout.
 - `deep-research` — conduct multi-step research with citations.

@@ -211,18 +211,6 @@
 		"showOverlay": "在 PDF 上显示置信度≥30% 的原始检测框（调试）",
 		"hideOverlay": "隐藏 PDF 上的原始检测框"
 	},
-	"equationAnnotation": {
-		"title": "公式解析",
-		"aria": "来自 Annotation.md 的符号含义",
-		"hoverAria": "显示公式符号对照",
-		"openFile": "打开 Annotation.md",
-		"close": "关闭",
-		"empty": "Annotation.md 中尚无符号条目。",
-		"emptyMeaning": "—",
-		"colSymbol": "符号",
-		"colMeaning": "含义",
-		"colPlain": "通俗理解"
-	},
 	"selection": {
 		"menuLabel": "选区操作",
 		"color": {

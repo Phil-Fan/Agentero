@@ -61,7 +61,6 @@ import { usePdfColorScheme } from "@/components/viewer/pdf/hooks/use-pdf-color-s
 import { usePdfCrossrefPreview } from "@/components/viewer/pdf/hooks/use-pdf-crossref-preview";
 import { usePdfFind } from "@/components/viewer/pdf/hooks/use-pdf-find";
 import { usePdfHighlights } from "@/components/viewer/pdf/hooks/use-pdf-highlights";
-import { usePdfLayoutHover } from "@/components/viewer/pdf/hooks/use-pdf-layout-hover";
 import { usePdfLayoutRegions } from "@/components/viewer/pdf/hooks/use-pdf-layout-regions";
 import { usePdfLayoutRun } from "@/components/viewer/pdf/hooks/use-pdf-layout-run";
 import { usePdfLayoutTranslate } from "@/components/viewer/pdf/hooks/use-pdf-layout-translate";
@@ -74,6 +73,7 @@ import { usePdfRegionFraming } from "@/components/viewer/pdf/hooks/use-pdf-regio
 import { usePdfSelectionTranslate } from "@/components/viewer/pdf/hooks/use-pdf-selection-translate";
 import { usePdfTextSelection } from "@/components/viewer/pdf/hooks/use-pdf-text-selection";
 import { usePdfViewerHandle } from "@/components/viewer/pdf/hooks/use-pdf-viewer-handle";
+import { usePdfVisualDraft } from "@/components/viewer/pdf/hooks/use-pdf-visual-draft";
 import { usePdfVisualMarks } from "@/components/viewer/pdf/hooks/use-pdf-visual-marks";
 import { usePdfZoomControls } from "@/components/viewer/pdf/hooks/use-pdf-zoom-controls";
 import { useStableDerived } from "@/components/viewer/pdf/hooks/use-stable-derived";
@@ -102,7 +102,6 @@ import { arxivUrls } from "@/lib/paper/arxiv";
 import { isVisualMarkKind, tracePreview } from "@/lib/pdf/agent-trace";
 import { threadHasUserQuestion, threadPreview } from "@/lib/pdf/ask/schema";
 import type { PdfAskNormalizedRect, PdfAskThread } from "@/lib/pdf/ask/types";
-import { equationAnnotationPath } from "@/lib/pdf/equation-annotation";
 import {
 	DEFAULT_HIGHLIGHT_COLOR,
 	HIGHLIGHT_HEX_LIST,
@@ -122,7 +121,6 @@ import {
 import type { PdfTranslateRect } from "@/lib/pdf/translate/types";
 import { PDF_ZOOM_MAX, PDF_ZOOM_MIN } from "@/lib/pdf/zoom";
 import { openRightTab } from "@/lib/shell/ui-store";
-import { openPath } from "@/lib/workspace/actions";
 
 export type {
 	PdfViewerHandle,
@@ -478,32 +476,21 @@ function PdfViewerInner({
 	const translateStreamingRef = useRef(false);
 
 	const hostRef = useRef<HTMLDivElement>(null);
-	/**
-	 * Mirrors of the visual-mark cluster's `regionSelecting` / `visualCropPending`.
-	 * Created here (not in {@link usePdfVisualMarks}) because the layout-hover
-	 * guard is declared first and must read the same ref objects.
-	 */
-	const regionSelectingRef = useRef(false);
-	const visualCropPendingRef = useRef(false);
 
 	// ---- Text selection → floating action menu ----
 	// Placed after hostRef/zoomRef: the hook anchors the menu against the page
 	// element and needs both refs injected.
-	const {
-		selectionMenu,
-		selectionMenuRef,
-		setSelectionMenu,
-		closeSelectionMenu,
-	} = usePdfTextSelection({
-		selectionCap,
-		docCap,
-		docId,
-		hostRef,
-		zoomRef,
-		isActive,
-		paperRelPath,
-		paperAbsPath,
-	});
+	const { selectionMenu, setSelectionMenu, closeSelectionMenu } =
+		usePdfTextSelection({
+			selectionCap,
+			docCap,
+			docId,
+			hostRef,
+			zoomRef,
+			isActive,
+			paperRelPath,
+			paperAbsPath,
+		});
 
 	/**
 	 * Session token of the single in-flight PDF agent run. Shared by ask and
@@ -891,27 +878,11 @@ function PdfViewerInner({
 	});
 
 	const {
-		equationSymbols,
 		visualDraftEditor,
-		formulaAnnotationPreview,
 		openVisualDraftEditor,
 		closeVisualDraftEditor,
-		closeFormulaAnnotationPreview,
 		screenPointForRegion,
-		scheduleLayoutHoverOpen,
-		handleLayoutHoverLeave,
-		markFormulaHoverEnter,
-		scheduleFormulaHide,
-		rePlaceFormulaAnnotationOnScroll,
-	} = usePdfLayoutHover({
-		docId,
-		paperAbsPath,
-		hostRef,
-		zoomLevel,
-		selectionMenuRef,
-		regionSelectingRef,
-		visualCropPendingRef,
-	});
+	} = usePdfVisualDraft({ hostRef });
 
 	const {
 		layoutTranslateItemsByPage,
@@ -939,17 +910,6 @@ function PdfViewerInner({
 				: null,
 		[visualDraftEditor],
 	);
-	/** Formula legend keeps the same on-page visual frame as visual-ask hover. */
-	const formulaAnnotationRegion = useMemo(
-		() =>
-			formulaAnnotationPreview
-				? {
-						page: formulaAnnotationPreview.page,
-						region: formulaAnnotationPreview.region,
-					}
-				: null,
-		[formulaAnnotationPreview],
-	);
 
 	// ---- Region framing (⌘. marquee → crop) ----
 
@@ -969,10 +929,7 @@ function PdfViewerInner({
 		setSelectionMenu,
 		openVisualDraftEditor,
 		closeVisualDraftEditor,
-		closeFormulaAnnotationPreview,
 		screenPointForRegion,
-		regionSelectingRef,
-		visualCropPendingRef,
 	});
 
 	// ---- Visual marks (draft save, agent turns, existing pins) ----
@@ -1245,7 +1202,6 @@ function PdfViewerInner({
 			activeVisualTrace,
 			visualDraftRegion,
 			visualCropRegion,
-			formulaAnnotationRegion,
 			focusedLayoutRegion,
 			pinsByPage,
 			citationLinks,
@@ -1257,7 +1213,6 @@ function PdfViewerInner({
 			activeVisualTrace,
 			visualDraftRegion,
 			visualCropRegion,
-			formulaAnnotationRegion,
 			focusedLayoutRegion,
 			pinsByPage,
 			citationLinks,
@@ -1272,7 +1227,6 @@ function PdfViewerInner({
 			layoutOverlayVisible,
 			layoutTranslateItemsByPage,
 			layoutTranslatePageStateByPage,
-			equationSymbolCount: equationSymbols.length,
 		}),
 		[
 			hoverableRegionsByPage,
@@ -1280,7 +1234,6 @@ function PdfViewerInner({
 			layoutOverlayVisible,
 			layoutTranslateItemsByPage,
 			layoutTranslatePageStateByPage,
-			equationSymbols.length,
 		],
 	);
 
@@ -1308,8 +1261,6 @@ function PdfViewerInner({
 			onCitationActivate: handleCitationLinkActivate,
 			onCitationHover: handleLinkHover,
 			onRegionSelect: handleVisualRegionSelect,
-			onLayoutHoverEnter: scheduleLayoutHoverOpen,
-			onLayoutHoverLeave: handleLayoutHoverLeave,
 			onLayoutRegionClick: handleLayoutRegionClick,
 			onTogglePageLayoutTranslate: togglePageLayoutTranslate,
 			onDeleteHighlightAnnotation: handleDeleteHighlightAnnotation,
@@ -1323,8 +1274,6 @@ function PdfViewerInner({
 			handleCitationLinkActivate,
 			handleLinkHover,
 			handleVisualRegionSelect,
-			scheduleLayoutHoverOpen,
-			handleLayoutHoverLeave,
 			handleLayoutRegionClick,
 			togglePageLayoutTranslate,
 			handleDeleteHighlightAnnotation,
@@ -1410,11 +1359,8 @@ function PdfViewerInner({
 			>
 				<WheelZoomHandler docId={docId} />
 				<ActiveCardScrollSync
-					active={Boolean(activeCard || formulaAnnotationPreview)}
-					onScroll={() => {
-						rePlaceActiveCardOnScroll();
-						rePlaceFormulaAnnotationOnScroll();
-					}}
+					active={Boolean(activeCard)}
+					onScroll={rePlaceActiveCardOnScroll}
 				/>
 				{/* Ctrl+wheel and trackpad pinch are handled by WheelZoomHandler (WebKit
 				    pinch arrives as GestureEvents, not ctrl+wheel); EmbedPDF's built-in
@@ -1445,18 +1391,6 @@ function PdfViewerInner({
 					onSendNow: handleVisualSendNow,
 					onDelete: closeVisualDraftEditor,
 					onClose: closeVisualDraftEditor,
-				}}
-				formulaAnnotation={{
-					state: formulaAnnotationPreview,
-					onOpenFile: paperAbsPath
-						? () => {
-								closeFormulaAnnotationPreview();
-								openPath(equationAnnotationPath(paperAbsPath));
-							}
-						: undefined,
-					onClose: closeFormulaAnnotationPreview,
-					onHoverEnter: markFormulaHoverEnter,
-					onHoverLeave: scheduleFormulaHide,
 				}}
 				citationPreview={{
 					state: citationPreview,

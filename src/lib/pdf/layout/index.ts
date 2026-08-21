@@ -15,8 +15,6 @@ export {
 	layoutKindHex,
 } from "@/lib/pdf/layout/colors";
 export {
-	LAYOUT_FORMULA_HOVER_DWELL_MS,
-	LAYOUT_FORMULA_HOVER_HIDE_MS,
 	LAYOUT_HINT_MIN_REGION_H_PX,
 	LAYOUT_HINT_MIN_REGION_W_PX,
 	LAYOUT_SIDEBAR_MIN_SCORE,
@@ -42,10 +40,6 @@ export {
 	rawLayoutRegionsByPage,
 	rawLayoutRegionsOnPage,
 } from "@/lib/pdf/layout/hit-test";
-export {
-	isLayoutHoverSuppressedByScroll,
-	LAYOUT_HOVER_SCROLL_SUPPRESS_MS,
-} from "@/lib/pdf/layout/hover-scroll-guard";
 export {
 	LAYOUT_INDEX_FILE,
 	LAYOUT_SIDECAR_FILE,

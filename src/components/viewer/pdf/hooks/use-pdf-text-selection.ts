@@ -22,7 +22,6 @@ import {
 	type SetStateAction,
 	useCallback,
 	useEffect,
-	useRef,
 	useState,
 } from "react";
 import {
@@ -65,8 +64,6 @@ export type UsePdfTextSelectionOptions = {
 
 export type PdfTextSelection = {
 	selectionMenu: SelectionMenuState | null;
-	/** Mirror so hover/dwell guards can read it without re-creating callbacks. */
-	selectionMenuRef: RefObject<SelectionMenuState | null>;
 	setSelectionMenu: Dispatch<SetStateAction<SelectionMenuState | null>>;
 	/** Dismiss the menu and drop the underlying PDFium selection. */
 	closeSelectionMenu: () => void;
@@ -85,8 +82,6 @@ export function usePdfTextSelection({
 	const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(
 		null,
 	);
-	const selectionMenuRef = useRef(selectionMenu);
-	selectionMenuRef.current = selectionMenu;
 
 	const closeSelectionMenu = useCallback(() => {
 		setSelectionMenu(null);
@@ -193,7 +188,6 @@ export function usePdfTextSelection({
 
 	return {
 		selectionMenu,
-		selectionMenuRef,
 		setSelectionMenu,
 		closeSelectionMenu,
 	};

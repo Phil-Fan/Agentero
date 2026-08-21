@@ -50,19 +50,9 @@ PDF 阅读器支持：
 - 自动（或手动点「分析」）运行 PP-DocLayoutV3 ONNX 版面分析。
 - 列出检测到的插图、表格、算法和有编号公式。
 - 点击条目跳转到 PDF 对应位置；可开启叠加层查看模型原始框。
-- 鼠标悬停在插图/表/算法区域会在框右上角显示「单击进行批注」提示；单击打开视觉批注编辑器。
+- 鼠标悬停在插图/表/算法/有编号公式区域会在框右上角显示「单击进行批注」提示；单击打开视觉批注编辑器。
 
 原始结果缓存到 `{paper}/source/layout.json`，侧栏索引写入 `{paper}/source/layout-index.json`，可用 CLI `agentero layout list|get` 读取。
-
-## 公式解析卡
-
-当论文目录存在 `Annotation.md`（通常由 `equation-annotation` Skill 生成）且解析到符号表时：
-
-- 鼠标悬停在**有编号公式**上，会弹出「公式解析」卡片。
-- 卡片展示公式中各符号的含义与通俗理解，符号列以 KaTeX 渲染。
-- 点击卡片可打开 `Annotation.md` 查看完整符号词典。
-
-无 `Annotation.md` 时，公式区域仍走视觉批注流程。
 
 ## 参考文献（References）
 

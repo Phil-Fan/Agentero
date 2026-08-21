@@ -63,10 +63,6 @@ pub const SUPERVISOR_SKILLS_LICENSE: &str =
 pub const PAPER_READER_SKILL: &str =
     include_str!("../../../../templates/vault/.agents/skills/paper-reader/SKILL.md");
 
-/// Bundled equation-annotation skill (symbol glossary → Annotation.md).
-pub const EQUATION_ANNOTATION_SKILL: &str =
-    include_str!("../../../../templates/vault/.agents/skills/equation-annotation/SKILL.md");
-
 /// Bundled agentero-cli skill (headless vault discover/import via CLI), POSIX variant.
 pub const AGENTERO_CLI_SKILL: &str =
     include_str!("../../../../templates/vault/.agents/skills/agentero-cli/SKILL.md");
@@ -117,10 +113,6 @@ pub(crate) fn bundled_skill_files() -> &'static [(&'static str, &'static str)] {
         (
             ".agents/skills/author-lookup/SKILL.md",
             AUTHOR_LOOKUP_SKILL,
-        ),
-        (
-            ".agents/skills/equation-annotation/SKILL.md",
-            EQUATION_ANNOTATION_SKILL,
         ),
         // Same skill id on every platform; the body matches the host OS the
         // CLI (and the agent consuming this skill) actually runs on.
