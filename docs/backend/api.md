@@ -2165,9 +2165,9 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
     "backend": "local", // "local"（默认，ONNX）| "paddle"（AI Studio 异步任务）| "mineru"（MinerU 云 API）
     "parserBackend": "local", // PAPER.md 正文解析引擎："local"（默认）| "paddle" | "mineru" | "openaiCompatible"
     "providerConfigs": {
-      "paddle": { "apiKey": "***", "baseUrl": "", "model": "" },
-      "mineru": { "apiKey": "***", "baseUrl": "", "model": "" }, // baseUrl 空 → 官方 https://mineru.net
-      "openaiCompatible": { "apiKey": "***", "baseUrl": "", "model": "" } // baseUrl 空 → https://api.siliconflow.cn/v1
+      "paddle": { "apiKey": "***", "baseUrl": "", "model": "", "prompt": "" },
+      "mineru": { "apiKey": "***", "baseUrl": "", "model": "", "prompt": "" }, // baseUrl 空 → 官方 https://mineru.net
+      "openaiCompatible": { "apiKey": "***", "baseUrl": "", "model": "", "prompt": "" } // baseUrl 空 → https://api.siliconflow.cn/v1
     }
   }
 }
@@ -2175,9 +2175,10 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 
 - `apiKey` 与翻译 BYOK 同一套掩码机制：`settings_get` 返回 `*` 掩码，`settings_set` 收到掩码时保留已存密钥。Paddle key 在 AI Studio 访问令牌页获取；MinerU token 在 mineru.net API 管理页获取；OpenAI 兼容 key 在服务商控制台获取（如硅基流动，前端 `LAYOUT_PROVIDER_DOCS_URLS`）。
 - `baseUrl` 为可选端点覆盖：paddle 端点固定（不支持覆盖）；mineru 支持覆盖且强制 https（loopback `http://localhost` 等除外）；openaiCompatible 默认硅基流动。
-- `model` 供正文解析引擎使用：openaiCompatible 预设 `PaddlePaddle/PaddleOCR-VL-1.5` / `deepseek-ai/DeepSeek-OCR`（空 → 前者）；paddle 正文默认 `PaddleOCR-VL-1.6`（版面分析固定用 `PP-StructureV3`，不读该字段）。
+- `model` 供正文解析引擎使用：openaiCompatible 预设 `PaddlePaddle/PaddleOCR-VL-1.5` / `deepseek-ai/DeepSeek-OCR`（空 → 前者）；paddle 正文预设 `PaddleOCR-VL-1.6` / `PaddleOCR-VL-1.5`（空 → 前者；版面分析固定用 `PP-StructureV3`，不读该字段）。
+- `prompt` 仅 openaiCompatible 使用：OCR 提示词覆盖，空 → 按 model id 自动选择。注意 `PaddleOCR-VL` 只接受固定任务提示词，自定义提示词请配指令型 VLM（详见 [paper-import.md](paper-import.md) § 正文解析引擎）。
 - `parserBackend` 与版面 `backend` 独立选择，但共用 `providerConfigs` 凭据池；正文引擎详见 [paper-import.md](paper-import.md) § 正文解析引擎。
-- 设置 UI：Settings →「版面解析 / Layout」（版面后端由前端 `LAYOUT_PROVIDERS`、正文引擎由 `PARSER_PROVIDERS` 注册表驱动；按 provider 的 `requiresApiKey` / `supportsBaseUrl` / `requiresModel` 显隐 API Key / Base URL / Model 输入 + 连通性测试）。
+- 设置 UI：Settings →「版面解析 / Layout」（版面后端由前端 `LAYOUT_PROVIDERS`、正文引擎由 `PARSER_PROVIDERS` 注册表驱动；两者指向同一 provider 时 `mergeProviderCards` 合并为一张卡片，按 `requiresApiKey` / `supportsBaseUrl` / `supportsModel` / `supportsPrompt` 显隐 API Key / Base URL / Model / Prompt 输入 + 连通性测试）。
 
 #### `layout_remote_analyze_pdf`（已实现）
 
