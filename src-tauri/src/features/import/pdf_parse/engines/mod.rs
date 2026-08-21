@@ -7,6 +7,7 @@
 //! `network::configure_proxy`), refreshed at startup and on `settings_set`.
 
 use crate::core::error::AppError;
+#[cfg(feature = "desktop")]
 use crate::features::settings::AppSettingsStore;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -14,8 +15,11 @@ use std::path::Path;
 use std::sync::{Arc, OnceLock, RwLock};
 
 mod local;
+#[cfg(feature = "desktop")]
 mod mineru;
+#[cfg(feature = "desktop")]
 mod openai_vlm;
+#[cfg(feature = "desktop")]
 mod paddle;
 
 /// Successful body parse: markdown plus the catalog quality labels.
@@ -41,6 +45,7 @@ pub struct BodyParseCtx<'a> {
 }
 
 impl BodyParseCtx<'_> {
+    #[cfg(feature = "desktop")]
     fn is_cancelled(&self) -> bool {
         super::pdf_parse_task_is_cancelled(self.task_id)
     }
@@ -55,16 +60,25 @@ pub trait BodyParseEngine: Send + Sync {
 /// Backend id (any case) → engine. Unknown ids fall back to local.
 fn engine_for(backend: &str) -> Arc<dyn BodyParseEngine> {
     match backend.trim().to_ascii_lowercase().as_str() {
+        #[cfg(feature = "desktop")]
         "mineru" => Arc::new(mineru::MineruBodyEngine),
+        #[cfg(feature = "desktop")]
         "paddle" => Arc::new(paddle::PaddleBodyEngine),
+        #[cfg(feature = "desktop")]
         "openaicompatible" => Arc::new(openai_vlm::OpenAiVlmBodyEngine),
         _ => Arc::new(local::LocalBodyEngine),
     }
 }
 
 /// Provider id used to look up credentials for a backend (None → local).
+#[cfg(feature = "desktop")]
 fn provider_for_backend(backend: &str) -> Option<&'static str> {
     crate::features::settings::layout_provider_settings_key(backend)
+}
+
+#[cfg(not(feature = "desktop"))]
+fn provider_for_backend(_backend: &str) -> Option<&'static str> {
+    None
 }
 
 /// Process-wide parser engine snapshot.
@@ -88,6 +102,7 @@ pub fn configure_parser(config: ParserEngineConfig) {
 
 /// Rebuild the snapshot from the settings store; plaintext keys never leave
 /// the Host process.
+#[cfg(feature = "desktop")]
 pub fn refresh_parser_config(store: &AppSettingsStore) {
     let mut credentials = HashMap::new();
     for provider in ["paddle", "mineru", "openaiCompatible"] {
@@ -152,7 +167,7 @@ pub(crate) async fn parse_body_with_engine(
     local::LocalBodyEngine.parse(&ctx).await
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "desktop"))]
 mod tests {
     use super::*;
 

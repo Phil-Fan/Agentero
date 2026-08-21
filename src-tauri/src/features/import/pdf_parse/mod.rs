@@ -38,7 +38,10 @@ const PDF_PARSE_TIMEOUT: Duration = Duration::from_secs(120);
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 const PDF_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 /// Rendering many pages at 150 DPI can exceed the parse timeout on large PDFs.
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[cfg(all(
+    feature = "desktop",
+    not(any(target_os = "ios", target_os = "android"))
+))]
 const PDF_RENDER_TIMEOUT: Duration = Duration::from_secs(300);
 /// Page cap for the VLM OCR engine (per-page cloud requests are costly).
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
@@ -380,7 +383,10 @@ enum PdfRenderWorkerResponse {
 #[derive(Debug)]
 pub(crate) struct WorkerDirGuard(PathBuf);
 
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[cfg(all(
+    feature = "desktop",
+    not(any(target_os = "ios", target_os = "android"))
+))]
 impl WorkerDirGuard {
     pub(crate) fn path(&self) -> &Path {
         &self.0
@@ -723,7 +729,10 @@ pub async fn run_liteparse_probe(
 
 /// Render a local PDF's pages to PNG files in the isolated PDFium worker
 /// (capped at [`VLM_MAX_PAGES`]). The returned guard owns the PNG directory.
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[cfg(all(
+    feature = "desktop",
+    not(any(target_os = "ios", target_os = "android"))
+))]
 pub(crate) async fn run_liteparse_render_pngs(
     pdf_path: &Path,
     task_id: Option<&str>,
