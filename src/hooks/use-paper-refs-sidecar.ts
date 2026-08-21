@@ -1,6 +1,13 @@
-import { listen } from "@tauri-apps/api/event";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useTauriEvent } from "@/hooks/use-tauri-event";
 import { type CiteSidecar, loadPaperRefsReadOnly } from "@/lib/paper/refs";
+
+type JobChangedPayload = {
+	job: { kind: string; paperPath?: string | null; state: string };
+};
+
+const normPaperPath = (p: string | null | undefined) =>
+	(p ?? "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
 
 /**
  * Read-only reference sidecar for a paper, reloaded when its ParseRefs
@@ -17,12 +24,29 @@ export function usePaperRefsSidecar(
 } {
 	const [sidecar, setSidecar] = useState<CiteSidecar | null>(null);
 	const [loading, setLoading] = useState(false);
+	const reloadRef = useRef<(() => void) | null>(null);
+
+	// Reload when this paper's ParseRefs backfill settles (event-driven,
+	// replacing the old blocking list→parse fallback).
+	useTauriEvent<JobChangedPayload>("job:changed", ({ job }) => {
+		if (job.kind !== "parseRefs") return;
+		if (normPaperPath(job.paperPath) !== normPaperPath(paperPath)) return;
+		if (
+			job.state === "succeeded" ||
+			job.state === "failed" ||
+			job.state === "cancelled"
+		) {
+			reloadRef.current?.();
+		}
+	});
 
 	useEffect(() => {
 		setSidecar(null);
-		if (!vaultPath || !paperPath) return;
+		if (!vaultPath || !paperPath) {
+			reloadRef.current = null;
+			return;
+		}
 		let cancelled = false;
-		let unlisten: (() => void) | undefined;
 		setLoading(true);
 		const reload = () => {
 			loadPaperRefsReadOnly(vaultPath, paperPath)
@@ -37,30 +61,10 @@ export function usePaperRefsSidecar(
 				});
 		};
 		reload();
-		// Reload when this paper's ParseRefs backfill settles (event-driven,
-		// replacing the old blocking list→parse fallback).
-		const norm = (p: string | null | undefined) =>
-			(p ?? "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-		void listen<{
-			job: { kind: string; paperPath?: string | null; state: string };
-		}>("job:changed", (event) => {
-			const job = event.payload.job;
-			if (job.kind !== "parseRefs") return;
-			if (norm(job.paperPath) !== norm(paperPath)) return;
-			if (
-				job.state === "succeeded" ||
-				job.state === "failed" ||
-				job.state === "cancelled"
-			) {
-				if (!cancelled) reload();
-			}
-		}).then((u) => {
-			if (cancelled) u();
-			else unlisten = u;
-		});
+		reloadRef.current = reload;
 		return () => {
 			cancelled = true;
-			unlisten?.();
+			reloadRef.current = null;
 		};
 	}, [vaultPath, paperPath]);
 

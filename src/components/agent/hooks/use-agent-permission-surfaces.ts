@@ -4,14 +4,9 @@
  * tool-shaped ask promoted by the runtime. Each registers in the overlay
  * stack so Esc dismisses (and cancels) the topmost one.
  */
-import {
-	type Dispatch,
-	type SetStateAction,
-	useEffect,
-	useRef,
-	useState,
-} from "react";
+import { type Dispatch, type SetStateAction, useRef, useState } from "react";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
+import { useTauriEvent } from "@/hooks/use-tauri-event";
 import {
 	type AskUserRequest,
 	type ElicitationRequest,
@@ -21,7 +16,6 @@ import {
 	respondPermission,
 } from "@/lib/agent";
 import type { ToolAskUserRequest } from "@/lib/agent/chat-state";
-import { isTauri } from "@/lib/core/tauri";
 
 export type UseAgentPermissionSurfacesOptions = {
 	toolAskUserRequest: ToolAskUserRequest | null;
@@ -99,67 +93,21 @@ export function useAgentPermissionSurfaces({
 		},
 	);
 
-	useEffect(() => {
-		if (!isTauri()) return;
-		let unsub: (() => void) | undefined;
-		let cancelled = false;
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-			unsub = await listen<PermissionRequest>(
-				"agent:permission-request",
-				({ payload }) => setPermissionRequest(payload),
-			);
-		})();
-		return () => {
-			cancelled = true;
-			unsub?.();
-		};
-	}, []);
+	useTauriEvent<PermissionRequest>("agent:permission-request", (payload) =>
+		setPermissionRequest(payload),
+	);
 
-	useEffect(() => {
-		if (!isTauri()) return;
-		let unsub: (() => void) | undefined;
-		let cancelled = false;
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-			unsub = await listen<ElicitationRequest>(
-				"agent:elicitation-request",
-				({ payload }) => {
-					// Prefer host elicitation over tool-card promote.
-					setToolAskUserRequest(null);
-					setElicitationRequest(payload);
-				},
-			);
-		})();
-		return () => {
-			cancelled = true;
-			unsub?.();
-		};
-	}, [setToolAskUserRequest]);
+	useTauriEvent<ElicitationRequest>("agent:elicitation-request", (payload) => {
+		// Prefer host elicitation over tool-card promote.
+		setToolAskUserRequest(null);
+		setElicitationRequest(payload);
+	});
 
-	useEffect(() => {
-		if (!isTauri()) return;
-		let unsub: (() => void) | undefined;
-		let cancelled = false;
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-			unsub = await listen<AskUserRequest>(
-				"agent:ask-user-request",
-				({ payload }) => {
-					// Grok ext is the authoritative respond path; drop tool-promote duplicate.
-					setToolAskUserRequest(null);
-					setAskUserRequest(payload);
-				},
-			);
-		})();
-		return () => {
-			cancelled = true;
-			unsub?.();
-		};
-	}, [setToolAskUserRequest]);
+	useTauriEvent<AskUserRequest>("agent:ask-user-request", (payload) => {
+		// Grok ext is the authoritative respond path; drop tool-promote duplicate.
+		setToolAskUserRequest(null);
+		setAskUserRequest(payload);
+	});
 
 	return {
 		permissionRequest,

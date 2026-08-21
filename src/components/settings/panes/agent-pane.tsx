@@ -1,4 +1,3 @@
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
 	ArrowUpCircle,
 	ChevronDown,
@@ -83,6 +82,7 @@ import {
 import { errorText } from "@/lib/core/error";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
+import { listenSafe } from "@/lib/core/tauri-events";
 import { cn } from "@/lib/core/utils";
 import type { AppSettings, EmbeddingSettings } from "@/lib/settings";
 import { isTranslateApiKeyMask } from "@/lib/translate";
@@ -430,7 +430,20 @@ export function AgentPane({
 			return next;
 		});
 		const taskId = `agent-lifecycle-${entry.templateId}-${Date.now().toString(36)}`;
-		let unlisten: UnlistenFn | null = null;
+		// listenSafe registers asynchronously, so the host's initial
+		// progress=5 emit may race the subscription. That is harmless: the
+		// lost event is redundant with the local patch below, and later
+		// emits are throttled (≥750ms apart on the host).
+		const stopProgress = listenSafe<LifecycleProgressEvent>(
+			"agent-lifecycle:progress",
+			(payload) => {
+				if (payload.taskId !== taskId) return;
+				patchLifecycleProgress(entry.templateId, {
+					progress: payload.progress,
+					detail: lifecyclePhaseLabel(payload.phase),
+				});
+			},
+		);
 		try {
 			patchLifecycleProgress(entry.templateId, {
 				progress: 5,
@@ -440,16 +453,6 @@ export function AgentPane({
 						: "agent.lifecycleInstalling",
 				),
 			});
-			unlisten = await listen<LifecycleProgressEvent>(
-				"agent-lifecycle:progress",
-				(event) => {
-					if (event.payload.taskId !== taskId) return;
-					patchLifecycleProgress(entry.templateId, {
-						progress: event.payload.progress,
-						detail: lifecyclePhaseLabel(event.payload.phase),
-					});
-				},
-			);
 			await runToolLifecycle(entry.templateId, action, taskId);
 			patchLifecycleProgress(entry.templateId, {
 				progress: 70,
@@ -476,7 +479,7 @@ export function AgentPane({
 		} catch (e) {
 			notifyError(errorText(e));
 		} finally {
-			unlisten?.();
+			stopProgress();
 			clearLifecycleProgress(entry.templateId);
 			setLifecycleBusyIds((prev) => {
 				const next = new Map(prev);
