@@ -34,4 +34,30 @@ describe("shell shortcuts", () => {
 	it("renders the split pane chord", () => {
 		expect(formatShortcut({ key: "\\", meta: true })).toContain("\\");
 	});
+
+	it("separates reopen tab from the terminal chord", () => {
+		expect(
+			resolveShortcutId(keyEvent({ key: "t", metaKey: true, shiftKey: true }), {
+				settingsOpen: false,
+			}),
+		).toBe("reopenTab");
+		expect(
+			resolveShortcutId(keyEvent({ key: "t", metaKey: true, altKey: true }), {
+				settingsOpen: false,
+			}),
+		).toBe("openInTerminal");
+	});
+
+	it("claims ⇧⌘A but leaves ⌘A to native select-all", () => {
+		expect(
+			resolveShortcutId(keyEvent({ key: "a", metaKey: true, shiftKey: true }), {
+				settingsOpen: false,
+			}),
+		).toBe("addSelectionToChat");
+		expect(
+			resolveShortcutId(keyEvent({ key: "a", metaKey: true }), {
+				settingsOpen: false,
+			}),
+		).toBeNull();
+	});
 });

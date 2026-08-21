@@ -40,6 +40,7 @@ import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
 import { useAnyOverlayOpen } from "@/hooks/use-overlay-registration";
 import { SIDEBAR_DEFAULT_PX, useShellLayout } from "@/hooks/use-shell-layout";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
+import { focusAgentComposer } from "@/lib/agent/composer-focus";
 import {
 	listenOpenAgentWithPrompt,
 	setPendingAgentComposerPrompt,
@@ -93,6 +94,7 @@ import {
 	closeTabOrWindow,
 	cycleActiveTab,
 	dirtyVaultPaths,
+	reopenClosedTab,
 	splitActivePane,
 	toggleNotesSplit,
 } from "@/lib/workspace/actions";
@@ -339,10 +341,17 @@ export default function App() {
 				openRightTab("agent");
 			} else toggleChat();
 		},
+		// ⇧⌘A — add the selection (when any) to the Agent context and type there.
+		addSelectionToChat: () => {
+			pinActiveSelection();
+			openRightTab("agent");
+			focusAgentComposer();
+		},
 		focusSidebar: () => layout()?.focusSidebar(),
 		focusEditor: () => layout()?.focusEditorPane(),
 		focusNotes: () => layout()?.focusNotesEditor(),
 		closeTab: closeTabOrWindow,
+		reopenTab: reopenClosedTab,
 		splitPane: splitActivePane,
 		nextTab: () => cycleActiveTab(1),
 		prevTab: () => cycleActiveTab(-1),

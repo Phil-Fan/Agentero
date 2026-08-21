@@ -25,11 +25,15 @@ export type ShortcutId =
 	| "commandPalette"
 	| "toggleSidebar"
 	| "toggleChat"
+	/** ⇧⌘A — pin the live selection into the Agent context and focus the composer */
+	| "addSelectionToChat"
 	| "closeSheet"
 	| "focusSidebar"
 	| "focusEditor"
 	| "focusNotes"
 	| "closeTab"
+	/** ⇧⌘T — reopen the most recently closed tab */
+	| "reopenTab"
 	| "splitPane"
 	| "nextTab"
 	| "prevTab"
@@ -231,6 +235,15 @@ export const SHORTCUTS: ShortcutDef[] = [
 		whenSettingsClosed: true,
 	},
 	{
+		id: "addSelectionToChat",
+		group: "Navigation",
+		// ⇧⌘A — pin the live selection as Agent context and focus the composer.
+		key: "a",
+		meta: true,
+		shift: true,
+		whenSettingsClosed: true,
+	},
+	{
 		id: "focusSidebar",
 		group: "Navigation",
 		key: "1",
@@ -258,6 +271,15 @@ export const SHORTCUTS: ShortcutDef[] = [
 		// Intentionally NOT whenSettingsClosed: overlays take priority over tabs.
 		key: "w",
 		meta: true,
+	},
+	{
+		id: "reopenTab",
+		group: "Navigation",
+		// ⇧⌘T — reopen the most recently closed panel (browser convention).
+		key: "t",
+		meta: true,
+		shift: true,
+		whenSettingsClosed: true,
 	},
 	{
 		id: "splitPane",

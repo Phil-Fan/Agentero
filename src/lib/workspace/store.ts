@@ -15,6 +15,15 @@ import {
 	reseedMarkdownTab,
 	reseedNotesTab,
 } from "@/lib/workspace/tabs";
+import type { CenterViewMode } from "@/lib/workspace/viewer";
+
+/** Closed panel remembered for ⇧⌘T (reopen), newest last. */
+export type ClosedTab = {
+	path: string;
+	mode?: CenterViewMode;
+};
+
+const CLOSED_TAB_HISTORY = 10;
 
 type WorkspaceStore = {
 	/** Open document panels (flat list; layout owned by global dockview). */
@@ -26,6 +35,8 @@ type WorkspaceStore = {
 	pdfLru: string[];
 	/** Most-recently-viewed Markdown editor tab ids kept mounted (see EDITOR_TAB_MOUNT_LRU). */
 	editorLru: string[];
+	/** Recently closed panels (ephemeral, never persisted). */
+	closedTabs: ClosedTab[];
 };
 
 export const workspaceStore = createStore<WorkspaceStore>(() => ({
@@ -34,6 +45,7 @@ export const workspaceStore = createStore<WorkspaceStore>(() => ({
 	dockLayout: null,
 	pdfLru: [],
 	editorLru: [],
+	closedTabs: [],
 }));
 
 let initialized = false;
@@ -106,6 +118,33 @@ export function setEditorLru(
 		return;
 	}
 	workspaceStore.setState({ editorLru: next });
+}
+
+/** Remember closed panels so ⇧⌘T can reopen them (newest last). */
+export function pushClosedTabs(entries: readonly ClosedTab[]): void {
+	if (!entries.length) return;
+	workspaceStore.setState((s) => {
+		const paths = new Set(entries.map((entry) => entry.path));
+		const kept = s.closedTabs.filter((entry) => !paths.has(entry.path));
+		return {
+			closedTabs: [...kept, ...entries].slice(-CLOSED_TAB_HISTORY),
+		};
+	});
+}
+
+/** Pop the most recently closed panel (null when the history is empty). */
+export function takeClosedTab(): ClosedTab | null {
+	const { closedTabs } = workspaceStore.getState();
+	const last = closedTabs[closedTabs.length - 1];
+	if (!last) return null;
+	workspaceStore.setState({ closedTabs: closedTabs.slice(0, -1) });
+	return last;
+}
+
+/** Drop reopen history (paths belong to the vault being left). */
+export function clearClosedTabs(): void {
+	if (!workspaceStore.getState().closedTabs.length) return;
+	workspaceStore.setState({ closedTabs: [] });
 }
 
 /** Merge a patch into the panel with the given id. */

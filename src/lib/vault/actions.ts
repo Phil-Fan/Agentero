@@ -88,7 +88,11 @@ import {
 	dirtyVaultPaths,
 	openPath,
 } from "@/lib/workspace/actions";
-import { setActiveTabId, setTabs } from "@/lib/workspace/store";
+import {
+	clearClosedTabs,
+	setActiveTabId,
+	setTabs,
+} from "@/lib/workspace/store";
 import { basenameOf } from "@/lib/workspace/tabs";
 
 export async function activateVault(path: string): Promise<void> {
@@ -115,6 +119,7 @@ export async function activateVault(path: string): Promise<void> {
 	});
 	setTabs([]);
 	setActiveTabId(null);
+	clearClosedTabs();
 	setTreeSelectedPath(null);
 	setLibraryQuery("");
 	setLibraryScopePath(null);
@@ -1019,6 +1024,7 @@ export function validateRestoredVault(): Promise<void> {
 			setTree([]);
 			setTabs([]);
 			setActiveTabId(null);
+			clearClosedTabs();
 			setTreeSelectedPath(null);
 		})
 		.catch(() => {

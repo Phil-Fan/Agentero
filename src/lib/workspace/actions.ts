@@ -64,10 +64,12 @@ import { dockHandle } from "@/lib/workspace/dock-registry";
 import {
 	getActiveTabId,
 	getTabs,
+	pushClosedTabs,
 	refreshTabMarkdown,
 	refreshTabNotes,
 	setActiveTabId,
 	setTabs,
+	takeClosedTab,
 	updateTab,
 } from "@/lib/workspace/store";
 import {
@@ -355,6 +357,8 @@ export function closeTab(id: string): void {
 		notePaperFocus(null);
 	}
 
+	rememberClosedTabs(idsToClose);
+
 	setTabs((prev) => {
 		let next = prev;
 		const removedList: DocTab[] = [];
@@ -368,6 +372,45 @@ export function closeTab(id: string): void {
 		return withLibraryIfEmpty(next);
 	});
 	removeTabAnnotations(idsToClose);
+}
+
+/**
+ * Push the panels about to close onto the reopen history (⇧⌘T). Library and
+ * Trash are auto-managed, and a NOTES companion is skipped when its paper body
+ * closes with it — reopening the body brings NOTES back.
+ */
+function rememberClosedTabs(idsToClose: readonly string[]): void {
+	const tabs = getTabs();
+	const closing = idsToClose
+		.map((closeId) => tabs.find((t) => t.id === closeId))
+		.filter((tab): tab is DocTab => Boolean(tab));
+	const companionIds = new Set(
+		closing.flatMap((tab) =>
+			isPaperContentTab(tab) && tab.notesPath
+				? [tabIdForPath(tab.notesPath)]
+				: [],
+		),
+	);
+	pushClosedTabs(
+		closing
+			.filter(
+				(tab) =>
+					!companionIds.has(tab.id) &&
+					!isLibraryVirtualPath(tab.path) &&
+					!isTrashVirtualPath(tab.path),
+			)
+			.map((tab) => ({ path: tab.path, mode: tab.mode })),
+	);
+}
+
+/** ⇧⌘T — reopen the most recently closed panel that is not already open. */
+export function reopenClosedTab(): void {
+	for (let entry = takeClosedTab(); entry; entry = takeClosedTab()) {
+		const id = tabIdForPath(entry.path);
+		if (getTabs().some((tab) => tab.id === id)) continue;
+		openTab(entry.path, { preferMode: entry.mode });
+		return;
+	}
 }
 
 /** Close every Plaza overview / source tab. */

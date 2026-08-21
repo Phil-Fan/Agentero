@@ -5,6 +5,8 @@
  */
 
 import { fileTreeHandle } from "@/components/shell/file-tree-registry";
+import { focusAgentComposer } from "@/lib/agent/composer-focus";
+import { pinActiveSelection } from "@/lib/agent/selection-store";
 import { openMagicWand } from "@/lib/paper/import-actions";
 import { refreshLibrary } from "@/lib/paper/library-store";
 import type { AppCommand } from "@/lib/shell/commands/types";
@@ -14,6 +16,7 @@ import {
 } from "@/lib/shell/settings-window";
 import {
 	layout,
+	openRightTab,
 	toggleChat,
 	toggleSidebar,
 	uiStore,
@@ -29,6 +32,7 @@ import { getVaultPath } from "@/lib/vault/store";
 import {
 	closeTabOrWindow,
 	cycleActiveTab,
+	reopenClosedTab,
 	selectLibrary,
 	splitActivePane,
 } from "@/lib/workspace/actions";
@@ -113,6 +117,17 @@ export const paletteCommands: AppCommand[] = [
 		run: () => toggleChat(),
 	},
 	{
+		id: "view.addSelectionToChat",
+		titleKey: "commands.viewAddSelectionToChat",
+		categoryKey: "commands.catView",
+		keywords: ["agent", "chat", "selection", "context"],
+		run: () => {
+			pinActiveSelection();
+			openRightTab("agent");
+			focusAgentComposer();
+		},
+	},
+	{
 		id: "view.focusSidebar",
 		titleKey: "commands.viewFocusSidebar",
 		categoryKey: "commands.catView",
@@ -145,6 +160,13 @@ export const paletteCommands: AppCommand[] = [
 		titleKey: "commands.tabClose",
 		categoryKey: "commands.catTab",
 		run: () => closeTabOrWindow(),
+	},
+	{
+		id: "tab.reopen",
+		titleKey: "commands.tabReopen",
+		categoryKey: "commands.catTab",
+		keywords: ["reopen", "restore", "undo close", "recent"],
+		run: () => reopenClosedTab(),
 	},
 	{
 		id: "tab.splitPane",

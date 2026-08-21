@@ -38,6 +38,7 @@ import type {
 	PromptImage,
 } from "@/lib/agent";
 import { SUGGESTION_KEYS, SUGGESTION_WORKFLOW } from "@/lib/agent/chat-state";
+import { AGENT_COMPOSER_INPUT_ATTR } from "@/lib/agent/composer-focus";
 import {
 	COMPOSER_IMAGE_ACCEPT,
 	COMPOSER_IMAGE_MAX_BYTES,
@@ -306,6 +307,7 @@ export function AgentComposer(props: AgentComposerProps) {
 										/>
 									) : null}
 									<PromptInputTextarea
+										{...{ [AGENT_COMPOSER_INPUT_ATTR]: "" }}
 										autoFocus={autoFocus || undefined}
 										className={cn(
 											"agentero-scroll min-h-0 flex-1 overflow-y-auto px-0 py-1 placeholder:text-muted-foreground/80",
