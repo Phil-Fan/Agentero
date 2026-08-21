@@ -78,6 +78,7 @@ papers/<id>/
 - `bump` Skill 执行完之后会，创建一个本地 commit。并打上对应的 tag
 - `commit` Skill 必须保留用户已有改动，按目的精确暂存，检查相关文档，并只创建本地 Conventional Commit。
 - 如果库当中有对应的 issue，则在提交信息中引用（如 `Fix #123`）；解决了该 issue 则关闭；部分解决则在 issue 区评论。
+- 解决 Issue 之后，把解决的方法评论在 issue 中
 
 ## 常用命令
 
