@@ -12,7 +12,7 @@
 | Q1 | 树位置 | **Library + Recycle Bin 下方、真实 Vault 根目录上方**（已实现） |
 | Q2 | Cool Papers 呈现 | **内嵌 iframe + Host 代理协议** `agentero-coolpapers://`（已实现；见 §3.2） |
 | Q3 | 入库 | **已实现**：每行注入 `[入库]`，复用现成魔棒（见 §3.2.1） |
-| Q4 | P0 范围 | **已交付：广场壳 + Cool Papers 浏览入库 + Skill 推荐 + 订阅 + arXiv 推荐**；播客尚未实现 |
+| Q4 | P0 范围 | **已交付：广场壳 + Cool Papers 浏览入库 + Skill 推荐 + 订阅 + arXiv Daily**；播客尚未实现 |
 | Q5 | ModelScope 论文 | **已实现**：同一代理模式，但站点是 SPA，另有取舍（见 §3.5） |
 | Q6 | 订阅 | **已落地**：广场下单一原生节点，本地 RSS/Atom；见 [`plaza-feeds.md`](plaza-feeds.md) |
 
@@ -68,7 +68,7 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 │   ├── ✨ Skill 推荐           agentero:plaza/skills
 │   ├── 📡 订阅                 agentero:plaza/feeds
 │   ├── 🎙️ 播客                 agentero:plaza/podcasts      ← 占位
-│   └── 🔭 arXiv 推荐            agentero:plaza/arxiv-rec
+│   └── 🔭 arXiv Daily            agentero:plaza/arxiv-rec
 ├── papers/
 ├── notes/
 └── …
@@ -93,7 +93,7 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 | Skill 推荐 | `Sparkles` | Skill picks | Skill 推荐 |
 | 订阅 | `Rss` | Feeds | 订阅 |
 | 播客 | `Podcast` | Podcasts | 播客 |
-| 推荐 | `Telescope` | arXiv Daily | arXiv 推荐 |
+| arXiv Daily | `Telescope` | arXiv Daily | arXiv Daily |
 
 i18n：`sidebar:plaza.*`。
 
@@ -201,7 +201,7 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 - 空态文案：订阅源、单集列表与播放将在后续版本提供。  
 - 侧栏子节点可点，进入占位页（避免「死链」）。
 
-### 3.4 arXiv 推荐（已实现）
+### 3.4 arXiv Daily（已实现）
 
 **目标**：用 Vault 论文库当「兴趣语料」，对当天 arXiv 新论文排序，给出「今天该读什么」。思路对齐 [zotero-arxiv-daily](https://github.com/TideDra/zotero-arxiv-daily)，但语料是本地 catalog 而非 Zotero 云端。
 
@@ -277,7 +277,7 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 
 | 模块 | 关系 |
 |---|---|
-| Library | arXiv 推荐读 `paper_list` 当语料；缓存表 `embed_cache` / `arxiv_rec_state` 落在 catalog（schema v6），不动 `papers` 表 |
+| Library | arXiv Daily 读 `paper_list` 当语料；缓存表 `embed_cache` / `arxiv_rec_state` 落在 catalog（schema v6），不动 `papers` 表 |
 | 魔棒 / 入库 | **已复用** `lookup_import_batch`：喂上游 URL，见 §3.2.1。订阅论文卡走同一条 |
 | 订阅 | 独立 XDG `feeds.sqlite`，不进 catalog；见 [`plaza-feeds.md`](plaza-feeds.md) |
 | PDF\|NOTES | 推荐打开本地论文时走现有阅读布局 |
@@ -308,7 +308,7 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 |---|---|---|
 | **P0a 壳** | 侧栏广场 + 三子节点；`PlazaView` 首页 + 路由 | 虚拟 path 不写盘；i18n；折叠位置正确 |
 | **P0b Cool Papers** | WebView 浏览 papers.cool + 导航 chrome + 外链 | 可分区浏览站点；失败可恢复 |
-| **P0c arXiv 推荐** | embedding 相似度 + 时间衰减排序 + 一键入库（已交付） | 配好 embedding 后有排序结果；未配置有引导空态 |
+| **P0c arXiv Daily** | embedding 相似度 + 时间衰减排序 + 一键入库（已交付） | 配好 embedding 后有排序结果；未配置有引导空态 |
 | **P0d 播客** | 占位页 | 可进入、文案清晰 |
 | **P1** | 入库（解析 arXiv / 魔棒管线）、预览抽屉、批量加入 Library | 与魔棒语义一致 |
 | **P2** | 播客实体、Agent 推荐、命令面板、@ 广场条目 | — |
@@ -319,7 +319,7 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 - 广场 → Vault **批量入库**（单条已实现，见 §3.2.1）。  
 - 把 feed 写入 catalog（订阅条目缓存走 XDG，见 [`plaza-feeds.md`](plaza-feeds.md)）。  
 - 播客播放器。订阅管理见 [`plaza-feeds.md`](plaza-feeds.md)，不进本篇原 P0。  
-- 云端协同过滤，或把本地库上传到 Agentero 自有服务。arXiv 推荐只把摘要发给**用户自己配置的** BYOK embedding 端点；未配置则整个功能不跑。  
+- 云端协同过滤，或把本地库上传到 Agentero 自有服务。arXiv Daily 只把摘要发给**用户自己配置的** BYOK embedding 端点；未配置则整个功能不跑。  
 - 注入脚本只做导航上报与 `[入库]`；**不注入任何凭据 / API Key / 登录态**。
 
 ## 8. 实现落点（编码时）
@@ -331,7 +331,7 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 | 文件树 | `src/components/sidebar/file-tree/` |
 | 中间栏 | `src/components/plaza/*` + `doc-view` |
 | 站点内嵌 | `src/components/plaza/plaza-web-frame.tsx`（代理 iframe，两个站点来源共用；没有 Tauri 子 webview 封装） |
-| arXiv 推荐 | `src-tauri/src/features/recommend/`（管线 + 命令）、`src/lib/recommend/index.ts`、`src/components/plaza/plaza-arxiv-rec-view.tsx`；缓存表见 `catalog/schema.rs` v6 |
+| arXiv Daily | `src-tauri/src/features/recommend/`（管线 + 命令）、`src/lib/recommend/index.ts`、`src/components/plaza/plaza-arxiv-rec-view.tsx`；缓存表见 `catalog/schema.rs` v6 |
 | 订阅 | [`plaza-feeds.md`](plaza-feeds.md) §6 |
 | i18n | `sidebar` / 独立 `plaza` ns |
 | Roadmap / Todo | 增加「广场 P0」条目 |
