@@ -1021,7 +1021,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 #### `paper_parse_body`
 
-把 paper 文件夹下的本地 PDF 解析为 `PAPER.md`，使用 liteparse 隔离子进程。可作为独立后台任务调用；已有 `PAPER.md` 且无 `force` 时直接跳过。
+把 paper 文件夹下的本地 PDF 解析为 `PAPER.md`。引擎由 `settings.layout.parserBackend` 决定（默认本地 liteparse 隔离子进程；可选 `mineru` / `paddle` / `openaiCompatible` 云端引擎，失败自动回退本地，见 [paper-import.md](paper-import.md) § 正文解析引擎）。可作为独立后台任务调用；已有 `PAPER.md` 且无 `force` 时直接跳过。
 
 - **参数**（invoke 字段名 `args`）：
 
@@ -1038,11 +1038,11 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 - **行为**：
   - 有本地 TeX 时跳过（认为 TeX 更干净）。
   - 无 PDF 时跳过。
-  - 无 `PAPER.md` 或 `force=true` 时，用 liteparse 生成 `{paper}/PAPER.md`。
-  - 写 catalog `body_source`（`pdf`/`ocr`）与 `body_quality`（`medium`/`low`）。
+  - 无 `PAPER.md` 或 `force=true` 时，用选定引擎生成 `{paper}/PAPER.md`。
+  - 写 catalog `body_source`（`pdf`/`ocr`/`mineru`/`paddle`/`vlm`）与 `body_quality`（`high`/`medium`/`low`）。
   - 远程 vault 在 `session.work_root` 解析后上传 `PAPER.md` 并 push catalog mirror。
-  - 解析最长等待 120 秒；取消任务会 kill 当前 liteparse 子进程。
-  - **`error` 只在真正失败时出现**（liteparse 失败 / 正文为空 / 写 `PAPER.md` 失败），跳过与取消不算失败。JobCenter 的 `parseBody` job 见到 `error` 会标记 `Failed` 并把它作为失败原因，任务面板因此能展示真实原因（例如找不到 PDFium 动态库）；否则标记 `Succeeded`。
+  - 本地解析最长等待 120 秒（VLM 渲染 300 秒、云端任务 10 分钟 deadline）；取消任务会 kill 当前 liteparse 子进程或中断云端轮询。
+  - **`error` 只在真正失败时出现**（解析失败 / 正文为空 / 写 `PAPER.md` 失败），跳过与取消不算失败；云端引擎失败自动回退本地并把原因写进 `messages`。JobCenter 的 `parseBody` job 见到 `error` 会标记 `Failed` 并把它作为失败原因，任务面板因此能展示真实原因（例如找不到 PDFium 动态库）；否则标记 `Succeeded`。
   - liteparse 依赖运行时 `dlopen` 的 PDFium，随安装包分发，见 [paper-import.md](paper-import.md) § PDFium 随包分发。
 
 > **正文生成时机**：魔棒 / 本地 PDF 导入 / 下载资产 / Library 导入 / Zotero 迁移 / 打开论文时，前端检查到该 paper 有 PDF、无 TeX、无 `PAPER.md`，就会入队 `paper_parse_body` 作为独立后台任务。原 `paper_download_assets` / 魔棒入库命令不再内联等待解析完成。
@@ -2163,17 +2163,21 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 {
   "layout": {
     "backend": "local", // "local"（默认，ONNX）| "paddle"（AI Studio 异步任务）| "mineru"（MinerU 云 API）
+    "parserBackend": "local", // PAPER.md 正文解析引擎："local"（默认）| "paddle" | "mineru" | "openaiCompatible"
     "providerConfigs": {
-      "paddle": { "apiKey": "***", "baseUrl": "" },
-      "mineru": { "apiKey": "***", "baseUrl": "" } // baseUrl 空 → 官方 https://mineru.net
+      "paddle": { "apiKey": "***", "baseUrl": "", "model": "" },
+      "mineru": { "apiKey": "***", "baseUrl": "", "model": "" }, // baseUrl 空 → 官方 https://mineru.net
+      "openaiCompatible": { "apiKey": "***", "baseUrl": "", "model": "" } // baseUrl 空 → https://api.siliconflow.cn/v1
     }
   }
 }
 ```
 
-- `apiKey` 与翻译 BYOK 同一套掩码机制：`settings_get` 返回 `*` 掩码，`settings_set` 收到掩码时保留已存密钥。Paddle key 在 AI Studio 访问令牌页获取；MinerU token 在 mineru.net API 管理页获取（前端 `LAYOUT_PROVIDER_DOCS_URLS`）。
-- `baseUrl` 为可选端点覆盖：paddle 端点固定（不支持覆盖）；mineru 支持覆盖且强制 https（loopback `http://localhost` 等除外）。
-- 设置 UI：Settings →「版面解析 / Layout」（后端选择由前端 `LAYOUT_PROVIDERS` 注册表驱动；按 provider 的 `requiresApiKey` / `supportsBaseUrl` 显隐 API Key / Base URL 输入 + 连通性测试）。
+- `apiKey` 与翻译 BYOK 同一套掩码机制：`settings_get` 返回 `*` 掩码，`settings_set` 收到掩码时保留已存密钥。Paddle key 在 AI Studio 访问令牌页获取；MinerU token 在 mineru.net API 管理页获取；OpenAI 兼容 key 在服务商控制台获取（如硅基流动，前端 `LAYOUT_PROVIDER_DOCS_URLS`）。
+- `baseUrl` 为可选端点覆盖：paddle 端点固定（不支持覆盖）；mineru 支持覆盖且强制 https（loopback `http://localhost` 等除外）；openaiCompatible 默认硅基流动。
+- `model` 仅 openaiCompatible 正文引擎使用（预设 `PaddlePaddle/PaddleOCR-VL-1.5` / `deepseek-ai/DeepSeek-OCR`，空 → 前者）。
+- `parserBackend` 与版面 `backend` 独立选择，但共用 `providerConfigs` 凭据池；正文引擎详见 [paper-import.md](paper-import.md) § 正文解析引擎。
+- 设置 UI：Settings →「版面解析 / Layout」（版面后端由前端 `LAYOUT_PROVIDERS`、正文引擎由 `PARSER_PROVIDERS` 注册表驱动；按 provider 的 `requiresApiKey` / `supportsBaseUrl` / `requiresModel` 显隐 API Key / Base URL / Model 输入 + 连通性测试）。
 
 #### `layout_remote_analyze_pdf`（已实现）
 
@@ -2194,7 +2198,7 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 #### `layout_remote_probe`（已实现）
 
 - **参数**：`{ args: { provider?, imageBase64, apiKey? } }`（`provider` 缺省 `"paddle"`）
-- **行为**：按 provider 走各自最小请求验证端点 + token（paddle 提交一张小图任务返回 `{ jobId }`；mineru 调 `file-urls/batch` 空列表验证鉴权）。走 Host（无 WebView CORS 限制、遵循代理），供设置页 / Onboarding「测试连接」使用。
+- **行为**：按 provider 走各自最小请求验证端点 + token（paddle 提交一张小图任务返回 `{ jobId }`；mineru 调 `file-urls/batch` 空列表验证鉴权；openaiCompatible 调 `GET {base}/models` 验证 key）。走 Host（无 WebView CORS 限制、遵循代理），供设置页 / Onboarding「测试连接」使用。
 
 #### `settings_get`（已实现）
 

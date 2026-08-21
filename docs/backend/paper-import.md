@@ -67,11 +67,26 @@ Skill 不写入 catalog、不创建 `papers/` 条目、不执行 `scripts/`。�
 | 情况 | 行为 |
 |---|---|
 | 有 TeX | 优先 TeX；不强制 `PAPER.md` |
-| 无 TeX 有 PDF | 下载后由隔离的 liteparse 子进程生成 `PAPER.md`；单次解析限时 120 秒 |
+| 无 TeX 有 PDF | 下载后由选定的正文解析引擎生成 `PAPER.md`（默认本地 liteparse 隔离子进程，单次解析限时 120 秒） |
 | 解析失败或超时 | 保留 PDF、`NOTES.md` 与 catalog；`paper_parse_body` 返回 `error`，对应 job 标记 `Failed` 并在任务面板展示原因，后续可重新执行 `paper parse` |
 | 质量字段 | catalog `body_source` / `body_quality`（实现以 schema 为准） |
 
 `PAPER.md` 是派生文件，可删可重建；`source/` 与 PDF 才是归档事实来源。
+
+### 正文解析引擎（可插拔）
+
+`settings.layout.parserBackend` 选择 PAPER.md 的生成引擎（Settings →「版面解析」），凭据与版面分析共用 `layout.providerConfigs`：
+
+| backend | 流程 | `body_source` | `body_quality` |
+|---|---|---|---|
+| `local`（默认） | liteparse worker 子进程 + PDFium | `pdf` / `ocr` | `medium` / `low` |
+| `mineru` | 复用 MinerU 批量提取（上传 → 轮询 → 结果 zip），读取 zip 内 `full.md` | `mineru` | `high` |
+| `paddle` | 复用 PP-StructureV3 异步任务，拼接 JSONL 中每页 `markdown.text` | `paddle` | `high` |
+| `openaiCompatible` | 渲染 worker 逐页出 150 DPI PNG（上限 100 页）→ OpenAI 兼容 `/chat/completions` 多模态 OCR（预设硅基流动；`PaddlePaddle/PaddleOCR-VL-1.5` 提示词 `OCR:`，`deepseek-ai/DeepSeek-OCR` 用 grounding 提示词，按 model id 自动选择） | `vlm` | `medium` |
+
+- **回退**：云端引擎失败或产出空 markdown 时自动回退本地 liteparse，原因追加进 `messages`；用户取消不回退。`body_source` 始终记录实际来源。
+- **凭据注入**：引擎配置以进程级快照持有（启动与 `settings_set` 时从 `AppSettingsStore` 刷新，模式同 `network::configure_proxy`），明文 key 不出 Host。
+- **实现**：`src-tauri/src/features/import/pdf_parse/engines/`（`BodyParseEngine` trait + local / mineru / paddle / openai_vlm）；云端上传/轮询复用 `layout_remote` 的 `run_mineru_extract` / `run_paddle_ocr_job`。
 
 ## PDFium 随包分发
 
@@ -126,7 +141,6 @@ liteparse 在**运行时 `dlopen`** PDFium，而 `liteparse-pdfium-sys` 的 buil
 ## 规划中的增强（非现状）
 
 - 关键词/描述 → Agent 候选确认后入库（路线图 0.3）。
-- 可插拔 `PdfParser`（liteparse 默认 + 可选 MinerU BYOK）（路线图 0.4）。
 - 统一 `afterPaperImport` / `paper:imported` 事件（路线图 0.3）。
 
 ## 代码
