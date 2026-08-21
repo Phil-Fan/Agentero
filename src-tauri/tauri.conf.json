@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "pnpm cli:ensure && pnpm pdfium:stage && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm cli:bundle:release && pnpm pdfium:stage && pnpm build",
+    "beforeBuildCommand": "pnpm cli:bundle:stub && pnpm pdfium:stage && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {

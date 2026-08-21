@@ -28,6 +28,19 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Assert desktop bundle ships only a CLI stub
+        if: matrix.task == 'quality'
+        # Desktop installers must not embed the multi-MB headless CLI (#285).
+        # An unrelated edit to beforeBuildCommand silently re-embedded it (#320).
+        run: |
+          set -euo pipefail
+          node --input-type=commonjs -e "
+            const cmd = require('./src-tauri/tauri.conf.json').build.beforeBuildCommand;
+            if (!cmd.includes('cli:bundle:stub')) {
+              console.error('::error file=src-tauri/tauri.conf.json::beforeBuildCommand must run cli:bundle:stub so desktop packages do not embed the CLI (#320). Got: ' + cmd);
+              process.exit(1);
+            }
+          "
       - name: Run TypeScript checks
         run: |
           set -euo pipefail
