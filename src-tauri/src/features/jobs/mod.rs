@@ -141,7 +141,7 @@ pub enum StartOutcome {
 /// Terminal result of a runner's business logic, mapped by `run_job` onto
 /// `finish` (state/progress/phase/error kept identical to the pre-refactor
 /// runners).
-enum RunOutcome {
+pub enum RunOutcome {
     /// `Succeeded`, progress 100, phase "completed".
     Succeeded,
     /// `Failed`, phase "failed", with the reported error (if any).
@@ -149,6 +149,35 @@ enum RunOutcome {
     /// `Cancelled`, phase "cancelled" (renderer-executed jobs only).
     Cancelled,
 }
+
+/// A job executor registered per [`JobKind`]. Business features define
+/// runners in their own domain and register them at app startup, so the
+/// JobCenter stays a pure scheduler with no edges into business features.
+/// Runners are built on [`JobCenter::run_job`] and must not call `finish`
+/// themselves.
+pub type JobRunner = Arc<
+    dyn Fn(
+            JobCenter,
+            tauri::AppHandle,
+            StartedJob,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>
+        + Send
+        + Sync,
+>;
+
+/// Cancels a background task by id. Registered by the agent domain at
+/// startup so the scheduler does not depend on it directly.
+type TaskCanceller = Arc<dyn Fn(&str) + Send + Sync>;
+
+/// Reads the current layout backend string from settings. Registered by the
+/// app assembly at startup so the scheduler does not depend on the settings
+/// store directly.
+type LayoutBackendSource = Arc<dyn Fn() -> String + Send + Sync>;
+
+/// Per-kind check whether a paper needs a backfill job. Registered by the
+/// owning domain (e.g. refs for the cite sidecar) so reconcile commands do
+/// not reach into business features.
+type BackfillProbe = Arc<dyn Fn(&Path, &str) -> bool + Send + Sync>;
 
 #[derive(Debug, Clone)]
 struct Job {
@@ -241,7 +270,7 @@ impl LaneQueues {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 struct JobCenterInner {
     jobs: HashMap<JobId, Job>,
     active_keys: HashMap<JobKey, JobId>,
@@ -251,6 +280,36 @@ struct JobCenterInner {
     running_by_kind: HashMap<JobKind, usize>,
     /// `LayoutAnalyze` cap: 1 for local ONNX, unlimited for the remote API.
     layout_analyze_cap: LayoutAnalyzeCap,
+    /// Per-kind runners registered by business domains at app startup.
+    runners: HashMap<JobKind, JobRunner>,
+    /// Registered by the agent domain; invoked by `cancel` for running jobs.
+    task_canceller: Option<TaskCanceller>,
+    /// Registered by the app assembly; re-read by `refresh_layout_backend`.
+    layout_backend_source: Option<LayoutBackendSource>,
+    /// Per-kind backfill probes registered by the owning domain.
+    backfill_probes: HashMap<JobKind, BackfillProbe>,
+}
+
+impl std::fmt::Debug for JobCenterInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JobCenterInner")
+            .field("jobs", &self.jobs)
+            .field("active_keys", &self.active_keys)
+            .field("lanes", &self.lanes)
+            .field("running_by_kind", &self.running_by_kind)
+            .field("layout_analyze_cap", &self.layout_analyze_cap)
+            .field("runners", &self.runners.keys().collect::<Vec<_>>())
+            .field("task_canceller", &self.task_canceller.is_some())
+            .field(
+                "layout_backend_source",
+                &self.layout_backend_source.is_some(),
+            )
+            .field(
+                "backfill_probes",
+                &self.backfill_probes.keys().collect::<Vec<_>>(),
+            )
+            .finish()
+    }
 }
 
 /// Default local-ONNX cap. `Default` on `usize` would be 0 and stall the queue.
@@ -381,9 +440,14 @@ pub struct JobCenter {
 
 impl JobCenter {
     pub fn new() -> Self {
-        Self {
+        let center = Self {
             inner: Arc::new(Mutex::new(JobCenterInner::default())),
-        }
+        };
+        // Renderer-executed layout analysis is part of the scheduler's
+        // offer/report protocol (no business feature involved), so this
+        // runner is built in instead of registered by a domain.
+        center.register_runner(JobKind::LayoutAnalyze, Arc::new(layout_analyze_runner));
+        center
     }
 
     pub fn handle(&self) -> Self {
@@ -406,6 +470,66 @@ impl JobCenter {
     pub async fn apply_layout_backend(&self, backend: &str) {
         self.set_layout_analyze_cap(layout_analyze_concurrency(backend))
             .await;
+    }
+
+    /// Register the runner that executes jobs of `kind`. Called by business
+    /// domains at app startup; registration happens before any job can run,
+    /// so the center is guaranteed to be idle.
+    pub fn register_runner(&self, kind: JobKind, runner: JobRunner) {
+        self.inner
+            .try_lock()
+            .expect("job center is idle while runners are registered")
+            .runners
+            .insert(kind, runner);
+    }
+
+    /// Register the hook `cancel` uses to stop a running job's background
+    /// task (provided by the agent domain).
+    pub fn set_task_canceller(&self, cancel: impl Fn(&str) + Send + Sync + 'static) {
+        self.inner
+            .try_lock()
+            .expect("job center is idle while runners are registered")
+            .task_canceller = Some(Arc::new(cancel));
+    }
+
+    /// Register the settings reader `refresh_layout_backend` re-reads
+    /// (provided by the app assembly).
+    pub fn set_layout_backend_source(&self, source: impl Fn() -> String + Send + Sync + 'static) {
+        self.inner
+            .try_lock()
+            .expect("job center is idle while runners are registered")
+            .layout_backend_source = Some(Arc::new(source));
+    }
+
+    /// Register the per-kind backfill probe used by the reconcile commands
+    /// (provided by the owning domain, e.g. refs for the cite sidecar).
+    pub fn register_backfill_probe(
+        &self,
+        kind: JobKind,
+        probe: impl Fn(&Path, &str) -> bool + Send + Sync + 'static,
+    ) {
+        self.inner
+            .try_lock()
+            .expect("job center is idle while runners are registered")
+            .backfill_probes
+            .insert(kind, Arc::new(probe));
+    }
+
+    /// Whether the registered probe for `kind` says the paper needs a
+    /// backfill job. Kinds without a probe never need backfill.
+    pub async fn backfill_needed(&self, kind: JobKind, vault: &Path, path: &str) -> bool {
+        let probe = self.inner.lock().await.backfill_probes.get(&kind).cloned();
+        probe.is_some_and(|probe| probe(vault, path))
+    }
+
+    /// Re-read the registered layout-backend source (settings) and re-apply
+    /// the `LayoutAnalyze` concurrency cap. No-op when no source is
+    /// registered (headless / tests).
+    pub async fn refresh_layout_backend(&self) {
+        let source = self.inner.lock().await.layout_backend_source.clone();
+        if let Some(source) = source {
+            self.apply_layout_backend(&source()).await;
+        }
     }
 
     pub async fn enqueue_parse_refs(
@@ -558,7 +682,9 @@ impl JobCenter {
                 // on the `job:changed(cancelled)` event emitted by the caller.
                 let task_id = job.task_id.clone().unwrap_or_else(|| job.id.0.clone());
                 release_running_slot(&mut inner, kind);
-                crate::features::agent::background_tasks::cancel(&task_id);
+                if let Some(cancel_task) = &inner.task_canceller {
+                    cancel_task(&task_id);
+                }
                 release_active_key(&mut inner, &id);
                 true
             }
@@ -651,74 +777,15 @@ impl JobCenter {
         outcomes
     }
 
-    /// Boxed to avoid an unresolvable recursive opaque-`Future` type: this
-    /// runner calls `wake_and_spawn_dependents`, which may call back into this
-    /// same runner for a newly-ready dependent job.
-    pub fn run_parse_refs_job(
-        self,
-        app: tauri::AppHandle,
-        started: StartedJob,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
-        self.run_job(app, started, |_center, _app, started| async move {
-            let StartedJob {
-                vault_path: vault,
-                paper_path: path,
-                force,
-                ..
-            } = started;
-            match crate::features::refs::parse_paper_refs(&vault, &path, true, force).await {
-                Ok(_) => RunOutcome::Succeeded,
-                Err(e) => RunOutcome::Failed(Some(e.to_string())),
-            }
-        })
-    }
-
-    /// Boxed for the same reason as `run_parse_refs_job` (mutual recursion via
-    /// `wake_and_spawn_dependents`).
-    pub fn run_parse_body_job(
-        self,
-        app: tauri::AppHandle,
-        started: StartedJob,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
-        self.run_job(app, started, |_center, app, started| async move {
-            let StartedJob {
-                snapshot,
-                vault_path: vault,
-                paper_path: path,
-                force,
-                task_id,
-            } = started;
-            let task_id = task_id.unwrap_or_else(|| snapshot.id.clone());
-            let cache = app.state::<crate::features::catalog::CapsCache>();
-            let result = crate::features::import::pdf_parse::parse_paper_body(
-                crate::features::import::pdf_parse::PaperParseBodyArgs {
-                    vault_path: vault.to_string_lossy().to_string(),
-                    path,
-                    force,
-                    task_id: Some(task_id.clone()),
-                },
-                Some(&cache),
-            )
-            .await;
-            crate::features::agent::background_tasks::finish(&task_id);
-            // A skipped or successful parse returns Ok with no error; a real
-            // liteparse failure also returns Ok, carrying the reason.
-            match result {
-                Ok(parsed) => match parsed.error {
-                    Some(message) => RunOutcome::Failed(Some(message)),
-                    None => RunOutcome::Succeeded,
-                },
-                Err(e) => RunOutcome::Failed(Some(e.to_string())),
-            }
-        })
-    }
-
     /// Shared runner skeleton: announce the started job, await the kind-specific
     /// `work`, map its [`RunOutcome`] onto `finish`, then wake dependents.
     /// `work` receives a center handle, the app handle and the started job; it
-    /// must not call `finish` itself. Boxed for the same mutual-recursion
-    /// reason as the `run_*_job` methods.
-    fn run_job<F, Fut>(
+    /// must not call `finish` itself. Public so business domains can build
+    /// their registered runners on it. Boxed to avoid an unresolvable
+    /// recursive opaque-`Future` type: runners call
+    /// `wake_and_spawn_dependents`, which may spawn and run this same
+    /// skeleton for a newly-ready dependent job.
+    pub fn run_job<F, Fut>(
         self,
         app: tauri::AppHandle,
         started: StartedJob,
@@ -760,104 +827,17 @@ impl JobCenter {
         })
     }
 
-    /// Offer a renderer-executed layout analysis job to the frontend and wait
-    /// for a terminal `job_report`. The renderer runs the ONNX model and calls
-    /// back with progress / success / failure.
-    pub fn run_layout_analyze_job(
-        self,
-        app: tauri::AppHandle,
-        started: StartedJob,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
-        self.run_job(app, started, |center, app, started| async move {
-            let job_id = started.snapshot.id.clone();
-            let StartedJob {
-                vault_path,
-                paper_path,
-                force,
-                ..
-            } = started;
-            let offer = JobOfferPayload {
-                job_id: job_id.clone(),
-                kind: JobKind::LayoutAnalyze,
-                vault_path: vault_path.to_string_lossy().to_string(),
-                paper_path: Some(paper_path),
-                force,
-            };
-            let _ = app.emit(JOB_OFFER_EVENT, offer);
-
-            match center
-                .wait_for_terminal(&job_id, LAYOUT_ANALYZE_TIMEOUT)
-                .await
-            {
-                Some(JobState::Succeeded) => RunOutcome::Succeeded,
-                Some(JobState::Failed) => RunOutcome::Failed(center.take_error(&job_id).await),
-                Some(JobState::Cancelled) => RunOutcome::Cancelled,
-                _ => RunOutcome::Failed(Some("layout analyze report timeout".into())),
-            }
-        })
-    }
-
-    /// Download PDF/TeX for a paper, then backfill `PAPER.md` + layout for the
-    /// freshly-downloaded assets. Byte-level progress flows via
-    /// `background-task:progress` (task_id defaults to the job id) to the
-    /// projected "download" row.
-    pub fn run_download_assets_job(
-        self,
-        app: tauri::AppHandle,
-        started: StartedJob,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
-        self.run_job(app, started, |center, app, started| async move {
-            let StartedJob {
-                snapshot,
-                vault_path: vault,
-                paper_path: path,
-                task_id,
-                ..
-            } = started;
-            let task_id = task_id.unwrap_or_else(|| snapshot.id.clone());
-            let cache = app.state::<crate::features::catalog::CapsCache>();
-            let args = crate::features::import::PaperDownloadAssetsArgs {
-                vault_path: vault.to_string_lossy().to_string(),
-                path: path.clone(),
-                task_id: Some(task_id),
-            };
-            let result = crate::features::import::download_paper_assets_with_progress(
-                args,
-                Some(&app),
-                Some(&cache),
-            )
-            .await;
-            // Assets changed on disk: drop the stale capability bits.
-            cache.invalidate(&vault, &path);
-
-            match result {
-                Ok(_) => {
-                    // Follow-ups for the freshly-downloaded PDF: PAPER.md + layout.
-                    if cache.caps_for(&vault, &path).needs_paper_md() {
-                        let snap = center
-                            .enqueue_parse_body(&vault, &path, JobLane::Normal, false, None)
-                            .await;
-                        emit_job_changed(&app, snap.clone());
-                        if let StartOutcome::Started(started) = center.try_start(&snap.id).await {
-                            center.spawn_runner(&app, started);
-                        }
-                    }
-                    let backend = app
-                        .state::<crate::features::settings::AppSettingsStore>()
-                        .layout_backend();
-                    center.apply_layout_backend(&backend).await;
-                    let lsnap = center
-                        .enqueue_layout_analyze(&vault, &path, JobLane::Normal, false)
-                        .await;
-                    emit_job_changed(&app, lsnap.clone());
-                    if let StartOutcome::Started(started) = center.try_start(&lsnap.id).await {
-                        center.spawn_runner(&app, started);
-                    }
-                    RunOutcome::Succeeded
-                }
-                Err(e) => RunOutcome::Failed(Some(e.to_string())),
-            }
-        })
+    /// Run the registered runner for a job `try_start` just moved to
+    /// `Running`, inline in the caller's task. Kinds without a registered
+    /// runner are no-ops (they never start backend-side).
+    pub async fn run_started(&self, app: &tauri::AppHandle, started: StartedJob) {
+        let runner = {
+            let inner = self.inner.lock().await;
+            inner.runners.get(&started.snapshot.kind).cloned()
+        };
+        if let Some(runner) = runner {
+            runner(self.handle(), app.clone(), started).await;
+        }
     }
 
     /// Spawn the runner for a job `try_start` just moved to `Running`.
@@ -865,13 +845,7 @@ impl JobCenter {
         let center = self.handle();
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
-            match started.snapshot.kind {
-                JobKind::ParseRefs => center.run_parse_refs_job(app, started).await,
-                JobKind::ParseBody => center.run_parse_body_job(app, started).await,
-                JobKind::LayoutAnalyze => center.run_layout_analyze_job(app, started).await,
-                JobKind::DownloadAssets => center.run_download_assets_job(app, started).await,
-                _ => {}
-            }
+            center.run_started(&app, started).await;
         });
     }
 
@@ -1122,6 +1096,45 @@ impl Default for JobCenter {
     }
 }
 
+/// Built-in runner for [`JobKind::LayoutAnalyze`]: offer the job to the
+/// frontend and wait for a terminal `job_report`. The renderer runs the ONNX
+/// model and calls back with progress / success / failure. Lives in the
+/// scheduler (not a business domain) because it is the renderer-offer
+/// protocol itself.
+fn layout_analyze_runner(
+    center: JobCenter,
+    app: tauri::AppHandle,
+    started: StartedJob,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
+    center.run_job(app, started, |center, app, started| async move {
+        let job_id = started.snapshot.id.clone();
+        let StartedJob {
+            vault_path,
+            paper_path,
+            force,
+            ..
+        } = started;
+        let offer = JobOfferPayload {
+            job_id: job_id.clone(),
+            kind: JobKind::LayoutAnalyze,
+            vault_path: vault_path.to_string_lossy().to_string(),
+            paper_path: Some(paper_path),
+            force,
+        };
+        let _ = app.emit(JOB_OFFER_EVENT, offer);
+
+        match center
+            .wait_for_terminal(&job_id, LAYOUT_ANALYZE_TIMEOUT)
+            .await
+        {
+            Some(JobState::Succeeded) => RunOutcome::Succeeded,
+            Some(JobState::Failed) => RunOutcome::Failed(center.take_error(&job_id).await),
+            Some(JobState::Cancelled) => RunOutcome::Cancelled,
+            _ => RunOutcome::Failed(Some("layout analyze report timeout".into())),
+        }
+    })
+}
+
 pub fn emit_job_changed(app: &tauri::AppHandle, job: JobSnapshot) {
     let payload = JobChangedPayload { job };
     let _ = app.emit(JOB_CHANGED_EVENT, &payload);
@@ -1158,7 +1171,7 @@ pub fn spawn_parse_body_after_assets(
         emit_job_changed(&app, snapshot.clone());
         match center.try_start(&snapshot.id).await {
             StartOutcome::Started(started) => {
-                center.run_parse_body_job(app, started).await;
+                center.run_started(&app, started).await;
             }
             StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
             StartOutcome::Waiting => {}

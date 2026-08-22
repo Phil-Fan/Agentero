@@ -1,11 +1,11 @@
 use crate::core::error::{map_err, ApiResult};
 use serde::Deserialize;
 use std::path::PathBuf;
-use tauri::{Manager, State};
+use tauri::State;
 
 use super::{
-    emit_job_changed, parse_lane, validate_job_paper, JobCenter, JobLane, JobSnapshot, JobState,
-    StartOutcome,
+    emit_job_changed, parse_lane, validate_job_paper, JobCenter, JobKind, JobLane, JobSnapshot,
+    JobState, StartOutcome,
 };
 
 /// Shared enqueue args for kinds that take no extra parameters
@@ -166,12 +166,12 @@ pub async fn job_reconcile_paper(
             .await,
         );
     }
-    // Backfill references when the cite sidecar is absent.
-    let sidecar = vault
-        .join(&path)
-        .join("source")
-        .join(crate::features::refs::SIDECAR_FILE);
-    if !sidecar.is_file() {
+    // Backfill references when the refs domain's registered probe flags the
+    // paper (cite sidecar absent).
+    if center
+        .backfill_needed(JobKind::ParseRefs, &vault, &path)
+        .await
+    {
         enqueued.push(
             enqueue_backfill(&app, &center, parse_lane(None), |lane| {
                 center.enqueue_parse_refs(&vault, &path, lane, false)
@@ -277,10 +277,7 @@ pub async fn job_layout_analyze_enqueue(
         Ok(valid) => valid,
         Err(e) => return Ok(map_err(e)),
     };
-    let backend = app
-        .state::<crate::features::settings::AppSettingsStore>()
-        .layout_backend();
-    center.apply_layout_backend(&backend).await;
+    center.refresh_layout_backend().await;
     let snapshot = center
         .enqueue_layout_analyze(&vault, &path, parse_lane(args.lane), args.force)
         .await;

@@ -5,6 +5,8 @@
 
 #[cfg(feature = "desktop")]
 pub mod commands;
+#[cfg(feature = "desktop")]
+pub mod job_runners;
 pub mod paper_import;
 pub mod pdf_parse;
 #[cfg(feature = "desktop")]
@@ -41,6 +43,19 @@ pub use zotero_io::{
     export_catalog, import_catalog, PaperExportArgs, PaperExportResult, PaperImportArgs,
     PaperImportResult,
 };
+
+// Stable top-level API for the remote import bridge (`remote/import_bridge.rs`).
+// Other features must depend on these re-exports, not reach into the
+// `batch` / `parse` / `map` / `zotero_io` internals. Desktop-only because
+// the remote bridge is the sole consumer.
+#[cfg(feature = "desktop")]
+pub(crate) use batch::{preflight_identifier_batch, SkillBatchMode};
+#[cfg(feature = "desktop")]
+pub(crate) use map::doi_slug;
+#[cfg(feature = "desktop")]
+pub(crate) use parse::extract_arxiv_id;
+#[cfg(feature = "desktop")]
+pub(crate) use zotero_io::translator_import_items;
 
 use crate::core::error::AppError;
 use crate::features::catalog::{

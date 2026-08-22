@@ -337,6 +337,42 @@ async fn parse_paper_refs_prepared(
     Ok(sidecar)
 }
 
+/// Register the refs job runner + backfill probe with the JobCenter at app
+/// startup. Dependency inversion: the scheduler dispatches, refs owns the
+/// execution (no jobs→refs edge).
+#[cfg(feature = "desktop")]
+pub fn register_job_runners(center: &crate::features::jobs::JobCenter) {
+    use crate::features::jobs::JobKind;
+    center.register_runner(JobKind::ParseRefs, Arc::new(parse_refs_runner));
+    // Reconcile backfill: a paper needs ParseRefs when its cite sidecar is absent.
+    center.register_backfill_probe(JobKind::ParseRefs, |vault, path| {
+        !vault.join(path).join("source").join(SIDECAR_FILE).is_file()
+    });
+}
+
+/// Runner for [`crate::features::jobs::JobKind::ParseRefs`]: parse the cite
+/// sidecar; online reference lookup is always enabled.
+#[cfg(feature = "desktop")]
+fn parse_refs_runner(
+    center: crate::features::jobs::JobCenter,
+    app: tauri::AppHandle,
+    started: crate::features::jobs::StartedJob,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
+    use crate::features::jobs::{RunOutcome, StartedJob};
+    center.run_job(app, started, |_center, _app, started| async move {
+        let StartedJob {
+            vault_path: vault,
+            paper_path: path,
+            force,
+            ..
+        } = started;
+        match parse_paper_refs(&vault, &path, true, force).await {
+            Ok(_) => RunOutcome::Succeeded,
+            Err(e) => RunOutcome::Failed(Some(e.to_string())),
+        }
+    })
+}
+
 /// Fire-and-forget refs parse after an import/download finished.
 /// Online reference lookup is always on; all failures are logged, never surfaced.
 #[cfg(feature = "desktop")]
@@ -359,7 +395,7 @@ pub fn spawn_parse_after_import(app: Option<&tauri::AppHandle>, vault: &Path, pa
             crate::features::jobs::emit_job_changed(&app, snapshot.clone());
             match center.try_start(&snapshot.id).await {
                 crate::features::jobs::StartOutcome::Started(started) => {
-                    center.run_parse_refs_job(app, started).await;
+                    center.run_started(&app, started).await;
                 }
                 crate::features::jobs::StartOutcome::Skipped(skipped) => {
                     crate::features::jobs::emit_job_changed(&app, skipped);

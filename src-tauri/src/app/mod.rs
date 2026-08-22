@@ -132,6 +132,19 @@ pub fn run() {
     }
 
     builder = builder.setup(|app| {
+        // JobCenter runner registry: business domains own their executors and
+        // register them here, so jobs stays a pure scheduler with no edges
+        // into import/refs/settings/agent (P2 runner-registry refactor).
+        {
+            let center = app.state::<crate::features::jobs::JobCenter>();
+            crate::features::refs::register_job_runners(&center);
+            crate::features::import::job_runners::register_job_runners(&center);
+            center.set_task_canceller(crate::features::agent::background_tasks::cancel);
+            let handle = app.handle().clone();
+            center.set_layout_backend_source(move || {
+                handle.state::<AppSettingsStore>().layout_backend()
+            });
+        }
         let settings_store = app.state::<AppSettingsStore>();
         let agents = app.state::<AgentRegistry>();
         let mut settings = settings_store

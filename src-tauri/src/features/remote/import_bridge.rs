@@ -5,14 +5,13 @@ use super::session::RemoteSession;
 use crate::core::error::AppError;
 use crate::core::fs::{VaultFs, WriteOpts};
 use crate::features::catalog::papers;
-use crate::features::import::batch::{preflight_identifier_batch, SkillBatchMode};
-use crate::features::import::parse::extract_arxiv_id;
 use crate::features::import::{
-    enrich_remote_urls, ensure_paper_assets, map_zotero_item, normalize_parent_dir,
-    resolve_metadata, slug_from_stem, title_from_stem, AssetDownloadResult, ImportLocalPdfArgs,
+    doi_slug, enrich_remote_urls, ensure_paper_assets, extract_arxiv_id, map_zotero_item,
+    normalize_parent_dir, preflight_identifier_batch, resolve_metadata, slug_from_stem,
+    title_from_stem, translator_import_items, AssetDownloadResult, ImportLocalPdfArgs,
     ImportLocalPdfResult, LocalPdfImportEntry, LookupImportArgs, LookupImportBatchArgs,
     LookupImportBatchResult, LookupImportResult, PaperDownloadAssetsArgs, PaperImportArgs,
-    PaperImportResult, DEFAULT_TRANSLATOR_BASE_URL,
+    PaperImportResult, SkillBatchMode, DEFAULT_TRANSLATOR_BASE_URL,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -260,7 +259,7 @@ async fn import_one_local_pdf_remote(
                 .as_deref()
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .map(crate::features::import::map::doi_slug)
+                .map(doi_slug)
         })
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| slug_from_stem(stem));
@@ -313,11 +312,7 @@ pub async fn import_catalog_remote(
         return Err(AppError::message("import content is empty"));
     }
     let parent_rel = normalize_parent_dir(args.parent_dir.as_deref().unwrap_or("papers"))?;
-    let items = crate::features::import::zotero_io::translator_import_items(
-        content,
-        args.translator_base_url.as_deref(),
-    )
-    .await?;
+    let items = translator_import_items(content, args.translator_base_url.as_deref()).await?;
 
     let mut imported = 0usize;
     let mut skipped = 0usize;
