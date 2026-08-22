@@ -2,6 +2,13 @@
 //!
 //! Frontend `AppSettings` (camelCase JSON) is the source of shape; Host owns
 //! the durable file under [`crate::core::paths::settings_path`].
+//!
+//! Coupling contract: settings provides read/write/persist/broadcast only and
+//! never calls into domain features. Domains that must react to changes
+//! (connector port, agent proxy, import parser, jobs layout cap) register
+//! [`AppSettingsStore::subscribe`] listeners at app assembly; domain defaults
+//! needed at deserialize time (e.g. [`DEFAULT_CONNECTOR_PORT`]) live here and
+//! are re-exported by the owning domain.
 
 use crate::core::error::AppError;
 use crate::core::paths::{self, settings_path};
@@ -9,10 +16,14 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "https://translator.philfan.cn";
 pub const DEFAULT_NETWORK_PROXY_URL: &str = "http://127.0.0.1:7890";
+/// Default Zotero Connector port (must match the official extension default).
+/// Owned here because the persisted `connectorPort` default must exist at
+/// deserialize time; `features::connector` re-exports it.
+pub const DEFAULT_CONNECTOR_PORT: u16 = 23119;
 
 /// True when `key` is a UI mask of only `*` (length mirrors the real secret).
 /// Real secrets stay in the Host process / settings file; `settings_set` treats
@@ -328,14 +339,8 @@ fn default_ai_response_language() -> String {
 fn default_translate_provider() -> String {
     "tencenttransmart".into()
 }
-#[cfg(not(target_os = "ios"))]
 fn default_connector_port() -> u16 {
-    crate::features::connector::DEFAULT_CONNECTOR_PORT
-}
-
-#[cfg(target_os = "ios")]
-fn default_connector_port() -> u16 {
-    23119
+    DEFAULT_CONNECTOR_PORT
 }
 fn default_batch_import_concurrency() -> u32 {
     5
@@ -353,10 +358,18 @@ fn default_parser_backend() -> String {
     "local".into()
 }
 
+/// Domain reaction fired after settings are persisted. Receives the same
+/// redacted snapshot that `settings_set` returns and broadcasts.
+pub type SettingsListener = Arc<dyn Fn(&AppSettings) + Send + Sync>;
+
 /// In-memory + file-backed settings store.
 pub struct AppSettingsStore {
     inner: Mutex<AppSettings>,
     path: PathBuf,
+    /// Domain reactions registered by the app assembly; fired after every
+    /// successful [`set`](Self::set). Registering from the assembly (instead
+    /// of calling domains from here) keeps settings schema-agnostic.
+    listeners: Mutex<Vec<SettingsListener>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -377,6 +390,26 @@ impl AppSettingsStore {
         Self {
             inner: Mutex::new(settings),
             path,
+            listeners: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Register a domain reaction fired after every successful `set`.
+    /// Called by the app assembly on behalf of domains (connector port,
+    /// agent proxy, import parser, jobs layout cap), so settings keeps no
+    /// edges into domain features.
+    pub fn subscribe(&self, listener: impl Fn(&AppSettings) + Send + Sync + 'static) {
+        if let Ok(mut guard) = self.listeners.lock() {
+            guard.push(Arc::new(listener));
+        }
+    }
+
+    fn notify(&self, settings: &AppSettings) {
+        let Ok(listeners) = self.listeners.lock().map(|guard| guard.clone()) else {
+            return;
+        };
+        for listener in listeners.iter() {
+            listener(settings);
         }
     }
 
@@ -408,13 +441,19 @@ impl AppSettingsStore {
         }
         normalize(&mut settings);
         persist(&self.path, &settings)?;
-        let mut guard = self
-            .inner
-            .lock()
-            .map_err(|_| AppError::message("settings lock poisoned"))?;
-        *guard = settings.clone();
         // Never echo raw API keys back to the WebView / settings:changed.
-        Ok(redact_translate_secrets(settings))
+        let redacted = {
+            let mut guard = self
+                .inner
+                .lock()
+                .map_err(|_| AppError::message("settings lock poisoned"))?;
+            *guard = settings.clone();
+            redact_translate_secrets(settings)
+        };
+        // Fire domain reactions with the store lock released: listeners read
+        // back into the store (e.g. import::refresh_parser_config).
+        self.notify(&redacted);
+        Ok(redacted)
     }
 
     /// Resolve a commercial MT API key by provider id (case-insensitive).
@@ -955,6 +994,64 @@ mod tests {
         };
         normalize(&mut s);
         assert_eq!(s.auto_update_internal_links, "ask");
+    }
+
+    #[test]
+    fn set_fires_subscribers_with_redacted_snapshot() {
+        let n = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("agentero-settings-sub-test-{n}"));
+        let _ = fs::create_dir_all(&dir);
+        let store = AppSettingsStore {
+            inner: Mutex::new(AppSettings::default()),
+            path: dir.join("settings.json"),
+            listeners: Mutex::new(Vec::new()),
+        };
+        let seen = Arc::new(Mutex::new(Vec::<String>::new()));
+        {
+            let seen = Arc::clone(&seen);
+            store.subscribe(move |s| {
+                seen.lock().unwrap().push(
+                    s.translate
+                        .provider_configs
+                        .get("deepl")
+                        .map_or(String::new(), |c| c.api_key.clone()),
+                );
+            });
+        }
+
+        let mut incoming = AppSettings::default();
+        incoming.translate.provider_configs.insert(
+            "deepl".into(),
+            TranslateProviderConfig {
+                api_key: "sk-secret".into(),
+                ..Default::default()
+            },
+        );
+        let out = store.set(incoming).expect("set");
+
+        // Listener fired exactly once with the redacted snapshot.
+        assert_eq!(*seen.lock().unwrap(), vec!["*********".to_string()]);
+        assert_eq!(
+            out.translate
+                .provider_configs
+                .get("deepl")
+                .map(|c| c.api_key.as_str()),
+            Some("*********")
+        );
+        // The plaintext secret is what lands on disk.
+        let (loaded, _) = read_file(&store.path);
+        assert_eq!(
+            loaded
+                .translate
+                .provider_configs
+                .get("deepl")
+                .map(|c| c.api_key.as_str()),
+            Some("sk-secret")
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

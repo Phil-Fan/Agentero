@@ -160,6 +160,58 @@ pub fn run() {
                 }
             }
         }
+        // Settings-change reactions: domains subscribe at assembly time, so
+        // the settings feature stays schema-agnostic with no edges into
+        // agent/connector/import/jobs (P2-18 settings-layer refactor; mirrors
+        // the JobCenter runner-registry pattern). Registered after the
+        // one-shot proxy migration above so that migration `set` does not
+        // fire reactions this boot sequence applies manually below.
+        {
+            let handle = app.handle().clone();
+            settings_store.subscribe(move |s| {
+                let _ = handle
+                    .state::<AgentRegistry>()
+                    .set_proxy(s.network_proxy_enabled, s.network_proxy_url.clone());
+            });
+            #[cfg(not(any(target_os = "ios", target_os = "android")))]
+            {
+                let handle = app.handle().clone();
+                settings_store.subscribe(move |_s| {
+                    crate::features::import::refresh_parser_config(
+                        &handle.state::<AppSettingsStore>(),
+                    );
+                });
+            }
+            #[cfg(not(target_os = "ios"))]
+            {
+                let handle = app.handle().clone();
+                settings_store.subscribe(move |s| {
+                    let ctrl = Arc::clone(handle.state::<Arc<ConnectorController>>().inner());
+                    let port = s.connector_port;
+                    // `set_port` is async (it may rebind the listener); the
+                    // result was always discarded and the controller emits its
+                    // own status event, so run it on the runtime.
+                    tauri::async_runtime::spawn(async move {
+                        let _ = ctrl.set_port(port).await;
+                    });
+                });
+            }
+            {
+                let handle = app.handle().clone();
+                settings_store.subscribe(move |s| {
+                    let center = handle
+                        .state::<crate::features::jobs::JobCenter>()
+                        .inner()
+                        .clone();
+                    let backend = s.layout.backend.clone();
+                    let app = handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        center.apply_layout_backend(&backend).await;
+                        center.drain_and_spawn(&app).await;
+                    });
+                });
+            }
+        }
         crate::core::http::configure_proxy(
             settings.network_proxy_enabled,
             &settings.network_proxy_url,

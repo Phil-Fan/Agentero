@@ -11,7 +11,9 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{oneshot, Mutex as AsyncMutex};
 
 /// Default Zotero Connector port (must match official extension default).
-pub const DEFAULT_CONNECTOR_PORT: u16 = 23119;
+/// Canonical value lives in `features::settings` (persisted `connectorPort`
+/// default); the connector re-exports it for its bind default.
+pub use crate::features::settings::DEFAULT_CONNECTOR_PORT;
 
 const CONNECTOR_API_VERSION: &str = "2";
 const AGENTERO_CONNECTOR_VERSION: &str = "0.1.0-agentero";

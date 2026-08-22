@@ -1,26 +1,13 @@
 //! App settings commands — durable XDG config file.
+//!
+//! `settings_set` is schema-agnostic: validate proxy → persist → broadcast.
+//! Domain reactions (connector port rebind, agent proxy, import parser
+//! refresh, jobs layout cap) subscribe via [`AppSettingsStore::subscribe`]
+//! at app assembly, so this feature imports no other domain.
 
 use crate::core::error::{map_err, ApiResult};
-#[cfg(not(target_os = "ios"))]
-use crate::features::connector::ConnectorController;
 use crate::features::settings::{AppSettings, AppSettingsStore, SettingsGetResult};
-#[cfg(not(target_os = "ios"))]
-use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
-
-fn apply_layout_analyze_cap(
-    app: &AppHandle,
-    center: &crate::features::jobs::JobCenter,
-    backend: &str,
-) {
-    let app = app.clone();
-    let center = center.clone();
-    let backend = backend.to_string();
-    tauri::async_runtime::spawn(async move {
-        center.apply_layout_backend(&backend).await;
-        center.drain_and_spawn(&app).await;
-    });
-}
 
 #[tauri::command]
 pub fn settings_get(store: State<'_, AppSettingsStore>) -> ApiResult<SettingsGetResult> {
@@ -72,14 +59,15 @@ pub async fn list_system_fonts() -> ApiResult<Vec<String>> {
     }
 }
 
+/// Persist the full settings snapshot and broadcast `settings:changed`.
+///
+/// Domain side effects are not wired here: they run as
+/// [`AppSettingsStore::subscribe`] listeners registered by the app assembly
+/// (see `app/mod.rs`), fired inside `store.set` with the redacted snapshot.
 #[tauri::command]
-#[cfg(not(target_os = "ios"))]
 pub fn settings_set(
     app: AppHandle,
     store: State<'_, AppSettingsStore>,
-    agents: State<'_, crate::features::agent::AgentRegistry>,
-    connector: State<'_, Arc<ConnectorController>>,
-    center: State<'_, crate::features::jobs::JobCenter>,
     settings: AppSettings,
 ) -> ApiResult<AppSettings> {
     if let Err(e) = crate::core::http::configure_proxy(
@@ -90,47 +78,7 @@ pub fn settings_set(
     }
     match store.set(settings) {
         Ok(s) => {
-            let _ = agents.set_proxy(s.network_proxy_enabled, s.network_proxy_url.clone());
-            #[cfg(not(target_os = "android"))]
-            crate::features::import::refresh_parser_config(&store);
-            // `set_port` is async (it may rebind the listener); the result was
-            // always discarded here and the controller emits its own status
-            // event, so run it on the runtime instead of blocking this handler.
-            let ctrl = Arc::clone(&connector);
-            let port = s.connector_port;
-            tauri::async_runtime::spawn(async move {
-                let _ = ctrl.set_port(port).await;
-            });
-            apply_layout_analyze_cap(&app, &center, &s.layout.backend);
             // Keep every window's settings cache fresh (settings window, main windows).
-            let _ = app.emit("settings:changed", &s);
-            ApiResult::ok(s)
-        }
-        Err(e) => map_err(e),
-    }
-}
-
-/// iOS has no local Connector process. Settings remain durable and are still
-/// broadcast to the WebView, but no desktop-only port update is attempted.
-#[tauri::command]
-#[cfg(target_os = "ios")]
-pub fn settings_set(
-    app: AppHandle,
-    store: State<'_, AppSettingsStore>,
-    agents: State<'_, crate::features::agent::AgentRegistry>,
-    center: State<'_, crate::features::jobs::JobCenter>,
-    settings: AppSettings,
-) -> ApiResult<AppSettings> {
-    if let Err(e) = crate::core::http::configure_proxy(
-        settings.network_proxy_enabled,
-        &settings.network_proxy_url,
-    ) {
-        return map_err(e);
-    }
-    match store.set(settings) {
-        Ok(s) => {
-            let _ = agents.set_proxy(s.network_proxy_enabled, s.network_proxy_url.clone());
-            apply_layout_analyze_cap(&app, &center, &s.layout.backend);
             let _ = app.emit("settings:changed", &s);
             ApiResult::ok(s)
         }
