@@ -38,6 +38,7 @@ pub mod recommend;
 pub mod refs;
 #[cfg(feature = "desktop")]
 pub mod remote;
+pub mod rename;
 #[cfg(feature = "desktop")]
 pub mod search;
 #[cfg(feature = "desktop")]

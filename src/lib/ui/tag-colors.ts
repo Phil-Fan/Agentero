@@ -1,6 +1,9 @@
 /**
- * Apple system color–inspired tag palette.
+ * Apple system color–inspired tag palette (presentation tokens only).
  * Stored as short ids in catalog tags_json when colored.
+ *
+ * The `PaperTag` type and tag semantics live in the paper domain
+ * (`lib/paper/tags.ts`, P2-18b); this module keeps the color mapping.
  */
 
 export const TAG_COLOR_IDS = [
@@ -15,31 +18,6 @@ export const TAG_COLOR_IDS = [
 ] as const;
 
 export type TagColorId = (typeof TAG_COLOR_IDS)[number];
-
-export type PaperTag = {
-	name: string;
-	/** Preset id; omit / null = default muted chip */
-	color?: TagColorId | null;
-};
-
-/** Accept catalog / API payloads: bare string or `{ name, color? }`. */
-export type PaperTagInput = string | PaperTag;
-
-/** Internal tags retained for provenance but omitted from user-facing tag UI. */
-export const CONNECTOR_TAG_PREFIX = "@zotero:";
-
-export function isConnectorTagName(name: string): boolean {
-	return name.trim().toLocaleLowerCase().startsWith(CONNECTOR_TAG_PREFIX);
-}
-
-export function isVisiblePaperTag(tag: PaperTagInput): boolean {
-	const name = typeof tag === "string" ? tag : tag?.name;
-	return typeof name === "string" && !isConnectorTagName(name);
-}
-
-export function visiblePaperTags(tags: readonly PaperTagInput[]): PaperTag[] {
-	return normalizePaperTags(tags.filter(isVisiblePaperTag));
-}
 
 type TagColorTokens = {
 	/** Solid swatch (picker + leading dot) */
@@ -125,49 +103,4 @@ export function tagSwatchStyle(
 	const t = tagColorTokens(id);
 	if (!t) return undefined;
 	return { backgroundColor: t.swatch };
-}
-
-export function normalizePaperTag(raw: PaperTagInput): PaperTag | null {
-	if (typeof raw === "string") {
-		const name = raw.trim();
-		return name ? { name } : null;
-	}
-	if (!raw || typeof raw !== "object") return null;
-	const name = typeof raw.name === "string" ? raw.name.trim() : "";
-	if (!name) return null;
-	const color = isTagColorId(raw.color) ? raw.color : undefined;
-	return color ? { name, color } : { name };
-}
-
-/** Dedupe by name (case-insensitive); first casing wins; later color fills if empty. */
-export function normalizePaperTags(tags: readonly PaperTagInput[]): PaperTag[] {
-	const out: PaperTag[] = [];
-	for (const raw of tags) {
-		const t = normalizePaperTag(raw);
-		if (!t) continue;
-		const existing = out.find(
-			(x) => x.name.toLocaleLowerCase() === t.name.toLocaleLowerCase(),
-		);
-		if (existing) {
-			if (!existing.color && t.color) existing.color = t.color;
-			continue;
-		}
-		out.push({ ...t });
-	}
-	return out;
-}
-
-export function tagName(t: PaperTagInput): string {
-	return typeof t === "string" ? t : t.name;
-}
-
-export function tagColorOf(t: PaperTagInput): TagColorId | undefined {
-	if (typeof t === "string") return undefined;
-	return isTagColorId(t.color) ? t.color : undefined;
-}
-
-/** Coerce API/catalog tags (string[] or mixed) into PaperTag[]. */
-export function coercePaperTags(tags: unknown): PaperTag[] {
-	if (!Array.isArray(tags)) return [];
-	return normalizePaperTags(tags as PaperTagInput[]);
 }

@@ -20,6 +20,7 @@ import {
 	stripPromptEnvelopeForDisplay,
 } from "@/lib/agent/prompt-display";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { nextLineId, nextPartId } from "@/lib/pdf-visual/ids";
 
 /** Snapshot of a visual PDF annotation attached to a local user chat line. */
 export type ChatVisualAnnotation = {
@@ -232,24 +233,6 @@ export function shouldDeferSessionEvent(args: {
 		(args.pendingRuntimeSessionId === null &&
 			!args.knownSessionIds.has(args.sessionId))
 	);
-}
-
-let chatLineSeq = 0;
-export function nextLineId(prefix: string) {
-	chatLineSeq += 1;
-	return `${prefix}-${chatLineSeq}`;
-}
-
-let agentPartSeq = 0;
-export function nextPartId(prefix: string) {
-	agentPartSeq += 1;
-	return `${prefix}-${agentPartSeq}`;
-}
-
-/** Test helper — reset module counters between cases. */
-export function resetAgentChatIds() {
-	chatLineSeq = 0;
-	agentPartSeq = 0;
 }
 
 /** Build a chat error line (shared structure for all failure paths). */

@@ -12,4 +12,3 @@ pub mod rename;
 pub mod resolve;
 
 pub use index::WikiIndexState;
-pub use rename::ExternalRenameRepairStore;

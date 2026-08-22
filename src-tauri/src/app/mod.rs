@@ -9,10 +9,11 @@ use crate::features::agent::{AgentRegistry, AgentRunController};
 use crate::features::connector::ConnectorController;
 #[cfg(not(target_os = "ios"))]
 use crate::features::remote::RemoteRegistry;
+use crate::features::rename::ExternalRenameRepairStore;
 use crate::features::settings::AppSettingsStore;
 #[cfg(not(target_os = "ios"))]
 use crate::features::watcher::FsWatchController;
-use crate::features::wiki::{ExternalRenameRepairStore, WikiIndexState};
+use crate::features::wiki::WikiIndexState;
 #[cfg(not(target_os = "ios"))]
 use std::sync::Arc;
 #[cfg(not(target_os = "ios"))]

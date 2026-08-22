@@ -761,10 +761,10 @@ impl ConnectorController {
             .app_handle()
             .ok_or_else(|| AppError::message("Connector app handle unavailable"))?;
         let index = app
-            .state::<crate::features::wiki::WikiIndexState>()
+            .state::<crate::features::rename::WikiIndexState>()
             .handle();
-        let result = crate::features::catalog::commands::paper_move_service(
-            crate::features::catalog::commands::PaperMoveArgs {
+        let result = crate::features::rename::commands::paper_move_service(
+            crate::features::rename::commands::PaperMoveArgs {
                 vault_path: vault_handle.to_string(),
                 from_rel: from.to_string(),
                 dest_parent_rel: parent.to_string(),

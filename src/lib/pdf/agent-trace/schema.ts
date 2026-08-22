@@ -1,7 +1,6 @@
 import { normalizeVisualTraceImagePath } from "@/lib/pdf/agent-trace/image";
 import type {
 	PdfVisualAgent,
-	PdfVisualNormalizedRect,
 	PdfVisualSessionTrace,
 	PdfVisualTraceImage,
 	PdfVisualTraceMessage,
@@ -15,6 +14,7 @@ import {
 } from "@/lib/pdf/agent-trace/types";
 import { isRecord, isRect } from "@/lib/pdf/marks/schema";
 import { pinFromRects } from "@/lib/pdf/selection/pin";
+import type { PdfVisualNormalizedRect } from "@/lib/pdf-visual/types";
 
 function isStatus(v: unknown): v is PdfVisualTraceStatus {
 	return v === "running" || v === "completed" || v === "failed";

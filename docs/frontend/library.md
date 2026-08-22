@@ -31,7 +31,7 @@
 
 - Paper Info 增删 + Apple 8 色色盘 → `paper_set_tags`。
 - `@zotero:` 前缀标签属于 Connector 来源标记，只保留在 catalog 中，不参与展示、搜索和筛选；编辑普通标签时会保留这些内部标签。
-- 色板：`src/lib/ui/tag-colors.ts`。
+- 标签类型与语义（normalize / coerce / 可见性）：`src/lib/paper/tags.ts`（类型在 `src/lib/paper/types.ts`）；色板映射：`src/lib/ui/tag-colors.ts`。
 - CLI 标签见 [../backend/catalog.md](../backend/catalog.md)。
 
 ## 编辑元数据

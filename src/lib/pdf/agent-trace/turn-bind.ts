@@ -10,11 +10,11 @@ import { joinPath } from "@/lib/core/path";
 import {
 	beginTraceContinue,
 	createRunningTraces,
-	newTraceMessageId,
 	readPdfVisualTrace,
 	writePdfVisualTrace,
 } from "@/lib/pdf/agent-trace/io";
 import { rememberPendingVisualTraces } from "@/lib/pdf/agent-trace/pending";
+import { newTraceMessageId } from "@/lib/pdf-visual/ids";
 
 export type BindVisualTracesInput = {
 	runtimeSessionId: string;

@@ -41,7 +41,6 @@ import {
 	type ChatSessionHistoryItem,
 	errorChatLine,
 	errorText,
-	nextLineId,
 	type ToolAskUserRequest,
 	upsertChatSessionTurn,
 } from "@/lib/agent/chat-state";
@@ -65,6 +64,7 @@ import {
 	visualTraceHistoryId,
 } from "@/lib/pdf/agent-trace";
 import { bindAskThreadsForTurn } from "@/lib/pdf/ask";
+import { nextLineId } from "@/lib/pdf-visual/ids";
 import { loadSettings } from "@/lib/settings";
 
 export type SendOptions = {

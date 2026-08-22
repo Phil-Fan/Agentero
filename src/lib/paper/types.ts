@@ -1,6 +1,14 @@
-import type { PaperTag, PaperTagInput } from "@/lib/ui/tag-colors";
+import type { TagColorId } from "@/lib/ui/tag-colors";
 
-export type { PaperTag, PaperTagInput };
+/** Paper tag (catalog `tags_json`): name + optional preset color id. */
+export type PaperTag = {
+	name: string;
+	/** Preset id; omit / null = default muted chip */
+	color?: TagColorId | null;
+};
+
+/** Accept catalog / API payloads: bare string or `{ name, color? }`. */
+export type PaperTagInput = string | PaperTag;
 
 /** Creator from Translator / Zotero item mapping. */
 export type PaperCreator = {

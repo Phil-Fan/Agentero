@@ -8,13 +8,7 @@
  * Legacy v1 used kind "agent-trace" with flat agent fields; parse normalizes to v2.
  */
 
-export type PdfVisualNormalizedRect = {
-	/** 0–1 relative to page box */
-	x: number;
-	y: number;
-	w: number;
-	h: number;
-};
+import type { PdfVisualNormalizedRect } from "@/lib/pdf-visual/types";
 
 export type PdfVisualTraceStatus = "running" | "completed" | "failed";
 

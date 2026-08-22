@@ -7,8 +7,8 @@ import { createStore } from "zustand/vanilla";
 
 import type { PromptImage } from "@/lib/agent/api";
 import { toVaultRelative } from "@/lib/core/path";
-import { newTraceId } from "@/lib/pdf/agent-trace/io";
-import type { PdfVisualNormalizedRect } from "@/lib/pdf/agent-trace/types";
+import { newTraceId } from "@/lib/pdf-visual/ids";
+import type { PdfVisualNormalizedRect } from "@/lib/pdf-visual/types";
 import { vaultStore } from "@/lib/vault/store";
 
 export type PdfVisualDraft = {

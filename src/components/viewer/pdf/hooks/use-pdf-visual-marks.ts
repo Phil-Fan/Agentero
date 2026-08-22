@@ -52,13 +52,13 @@ import {
 	createRunningTraces,
 	deletePdfVisualTrace,
 	isVisualMarkKind,
-	newTraceMessageId,
 	type PdfVisualSessionTrace,
 	traceMessages,
 	writePdfVisualTrace,
 } from "@/lib/pdf/agent-trace";
 import { loadPdfVisualTraceImage } from "@/lib/pdf/agent-trace/image";
 import type { ActiveSelectionCard } from "@/lib/pdf/selection";
+import { newTraceMessageId } from "@/lib/pdf-visual/ids";
 import {
 	openRightTab,
 	requestOpenAgentSession,

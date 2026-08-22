@@ -1,5 +1,3 @@
-import { nanoid } from "nanoid";
-
 import { isTauri } from "@/lib/core/tauri";
 import {
 	preparePdfVisualTraceImageWrite,
@@ -9,7 +7,6 @@ import { isVisualTraceSessionPending } from "@/lib/pdf/agent-trace/pending";
 import { parsePdfVisualSessionTrace } from "@/lib/pdf/agent-trace/schema";
 import type {
 	PdfVisualAgent,
-	PdfVisualNormalizedRect,
 	PdfVisualSessionTrace,
 	PdfVisualTraceImage,
 	PdfVisualTraceMessage,
@@ -17,6 +14,8 @@ import type {
 import { VISUAL_MARK_KIND } from "@/lib/pdf/agent-trace/types";
 import { createMarkStore } from "@/lib/pdf/marks/io";
 import { markSelfWrite } from "@/lib/pdf/selection/marks-io";
+import { newTraceId, newTraceMessageId } from "@/lib/pdf-visual/ids";
+import type { PdfVisualNormalizedRect } from "@/lib/pdf-visual/types";
 import { removeVaultPath, writeVaultBytes } from "@/lib/vault";
 
 const store = createMarkStore<PdfVisualSessionTrace>({
@@ -29,14 +28,6 @@ const store = createMarkStore<PdfVisualSessionTrace>({
 		updatedAt: new Date().toISOString(),
 	}),
 });
-
-export function newTraceId(): string {
-	return nanoid(10);
-}
-
-export function newTraceMessageId(): string {
-	return nanoid(10);
-}
 
 export type CreateNoteTraceInput = {
 	id?: string;

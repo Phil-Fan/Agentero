@@ -11,7 +11,7 @@
 
 import { createStore } from "zustand/vanilla";
 import { toVaultRelative } from "@/lib/core/path";
-import type { PdfVisualNormalizedRect } from "@/lib/pdf/agent-trace/types";
+import type { PdfVisualNormalizedRect } from "@/lib/pdf-visual/types";
 import { vaultStore } from "@/lib/vault/store";
 
 export type SelectionOrigin = "pdf" | "markdown";

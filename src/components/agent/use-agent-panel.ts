@@ -32,11 +32,11 @@ import {
 	buildOptions,
 	errorChatLine,
 	errorText,
-	nextLineId,
 	resolveSelected,
 } from "@/lib/agent/chat-state";
 import { removeVisualDraft } from "@/lib/agent/visual-context-store";
 import { isTauri } from "@/lib/core/tauri";
+import { nextLineId } from "@/lib/pdf-visual/ids";
 import { listenAgentSessionHandoff } from "@/lib/shell/workspace-broadcast";
 
 export type UseAgentPanelArgs = Pick<

@@ -48,8 +48,6 @@ import {
 	type ChatLine,
 	errorChatLine,
 	isPendingAskUserToolStatus,
-	nextLineId,
-	nextPartId,
 	type PendingSessionEvent,
 	parseAskUserQuestions,
 	shouldDeferSessionEvent,
@@ -76,6 +74,7 @@ import {
 	takePendingAskThreads,
 	writePdfAskThread,
 } from "@/lib/pdf/ask";
+import { nextLineId, nextPartId } from "@/lib/pdf-visual/ids";
 
 export type UseAgentSessionRuntimeOptions = {
 	refs: Pick<

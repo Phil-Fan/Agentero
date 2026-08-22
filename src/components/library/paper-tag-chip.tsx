@@ -5,11 +5,8 @@
 import { X } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { cn } from "@/lib/core/utils";
-import {
-	type PaperTag,
-	tagChipStyle,
-	tagSwatchStyle,
-} from "@/lib/ui/tag-colors";
+import type { PaperTag } from "@/lib/paper/types";
+import { tagChipStyle, tagSwatchStyle } from "@/lib/ui/tag-colors";
 
 type PaperTagChipProps = {
 	tag: PaperTag;

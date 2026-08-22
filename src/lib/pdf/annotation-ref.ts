@@ -19,7 +19,6 @@ import {
 	traceMessagesForEmbed,
 } from "@/lib/pdf/agent-trace/schema";
 import type {
-	PdfVisualNormalizedRect,
 	PdfVisualTraceImage,
 	PdfVisualTraceMessage,
 } from "@/lib/pdf/agent-trace/types";
@@ -32,6 +31,7 @@ import {
 } from "@/lib/pdf/highlight/annotation-store";
 import type { HighlightColor } from "@/lib/pdf/highlight/palette";
 import { readMarkRaw } from "@/lib/pdf/selection/marks-io";
+import type { PdfVisualNormalizedRect } from "@/lib/pdf-visual/types";
 import { joinVaultPath } from "@/lib/vault";
 import { formatWikiLinkBody } from "@/lib/wiki/api";
 import { tabIdForPath } from "@/lib/workspace/tabs/model";

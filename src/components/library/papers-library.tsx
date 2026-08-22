@@ -71,6 +71,7 @@ import {
 	type ReadingActivityPoint,
 	type ReadingHeatmap,
 } from "@/lib/paper/reading-heatmap";
+import { type PaperTag, visiblePaperTags } from "@/lib/paper/tags";
 import { getPdfPageCount } from "@/lib/pdf/page-count";
 import {
 	DEFAULT_LIBRARY_COLUMNS,
@@ -78,7 +79,6 @@ import {
 	type LibraryColumnPref,
 	useUiScale,
 } from "@/lib/settings";
-import { type PaperTag, visiblePaperTags } from "@/lib/ui/tag-colors";
 import { joinVaultPath } from "@/lib/vault";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 

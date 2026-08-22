@@ -27,8 +27,6 @@ import {
 	errorText,
 	isBackgroundWorkflowHistoryTitle,
 	mapToolStatus,
-	nextLineId,
-	nextPartId,
 	providerSessionIdForHistoryLoad,
 } from "@/lib/agent/chat-state";
 import {
@@ -40,6 +38,7 @@ import {
 	buildVisualTraceHistoryItem,
 	visualTraceHistoryId,
 } from "@/lib/pdf/agent-trace/open-session";
+import { nextLineId, nextPartId } from "@/lib/pdf-visual/ids";
 import { clearAgentSessionOpenRequest } from "@/lib/shell/ui-store";
 
 /** Strip Host/Codex machine envelopes so Chat never shows system preamble. */

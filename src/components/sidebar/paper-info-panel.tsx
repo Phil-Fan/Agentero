@@ -45,10 +45,12 @@ import {
 	isConnectorTagName,
 	normalizePaperTags,
 	type PaperTag,
+	visiblePaperTags,
+} from "@/lib/paper/tags";
+import {
 	TAG_COLOR_IDS,
 	type TagColorId,
 	tagSwatchStyle,
-	visiblePaperTags,
 } from "@/lib/ui/tag-colors";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 import { getVaultPath } from "@/lib/vault/store";

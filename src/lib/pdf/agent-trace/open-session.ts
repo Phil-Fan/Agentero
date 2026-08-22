@@ -8,12 +8,12 @@ import type {
 	ChatSessionHistoryItem,
 	ChatVisualAnnotation,
 } from "@/lib/agent/chat-state";
-import { nextLineId, nextPartId } from "@/lib/agent/chat-state";
 import type {
 	PdfVisualSessionTrace,
 	PdfVisualTraceImage,
 	PdfVisualTraceMessage,
 } from "@/lib/pdf/agent-trace/types";
+import { nextLineId, nextPartId } from "@/lib/pdf-visual/ids";
 
 /** Stable Agent history id for one visual mark (not a runtime runOnce id). */
 export function visualTraceHistoryId(traceId: string): string {
