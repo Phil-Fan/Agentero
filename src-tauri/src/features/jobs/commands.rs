@@ -8,9 +8,11 @@ use super::{
     StartOutcome,
 };
 
+/// Shared enqueue args for kinds that take no extra parameters
+/// (ParseRefs / LayoutAnalyze / DownloadAssets).
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct JobParseRefsEnqueueArgs {
+pub struct JobEnqueueArgs {
     pub vault_path: String,
     pub path: String,
     #[serde(default)]
@@ -50,17 +52,6 @@ pub struct JobListArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct JobLayoutAnalyzeEnqueueArgs {
-    pub vault_path: String,
-    pub path: String,
-    #[serde(default)]
-    pub lane: Option<JobLane>,
-    #[serde(default)]
-    pub force: bool,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct JobReportArgs {
     pub job_id: String,
     #[serde(default)]
@@ -73,11 +64,27 @@ pub struct JobReportArgs {
     pub state: Option<JobState>,
 }
 
+/// Announce an enqueued job (`job:changed`) and start it when its kind has a
+/// free slot and its dependencies are ready. Returns the enqueued snapshot.
+async fn start_or_hold(
+    app: &tauri::AppHandle,
+    center: &JobCenter,
+    snapshot: JobSnapshot,
+) -> JobSnapshot {
+    emit_job_changed(app, snapshot.clone());
+    match center.try_start(&snapshot.id).await {
+        StartOutcome::Started(started) => center.spawn_runner(app, started),
+        StartOutcome::Skipped(skipped) => emit_job_changed(app, skipped),
+        StartOutcome::Waiting => {}
+    }
+    snapshot
+}
+
 #[tauri::command]
 pub async fn job_parse_refs_enqueue(
     app: tauri::AppHandle,
     center: State<'_, JobCenter>,
-    args: JobParseRefsEnqueueArgs,
+    args: JobEnqueueArgs,
 ) -> Result<ApiResult<JobSnapshot>, String> {
     let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
         Ok(valid) => valid,
@@ -86,15 +93,7 @@ pub async fn job_parse_refs_enqueue(
     let snapshot = center
         .enqueue_parse_refs(&vault, &path, parse_lane(args.lane), args.force)
         .await;
-    emit_job_changed(&app, snapshot.clone());
-
-    match center.try_start(&snapshot.id).await {
-        StartOutcome::Started(started) => center.spawn_runner(&app, started),
-        StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
-        StartOutcome::Waiting => {}
-    }
-
-    Ok(ApiResult::ok(snapshot))
+    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
 }
 
 #[tauri::command]
@@ -116,15 +115,7 @@ pub async fn job_parse_body_enqueue(
             args.task_id,
         )
         .await;
-    emit_job_changed(&app, snapshot.clone());
-
-    match center.try_start(&snapshot.id).await {
-        StartOutcome::Started(started) => center.spawn_runner(&app, started),
-        StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
-        StartOutcome::Waiting => {}
-    }
-
-    Ok(ApiResult::ok(snapshot))
+    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
 }
 
 #[derive(Debug, Deserialize)]
@@ -134,45 +125,22 @@ pub struct JobReconcilePaperArgs {
     pub path: String,
 }
 
-/// Shared backfill: enqueue a `ParseBody` job for `path` on `lane` and start it
-/// if a slot is free. Returns the enqueued snapshot.
-async fn enqueue_parse_body_backfill(
+/// Shared backfill: enqueue a job via `enqueue` on `lane` and start it if a
+/// slot is free. Returns the enqueued snapshot.
+async fn enqueue_backfill<F, Fut>(
     app: &tauri::AppHandle,
     center: &JobCenter,
-    vault: &std::path::Path,
-    path: &str,
     lane: JobLane,
-) -> JobSnapshot {
-    let snapshot = center
-        .enqueue_parse_body(vault, path, lane, false, None)
-        .await;
-    emit_job_changed(app, snapshot.clone());
-    match center.try_start(&snapshot.id).await {
-        StartOutcome::Started(started) => center.spawn_runner(app, started),
-        StartOutcome::Skipped(skipped) => emit_job_changed(app, skipped),
-        StartOutcome::Waiting => {}
-    }
-    snapshot
+    enqueue: F,
+) -> JobSnapshot
+where
+    F: FnOnce(JobLane) -> Fut,
+    Fut: std::future::Future<Output = JobSnapshot>,
+{
+    let snapshot = enqueue(lane).await;
+    start_or_hold(app, center, snapshot).await
 }
 
-/// Shared backfill: enqueue a `ParseRefs` job for `path` on `lane` and start it
-/// if a slot is free. Returns the enqueued snapshot.
-async fn enqueue_parse_refs_backfill(
-    app: &tauri::AppHandle,
-    center: &JobCenter,
-    vault: &std::path::Path,
-    path: &str,
-    lane: JobLane,
-) -> JobSnapshot {
-    let snapshot = center.enqueue_parse_refs(vault, path, lane, false).await;
-    emit_job_changed(app, snapshot.clone());
-    match center.try_start(&snapshot.id).await {
-        StartOutcome::Started(started) => center.spawn_runner(app, started),
-        StartOutcome::Skipped(skipped) => emit_job_changed(app, skipped),
-        StartOutcome::Waiting => {}
-    }
-    snapshot
-}
 /// Per-paper reconcile (pipeline-orchestration §7.4 入口②): backfill a
 /// `ParseBody` job when the paper has a PDF but no TeX and no `PAPER.md`, and
 /// a `ParseRefs` job when the cite sidecar is absent. Returns the enqueued
@@ -192,7 +160,10 @@ pub async fn job_reconcile_paper(
     let mut enqueued = Vec::new();
     if paper_caps.needs_paper_md() {
         enqueued.push(
-            enqueue_parse_body_backfill(&app, &center, &vault, &path, parse_lane(None)).await,
+            enqueue_backfill(&app, &center, parse_lane(None), |lane| {
+                center.enqueue_parse_body(&vault, &path, lane, false, None)
+            })
+            .await,
         );
     }
     // Backfill references when the cite sidecar is absent.
@@ -202,7 +173,10 @@ pub async fn job_reconcile_paper(
         .join(crate::features::refs::SIDECAR_FILE);
     if !sidecar.is_file() {
         enqueued.push(
-            enqueue_parse_refs_backfill(&app, &center, &vault, &path, parse_lane(None)).await,
+            enqueue_backfill(&app, &center, parse_lane(None), |lane| {
+                center.enqueue_parse_refs(&vault, &path, lane, false)
+            })
+            .await,
         );
     }
     Ok(ApiResult::ok(enqueued))
@@ -245,7 +219,10 @@ pub async fn job_reconcile_vault(
 
     let mut enqueued = 0u32;
     for path in needing {
-        enqueue_parse_body_backfill(&app, &center, &vault, &path, JobLane::Idle).await;
+        enqueue_backfill(&app, &center, JobLane::Idle, |lane| {
+            center.enqueue_parse_body(&vault, &path, lane, false, None)
+        })
+        .await;
         enqueued += 1;
     }
     Ok(ApiResult::ok(enqueued))
@@ -294,7 +271,7 @@ pub async fn job_papers_needing_assets(
 pub async fn job_layout_analyze_enqueue(
     app: tauri::AppHandle,
     center: State<'_, JobCenter>,
-    args: JobLayoutAnalyzeEnqueueArgs,
+    args: JobEnqueueArgs,
 ) -> Result<ApiResult<JobSnapshot>, String> {
     let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
         Ok(valid) => valid,
@@ -307,33 +284,14 @@ pub async fn job_layout_analyze_enqueue(
     let snapshot = center
         .enqueue_layout_analyze(&vault, &path, parse_lane(args.lane), args.force)
         .await;
-    emit_job_changed(&app, snapshot.clone());
-
-    match center.try_start(&snapshot.id).await {
-        StartOutcome::Started(started) => center.spawn_runner(&app, started),
-        StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
-        StartOutcome::Waiting => {}
-    }
-
-    Ok(ApiResult::ok(snapshot))
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct JobDownloadAssetsEnqueueArgs {
-    pub vault_path: String,
-    pub path: String,
-    #[serde(default)]
-    pub lane: Option<JobLane>,
-    #[serde(default)]
-    pub force: bool,
+    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
 }
 
 #[tauri::command]
 pub async fn job_download_assets_enqueue(
     app: tauri::AppHandle,
     center: State<'_, JobCenter>,
-    args: JobDownloadAssetsEnqueueArgs,
+    args: JobEnqueueArgs,
 ) -> Result<ApiResult<JobSnapshot>, String> {
     let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
         Ok(valid) => valid,
@@ -342,15 +300,7 @@ pub async fn job_download_assets_enqueue(
     let snapshot = center
         .enqueue_download_assets(&vault, &path, parse_lane(args.lane), args.force)
         .await;
-    emit_job_changed(&app, snapshot.clone());
-
-    match center.try_start(&snapshot.id).await {
-        StartOutcome::Started(started) => center.spawn_runner(&app, started),
-        StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
-        StartOutcome::Waiting => {}
-    }
-
-    Ok(ApiResult::ok(snapshot))
+    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
 }
 
 #[tauri::command]

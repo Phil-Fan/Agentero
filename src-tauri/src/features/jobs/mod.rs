@@ -39,6 +39,30 @@ pub enum JobKind {
     WikiReindex,
 }
 
+impl JobKind {
+    /// Dedupe fingerprint for enqueued jobs. The strings are part of the
+    /// active-key contract and must stay stable (tests assert them).
+    fn fingerprint(self, force: bool) -> String {
+        let label = match self {
+            JobKind::ParseRefs => "parseRefs",
+            JobKind::ParseBody => "parseBody",
+            JobKind::LayoutAnalyze => "layoutAnalyze",
+            JobKind::LayoutTranslate => "layoutTranslate",
+            JobKind::DownloadAssets => "downloadAssets",
+            JobKind::PageCount => "pageCount",
+            JobKind::WikiReindex => "wikiReindex",
+        };
+        // ParseRefs always runs with online lookup enabled; the segment is
+        // kept for fingerprint compatibility with pre-refactor jobs.
+        let online = if self == JobKind::ParseRefs {
+            ":online:true"
+        } else {
+            ""
+        };
+        format!("{label}:v1{online}:force:{force}")
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum JobLane {
@@ -112,6 +136,18 @@ pub enum StartOutcome {
     /// Dependencies settled but unsatisfiable under `DepPolicy::AllSucceeded`;
     /// the job was transitioned to `Skipped`.
     Skipped(JobSnapshot),
+}
+
+/// Terminal result of a runner's business logic, mapped by `run_job` onto
+/// `finish` (state/progress/phase/error kept identical to the pre-refactor
+/// runners).
+enum RunOutcome {
+    /// `Succeeded`, progress 100, phase "completed".
+    Succeeded,
+    /// `Failed`, phase "failed", with the reported error (if any).
+    Failed(Option<String>),
+    /// `Cancelled`, phase "cancelled" (renderer-executed jobs only).
+    Cancelled,
 }
 
 #[derive(Debug, Clone)]
@@ -379,46 +415,8 @@ impl JobCenter {
         lane: JobLane,
         force: bool,
     ) -> JobSnapshot {
-        let vault_path = normalize_vault_path(vault.into());
-        let paper_path = path.into();
-        let fingerprint = format!("parseRefs:v1:online:true:force:{force}");
-        let key = JobKey {
-            kind: JobKind::ParseRefs,
-            vault_path: vault_path.clone(),
-            paper_path: Some(paper_path.clone()),
-            fingerprint: fingerprint.clone(),
-        };
-
-        let mut inner = self.inner.lock().await;
-        if let Some(existing_id) = inner.active_keys.get(&key) {
-            if let Some(existing) = inner.jobs.get(existing_id) {
-                return existing.snapshot();
-            }
-        }
-
-        let id = JobId(uuid::Uuid::new_v4().to_string());
-        let job = Job {
-            id: id.clone(),
-            kind: JobKind::ParseRefs,
-            lane,
-            vault_path,
-            paper_path: Some(paper_path),
-            fingerprint,
-            depends_on: Vec::new(),
-            dep_policy: DepPolicy::AllSucceeded,
-            attempts: 0,
-            state: JobState::Queued,
-            progress: Some(0.0),
-            phase: Some("queued".into()),
-            error: None,
-            force,
-            task_id: None,
-        };
-        let snapshot = job.snapshot();
-        inner.active_keys.insert(key, id.clone());
-        inner.lanes.push(lane, id.clone());
-        inner.jobs.insert(id, job);
-        snapshot
+        self.enqueue_core(JobKind::ParseRefs, vault, path, lane, force, None)
+            .await
     }
 
     pub async fn enqueue_parse_body(
@@ -429,11 +427,50 @@ impl JobCenter {
         force: bool,
         task_id: Option<String>,
     ) -> JobSnapshot {
+        self.enqueue_core(JobKind::ParseBody, vault, path, lane, force, task_id)
+            .await
+    }
+
+    pub async fn enqueue_layout_analyze(
+        &self,
+        vault: impl Into<PathBuf>,
+        path: impl Into<String>,
+        lane: JobLane,
+        force: bool,
+    ) -> JobSnapshot {
+        self.enqueue_core(JobKind::LayoutAnalyze, vault, path, lane, force, None)
+            .await
+    }
+
+    pub async fn enqueue_download_assets(
+        &self,
+        vault: impl Into<PathBuf>,
+        path: impl Into<String>,
+        lane: JobLane,
+        force: bool,
+    ) -> JobSnapshot {
+        self.enqueue_core(JobKind::DownloadAssets, vault, path, lane, force, None)
+            .await
+    }
+
+    /// Shared enqueue path for every kind: normalize, dedupe on
+    /// (kind, vault, paper, fingerprint), then register on the lane.
+    /// Adding a new kind only needs a `JobKind` variant (with fingerprint +
+    /// concurrency cap) and a thin wrapper like the ones above.
+    async fn enqueue_core(
+        &self,
+        kind: JobKind,
+        vault: impl Into<PathBuf>,
+        path: impl Into<String>,
+        lane: JobLane,
+        force: bool,
+        task_id: Option<String>,
+    ) -> JobSnapshot {
         let vault_path = normalize_vault_path(vault.into());
         let paper_path = path.into();
-        let fingerprint = format!("parseBody:v1:force:{force}");
+        let fingerprint = kind.fingerprint(force);
         let key = JobKey {
-            kind: JobKind::ParseBody,
+            kind,
             vault_path: vault_path.clone(),
             paper_path: Some(paper_path.clone()),
             fingerprint: fingerprint.clone(),
@@ -449,7 +486,7 @@ impl JobCenter {
         let id = JobId(uuid::Uuid::new_v4().to_string());
         let job = Job {
             id: id.clone(),
-            kind: JobKind::ParseBody,
+            kind,
             lane,
             vault_path,
             paper_path: Some(paper_path),
@@ -463,104 +500,6 @@ impl JobCenter {
             error: None,
             force,
             task_id,
-        };
-        let snapshot = job.snapshot();
-        inner.active_keys.insert(key, id.clone());
-        inner.lanes.push(lane, id.clone());
-        inner.jobs.insert(id, job);
-        snapshot
-    }
-
-    pub async fn enqueue_layout_analyze(
-        &self,
-        vault: impl Into<PathBuf>,
-        path: impl Into<String>,
-        lane: JobLane,
-        force: bool,
-    ) -> JobSnapshot {
-        let vault_path = normalize_vault_path(vault.into());
-        let paper_path = path.into();
-        let fingerprint = format!("layoutAnalyze:v1:force:{force}");
-        let key = JobKey {
-            kind: JobKind::LayoutAnalyze,
-            vault_path: vault_path.clone(),
-            paper_path: Some(paper_path.clone()),
-            fingerprint: fingerprint.clone(),
-        };
-
-        let mut inner = self.inner.lock().await;
-        if let Some(existing_id) = inner.active_keys.get(&key) {
-            if let Some(existing) = inner.jobs.get(existing_id) {
-                return existing.snapshot();
-            }
-        }
-
-        let id = JobId(uuid::Uuid::new_v4().to_string());
-        let job = Job {
-            id: id.clone(),
-            kind: JobKind::LayoutAnalyze,
-            lane,
-            vault_path,
-            paper_path: Some(paper_path),
-            fingerprint,
-            depends_on: Vec::new(),
-            dep_policy: DepPolicy::AllSucceeded,
-            attempts: 0,
-            state: JobState::Queued,
-            progress: Some(0.0),
-            phase: Some("queued".into()),
-            error: None,
-            force,
-            task_id: None,
-        };
-        let snapshot = job.snapshot();
-        inner.active_keys.insert(key, id.clone());
-        inner.lanes.push(lane, id.clone());
-        inner.jobs.insert(id, job);
-        snapshot
-    }
-
-    pub async fn enqueue_download_assets(
-        &self,
-        vault: impl Into<PathBuf>,
-        path: impl Into<String>,
-        lane: JobLane,
-        force: bool,
-    ) -> JobSnapshot {
-        let vault_path = normalize_vault_path(vault.into());
-        let paper_path = path.into();
-        let fingerprint = format!("downloadAssets:v1:force:{force}");
-        let key = JobKey {
-            kind: JobKind::DownloadAssets,
-            vault_path: vault_path.clone(),
-            paper_path: Some(paper_path.clone()),
-            fingerprint: fingerprint.clone(),
-        };
-
-        let mut inner = self.inner.lock().await;
-        if let Some(existing_id) = inner.active_keys.get(&key) {
-            if let Some(existing) = inner.jobs.get(existing_id) {
-                return existing.snapshot();
-            }
-        }
-
-        let id = JobId(uuid::Uuid::new_v4().to_string());
-        let job = Job {
-            id: id.clone(),
-            kind: JobKind::DownloadAssets,
-            lane,
-            vault_path,
-            paper_path: Some(paper_path),
-            fingerprint,
-            depends_on: Vec::new(),
-            dep_policy: DepPolicy::AllSucceeded,
-            attempts: 0,
-            state: JobState::Queued,
-            progress: Some(0.0),
-            phase: Some("queued".into()),
-            error: None,
-            force,
-            task_id: None,
         };
         let snapshot = job.snapshot();
         inner.active_keys.insert(key, id.clone());
@@ -720,44 +659,17 @@ impl JobCenter {
         app: tauri::AppHandle,
         started: StartedJob,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
-        Box::pin(async move {
+        self.run_job(app, started, |_center, _app, started| async move {
             let StartedJob {
-                snapshot,
                 vault_path: vault,
                 paper_path: path,
                 force,
                 ..
             } = started;
-            let job_id = snapshot.id.clone();
-            emit_job_changed(&app, snapshot);
-
-            let result = crate::features::refs::parse_paper_refs(&vault, &path, true, force).await;
-            let snapshot = match result {
-                Ok(_) => {
-                    self.finish(
-                        &job_id,
-                        JobState::Succeeded,
-                        Some(100.0),
-                        Some("completed"),
-                        None,
-                    )
-                    .await
-                }
-                Err(e) => {
-                    self.finish(
-                        &job_id,
-                        JobState::Failed,
-                        None,
-                        Some("failed"),
-                        Some(e.to_string()),
-                    )
-                    .await
-                }
-            };
-            if let Some(snapshot) = snapshot {
-                emit_job_changed(&app, snapshot);
+            match crate::features::refs::parse_paper_refs(&vault, &path, true, force).await {
+                Ok(_) => RunOutcome::Succeeded,
+                Err(e) => RunOutcome::Failed(Some(e.to_string())),
             }
-            self.wake_and_spawn_dependents(&app, &job_id).await;
         })
     }
 
@@ -768,7 +680,7 @@ impl JobCenter {
         app: tauri::AppHandle,
         started: StartedJob,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
-        Box::pin(async move {
+        self.run_job(app, started, |_center, app, started| async move {
             let StartedJob {
                 snapshot,
                 vault_path: vault,
@@ -776,10 +688,7 @@ impl JobCenter {
                 force,
                 task_id,
             } = started;
-            let job_id = snapshot.id.clone();
-            emit_job_changed(&app, snapshot);
-
-            let task_id = task_id.unwrap_or_else(|| job_id.clone());
+            let task_id = task_id.unwrap_or_else(|| snapshot.id.clone());
             let cache = app.state::<crate::features::catalog::CapsCache>();
             let result = crate::features::import::pdf_parse::parse_paper_body(
                 crate::features::import::pdf_parse::PaperParseBodyArgs {
@@ -792,40 +701,56 @@ impl JobCenter {
             )
             .await;
             crate::features::agent::background_tasks::finish(&task_id);
-            let snapshot = match result {
-                // A skipped or successful parse returns Ok with no error; a real
-                // liteparse failure also returns Ok, carrying the reason.
+            // A skipped or successful parse returns Ok with no error; a real
+            // liteparse failure also returns Ok, carrying the reason.
+            match result {
                 Ok(parsed) => match parsed.error {
-                    Some(message) => {
-                        self.finish(
-                            &job_id,
-                            JobState::Failed,
-                            None,
-                            Some("failed"),
-                            Some(message),
-                        )
-                        .await
-                    }
-                    None => {
-                        self.finish(
-                            &job_id,
-                            JobState::Succeeded,
-                            Some(100.0),
-                            Some("completed"),
-                            None,
-                        )
-                        .await
-                    }
+                    Some(message) => RunOutcome::Failed(Some(message)),
+                    None => RunOutcome::Succeeded,
                 },
-                Err(e) => {
+                Err(e) => RunOutcome::Failed(Some(e.to_string())),
+            }
+        })
+    }
+
+    /// Shared runner skeleton: announce the started job, await the kind-specific
+    /// `work`, map its [`RunOutcome`] onto `finish`, then wake dependents.
+    /// `work` receives a center handle, the app handle and the started job; it
+    /// must not call `finish` itself. Boxed for the same mutual-recursion
+    /// reason as the `run_*_job` methods.
+    fn run_job<F, Fut>(
+        self,
+        app: tauri::AppHandle,
+        started: StartedJob,
+        work: F,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>
+    where
+        F: FnOnce(JobCenter, tauri::AppHandle, StartedJob) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = RunOutcome> + Send + 'static,
+    {
+        Box::pin(async move {
+            let job_id = started.snapshot.id.clone();
+            emit_job_changed(&app, started.snapshot.clone());
+
+            let outcome = work(self.handle(), app.clone(), started).await;
+            let snapshot = match outcome {
+                RunOutcome::Succeeded => {
                     self.finish(
                         &job_id,
-                        JobState::Failed,
+                        JobState::Succeeded,
+                        Some(100.0),
+                        Some("completed"),
                         None,
-                        Some("failed"),
-                        Some(e.to_string()),
                     )
                     .await
+                }
+                RunOutcome::Failed(error) => {
+                    self.finish(&job_id, JobState::Failed, None, Some("failed"), error)
+                        .await
+                }
+                RunOutcome::Cancelled => {
+                    self.finish(&job_id, JobState::Cancelled, None, Some("cancelled"), None)
+                        .await
                 }
             };
             if let Some(snapshot) = snapshot {
@@ -843,17 +768,14 @@ impl JobCenter {
         app: tauri::AppHandle,
         started: StartedJob,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
-        Box::pin(async move {
+        self.run_job(app, started, |center, app, started| async move {
+            let job_id = started.snapshot.id.clone();
             let StartedJob {
-                snapshot,
                 vault_path,
                 paper_path,
                 force,
                 ..
             } = started;
-            let job_id = snapshot.id.clone();
-            emit_job_changed(&app, snapshot);
-
             let offer = JobOfferPayload {
                 job_id: job_id.clone(),
                 kind: JobKind::LayoutAnalyze,
@@ -863,44 +785,15 @@ impl JobCenter {
             };
             let _ = app.emit(JOB_OFFER_EVENT, offer);
 
-            let terminal = self
+            match center
                 .wait_for_terminal(&job_id, LAYOUT_ANALYZE_TIMEOUT)
-                .await;
-            let snapshot = match terminal {
-                Some(JobState::Succeeded) => {
-                    self.finish(
-                        &job_id,
-                        JobState::Succeeded,
-                        Some(100.0),
-                        Some("completed"),
-                        None,
-                    )
-                    .await
-                }
-                Some(JobState::Failed) => {
-                    let error = self.take_error(&job_id).await;
-                    self.finish(&job_id, JobState::Failed, None, Some("failed"), error)
-                        .await
-                }
-                Some(JobState::Cancelled) => {
-                    self.finish(&job_id, JobState::Cancelled, None, Some("cancelled"), None)
-                        .await
-                }
-                _ => {
-                    self.finish(
-                        &job_id,
-                        JobState::Failed,
-                        None,
-                        Some("failed"),
-                        Some("layout analyze report timeout".into()),
-                    )
-                    .await
-                }
-            };
-            if let Some(snapshot) = snapshot {
-                emit_job_changed(&app, snapshot);
+                .await
+            {
+                Some(JobState::Succeeded) => RunOutcome::Succeeded,
+                Some(JobState::Failed) => RunOutcome::Failed(center.take_error(&job_id).await),
+                Some(JobState::Cancelled) => RunOutcome::Cancelled,
+                _ => RunOutcome::Failed(Some("layout analyze report timeout".into())),
             }
-            self.wake_and_spawn_dependents(&app, &job_id).await;
         })
     }
 
@@ -913,7 +806,7 @@ impl JobCenter {
         app: tauri::AppHandle,
         started: StartedJob,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
-        Box::pin(async move {
+        self.run_job(app, started, |center, app, started| async move {
             let StartedJob {
                 snapshot,
                 vault_path: vault,
@@ -921,10 +814,7 @@ impl JobCenter {
                 task_id,
                 ..
             } = started;
-            let job_id = snapshot.id.clone();
-            emit_job_changed(&app, snapshot);
-
-            let task_id = task_id.unwrap_or_else(|| job_id.clone());
+            let task_id = task_id.unwrap_or_else(|| snapshot.id.clone());
             let cache = app.state::<crate::features::catalog::CapsCache>();
             let args = crate::features::import::PaperDownloadAssetsArgs {
                 vault_path: vault.to_string_lossy().to_string(),
@@ -940,53 +830,33 @@ impl JobCenter {
             // Assets changed on disk: drop the stale capability bits.
             cache.invalidate(&vault, &path);
 
-            let snapshot = match result {
+            match result {
                 Ok(_) => {
                     // Follow-ups for the freshly-downloaded PDF: PAPER.md + layout.
                     if cache.caps_for(&vault, &path).needs_paper_md() {
-                        let snap = self
+                        let snap = center
                             .enqueue_parse_body(&vault, &path, JobLane::Normal, false, None)
                             .await;
                         emit_job_changed(&app, snap.clone());
-                        if let StartOutcome::Started(started) = self.try_start(&snap.id).await {
-                            self.spawn_runner(&app, started);
+                        if let StartOutcome::Started(started) = center.try_start(&snap.id).await {
+                            center.spawn_runner(&app, started);
                         }
                     }
                     let backend = app
                         .state::<crate::features::settings::AppSettingsStore>()
                         .layout_backend();
-                    self.apply_layout_backend(&backend).await;
-                    let lsnap = self
+                    center.apply_layout_backend(&backend).await;
+                    let lsnap = center
                         .enqueue_layout_analyze(&vault, &path, JobLane::Normal, false)
                         .await;
                     emit_job_changed(&app, lsnap.clone());
-                    if let StartOutcome::Started(started) = self.try_start(&lsnap.id).await {
-                        self.spawn_runner(&app, started);
+                    if let StartOutcome::Started(started) = center.try_start(&lsnap.id).await {
+                        center.spawn_runner(&app, started);
                     }
-                    self.finish(
-                        &job_id,
-                        JobState::Succeeded,
-                        Some(100.0),
-                        Some("completed"),
-                        None,
-                    )
-                    .await
+                    RunOutcome::Succeeded
                 }
-                Err(e) => {
-                    self.finish(
-                        &job_id,
-                        JobState::Failed,
-                        None,
-                        Some("failed"),
-                        Some(e.to_string()),
-                    )
-                    .await
-                }
-            };
-            if let Some(snapshot) = snapshot {
-                emit_job_changed(&app, snapshot);
+                Err(e) => RunOutcome::Failed(Some(e.to_string())),
             }
-            self.wake_and_spawn_dependents(&app, &job_id).await;
         })
     }
 
