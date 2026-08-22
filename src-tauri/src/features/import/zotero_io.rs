@@ -15,8 +15,6 @@ use std::time::Duration;
 #[cfg(feature = "desktop")]
 use tauri::AppHandle;
 
-const USER_AGENT: &str = "agentero-lookup/0.1 (+https://github.com/poco-ai/agentero)";
-
 /// Formats accepted by translation-server `?format=` (see zotero/translation-server formats.js).
 pub const EXPORT_FORMATS: &[&str] = &[
     "bibtex",
@@ -459,12 +457,7 @@ fn resolve_base(override_url: Option<&str>) -> String {
 }
 
 fn http_client(timeout: Duration) -> Result<reqwest::Client, AppError> {
-    crate::features::network::client_builder()
-        .timeout(timeout)
-        .user_agent(USER_AGENT)
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
-        .map_err(|e| AppError::message(format!("http client: {e}")))
+    crate::core::http::client_with(timeout, 10, crate::core::http::USER_AGENT)
 }
 
 #[cfg(test)]

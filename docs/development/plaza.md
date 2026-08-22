@@ -154,7 +154,7 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 - sandbox 去掉 `allow-popups`，确保没有链接能逃到新窗口。
 - 与 PDF iframe 一样，拖拽期间置 `pointer-events: none`，否则 dockview 收不到 dragover。
 - 远程 Vault 会话下同样可用（广场不依赖 vault 文件 IO）。
-- Host 用进程级复用的 HTTP 客户端转发（`network::shared_client`），否则每张图 / 每段 JS 都要重新握手代理 TLS，papers.cool 会明显卡。
+- Host 用进程级复用的 HTTP 客户端转发（`core::http::shared_client`），否则每张图 / 每段 JS 都要重新握手代理 TLS，papers.cool 会明显卡。
 
 ### 3.2.1 入库（已实现）
 
@@ -211,7 +211,7 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 |---|---|---|
 | 候选 | 逐个分类 GET `https://rss.arxiv.org/rss/<cat>`，按 arXiv id 去重，丢弃空摘要 | `feeds::parse::parse_feed_bytes`（已 `clean_summary_text` + `extract_paper_url`） |
 | 语料 | catalog 中有 abstract 的论文，按 `added_at` 倒序，上限 2000 篇 | `papers::list_all_unique_by_id` |
-| 向量 | `POST {baseUrl}/embeddings`（batch，OpenAI 兼容），凭据取自设置 → Agent → Embedding | `network::client_builder`；请求形状抄 `translate_openai_compatible` |
+| 向量 | `POST {baseUrl}/embeddings`（batch，OpenAI 兼容），凭据取自设置 → Agent → Embedding | `core::http::client_builder`；请求形状抄 `translate_openai_compatible` |
 | 打分 | 归一化后 cosine；语料权重 `w_i = 1/(1+log10(i+1))` 归一化 → `score = Σ sim·w`，降序取 Top-20 | — |
 
 **缓存进 `catalog.sqlite`（schema v6）**，不新建库：

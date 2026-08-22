@@ -4,7 +4,7 @@
 
 use super::{BodyParseCtx, BodyParseEngine, BodyParseOutcome};
 use crate::core::error::AppError;
-use crate::features::network;
+use crate::core::http;
 use async_trait::async_trait;
 use base64::Engine as _;
 use futures_util::stream::{self, StreamExt};
@@ -105,10 +105,7 @@ async fn ocr_rendered_pages(
         return Err(AppError::message("PDF rendered no pages"));
     }
     let truncated = pages.len() >= super::super::VLM_MAX_PAGES;
-    let client = network::client_builder()
-        .timeout(PAGE_TIMEOUT)
-        .build()
-        .map_err(|e| AppError::message(format!("http client: {e}")))?;
+    let client = http::client_with(PAGE_TIMEOUT, 10, http::USER_AGENT)?;
 
     let total = pages.len();
     let mut page_futures = Vec::with_capacity(total);
@@ -233,7 +230,7 @@ async fn ocr_page(
         .await
         .map_err(|e| AppError::message(format!("VLM OCR response read failed: {e}")))?;
     if !status.is_success() {
-        let snippet: String = text.chars().take(180).collect();
+        let snippet = http::http_err_snippet(&text);
         return Err(AppError::message(format!(
             "VLM OCR request failed (HTTP {status}): {snippet}"
         )));

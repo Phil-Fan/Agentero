@@ -223,7 +223,7 @@ pub(crate) async fn recognize_pdf(
         .to_string();
     let payload = build_recognizer_payload(&pages, &file_name);
 
-    let client = crate::features::network::client_builder()
+    let client = crate::core::http::client_builder()
         .timeout(RECOGNIZE_TIMEOUT)
         .user_agent(concat!(
             "Agentero/",
@@ -458,7 +458,7 @@ async fn fetch_crossref_metadata(doi: &str) -> Result<PaperMeta, AppError> {
         "https://api.crossref.org/works/{}",
         urlencoding::encode(doi.trim())
     );
-    let client = crate::features::network::client_builder()
+    let client = crate::core::http::client_builder()
         .timeout(Duration::from_secs(30))
         .user_agent(concat!(
             "Agentero/",
@@ -661,7 +661,7 @@ mod tests {
                 }
             }
         }
-        let client = crate::features::network::client_builder()
+        let client = crate::core::http::client_builder()
             .timeout(Duration::from_secs(30))
             .build()
             .unwrap();

@@ -3,11 +3,11 @@
 //! provider has no layout-analysis capability.
 
 use crate::core::error::AppError;
+use crate::core::http;
 use crate::features::layout_remote::engine::{AnalyzeCtx, ProviderCredentials, RemoteLayoutEngine};
 use crate::features::layout_remote::{
     LayoutRemoteAnalyzePdfResult, LayoutRemoteProbeArgs, LayoutRemoteProbeResult,
 };
-use crate::features::network;
 use async_trait::async_trait;
 use std::time::Duration;
 
@@ -49,10 +49,7 @@ impl RemoteLayoutEngine for OpenAiCompatibleEngine {
             .filter(|s| !s.is_empty())
             .unwrap_or(DEFAULT_BASE_URL)
             .trim_end_matches('/');
-        let client = network::client_builder()
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|e| AppError::message(format!("http client: {e}")))?;
+        let client = http::client_with(Duration::from_secs(30), 10, http::USER_AGENT)?;
         let response = client
             .get(format!("{base}/models"))
             .bearer_auth(api_key)
@@ -62,7 +59,7 @@ impl RemoteLayoutEngine for OpenAiCompatibleEngine {
         let status = response.status();
         if !status.is_success() {
             let text = response.text().await.unwrap_or_default();
-            let snippet: String = text.chars().take(180).collect();
+            let snippet = http::http_err_snippet(&text);
             return Err(AppError::message(format!(
                 "OpenAI-compatible probe failed (HTTP {status}): {snippet}"
             )));

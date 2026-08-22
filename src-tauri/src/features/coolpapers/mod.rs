@@ -80,7 +80,7 @@ impl CoolPapersNotes {
 }
 
 pub(crate) fn http_client() -> Result<reqwest::Client, AppError> {
-    crate::features::network::shared_client()
+    crate::core::http::shared_client()
 }
 
 async fn get_text(url: &str) -> Result<String, AppError> {

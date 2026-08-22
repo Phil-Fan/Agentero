@@ -18,8 +18,8 @@
 
 use super::latex;
 use crate::core::error::AppError;
+use crate::core::http;
 use crate::features::catalog::papers;
-use crate::features::network;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
@@ -32,8 +32,6 @@ use futures_util::stream::{self, StreamExt};
 const CITING_SCAN_REL: &str = ".agentero/citing-scan.json";
 const CACHE_SCHEMA_VERSION: u32 = 1;
 const S2_BASE: &str = "https://api.semanticscholar.org/graph/v1";
-const USER_AGENT: &str =
-    "agentero/0.2 (+https://github.com/poco-ai/agentero; mailto:agentero@users.noreply.github.com)";
 
 /// Above this, a paper is a field-defining classic: its citers say nothing
 /// about *my* direction, and paging through 100k of them is pointless.
@@ -399,7 +397,7 @@ fn since_date(days: i64) -> String {
 // ------------------------------------------------------------------ S2 client
 
 fn http_client() -> Result<reqwest::Client, AppError> {
-    network::shared_client()
+    http::shared_client()
 }
 
 async fn s2_get(client: &reqwest::Client, url: &str) -> Result<serde_json::Value, AppError> {
@@ -407,7 +405,7 @@ async fn s2_get(client: &reqwest::Client, url: &str) -> Result<serde_json::Value
         let res = client
             .get(url)
             .header("Accept", "application/json")
-            .header("User-Agent", USER_AGENT)
+            .header("User-Agent", http::USER_AGENT)
             .timeout(Duration::from_secs(90))
             .send()
             .await;
@@ -443,7 +441,7 @@ async fn s2_batch(
     for attempt in 0..MAX_RETRIES {
         let res = client
             .post(&url)
-            .header("User-Agent", USER_AGENT)
+            .header("User-Agent", http::USER_AGENT)
             .timeout(Duration::from_secs(120))
             .json(&serde_json::json!({ "ids": ids }))
             .send()

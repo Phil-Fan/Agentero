@@ -5,6 +5,7 @@
 #[cfg(not(feature = "desktop"))]
 use super::AppHandle;
 use crate::core::error::AppError;
+use crate::core::http;
 use crate::features::catalog::{probe_paper_caps, CapsCache};
 use flate2::read::GzDecoder;
 use serde::Serialize;
@@ -15,10 +16,6 @@ use std::time::Duration;
 use tar::Archive;
 #[cfg(feature = "desktop")]
 use tauri::{AppHandle, Emitter};
-
-// Browser-like UA: several non-arXiv publishers (PLOS, IEEE, Springer, …)
-// reject non-browser agents with HTTP 403, which blocked DOI PDF downloads.
-const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
 #[derive(Debug, Default, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -450,11 +447,7 @@ async fn unpaywall_pdf_url(doi: &str) -> Option<String> {
         "https://api.unpaywall.org/v2/{}?email=agentero@users.noreply.github.com",
         doi.trim()
     );
-    let client = crate::features::network::client_builder()
-        .timeout(std::time::Duration::from_secs(20))
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-        .build()
-        .ok()?;
+    let client = http::client_with(Duration::from_secs(20), 10, http::BROWSER_USER_AGENT).ok()?;
     let resp = client.get(&url).send().await.ok()?;
     if !resp.status().is_success() {
         return None;
@@ -500,11 +493,7 @@ async fn crossref_pdf_urls(doi: &str) -> Vec<String> {
         "https://api.crossref.org/works/{}",
         doi.trim().replace(' ', "%20")
     );
-    let Ok(client) = crate::features::network::client_builder()
-        .timeout(Duration::from_secs(20))
-        .user_agent(USER_AGENT)
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
+    let Ok(client) = http::client_with(Duration::from_secs(20), 10, http::BROWSER_USER_AGENT)
     else {
         return Vec::new();
     };
@@ -767,12 +756,7 @@ pub(crate) async fn http_get_bytes_with_progress(
     phase: &str,
 ) -> Result<Vec<u8>, AppError> {
     crate::features::import::check_task_not_cancelled(task_id)?;
-    let client = crate::features::network::client_builder()
-        .timeout(timeout)
-        .user_agent(USER_AGENT)
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
-        .map_err(|e| AppError::message(format!("http client: {e}")))?;
+    let client = http::client_with(timeout, 10, http::BROWSER_USER_AGENT)?;
     let mut request = client
         .get(url)
         .header("Accept", "application/pdf,application/octet-stream,*/*");

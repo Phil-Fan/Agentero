@@ -77,7 +77,7 @@ pub fn handle(
 
     tauri::async_runtime::spawn(async move {
         let result = async {
-            let client = crate::features::network::shared_client().map_err(|e| e.to_string())?;
+            let client = crate::core::http::shared_client().map_err(|e| e.to_string())?;
             let method = reqwest::Method::from_bytes(parts.method.as_str().as_bytes())
                 .unwrap_or(reqwest::Method::GET);
             let mut outgoing = client

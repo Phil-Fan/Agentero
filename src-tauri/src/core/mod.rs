@@ -5,6 +5,7 @@ pub mod blocking;
 pub mod error;
 pub mod frontmatter;
 pub mod fs;
+pub mod http;
 pub mod install_dirs;
 pub mod log_util;
 pub mod paths;

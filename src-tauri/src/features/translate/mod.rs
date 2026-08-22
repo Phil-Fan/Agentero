@@ -3,14 +3,13 @@
 //! Unofficial / best-effort; may break or rate-limit.
 
 use crate::core::error::AppError;
+use crate::core::http;
 use serde::Serialize;
 use serde_json::Value;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Soft cap for a single translation request (characters).
 pub const MAX_TEXT_CHARS: usize = 5000;
-
-const UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 /// Known free MT provider ids.
 pub const FREE_PROVIDERS: &[&str] = &[
@@ -309,14 +308,6 @@ fn resolve_timeout(timeout_ms: Option<u32>) -> Duration {
     }
 }
 
-fn http_client(timeout: Duration) -> Result<reqwest::Client, AppError> {
-    crate::features::network::client_builder()
-        .timeout(timeout)
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .build()
-        .map_err(|e| AppError::message(format!("http client: {e}")))
-}
-
 async fn read_body(resp: reqwest::Response) -> Result<(reqwest::StatusCode, String), AppError> {
     let status = resp.status();
     let body = resp
@@ -327,7 +318,7 @@ async fn read_body(resp: reqwest::Response) -> Result<(reqwest::StatusCode, Stri
 }
 
 fn http_err(status: reqwest::StatusCode, body: &str, label: &str) -> AppError {
-    let snippet: String = body.chars().take(180).collect();
+    let snippet = http::http_err_snippet(body);
     AppError::message(format!("{label} failed (HTTP {status}): {snippet}"))
 }
 
@@ -340,7 +331,7 @@ async fn translate_google(
     target: &str,
     timeout: Duration,
 ) -> Result<String, AppError> {
-    let client = http_client(timeout)?;
+    let client = http::client(timeout)?;
     let sl = if source == "auto" { "auto" } else { source };
     let tl = target;
     let url = format!("{}/translate_a/single", host.trim_end_matches('/'));
@@ -353,7 +344,7 @@ async fn translate_google(
             ("dt", "t"),
             ("q", text),
         ])
-        .header("User-Agent", UA)
+        .header("User-Agent", http::BROWSER_USER_AGENT)
         .send()
         .await
         .map_err(|e| AppError::message(format!("Google translate request failed: {e}")))?;
@@ -390,7 +381,7 @@ async fn translate_deeplx(
     target: &str,
     timeout: Duration,
 ) -> Result<String, AppError> {
-    let client = http_client(timeout)?;
+    let client = http::client(timeout)?;
     let id = deeplx_request_id();
     let i_count = text.matches('i').count() as u128 + text.matches('I').count() as u128 + 1;
     let now_ms = SystemTime::now()
@@ -494,7 +485,7 @@ async fn translate_huoshan_web(
     target: &str,
     timeout: Duration,
 ) -> Result<String, AppError> {
-    let client = http_client(timeout)?;
+    let client = http::client(timeout)?;
     let from = if source == "auto" {
         "auto".to_string()
     } else {
@@ -509,7 +500,7 @@ async fn translate_huoshan_web(
     let resp = client
         .post("https://translate.volcengine.com/crx/translate/v1")
         .header("Content-Type", "application/json")
-        .header("User-Agent", UA)
+        .header("User-Agent", http::BROWSER_USER_AGENT)
         .json(&body)
         .send()
         .await
@@ -534,7 +525,7 @@ async fn translate_tencent_transmart(
     target: &str,
     timeout: Duration,
 ) -> Result<String, AppError> {
-    let client = http_client(timeout)?;
+    let client = http::client(timeout)?;
     let from = if source == "auto" {
         "auto".to_string()
     } else {
@@ -559,7 +550,7 @@ async fn translate_tencent_transmart(
     let resp = client
         .post("https://transmart.qq.com/api/imt")
         .header("Content-Type", "application/json")
-        .header("User-Agent", UA)
+        .header("User-Agent", http::BROWSER_USER_AGENT)
         .header("Referer", "https://transmart.qq.com/zh-CN/index")
         .json(&body)
         .send()
@@ -602,7 +593,7 @@ async fn translate_deepl(
 ) -> Result<String, AppError> {
     let key = required_api_key("DeepL", api_key)?;
     let url = optional_endpoint(base_url, "https://api-free.deepl.com", "/v2/translate");
-    let client = http_client(timeout)?;
+    let client = http::client(timeout)?;
     let target_lang = deepl_target(target);
     let source_lang = if source == "auto" {
         None
@@ -685,7 +676,7 @@ async fn translate_azure(
     if source != "auto" {
         req.push(("from", azure_lang(source)));
     }
-    let client = http_client(timeout)?;
+    let client = http::client(timeout)?;
     let resp = client
         .post(&url)
         .query(&req)
@@ -745,7 +736,7 @@ async fn translate_google_cloud(
         "https://translation.googleapis.com",
         "/language/translate/v2",
     );
-    let client = http_client(timeout)?;
+    let client = http::client(timeout)?;
     let resp = client
         .post(&url)
         .query(&[("key", key)])
@@ -856,7 +847,7 @@ async fn translate_openai_compatible(
         })?;
     let url = optional_endpoint(base_url, "https://api.openai.com/v1", "/chat/completions");
     let prompt = openai_translate_prompt(text, source, target);
-    let client = http_client(timeout)?;
+    let client = http::client(timeout)?;
     let resp = client
         .post(&url)
         .header("Authorization", format!("Bearer {key}"))

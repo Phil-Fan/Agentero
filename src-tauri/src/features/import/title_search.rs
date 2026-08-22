@@ -15,8 +15,6 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use crate::core::error::AppError;
 use crate::features::refs::latex;
 
-const USER_AGENT: &str =
-    "agentero/0.2 (+https://github.com/poco-ai/agentero; mailto:agentero@users.noreply.github.com)";
 const SEARCH_CONCURRENCY: usize = 2;
 
 fn search_limiter() -> &'static Arc<Semaphore> {
@@ -114,12 +112,7 @@ fn normalize_title(s: &str) -> String {
 }
 
 fn http_client() -> Result<reqwest::Client, String> {
-    crate::features::network::client_builder()
-        .timeout(Duration::from_secs(20))
-        .user_agent(USER_AGENT)
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .build()
-        .map_err(|e| format!("http client: {e}"))
+    crate::core::http::client(Duration::from_secs(20)).map_err(|e| e.to_string())
 }
 
 async fn get_text(url: &str) -> Result<String, String> {

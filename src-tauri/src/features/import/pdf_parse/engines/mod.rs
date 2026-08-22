@@ -4,7 +4,7 @@
 //! Cloud engines fall back to the local engine on failure or empty output;
 //! cancellation aborts without fallback. The engine selection and plaintext
 //! credentials live in a process-wide snapshot (same pattern as
-//! `network::configure_proxy`), refreshed at startup and on `settings_set`.
+//! `http::configure_proxy`), refreshed at startup and on `settings_set`.
 
 use crate::core::error::AppError;
 #[cfg(feature = "desktop")]

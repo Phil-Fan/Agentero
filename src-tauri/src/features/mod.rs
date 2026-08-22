@@ -30,7 +30,6 @@ pub mod layout_remote;
 pub mod lifecycle;
 #[cfg(feature = "desktop")]
 pub mod modelscope_proxy;
-pub mod network;
 pub mod open_request;
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 pub mod pdf_locate;

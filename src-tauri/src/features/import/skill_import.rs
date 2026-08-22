@@ -110,7 +110,7 @@ pub async fn discover_skill_source(
 
 async fn default_branch(owner: &str, repo: &str) -> Result<String, AppError> {
     let url = format!("https://api.github.com/repos/{owner}/{repo}");
-    let client = crate::features::network::client_builder()
+    let client = crate::core::http::client_builder()
         .timeout(Duration::from_secs(20))
         .user_agent("Agentero/skill-import")
         .build()

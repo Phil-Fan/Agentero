@@ -6,7 +6,7 @@
 //! S3, R2 and MinIO all support.
 
 use crate::core::error::AppError;
-use crate::features::network;
+use crate::core::http;
 use crate::features::sync::config::SyncBackendConfig;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
@@ -63,7 +63,7 @@ impl S3Client {
             format!("{}/", cfg.prefix)
         };
         Ok(Self {
-            http: network::client_builder()
+            http: http::client_builder()
                 .build()
                 .map_err(|e| AppError::message(e.to_string()))?,
             base_url: format!("{scheme}://{host}"),

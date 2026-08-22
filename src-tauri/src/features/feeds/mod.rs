@@ -12,7 +12,7 @@ mod schema;
 pub mod commands;
 
 use crate::core::error::AppError;
-use crate::features::network;
+use crate::core::http;
 use body::{
     ensure_heading, extract_article_html, extract_paper_doi, html_to_markdown,
     is_fetchable_http_url, is_paper_landing_url, looks_truncated, strip_trailing_ellipsis,
@@ -107,21 +107,12 @@ enum FetchOutcome {
     Failed(String),
 }
 
-fn user_agent() -> String {
-    format!("Agentero/{} (feeds)", env!("CARGO_PKG_VERSION"))
-}
-
 fn now_rfc3339() -> String {
     crate::core::time::now_rfc3339_millis()
 }
 
 fn http_client() -> Result<reqwest::Client, AppError> {
-    network::client_builder()
-        .timeout(Duration::from_secs(FETCH_TIMEOUT_SECS))
-        .user_agent(user_agent())
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .build()
-        .map_err(|e| AppError::message(format!("feeds http client: {e}")))
+    http::client(Duration::from_secs(FETCH_TIMEOUT_SECS))
 }
 
 struct RawFetch {

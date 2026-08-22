@@ -6,16 +6,15 @@
 //! `*middle.json` (per-page sizes).
 
 use crate::core::error::AppError;
+use crate::core::http;
 use crate::features::import::pdf_parse::CANCELLED_MESSAGE;
 use crate::features::layout_remote::engine::{AnalyzeCtx, ProviderCredentials, RemoteLayoutEngine};
 use crate::features::layout_remote::{
     emit_cloud_progress, LayoutRemoteAnalyzePdfResult, LayoutRemoteBox, LayoutRemotePageResult,
     LayoutRemoteProbeArgs, LayoutRemoteProbeResult,
 };
-use crate::features::network;
 use async_trait::async_trait;
 use base64::Engine;
-use reqwest::redirect::Policy;
 use serde_json::{json, Value};
 use std::io::Read;
 use std::time::{Duration, Instant};
@@ -328,7 +327,7 @@ async fn request_upload_url(
         .await
         .map_err(|e| AppError::message(format!("MinerU response read failed: {e}")))?;
     let value: Value = serde_json::from_str(&text).map_err(|_| {
-        let snippet: String = text.chars().take(180).collect();
+        let snippet = http::http_err_snippet(&text);
         AppError::message(format!(
             "MinerU batch submit failed (HTTP {status}): {snippet}"
         ))
@@ -408,11 +407,7 @@ pub(crate) async fn run_mineru_extract(
     cancel: super::CancelFn<'_>,
 ) -> Result<Vec<u8>, AppError> {
     let (base, auth) = resolve_target(credentials)?;
-    let client = network::client_builder()
-        .timeout(MINERU_REQUEST_TIMEOUT)
-        .redirect(Policy::limited(5))
-        .build()
-        .map_err(|e| AppError::message(format!("http client: {e}")))?;
+    let client = http::client(MINERU_REQUEST_TIMEOUT)?;
 
     // 1) Request the presigned upload URL, then PUT the raw PDF bytes
     //    (no Content-Type — the presigned signature does not cover one).
@@ -454,7 +449,7 @@ pub(crate) async fn run_mineru_extract(
             .await
             .map_err(|e| AppError::message(format!("MinerU poll read failed: {e}")))?;
         let poll_value: Value = serde_json::from_str(&poll_text).map_err(|_| {
-            let snippet: String = poll_text.chars().take(180).collect();
+            let snippet = http::http_err_snippet(&poll_text);
             AppError::message(format!(
                 "MinerU task poll failed (HTTP {poll_status}): {snippet}"
             ))
@@ -563,11 +558,7 @@ async fn probe(
     _args: LayoutRemoteProbeArgs,
 ) -> Result<LayoutRemoteProbeResult, AppError> {
     let (base, auth) = resolve_target(credentials)?;
-    let client = network::client_builder()
-        .timeout(Duration::from_secs(30))
-        .redirect(Policy::limited(5))
-        .build()
-        .map_err(|e| AppError::message(format!("http client: {e}")))?;
+    let client = http::client(Duration::from_secs(30))?;
     let response = client
         .post(format!("{base}/api/v4/file-urls/batch"))
         .header("Authorization", &auth)
@@ -581,7 +572,7 @@ async fn probe(
         .await
         .map_err(|e| AppError::message(format!("MinerU probe read failed: {e}")))?;
     let value: Value = serde_json::from_str(&text).map_err(|_| {
-        let snippet: String = text.chars().take(180).collect();
+        let snippet = http::http_err_snippet(&text);
         AppError::message(format!("MinerU probe failed (HTTP {status}): {snippet}"))
     })?;
     match classify_probe_response(&value) {

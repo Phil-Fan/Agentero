@@ -277,7 +277,7 @@ interface ParsedIdentifier {
 兼容性通过分工保留：**搜索只负责「文本 → 候选标识符」**，用户选中后把 `identifier`（arXiv ID 优先，其次 DOI）重新提交 `lookup_import_batch`，Translator 仍是元数据的唯一事实来源，入库管道不分叉。
 
 - 实现：`src-tauri/src/features/import/title_search.rs`
-- 数据源：Semantic Scholar Graph API `/paper/search` 为主；报错或 0 结果时回退 **arXiv** `search_query=ti:"…"&sortBy=relevance`。两者均免 key，复用 `features::network::client_builder()` 与信号量限流（并发 2）。
+- 数据源：Semantic Scholar Graph API `/paper/search` 为主；报错或 0 结果时回退 **arXiv** `search_query=ti:"…"&sortBy=relevance`。两者均免 key，复用 `core::http::client_builder()` 与信号量限流（并发 2）。
   > **S2 无 key 的搜索接口限流极严（实测连续 3 次均 429）**，所以 arXiv 才是线上的常走路径。不选 Crossref 兜底：NeurIPS proceedings 之类没有 Crossref DOI，搜 "Attention is all you need" 时正确论文**根本不在** Crossref 结果集里，只会返回一堆同名论文。
   > arXiv 的 Atom 需要按 `<entry>` 切块解析 —— `map::map_arxiv_atom` 只处理单条响应，不能复用。
 - 排序：保留 provider 的相关度顺序，但把**标题与 query 归一化后完全相等**的条目提到最前（归一化 = 小写、去非字母数字、压空格）。同名论文很多，这一步防止真正那篇被埋掉。

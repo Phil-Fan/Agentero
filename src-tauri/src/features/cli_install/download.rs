@@ -4,7 +4,7 @@
 //! `agentero-cli-{version}-{rust-host}.{tar.gz|zip}` plus sibling `.sha256`.
 
 use crate::core::error::AppError;
-use crate::features::network;
+use crate::core::http;
 use flate2::read::GzDecoder;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
@@ -245,7 +245,7 @@ pub async fn download_and_extract(version: &str, dest_bin: &Path) -> Result<(), 
     let sha_url = release_sha256_url(&ver, triple);
     let tag_page = release_tag_page_url(&ver);
 
-    let client = network::client_builder()
+    let client = http::client_builder()
         .timeout(DOWNLOAD_TIMEOUT)
         .user_agent(format!(
             "agentero/{ver} (+https://github.com/{RELEASE_REPO})"

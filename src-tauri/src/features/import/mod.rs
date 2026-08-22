@@ -1051,7 +1051,7 @@ async fn translator_fetch(
     base: &str,
     task_id: Option<&str>,
 ) -> Result<PaperMeta, AppError> {
-    let client = crate::features::network::client_builder()
+    let client = crate::core::http::client_builder()
         .timeout(Duration::from_secs(30))
         .user_agent("agentero-lookup/0.1 (+https://github.com/poco-ai/agentero)")
         .build()
@@ -1144,7 +1144,7 @@ pub(crate) async fn fetch_arxiv_metadata(
         "https://export.arxiv.org/api/query?id_list={}",
         urlencoding_encode(&bare)
     );
-    let client = crate::features::network::client_builder()
+    let client = crate::core::http::client_builder()
         .timeout(Duration::from_secs(30))
         .user_agent("agentero-lookup/0.1")
         .build()

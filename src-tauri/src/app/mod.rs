@@ -148,7 +148,7 @@ pub fn run() {
                 }
             }
         }
-        crate::features::network::configure_proxy(
+        crate::core::http::configure_proxy(
             settings.network_proxy_enabled,
             &settings.network_proxy_url,
         )?;

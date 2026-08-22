@@ -15,7 +15,6 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
 
 const TARGET: &str = "agentero::layout_model";
-const USER_AGENT: &str = "Agentero/layout-model";
 /// Canonical on-disk name (either full or FP16 export).
 pub const LAYOUT_MODEL_FILE: &str = "pp-doclayoutv3.onnx";
 /// Fixed id so Host startup + frontend panel share one background-task row.
@@ -328,12 +327,8 @@ async fn download_to_file(
     progress: ProgressCtx<'_>,
 ) -> Result<u64, AppError> {
     progress.check_cancelled()?;
-    let client = crate::features::network::client_builder()
-        .timeout(DOWNLOAD_TIMEOUT)
-        .user_agent(USER_AGENT)
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
-        .map_err(|e| AppError::message(format!("http client: {e}")))?;
+    let client =
+        crate::core::http::client_with(DOWNLOAD_TIMEOUT, 10, crate::core::http::USER_AGENT)?;
 
     let mut res = client
         .get(url)

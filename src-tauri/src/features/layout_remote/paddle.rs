@@ -4,16 +4,15 @@
 //! `GET {base}/api/v2/ocr/jobs/{jobId}` → download the JSONL result.
 
 use crate::core::error::AppError;
+use crate::core::http;
 use crate::features::import::pdf_parse::CANCELLED_MESSAGE;
 use crate::features::layout_remote::engine::{AnalyzeCtx, ProviderCredentials, RemoteLayoutEngine};
 use crate::features::layout_remote::{
     emit_cloud_progress, parse_det_boxes, LayoutRemoteAnalyzePdfResult, LayoutRemotePageResult,
     LayoutRemoteProbeArgs, LayoutRemoteProbeResult,
 };
-use crate::features::network;
 use async_trait::async_trait;
 use base64::Engine;
-use reqwest::redirect::Policy;
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
@@ -210,7 +209,7 @@ async fn submit_job(
         .await
         .map_err(|e| AppError::message(format!("Paddle response read failed: {e}")))?;
     if !status.is_success() {
-        let snippet: String = text.chars().take(180).collect();
+        let snippet = http::http_err_snippet(&text);
         return Err(AppError::message(format!(
             "Paddle job submit failed (HTTP {status}): {snippet}"
         )));
@@ -250,11 +249,7 @@ pub(crate) async fn run_paddle_ocr_job(
     cancel: super::CancelFn<'_>,
 ) -> Result<(String, Option<Value>), AppError> {
     let (jobs_url, auth) = resolve_cloud_target(api_key)?;
-    let client = network::client_builder()
-        .timeout(CLOUD_REQUEST_TIMEOUT)
-        .redirect(Policy::limited(5))
-        .build()
-        .map_err(|e| AppError::message(format!("http client: {e}")))?;
+    let client = http::client(CLOUD_REQUEST_TIMEOUT)?;
 
     // 1) Submit the whole-document job (multipart file upload).
     progress("uploading", None, None);
@@ -286,7 +281,7 @@ pub(crate) async fn run_paddle_ocr_job(
             .await
             .map_err(|e| AppError::message(format!("Paddle poll read failed: {e}")))?;
         if !poll_status.is_success() {
-            let snippet: String = poll_text.chars().take(180).collect();
+            let snippet = http::http_err_snippet(&poll_text);
             return Err(AppError::message(format!(
                 "Paddle job poll failed (HTTP {poll_status}): {snippet}"
             )));
@@ -487,11 +482,7 @@ async fn probe(
     let image_bytes = base64::engine::general_purpose::STANDARD
         .decode(args.image_base64.trim())
         .map_err(|e| AppError::message(format!("layout_remote: invalid probe image: {e}")))?;
-    let client = network::client_builder()
-        .timeout(Duration::from_secs(30))
-        .redirect(Policy::limited(5))
-        .build()
-        .map_err(|e| AppError::message(format!("http client: {e}")))?;
+    let client = http::client(Duration::from_secs(30))?;
     let job_id = submit_job(
         &client,
         &jobs_url,

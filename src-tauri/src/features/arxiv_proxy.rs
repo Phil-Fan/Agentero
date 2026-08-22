@@ -33,8 +33,11 @@ pub fn handle(request: tauri::http::Request<Vec<u8>>, responder: tauri::UriSchem
 
     tauri::async_runtime::spawn(async move {
         let result = async {
-            let client = crate::features::network::client_builder()
-                .redirect(reqwest::redirect::Policy::limited(5))
+            let client = crate::core::http::client_builder()
+                .user_agent(crate::core::http::USER_AGENT)
+                .redirect(reqwest::redirect::Policy::limited(
+                    crate::core::http::DEFAULT_REDIRECT_LIMIT,
+                ))
                 .build()?;
             let remote = client.get(url).send().await?;
             let status =

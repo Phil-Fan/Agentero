@@ -9,10 +9,10 @@
 //! same-day open reuses the previous result without touching the network.
 
 use crate::core::error::AppError;
+use crate::core::http;
 use crate::features::catalog::papers;
 use crate::features::catalog::with_catalog;
 use crate::features::feeds::parse::parse_feed_bytes;
-use crate::features::network;
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -169,7 +169,7 @@ struct Candidate {
 
 /// Fetch each category RSS and collect de-duplicated candidates with abstracts.
 async fn fetch_candidates(categories: &[String]) -> Result<Vec<Candidate>, AppError> {
-    let client = network::client_builder()
+    let client = http::client_builder()
         .timeout(FEED_TIMEOUT)
         .build()
         .map_err(|e| AppError::message(format!("recommend http client: {e}")))?;
@@ -346,7 +346,7 @@ async fn embed_batch(
         .await
         .map_err(|e| AppError::message(format!("embeddings read body: {e}")))?;
     if !status.is_success() {
-        let snippet: String = body.chars().take(180).collect();
+        let snippet = http::http_err_snippet(&body);
         return Err(AppError::message(format!(
             "embeddings endpoint returned {status}: {snippet}"
         )));
@@ -407,7 +407,7 @@ async fn embed_all(
         missing.push((hash.clone(), text.clone()));
     }
 
-    let client = network::client_builder()
+    let client = http::client_builder()
         .timeout(EMBED_TIMEOUT)
         .build()
         .map_err(|e| AppError::message(format!("recommend http client: {e}")))?;

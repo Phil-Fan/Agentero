@@ -82,7 +82,7 @@ pub fn settings_set(
     center: State<'_, crate::features::jobs::JobCenter>,
     settings: AppSettings,
 ) -> ApiResult<AppSettings> {
-    if let Err(e) = crate::features::network::configure_proxy(
+    if let Err(e) = crate::core::http::configure_proxy(
         settings.network_proxy_enabled,
         &settings.network_proxy_url,
     ) {
@@ -121,7 +121,7 @@ pub fn settings_set(
     center: State<'_, crate::features::jobs::JobCenter>,
     settings: AppSettings,
 ) -> ApiResult<AppSettings> {
-    if let Err(e) = crate::features::network::configure_proxy(
+    if let Err(e) = crate::core::http::configure_proxy(
         settings.network_proxy_enabled,
         &settings.network_proxy_url,
     ) {

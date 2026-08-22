@@ -7,8 +7,6 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
-const USER_AGENT: &str =
-    "agentero/0.2 (+https://github.com/poco-ai/agentero; mailto:agentero@users.noreply.github.com)";
 const CROSSREF_MAILTO: &str = "agentero@users.noreply.github.com";
 const ONLINE_REFERENCE_CONCURRENCY: usize = 2;
 
@@ -74,12 +72,7 @@ pub async fn fetch_references(doi: Option<&str>, arxiv_id: Option<&str>) -> Onli
 }
 
 fn http_client() -> Result<reqwest::Client, String> {
-    crate::features::network::client_builder()
-        .timeout(Duration::from_secs(20))
-        .user_agent(USER_AGENT)
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .build()
-        .map_err(|e| format!("http client: {e}"))
+    crate::core::http::client(Duration::from_secs(20)).map_err(|e| e.to_string())
 }
 
 async fn get_json(url: &str) -> Result<serde_json::Value, String> {
