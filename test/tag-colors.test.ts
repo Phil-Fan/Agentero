@@ -2,11 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
 	coercePaperTags,
 	isConnectorTagName,
-	isTagColorId,
 	normalizePaperTags,
-	tagChipStyle,
 	visiblePaperTags,
-} from "@/lib/ui/tag-colors";
+} from "@/lib/paper/tags";
+import { isTagColorId, tagChipStyle } from "@/lib/ui/tag-colors";
 
 describe("tag colors", () => {
 	it("accepts preset ids only", () => {

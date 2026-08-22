@@ -20,12 +20,12 @@ import {
 	providerSessionIdForHistoryLoad,
 	questionsFromAskUserDtos,
 	questionsFromElicitationFields,
-	resetAgentChatIds,
 	resolveSelected,
 	shouldDeferSessionEvent,
 	upsertChatSessionTurn,
 	upsertPlanPart,
 } from "@/lib/agent/chat-state";
+import { resetAgentChatIds } from "@/lib/pdf-visual/ids";
 
 beforeEach(() => {
 	resetAgentChatIds();
