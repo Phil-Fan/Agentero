@@ -21,12 +21,7 @@ pub fn write_sidecar(vault_root: &Path, record: &PaperRecord) {
     }
     let write = || -> std::io::Result<()> {
         let raw = serde_json::to_vec_pretty(record)?;
-        let tmp = dir.join(format!("{SIDECAR_FILE}.tmp"));
-        fs::write(&tmp, raw)?;
-        fs::rename(&tmp, dir.join(SIDECAR_FILE)).or_else(|_| {
-            // Windows may fail rename over an existing file.
-            fs::write(dir.join(SIDECAR_FILE), serde_json::to_vec_pretty(record)?)
-        })
+        crate::core::fs::atomic_write(&dir.join(SIDECAR_FILE), &raw)
     };
     if let Err(e) = write() {
         log::warn!(

@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub const FORMAT_VERSION: u32 = 1;
 const HEAD_KEY: &str = "HEAD";
@@ -444,19 +444,13 @@ fn conflict_name(path: &str) -> String {
     }
 }
 
-fn write_atomic(target: &PathBuf, bytes: &[u8]) -> Result<(), AppError> {
+fn write_atomic(target: &Path, bytes: &[u8]) -> Result<(), AppError> {
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent)?;
     }
-    let tmp = target.with_extension(format!(
-        "{}.sync.tmp",
-        target.extension().and_then(|e| e.to_str()).unwrap_or("")
-    ));
-    fs::write(&tmp, bytes)?;
-    fs::rename(&tmp, target).or_else(|_| {
-        // Windows may fail rename over an existing file.
-        fs::write(target, bytes)
-    })?;
+    // Shared default temp `{name}.tmp`: snapshot scans skip `*.tmp`, so the
+    // half-written download is never synced.
+    crate::core::fs::atomic_write(target, bytes)?;
     Ok(())
 }
 

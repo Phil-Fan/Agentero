@@ -4,12 +4,14 @@
 
 mod local;
 mod path;
+mod store;
 
 pub use local::LocalFs;
 pub use path::{
     ensure_vault_dir, join_remote, normalize_rel, path_escapes_root, resolve_paper_dir,
     resolve_vault, sanitize_vault_rel, FsCaps, FsDirEntry, FsFileMeta,
 };
+pub use store::{atomic_write, atomic_write_with, json_store, json_store_with, AtomicOpts};
 
 use crate::core::error::AppError;
 use async_trait::async_trait;

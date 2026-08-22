@@ -266,10 +266,8 @@ pub fn write_cli_open_request(absolute_path: &Path) -> Result<PathBuf, AppError>
     };
     let json = serde_json::to_string_pretty(&body)
         .map_err(|e| AppError::message(format!("serialize open request: {e}")))?;
-    // Atomic-ish write: temp then rename.
-    let tmp = file.with_extension("json.tmp");
-    std::fs::write(&tmp, json)?;
-    std::fs::rename(&tmp, &file)?;
+    // Atomic write: temp then rename (with the Windows replace fallback).
+    crate::core::fs::atomic_write(&file, json.as_bytes())?;
     Ok(file)
 }
 

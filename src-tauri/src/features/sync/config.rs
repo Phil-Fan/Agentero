@@ -142,17 +142,12 @@ fn write_all(vaults: HashMap<String, SyncBackendConfig>) -> Result<(), AppError>
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let raw = serde_json::to_string_pretty(&SyncConfigFile { vaults })?;
-    let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, raw.as_bytes())?;
-    fs::rename(&tmp, &path).or_else(|_| fs::write(&path, raw.as_bytes()))?;
-    // Owner-only: this file holds S3 credentials.
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
-    }
-    Ok(())
+    // Owner-only (0o600 on Unix): this file holds S3 credentials.
+    crate::core::fs::json_store_with(
+        &path,
+        &SyncConfigFile { vaults },
+        &crate::core::fs::AtomicOpts::OWNER_ONLY,
+    )
 }
 
 pub fn get(vault_path: &str) -> Option<SyncBackendConfig> {

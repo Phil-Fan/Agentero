@@ -10,7 +10,7 @@ use crate::features::agent::templates::{
 use crate::features::agent::tool_lifecycle;
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use uuid::Uuid;
 
@@ -639,13 +639,13 @@ fn read_state(path: &PathBuf) -> Result<AgentRegistryState, AppError> {
     Ok(serde_json::from_str(&raw)?)
 }
 
-fn persist(path: &PathBuf, state: &AgentRegistryState) -> Result<(), AppError> {
+fn persist(path: &Path, state: &AgentRegistryState) -> Result<(), AppError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let raw = serde_json::to_string_pretty(state)?;
-    fs::write(path, raw)?;
-    Ok(())
+    // Atomic temp+rename: a crash mid-write must never truncate agents.json —
+    // `load()` falls back to an empty registry on any parse failure.
+    crate::core::fs::json_store(path, state)
 }
 
 fn normalize_proxy_url(proxy_url: &str) -> String {

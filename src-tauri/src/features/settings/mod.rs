@@ -8,7 +8,7 @@ use crate::core::paths::{self, settings_path};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "https://translator.philfan.cn";
@@ -551,25 +551,12 @@ fn read_file(path: &PathBuf) -> (AppSettings, bool) {
     }
 }
 
-fn persist(path: &PathBuf, settings: &AppSettings) -> Result<(), AppError> {
+fn persist(path: &Path, settings: &AppSettings) -> Result<(), AppError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let raw = serde_json::to_string_pretty(settings)?;
-    // Atomic-ish: write tmp then rename.
-    let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, raw.as_bytes())?;
-    fs::rename(&tmp, path).or_else(|_| {
-        // Windows may fail rename over existing; fallback to write.
-        fs::write(path, raw.as_bytes())
-    })?;
-    // Owner-only file when secrets (BYOK keys) may live in this JSON.
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
-    }
-    Ok(())
+    // Owner-only (0o600 on Unix) when secrets (BYOK keys) may live in this JSON.
+    crate::core::fs::json_store_with(path, settings, &crate::core::fs::AtomicOpts::OWNER_ONLY)
 }
 
 /// Map Host translate provider id (any case) → settings `providerConfigs` key.

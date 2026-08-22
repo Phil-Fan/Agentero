@@ -39,11 +39,7 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), AppError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let raw = serde_json::to_vec_pretty(value)?;
-    let tmp = path.with_extension("tmp");
-    fs::write(&tmp, &raw)?;
-    fs::rename(&tmp, path).or_else(|_| fs::write(path, &raw))?;
-    Ok(())
+    crate::core::fs::json_store(path, value)
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Option<T> {

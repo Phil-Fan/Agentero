@@ -737,20 +737,19 @@ fn apply_edits(content: &str, edits: &[PlannedEdit]) -> String {
 }
 
 pub(crate) fn atomic_write(path: &Path, contents: &[u8]) -> Result<(), String> {
-    let parent = path
-        .parent()
+    path.parent()
         .ok_or_else(|| format!("{} has no parent", path.display()))?;
     let name = path
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("markdown");
-    let temp = parent.join(format!(".{name}.agentero-rename-{}.tmp", Uuid::new_v4()));
-    fs::write(&temp, contents).map_err(|error| error.to_string())?;
-    if let Err(error) = fs::rename(&temp, path) {
-        let _ = fs::remove_file(&temp);
-        return Err(error.to_string());
-    }
-    Ok(())
+    // `.agentero-rename-` marks the temp for the vault watcher (content
+    // modify, not a user rename); the `.tmp` suffix keeps sync scans away.
+    let opts = crate::core::fs::AtomicOpts {
+        temp_name: Some(format!(".{name}.agentero-rename-{}.tmp", Uuid::new_v4())),
+        ..Default::default()
+    };
+    crate::core::fs::atomic_write_with(path, contents, &opts).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
