@@ -203,7 +203,7 @@ pub fn extract_arxiv_id(text: &str) -> Option<String> {
         .trim_end_matches(".pdf");
     let id = id.trim().trim_end_matches('/');
     // new-style 1706.03762 or old-style hep-th/9901001
-    let bare = strip_version(id);
+    let bare = strip_arxiv_version(id);
     if is_arxiv_id(&bare) {
         Some(bare)
     } else {
@@ -227,13 +227,24 @@ fn is_arxiv_id(s: &str) -> bool {
     false
 }
 
-fn strip_version(id: &str) -> String {
-    if let Some(i) = id.rfind('v') {
-        if id[i + 1..].chars().all(|c| c.is_ascii_digit()) && i > 0 {
-            return id[..i].to_string();
+/// Canonical arXiv id normalizer: trim, drop an `arXiv:` / `arxiv:` prefix
+/// (re-trimming any whitespace behind the colon), then strip a trailing `vN`
+/// version suffix (only when the `v` is not the first character, so ids like
+/// `cs.CL/0101001` survive). Single shared implementation for import and
+/// coolpapers; supersedes the former local copies in `assets.rs`, `mod.rs`
+/// and `coolpapers/mod.rs`.
+pub(crate) fn strip_arxiv_version(id: &str) -> String {
+    let s = id
+        .trim()
+        .trim_start_matches("arXiv:")
+        .trim_start_matches("arxiv:")
+        .trim();
+    if let Some(i) = s.rfind('v') {
+        if s[i + 1..].chars().all(|c| c.is_ascii_digit()) && i > 0 {
+            return s[..i].to_string();
         }
     }
-    id.to_string()
+    s.to_string()
 }
 
 pub(crate) fn clean_doi(s: &str) -> Option<String> {
@@ -317,6 +328,32 @@ mod tests {
         assert_eq!(
             extract_arxiv_id("https://arxiv.org/pdf/2508.05004.pdf?download=1").as_deref(),
             Some("2508.05004")
+        );
+    }
+
+    #[test]
+    fn strip_arxiv_version_normalizes_prefix_and_suffix() {
+        assert_eq!(strip_arxiv_version("2608.13558v3"), "2608.13558");
+        assert_eq!(strip_arxiv_version("arXiv:1706.03762v2"), "1706.03762");
+        assert_eq!(strip_arxiv_version("arxiv:1706.03762"), "1706.03762");
+        assert_eq!(strip_arxiv_version("  1706.03762  "), "1706.03762");
+        // Old-style id without a version stays intact.
+        assert_eq!(strip_arxiv_version("hep-th/9901001"), "hep-th/9901001");
+        // A leading `v` is never treated as a version marker.
+        assert_eq!(strip_arxiv_version("v2"), "v2");
+    }
+
+    #[test]
+    fn arxiv_id_with_prefix_and_version() {
+        // The old parse.rs-local strip_version missed the `arXiv:` prefix and
+        // returned None here; the canonical stripper resolves it.
+        assert_eq!(
+            extract_arxiv_id("arXiv:1706.03762v2").as_deref(),
+            Some("1706.03762")
+        );
+        assert_eq!(
+            extract_arxiv_id("https://arxiv.org/abs/arXiv:2608.13558v1").as_deref(),
+            Some("2608.13558")
         );
     }
 

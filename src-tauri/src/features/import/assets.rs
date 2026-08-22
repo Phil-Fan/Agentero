@@ -2,6 +2,7 @@
 //!
 //! Flow: always try PDF → arXiv also tries e-print TeX → caller may liteparse when no TeX.
 
+use super::parse::strip_arxiv_version;
 #[cfg(not(feature = "desktop"))]
 use super::AppHandle;
 use crate::core::error::AppError;
@@ -419,11 +420,11 @@ fn pdf_url_candidates(id: &str, arxiv_id: Option<&str>, pdf_url: Option<&str>) -
     }
 
     let bare_arxiv = arxiv_id
-        .map(strip_version)
+        .map(strip_arxiv_version)
         .filter(|s| !s.is_empty())
         .or_else(|| {
             // Folder / id often is the arXiv id
-            let s = strip_version(id);
+            let s = strip_arxiv_version(id);
             if looks_like_arxiv_id(&s) {
                 Some(s)
             } else {
@@ -596,7 +597,7 @@ async fn download_arxiv_source(
     app: Option<&AppHandle>,
     task_id: Option<&str>,
 ) -> Result<(), AppError> {
-    let bare = strip_version(arxiv_id);
+    let bare = strip_arxiv_version(arxiv_id);
     // Prefer e-print; /src/ is an alias
     let url = format!("https://arxiv.org/e-print/{bare}");
     let bytes =
@@ -838,19 +839,6 @@ pub(crate) async fn http_get_bytes_with_progress(
         );
     }
     Ok(bytes)
-}
-
-fn strip_version(id: &str) -> String {
-    let s = id
-        .trim()
-        .trim_start_matches("arXiv:")
-        .trim_start_matches("arxiv:");
-    if let Some(i) = s.rfind('v') {
-        if s[i + 1..].chars().all(|c| c.is_ascii_digit()) && i > 0 {
-            return s[..i].to_string();
-        }
-    }
-    s.to_string()
 }
 
 fn safe_filename(id: &str, ext: &str) -> String {

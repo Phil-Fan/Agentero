@@ -102,14 +102,7 @@ async fn get_text(url: &str) -> Result<String, AppError> {
 
 /// Bare arXiv id without the `vN` suffix papers.cool does not use.
 fn bare_arxiv_id(raw: &str) -> Option<String> {
-    let trimmed = raw.trim().trim_start_matches("arXiv:").trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    let id = match trimmed.rfind('v') {
-        Some(pos) if trimmed[pos + 1..].chars().all(|c| c.is_ascii_digit()) => &trimmed[..pos],
-        _ => trimmed,
-    };
+    let id = crate::features::import::parse::strip_arxiv_version(raw);
     let id = id.trim();
     if id.is_empty() {
         return None;

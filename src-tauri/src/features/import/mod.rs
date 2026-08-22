@@ -1139,7 +1139,7 @@ pub(crate) async fn fetch_arxiv_metadata(
     arxiv_id: &str,
     task_id: Option<&str>,
 ) -> Result<PaperMeta, AppError> {
-    let bare = regex_lite_strip_version(arxiv_id);
+    let bare = parse::strip_arxiv_version(arxiv_id);
     let api = format!(
         "https://export.arxiv.org/api/query?id_list={}",
         urlencoding_encode(&bare)
@@ -1160,20 +1160,6 @@ pub(crate) async fn fetch_arxiv_metadata(
     check_task_not_cancelled(task_id)?;
 
     map::map_arxiv_atom(&xml, &bare)
-}
-
-fn regex_lite_strip_version(id: &str) -> String {
-    let s = id
-        .trim()
-        .trim_start_matches("arXiv:")
-        .trim_start_matches("arxiv:");
-    // strip trailing vN
-    if let Some(i) = s.rfind('v') {
-        if s[i + 1..].chars().all(|c| c.is_ascii_digit()) && i > 0 {
-            return s[..i].to_string();
-        }
-    }
-    s.to_string()
 }
 
 fn urlencoding_encode(s: &str) -> String {

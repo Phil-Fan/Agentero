@@ -68,15 +68,7 @@ pub fn ensure_feeds_at(db_path: &Path) -> Result<Connection, AppError> {
     if let Some(parent) = db_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let conn = Connection::open(db_path)
-        .map_err(|e| AppError::message(format!("open feeds {}: {e}", db_path.display())))?;
-    conn.execute_batch(
-        "PRAGMA journal_mode = WAL;\n\
-         PRAGMA synchronous = NORMAL;\n\
-         PRAGMA busy_timeout = 5000;\n\
-         PRAGMA foreign_keys = ON;",
-    )
-    .map_err(|e| AppError::message(format!("feeds pragma: {e}")))?;
+    let conn = crate::core::sqlite::open_standard(db_path, crate::core::sqlite::DbMsgs::FEEDS)?;
     migrate(&conn)?;
     Ok(conn)
 }
@@ -142,25 +134,11 @@ fn migrate(conn: &Connection) -> Result<(), AppError> {
 }
 
 fn schema_version(conn: &Connection) -> Result<i32, AppError> {
-    conn.query_row(
-        "SELECT value FROM schema_meta WHERE key = 'schema_version'",
-        [],
-        |row| {
-            let raw: String = row.get(0)?;
-            Ok(raw.parse::<i32>().unwrap_or(0))
-        },
-    )
-    .map_err(|e| AppError::message(format!("feeds schema_version: {e}")))
+    crate::core::sqlite::read_schema_version(conn, crate::core::sqlite::DbMsgs::FEEDS)
 }
 
 fn set_schema_version(conn: &Connection, version: i32) -> Result<(), AppError> {
-    conn.execute(
-        "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?1)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        [version.to_string()],
-    )
-    .map_err(|e| AppError::message(format!("write feeds schema_version: {e}")))?;
-    Ok(())
+    crate::core::sqlite::write_schema_version(conn, version, crate::core::sqlite::DbMsgs::FEEDS)
 }
 
 #[cfg(test)]

@@ -137,18 +137,7 @@ pub fn ensure_catalog(vault_root: &Path) -> Result<Connection, AppError> {
     fs::create_dir_all(&agentero_dir)?;
 
     let db_path = catalog_db_path(vault_root);
-    let conn = Connection::open(&db_path)
-        .map_err(|e| AppError::message(format!("open catalog {}: {e}", db_path.display())))?;
-
-    // WAL lets readers proceed while the app writes; busy_timeout absorbs
-    // short lock contention instead of failing commands immediately.
-    conn.execute_batch(
-        "PRAGMA journal_mode = WAL;\n\
-         PRAGMA synchronous = NORMAL;\n\
-         PRAGMA busy_timeout = 5000;\n\
-         PRAGMA foreign_keys = ON;",
-    )
-    .map_err(|e| AppError::message(format!("pragma: {e}")))?;
+    let conn = crate::core::sqlite::open_standard(&db_path, crate::core::sqlite::DbMsgs::CATALOG)?;
 
     migrate(&conn)?;
     Ok(conn)
@@ -380,35 +369,11 @@ fn migrate(conn: &Connection) -> Result<(), AppError> {
 }
 
 pub fn schema_version(conn: &Connection) -> Result<i32, AppError> {
-    // Table may not exist yet
-    let exists: bool = conn
-        .query_row(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_meta'",
-            [],
-            |_| Ok(true),
-        )
-        .unwrap_or(false);
-    if !exists {
-        return Ok(0);
-    }
-    conn.query_row(
-        "SELECT value FROM schema_meta WHERE key = 'schema_version'",
-        [],
-        |row| {
-            let v: String = row.get(0)?;
-            Ok(v.parse::<i32>().unwrap_or(0))
-        },
-    )
-    .map_err(|e| AppError::message(format!("read schema_version: {e}")))
+    crate::core::sqlite::read_schema_version(conn, crate::core::sqlite::DbMsgs::CATALOG)
 }
 
 fn set_schema_version(conn: &Connection, version: i32) -> Result<(), AppError> {
-    conn.execute(
-        "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?1)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        [version.to_string()],
-    )
-    .map_err(|e| AppError::message(format!("write schema_version: {e}")))?;
+    crate::core::sqlite::write_schema_version(conn, version, crate::core::sqlite::DbMsgs::CATALOG)?;
     conn.execute(
         "INSERT INTO schema_meta(key, value) VALUES('agentero_app', 'agentero')
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
