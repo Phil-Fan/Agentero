@@ -53,6 +53,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useDebouncedCallback } from "@/hooks/use-debounce";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { logger } from "@/lib/core/logger";
 import { cn } from "@/lib/core/utils";
@@ -504,33 +505,24 @@ export function PapersLibrary({
 	 * workspace subscribers are not re-rendered on every key.
 	 */
 	const [inputValue, setInputValue] = useState(query);
-	const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const commitSearch = useDebouncedCallback(
+		(value: string) => onQueryChange?.(value),
+		SEARCH_DEBOUNCE_MS,
+	);
 
 	useEffect(() => {
 		setInputValue(query);
-		if (searchDebounceRef.current) {
-			clearTimeout(searchDebounceRef.current);
-			searchDebounceRef.current = null;
-		}
-	}, [query]);
+		commitSearch.cancel();
+	}, [query, commitSearch]);
 
-	useEffect(
-		() => () => {
-			if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-		},
-		[],
-	);
+	useEffect(() => () => commitSearch.cancel(), [commitSearch]);
 
 	const onSearchInputChange = useCallback(
 		(value: string) => {
 			setInputValue(value);
-			if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-			searchDebounceRef.current = setTimeout(() => {
-				searchDebounceRef.current = null;
-				onQueryChange?.(value);
-			}, SEARCH_DEBOUNCE_MS);
+			commitSearch(value);
 		},
-		[onQueryChange],
+		[commitSearch],
 	);
 
 	const cancelPendingCopy = useCallback(() => {

@@ -23,6 +23,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useDebouncedCallback } from "@/hooks/use-debounce";
 
 /** How long the query rests before a full-document search is issued. */
 const FIND_DEBOUNCE_MS = 250;
@@ -60,18 +61,20 @@ export function usePdfFind({
 	const findInputRef = useRef<HTMLInputElement>(null);
 
 	// Run a debounced full-document search as the query changes.
+	const scheduleSearch = useDebouncedCallback((q: string) => {
+		void search?.searchAllPages(q);
+	}, FIND_DEBOUNCE_MS);
 	useEffect(() => {
 		if (!search) return;
 		const q = findQuery.trim();
 		if (!q) {
+			scheduleSearch.cancel();
 			search.stopSearch();
 			return;
 		}
-		const id = setTimeout(() => {
-			void search.searchAllPages(q);
-		}, FIND_DEBOUNCE_MS);
-		return () => clearTimeout(id);
-	}, [findQuery, search]);
+		scheduleSearch(q);
+		return () => scheduleSearch.cancel();
+	}, [findQuery, search, scheduleSearch]);
 
 	// Cmd/Ctrl+F opens the in-document find bar when the PDF host is focused.
 	useEffect(() => {

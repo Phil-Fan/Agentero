@@ -2,7 +2,8 @@
 
 import { RangeApi } from "platejs";
 import type { PlateEditor } from "platejs/react";
-import { type RefObject, useCallback, useEffect, useRef } from "react";
+import { type RefObject, useEffect } from "react";
+import { useDebouncedCallback } from "@/hooks/use-debounce";
 import {
 	clearActiveSelection,
 	publishSelection,
@@ -24,37 +25,27 @@ export function useSelectionContextPublish({
 	editor: PlateEditor;
 	filePathRef: RefObject<string | null>;
 }): () => void {
-	const timerRef = useRef<number | null>(null);
-
-	const schedule = useCallback(() => {
-		if (timerRef.current !== null) {
-			window.clearTimeout(timerRef.current);
+	const schedule = useDebouncedCallback(() => {
+		const selection = editor.selection;
+		if (!selection || RangeApi.isCollapsed(selection)) {
+			clearActiveSelection("markdown");
+			return;
 		}
-		timerRef.current = window.setTimeout(() => {
-			timerRef.current = null;
-			const selection = editor.selection;
-			if (!selection || RangeApi.isCollapsed(selection)) {
-				clearActiveSelection("markdown");
-				return;
-			}
-			const path = filePathRef.current;
-			if (!path) return;
-			publishSelection({
-				text: editor.api.string(selection),
-				sourcePath: path,
-				origin: "markdown",
-			});
-		}, PUBLISH_DEBOUNCE_MS);
-	}, [editor, filePathRef]);
+		const path = filePathRef.current;
+		if (!path) return;
+		publishSelection({
+			text: editor.api.string(selection),
+			sourcePath: path,
+			origin: "markdown",
+		});
+	}, PUBLISH_DEBOUNCE_MS);
 
 	useEffect(() => {
 		return () => {
-			if (timerRef.current !== null) {
-				window.clearTimeout(timerRef.current);
-			}
+			schedule.cancel();
 			clearActiveSelection("markdown");
 		};
-	}, []);
+	}, [schedule]);
 
 	return schedule;
 }

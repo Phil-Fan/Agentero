@@ -5,6 +5,7 @@
  */
 
 import { createStore } from "zustand/vanilla";
+import { debounce } from "@/lib/core/debounce";
 import { isTauri } from "@/lib/core/tauri";
 import type { PaperMetadata } from "@/lib/paper";
 import { listPapers } from "@/lib/paper/api";
@@ -159,29 +160,30 @@ export async function refreshLibrary(): Promise<void> {
 	}
 }
 
-let libraryRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+/** Coalesces external-change bursts (CLI, sync clients) into one reload. */
+const LIBRARY_REFRESH_DEBOUNCE_MS = 500;
 
 /**
  * Quiet, debounced catalog reload for external tools (CLI, sync clients).
  * Avoids loading-state flicker while still updating tree labels and table rows.
  */
+const debouncedLibraryRefresh = debounce(() => {
+	const vaultPath = getVaultPath();
+	if (!vaultPath || !isTauri()) {
+		setLibraryPapers([]);
+		return;
+	}
+	void listPapers(vaultPath)
+		.then((papers) => {
+			if (getVaultPath() === vaultPath) setLibraryPapers(papers);
+		})
+		.catch(() => {
+			// Best-effort background refresh; explicit Library opens still report loading.
+		});
+}, LIBRARY_REFRESH_DEBOUNCE_MS);
+
 export function scheduleLibraryRefresh(): void {
-	if (libraryRefreshTimer) clearTimeout(libraryRefreshTimer);
-	libraryRefreshTimer = setTimeout(() => {
-		libraryRefreshTimer = null;
-		const vaultPath = getVaultPath();
-		if (!vaultPath || !isTauri()) {
-			setLibraryPapers([]);
-			return;
-		}
-		void listPapers(vaultPath)
-			.then((papers) => {
-				if (getVaultPath() === vaultPath) setLibraryPapers(papers);
-			})
-			.catch(() => {
-				// Best-effort background refresh; explicit Library opens still report loading.
-			});
-	}, 500);
+	debouncedLibraryRefresh();
 }
 
 /**
@@ -191,10 +193,7 @@ export function scheduleLibraryRefresh(): void {
  * `trashReloadSignal`, whose monotonic value subscribers compare against.
  */
 export function clearLibraryVaultState(): void {
-	if (libraryRefreshTimer) {
-		clearTimeout(libraryRefreshTimer);
-		libraryRefreshTimer = null;
-	}
+	debouncedLibraryRefresh.cancel();
 	libraryStore.setState({
 		papers: [],
 		paperMetaByRelPath: new Map(),

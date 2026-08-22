@@ -9,6 +9,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useDebouncedCallback } from "@/hooks/use-debounce";
 import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
 import {
 	frontmatterInterior,
@@ -96,7 +97,6 @@ export function useMarkdownPersistence({
 	 * (the tab-bar unsaved indicator), which made editing laggy on large notes.
 	 */
 	const dirtyRef = useRef(false);
-	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const persistInFlightRef = useRef<Promise<void> | null>(null);
 	const persistQueuedRef = useRef(false);
 	/**
@@ -211,6 +211,12 @@ export function useMarkdownPersistence({
 	const reconcileAssetsRef = useRef(reconcileAssets);
 	reconcileAssetsRef.current = reconcileAssets;
 
+	/** Debounced autosave; flushed on unmount, cancelled by external reloads. */
+	const debouncedPersist = useDebouncedCallback(() => {
+		reconcileAssetsRef.current();
+		persistRef.current();
+	}, CHANGE_DEBOUNCE_MS);
+
 	// Mark ready after the initial normalization pass so opening a file never saves.
 	// Seed image URL counts so we only GC assets removed after open.
 	// On unmount, flush pending edit + deferred asset GC for this file.
@@ -219,28 +225,18 @@ export function useMarkdownPersistence({
 		imageCountsRef.current = collectImageUrlCounts(editor.children);
 		const assetGc = assetGcRef.current;
 		return () => {
-			if (timerRef.current) {
-				clearTimeout(timerRef.current);
-				timerRef.current = null;
-				reconcileAssetsRef.current();
-				persistRef.current();
-			}
+			debouncedPersist.flush();
 			void assetGc.flush();
 		};
-	}, [editor]);
+	}, [editor, debouncedPersist]);
 
 	const schedulePersist = useCallback(() => {
 		if (readOnly || !readyRef.current || externalReloadRef.current) return;
 		if (!dirtyRef.current) {
 			setDirty(true);
 		}
-		if (timerRef.current) clearTimeout(timerRef.current);
-		timerRef.current = setTimeout(() => {
-			timerRef.current = null;
-			reconcileAssetsRef.current();
-			persistRef.current();
-		}, CHANGE_DEBOUNCE_MS);
-	}, [readOnly, setDirty]);
+		debouncedPersist();
+	}, [readOnly, setDirty, debouncedPersist]);
 
 	/**
 	 * Reload the whole document from an external/Agent disk write without
@@ -253,10 +249,7 @@ export function useMarkdownPersistence({
 			if (markdown === savedRef.current && !dirtyRef.current) return false;
 			reloadGenerationRef.current += 1;
 			persistQueuedRef.current = false;
-			if (timerRef.current) {
-				clearTimeout(timerRef.current);
-				timerRef.current = null;
-			}
+			debouncedPersist.cancel();
 			const { frontmatter, body } = splitFrontmatter(markdown);
 			frontmatterRef.current = frontmatter;
 			setFrontmatterYaml(frontmatterInterior(frontmatter));
@@ -281,7 +274,7 @@ export function useMarkdownPersistence({
 			imageCountsRef.current = collectImageUrlCounts(editor.children);
 			return true;
 		},
-		[editor, setDirty],
+		[editor, setDirty, debouncedPersist],
 	);
 
 	const onFrontmatterChange = useCallback(
@@ -294,13 +287,10 @@ export function useMarkdownPersistence({
 	);
 
 	const saveNow = useCallback(() => {
-		if (timerRef.current) {
-			clearTimeout(timerRef.current);
-			timerRef.current = null;
-		}
+		debouncedPersist.cancel();
 		reconcileAssetsRef.current();
 		persistRef.current();
-	}, []);
+	}, [debouncedPersist]);
 
 	return {
 		frontmatterYaml,

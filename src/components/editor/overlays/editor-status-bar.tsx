@@ -12,6 +12,7 @@ import {
 	HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { useWikiStore } from "@/hooks/use-app-stores";
+import { useDebouncedValue } from "@/hooks/use-debounce";
 import { cn } from "@/lib/core/utils";
 import { countChars, countWords } from "@/lib/markdown/stats";
 import { isMarkdownPath } from "@/lib/vault/fs";
@@ -56,19 +57,17 @@ export function EditorStatusBar({ filePath, vaultPath }: EditorStatusBarProps) {
 	// (selection-only changes keep it stable). The expensive full-document walk
 	// runs debounced below, never inside the selector.
 	const children = useEditorSelector((e) => e.children, []);
+	const debouncedChildren = useDebouncedValue(children, STATS_DEBOUNCE_MS);
 	const [{ words, chars }, setStats] = useState<DocumentStats>(() =>
 		computeDocumentStats(editor.children),
 	);
 
 	useEffect(() => {
-		const timer = window.setTimeout(() => {
-			const next = computeDocumentStats(children);
-			setStats((prev) =>
-				prev.words === next.words && prev.chars === next.chars ? prev : next,
-			);
-		}, STATS_DEBOUNCE_MS);
-		return () => window.clearTimeout(timer);
-	}, [children]);
+		const next = computeDocumentStats(debouncedChildren);
+		setStats((prev) =>
+			prev.words === next.words && prev.chars === next.chars ? prev : next,
+		);
+	}, [debouncedChildren]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: wikiIndexRevision is a refresh signal
 	useEffect(() => {

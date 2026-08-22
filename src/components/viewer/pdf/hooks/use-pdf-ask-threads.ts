@@ -37,11 +37,10 @@ import {
 import { useTranslation } from "react-i18next";
 import type { CardScreenPoint } from "@/components/viewer/pdf/types";
 import {
+	attachAgentRun,
 	cancelAgentRun,
+	disposeAgentRun,
 	listAgents,
-	listenAgentCompleted,
-	listenAgentFailed,
-	listenAgentStream,
 	type PromptImage,
 	runOnce,
 } from "@/lib/agent";
@@ -130,6 +129,8 @@ export function usePdfAskThreads({
 	const [askError, setAskError] = useState<string | null>(null);
 	/** Per-run IPC unlisteners of the in-flight ask turn (null when idle). */
 	const runUnsubsRef = useRef<UnlistenFn[] | null>(null);
+	/** ACP session of the in-flight ask turn (null when idle). */
+	const askSessionRef = useRef<string | null>(null);
 	/** True once the viewer unmounts; guards runs accepted after teardown. */
 	const runDisposedRef = useRef(false);
 
@@ -139,15 +140,12 @@ export function usePdfAskThreads({
 	useEffect(() => {
 		runDisposedRef.current = false;
 		return () => {
-			runDisposedRef.current = true;
-			const unsubs = runUnsubsRef.current;
-			runUnsubsRef.current = null;
-			if (unsubs) for (const u of unsubs) u();
-			const sid = activeSessionRef.current;
-			if (sid) {
-				activeSessionRef.current = null;
-				void cancelAgentRun(sid).catch(() => undefined);
-			}
+			disposeAgentRun({
+				disposedRef: runDisposedRef,
+				unsubsRef: runUnsubsRef,
+				sessionRef: askSessionRef,
+				activeSessionRef,
+			});
 		};
 	}, [activeSessionRef]);
 
@@ -252,12 +250,6 @@ export function usePdfAskThreads({
 					autoApprove: true,
 					hideFromChatHistory: true,
 				});
-				if (runDisposedRef.current) {
-					// Viewer unmounted while the run was being accepted: drop it.
-					void cancelAgentRun(accepted.sessionId).catch(() => undefined);
-					return;
-				}
-				activeSessionRef.current = accepted.sessionId;
 				const withAssistant: PdfAskThread = {
 					...withUser,
 					messages: [
@@ -271,21 +263,14 @@ export function usePdfAskThreads({
 						},
 					],
 				};
-				upsertThread(withAssistant);
-				const sessionId = accepted.sessionId;
-				const unsubs: UnlistenFn[] = [];
-				runUnsubsRef.current = unsubs;
-				const cleanup = () => {
-					for (const u of unsubs) u();
-					if (runUnsubsRef.current === unsubs) runUnsubsRef.current = null;
-					if (activeSessionRef.current === sessionId)
-						activeSessionRef.current = null;
-					setStreaming(false);
-				};
-				unsubs.push(
-					await listenAgentStream((ev) => {
-						if (ev.sessionId !== sessionId) return;
-						if ((ev.kind ?? "message") === "thought") return;
+				await attachAgentRun({
+					accepted,
+					disposedRef: runDisposedRef,
+					unsubsRef: runUnsubsRef,
+					sessionRef: askSessionRef,
+					activeSessionRef,
+					onArmed: () => upsertThread(withAssistant),
+					onStream: (ev) => {
 						setThreads((prev) =>
 							prev.map((th) => {
 								if (th.id !== threadId) return th;
@@ -299,11 +284,8 @@ export function usePdfAskThreads({
 								return { ...th, messages: msgs };
 							}),
 						);
-					}),
-				);
-				unsubs.push(
-					await listenAgentCompleted((ev) => {
-						if (ev.sessionId !== sessionId) return;
+					},
+					onCompleted: (ev) => {
 						setThreads((prev) =>
 							prev.map((th) => {
 								if (th.id !== threadId) return th;
@@ -325,12 +307,8 @@ export function usePdfAskThreads({
 								return done;
 							}),
 						);
-						cleanup();
-					}),
-				);
-				unsubs.push(
-					await listenAgentFailed((ev) => {
-						if (ev.sessionId !== sessionId) return;
+					},
+					onFailed: (ev) => {
 						setAskError(ev.error || t("pdfAsk.agentFailed"));
 						setThreads((prev) =>
 							prev.map((th) => {
@@ -341,14 +319,9 @@ export function usePdfAskThreads({
 								return done;
 							}),
 						);
-						cleanup();
-					}),
-				);
-				if (runDisposedRef.current) {
-					// Viewer unmounted while the listeners were being attached.
-					cleanup();
-					return;
-				}
+					},
+					onSettled: () => setStreaming(false),
+				});
 			} catch (e) {
 				setStreaming(false);
 				setAskError(e instanceof Error ? e.message : t("pdfAsk.agentFailed"));
@@ -432,9 +405,11 @@ export function usePdfAskThreads({
 
 	/** Cancel the run, clear the chrome, and close the card if it is an ask card. */
 	const dismissAskChrome = useCallback(() => {
-		if (activeSessionRef.current) {
-			void cancelAgentRun(activeSessionRef.current).catch(() => undefined);
-			activeSessionRef.current = null;
+		const sid = askSessionRef.current;
+		if (sid) {
+			askSessionRef.current = null;
+			if (activeSessionRef.current === sid) activeSessionRef.current = null;
+			void cancelAgentRun(sid).catch(() => undefined);
 		}
 		setStreaming(false);
 		setAskError(null);
@@ -484,10 +459,11 @@ export function usePdfAskThreads({
 	}, [paperAbsPath, dismissAskChrome, activeCardRef, setThreads]);
 
 	const stopAskStreaming = useCallback(() => {
-		const sid = activeSessionRef.current;
+		const sid = askSessionRef.current;
 		if (!sid) return;
 		void cancelAgentRun(sid).catch(() => undefined);
-		activeSessionRef.current = null;
+		askSessionRef.current = null;
+		if (activeSessionRef.current === sid) activeSessionRef.current = null;
 		setStreaming(false);
 	}, [activeSessionRef]);
 

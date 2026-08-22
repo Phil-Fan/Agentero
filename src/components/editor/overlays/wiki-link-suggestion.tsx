@@ -19,6 +19,7 @@ import {
 	useCompletionMenu,
 } from "@/components/editor/hooks/use-completion-menu";
 import { ViewportFloating } from "@/components/ui/viewport-floating";
+import { useDebouncedCallback } from "@/hooks/use-debounce";
 import {
 	annotationSnippet,
 	listPaperAnnotationSummaries,
@@ -42,6 +43,7 @@ import {
 	narrowExactWikiFileCandidates,
 	parseWikiCompletionQuery,
 	sameWikiPath,
+	type WikiCompletionRequest,
 	wikiCompletionCandidateKey,
 	wikiCompletionInsert,
 	wikiFileCandidateSecondaryLine,
@@ -240,17 +242,19 @@ export function WikiLinkSuggestion({
 	 * so the menu opens without lag.
 	 */
 	const [fetchRequest, setFetchRequest] = useState(request);
+	const scheduleFetch = useDebouncedCallback(
+		(next: WikiCompletionRequest) => setFetchRequest(next),
+		WIKI_SEARCH_DEBOUNCE_MS,
+	);
 	useEffect(() => {
 		if (!request || request.kind === "alias" || request.query === "") {
+			scheduleFetch.cancel();
 			setFetchRequest(request);
 			return;
 		}
-		const timer = window.setTimeout(
-			() => setFetchRequest(request),
-			WIKI_SEARCH_DEBOUNCE_MS,
-		);
-		return () => window.clearTimeout(timer);
-	}, [request]);
+		scheduleFetch(request);
+		return () => scheduleFetch.cancel();
+	}, [request, scheduleFetch]);
 	const fetchRequestKey = completionRequestKey(fetchRequest);
 	/** True while a debounced refinement has not been fetched yet. */
 	const fetchPending = requestKey !== fetchRequestKey;

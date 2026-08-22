@@ -25,6 +25,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useDebouncedValue } from "@/hooks/use-debounce";
 
 /**
  * `findSearchMatches` returns a fresh array each run, so the default reference
@@ -113,14 +114,7 @@ export function FindReplaceBar({
 	 * keystroke burst costs one full-document walk + redecorate, not one
 	 * per key.
 	 */
-	const [debouncedQuery, setDebouncedQuery] = useState("");
-	useEffect(() => {
-		const timer = window.setTimeout(
-			() => setDebouncedQuery(query),
-			FIND_DEBOUNCE_MS,
-		);
-		return () => window.clearTimeout(timer);
-	}, [query]);
+	const debouncedQuery = useDebouncedValue(query, FIND_DEBOUNCE_MS);
 
 	// Recompute matches on every editor change while the bar is open.
 	const matches = useEditorSelector(

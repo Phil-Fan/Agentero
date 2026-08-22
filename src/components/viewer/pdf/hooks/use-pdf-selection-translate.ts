@@ -35,11 +35,10 @@ import {
 import { useTranslation } from "react-i18next";
 import type { PdfViewerProps } from "@/components/viewer/pdf/types";
 import {
+	attachAgentRun,
 	cancelAgentRun,
+	disposeAgentRun,
 	listAgents,
-	listenAgentCompleted,
-	listenAgentFailed,
-	listenAgentStream,
 	runOnce,
 } from "@/lib/agent";
 import { errorText } from "@/lib/core/error";
@@ -147,16 +146,12 @@ export function usePdfSelectionTranslate({
 	useEffect(() => {
 		translateDisposedRef.current = false;
 		return () => {
-			translateDisposedRef.current = true;
-			const unsubs = translateUnsubsRef.current;
-			translateUnsubsRef.current = null;
-			if (unsubs) for (const u of unsubs) u();
-			const sid = translateSessionRef.current;
-			if (sid) {
-				translateSessionRef.current = null;
-				if (activeSessionRef.current === sid) activeSessionRef.current = null;
-				void cancelAgentRun(sid).catch(() => undefined);
-			}
+			disposeAgentRun({
+				disposedRef: translateDisposedRef,
+				unsubsRef: translateUnsubsRef,
+				sessionRef: translateSessionRef,
+				activeSessionRef,
+			});
 			translateStreamingRef.current = false;
 		};
 	}, [activeSessionRef, translateStreamingRef]);
@@ -285,31 +280,13 @@ export function usePdfSelectionTranslate({
 							autoApprove: true,
 							hideFromChatHistory: true,
 						});
-						if (translateDisposedRef.current) {
-							// Viewer unmounted while the run was being accepted: drop it.
-							void cancelAgentRun(accepted.sessionId).catch(() => undefined);
-							return;
-						}
-						const sessionId = accepted.sessionId;
-						translateSessionRef.current = sessionId;
-						activeSessionRef.current = sessionId;
-						const unsubs: UnlistenFn[] = [];
-						translateUnsubsRef.current = unsubs;
-						const cleanup = () => {
-							for (const u of unsubs) u();
-							if (translateUnsubsRef.current === unsubs)
-								translateUnsubsRef.current = null;
-							if (translateSessionRef.current === sessionId)
-								translateSessionRef.current = null;
-							if (activeSessionRef.current === sessionId)
-								activeSessionRef.current = null;
-							translateStreamingRef.current = false;
-							setTranslateStreaming(false);
-						};
-						unsubs.push(
-							await listenAgentStream((ev) => {
-								if (ev.sessionId !== sessionId) return;
-								if ((ev.kind ?? "message") === "thought") return;
+						await attachAgentRun({
+							accepted,
+							disposedRef: translateDisposedRef,
+							unsubsRef: translateUnsubsRef,
+							sessionRef: translateSessionRef,
+							activeSessionRef,
+							onStream: (ev) => {
 								const latest =
 									translatesRef.current.find((r) => r.id === rec.id) ?? rec;
 								upsertTranslate({
@@ -318,11 +295,8 @@ export function usePdfSelectionTranslate({
 									updatedAt: new Date().toISOString(),
 									error: undefined,
 								});
-							}),
-						);
-						unsubs.push(
-							await listenAgentCompleted((ev) => {
-								if (ev.sessionId !== sessionId) return;
+							},
+							onCompleted: (ev) => {
 								const latest =
 									translatesRef.current.find((r) => r.id === rec.id) ?? rec;
 								const next = {
@@ -342,24 +316,18 @@ export function usePdfSelectionTranslate({
 										ev.providerSessionId,
 									);
 								}
-								cleanup();
-							}),
-						);
-						unsubs.push(
-							await listenAgentFailed((ev) => {
-								if (ev.sessionId !== sessionId) return;
+							},
+							onFailed: (ev) => {
 								evictAgentTranslateSessionId(paperKey, agentId, modelId);
 								const msg = ev.error || t("pdfAsk.agentFailed");
 								notifyError(msg);
 								markTranslateFailure(rec.id, msg);
-								cleanup();
-							}),
-						);
-						if (translateDisposedRef.current) {
-							// Viewer unmounted while the listeners were being attached.
-							cleanup();
-							return;
-						}
+							},
+							onSettled: () => {
+								translateStreamingRef.current = false;
+								setTranslateStreaming(false);
+							},
+						});
 					} catch (e) {
 						const message = errorText(e);
 						notifyError(message);
