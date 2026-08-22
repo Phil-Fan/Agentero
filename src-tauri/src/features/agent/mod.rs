@@ -19,7 +19,7 @@ pub mod tool_lifecycle;
 
 pub use acp::{
     list_acp_sessions, load_acp_session, new_ids, probe_agent, run_once, warm_agent,
-    PermissionPolicy,
+    PermissionPolicy, RunOnceParams,
 };
 pub use ask_user::AskUserGate;
 pub use elicitation::ElicitationGate;

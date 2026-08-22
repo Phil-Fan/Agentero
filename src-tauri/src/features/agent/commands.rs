@@ -8,7 +8,7 @@ use crate::features::agent::models::{
 use crate::features::agent::{
     list_agent_skills, new_ids, probe_agent, run_once, warm_agent, AgentEventEmitter,
     AgentRegistry, AgentRunController, AgentWarmGate, AskUserGate, ElicitationGate, PermissionGate,
-    PermissionPolicy,
+    PermissionPolicy, RunOnceParams,
 };
 use crate::features::remote::{materialize_skills_to_work, resolve_remote_target, RemoteRegistry};
 use serde::Serialize;
@@ -365,32 +365,32 @@ pub async fn agent_run_once(
     let session_agent_id = log_agent_id.clone();
     let remote_for_spawn = remote_target_early;
     tauri::async_runtime::spawn(async move {
-        let run_result = run_once(
-            events.clone(),
+        let run_result = run_once(RunOnceParams {
+            app: events.clone(),
             desc,
-            session_id.clone(),
+            session_id: session_id.clone(),
             message_id,
-            request.prompt,
-            request.is_acp_command,
-            request.images,
-            request.workflow,
-            request.target.clone(),
-            request.vault_path,
-            request.model_id,
-            request.collaboration_mode_id,
-            request.reasoning_effort,
-            request.fast_mode,
-            request.skill_ids,
+            prompt: request.prompt,
+            is_acp_command: request.is_acp_command,
+            images: request.images,
+            workflow: request.workflow,
+            target: request.target.clone(),
+            vault_path: request.vault_path,
+            preferred_model_id: request.model_id,
+            preferred_collaboration_mode_id: request.collaboration_mode_id,
+            preferred_reasoning_effort: request.reasoning_effort,
+            fast_mode: request.fast_mode,
+            skill_ids: request.skill_ids,
             permission_policy,
-            permission_gate.clone(),
-            elicitation_gate.clone(),
-            ask_user_gate.clone(),
-            request.response_language,
-            request.personal_prompt,
+            permission_gate: permission_gate.clone(),
+            elicitation_gate: elicitation_gate.clone(),
+            ask_user_gate: ask_user_gate.clone(),
+            response_language: request.response_language,
+            personal_prompt: request.personal_prompt,
             cancellation,
-            remote_for_spawn,
-            request.session_id.clone(),
-        )
+            remote: remote_for_spawn,
+            resume_session_id: request.session_id.clone(),
+        })
         .await;
         if run_result.is_ok() {
             app_handle.state::<AgentWarmGate>().clear(&session_agent_id);
