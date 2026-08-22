@@ -1,3 +1,4 @@
+import { errorText } from "@/lib/core/error";
 import { invokeApi } from "@/lib/core/ipc";
 import { toVaultRelative } from "@/lib/core/path";
 import { normalizePathKey } from "@/lib/vault/path";
@@ -112,9 +113,7 @@ type TreeAdapter = {
  * Matches Host local tree semantics: missing dirs list as empty, not hard fail.
  */
 export function isPathMissingError(error: unknown): boolean {
-	const msg = (
-		error instanceof Error ? error.message : String(error ?? "")
-	).toLowerCase();
+	const msg = errorText(error).toLowerCase();
 	return (
 		msg.includes("no such file") ||
 		msg.includes("nosuchfile") ||
