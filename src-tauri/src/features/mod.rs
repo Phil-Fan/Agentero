@@ -62,5 +62,6 @@ pub mod watcher;
 pub mod wiki;
 #[cfg(feature = "desktop")]
 pub mod window;
+pub mod zotero;
 #[cfg(feature = "desktop")]
 pub mod zotero_sync;

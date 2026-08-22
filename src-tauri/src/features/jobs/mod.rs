@@ -165,10 +165,6 @@ pub type JobRunner = Arc<
         + Sync,
 >;
 
-/// Cancels a background task by id. Registered by the agent domain at
-/// startup so the scheduler does not depend on it directly.
-type TaskCanceller = Arc<dyn Fn(&str) + Send + Sync>;
-
 /// Reads the current layout backend string from settings. Registered by the
 /// app assembly at startup so the scheduler does not depend on the settings
 /// store directly.
@@ -282,8 +278,6 @@ struct JobCenterInner {
     layout_analyze_cap: LayoutAnalyzeCap,
     /// Per-kind runners registered by business domains at app startup.
     runners: HashMap<JobKind, JobRunner>,
-    /// Registered by the agent domain; invoked by `cancel` for running jobs.
-    task_canceller: Option<TaskCanceller>,
     /// Registered by the app assembly; re-read by `refresh_layout_backend`.
     layout_backend_source: Option<LayoutBackendSource>,
     /// Per-kind backfill probes registered by the owning domain.
@@ -299,7 +293,6 @@ impl std::fmt::Debug for JobCenterInner {
             .field("running_by_kind", &self.running_by_kind)
             .field("layout_analyze_cap", &self.layout_analyze_cap)
             .field("runners", &self.runners.keys().collect::<Vec<_>>())
-            .field("task_canceller", &self.task_canceller.is_some())
             .field(
                 "layout_backend_source",
                 &self.layout_backend_source.is_some(),
@@ -481,15 +474,6 @@ impl JobCenter {
             .expect("job center is idle while runners are registered")
             .runners
             .insert(kind, runner);
-    }
-
-    /// Register the hook `cancel` uses to stop a running job's background
-    /// task (provided by the agent domain).
-    pub fn set_task_canceller(&self, cancel: impl Fn(&str) + Send + Sync + 'static) {
-        self.inner
-            .try_lock()
-            .expect("job center is idle while runners are registered")
-            .task_canceller = Some(Arc::new(cancel));
     }
 
     /// Register the settings reader `refresh_layout_backend` re-reads
@@ -682,9 +666,7 @@ impl JobCenter {
                 // on the `job:changed(cancelled)` event emitted by the caller.
                 let task_id = job.task_id.clone().unwrap_or_else(|| job.id.0.clone());
                 release_running_slot(&mut inner, kind);
-                if let Some(cancel_task) = &inner.task_canceller {
-                    cancel_task(&task_id);
-                }
+                crate::core::background_tasks::cancel(&task_id);
                 release_active_key(&mut inner, &id);
                 true
             }

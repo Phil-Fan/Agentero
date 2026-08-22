@@ -6,7 +6,7 @@
 
 use crate::core::error::AppError;
 use crate::features::catalog::papers::{self, PaperRecord};
-use crate::features::import::zotero_db::normalize_title;
+use crate::features::zotero::db::normalize_title;
 use std::collections::HashMap;
 use std::path::Path;
 

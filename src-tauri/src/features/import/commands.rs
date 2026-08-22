@@ -1,4 +1,4 @@
-//! Magic-wand / identifier import commands + catalog export/import via Translator.
+//! Magic-wand / identifier import commands.
 
 use crate::core::error::ApiResult;
 use crate::core::fs::WriteOpts;
@@ -7,8 +7,7 @@ use crate::features::catalog::CapsCache;
 use crate::features::import::pdf_parse::{PaperParseBodyArgs, PaperParseResult};
 use crate::features::import::{
     AssetDownloadResult, ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportBatchArgs,
-    LookupImportBatchResult, PaperDownloadAssetsArgs, PaperExportArgs, PaperExportResult,
-    PaperImportArgs, PaperImportResult, SkillImportResult, StageImportFileArgs,
+    LookupImportBatchResult, PaperDownloadAssetsArgs, SkillImportResult, StageImportFileArgs,
     StageImportFileResult,
 };
 use crate::features::remote::{import_bridge, parse_remote_handle, RemoteRegistry};
@@ -47,7 +46,7 @@ pub async fn lookup_import_batch(
     let task_id = args.task_id.clone();
     let result = super::import_by_identifier_batch(args, Some(&app), Some(&cache)).await;
     if let Some(task_id) = task_id.as_deref() {
-        crate::features::agent::background_tasks::finish(task_id);
+        crate::core::background_tasks::finish(task_id);
     }
     Ok(op.finish_result(result))
 }
@@ -112,7 +111,7 @@ pub async fn paper_download_assets(
     let task_id = args.task_id.clone();
     let result = super::download_paper_assets_with_progress(args, Some(&app), Some(&cache)).await;
     if let Some(task_id) = task_id.as_deref() {
-        crate::features::agent::background_tasks::finish(task_id);
+        crate::core::background_tasks::finish(task_id);
     }
     Ok(op.finish_result(result))
 }
@@ -133,7 +132,7 @@ pub async fn paper_import_local_pdf(
             Ok(s) => s,
             Err(e) => {
                 if let Some(task_id) = task_id.as_deref() {
-                    crate::features::agent::background_tasks::finish(task_id);
+                    crate::core::background_tasks::finish(task_id);
                 }
                 op.finish_err(&e);
                 return Ok(crate::core::error::map_err(e));
@@ -151,7 +150,7 @@ pub async fn paper_import_local_pdf(
         super::import_local_pdfs(args, Some(&app), Some(&cache)).await
     };
     if let Some(task_id) = task_id.as_deref() {
-        crate::features::agent::background_tasks::finish(task_id);
+        crate::core::background_tasks::finish(task_id);
     }
     Ok(op.finish_result_ok_extra(result, |r| {
         format!("imported={} errors={}", r.papers.len(), r.errors.len())
@@ -174,7 +173,7 @@ pub async fn paper_parse_body(
             Ok(s) => s,
             Err(e) => {
                 if let Some(task_id) = args.task_id.as_deref() {
-                    crate::features::agent::background_tasks::finish(task_id);
+                    crate::core::background_tasks::finish(task_id);
                 }
                 op.finish_err(&e);
                 return Ok(crate::core::error::map_err(e));
@@ -183,7 +182,7 @@ pub async fn paper_parse_body(
         let task_id = args.task_id.clone();
         let result = parse_remote_body(session, args).await;
         if let Some(task_id) = task_id.as_deref() {
-            crate::features::agent::background_tasks::finish(task_id);
+            crate::core::background_tasks::finish(task_id);
         }
         return Ok(op.finish_result(result));
     }
@@ -191,7 +190,7 @@ pub async fn paper_parse_body(
     let task_id = args.task_id.clone();
     let result = crate::features::import::pdf_parse::parse_paper_body(args, Some(&cache)).await;
     if let Some(task_id) = task_id.as_deref() {
-        crate::features::agent::background_tasks::finish(task_id);
+        crate::core::background_tasks::finish(task_id);
     }
     Ok(op.finish_result(result))
 }
@@ -282,40 +281,4 @@ pub async fn paper_resolve_identifier(
             crate::core::error::map_err(e)
         }
     }
-}
-
-/// Export catalog papers via Translator `POST /export` (Zotero JSON array → BibTeX/RIS/…).
-#[tauri::command]
-pub async fn paper_export(args: PaperExportArgs) -> ApiResult<PaperExportResult> {
-    let format = args.format.as_deref().unwrap_or("bibtex");
-    let op = OpTimer::start_with("paper_export", format!("format={format}"));
-    op.finish_result(super::export_catalog(args).await)
-}
-
-/// Import BibTeX/RIS/… via Translator `POST /import`, write papers into vault + catalog.
-#[tauri::command]
-pub async fn paper_import(
-    app: tauri::AppHandle,
-    registry: State<'_, Arc<RemoteRegistry>>,
-    args: PaperImportArgs,
-) -> Result<ApiResult<PaperImportResult>, String> {
-    let op = OpTimer::start("paper_import");
-    if let Some(session_id) = parse_remote_handle(&args.vault_path) {
-        let session = match registry.get(session_id).await {
-            Ok(s) => s,
-            Err(e) => {
-                op.finish_err(&e);
-                return Ok(crate::core::error::map_err(e));
-            }
-        };
-        return Ok(op.finish_result_ok_extra(
-            import_bridge::import_catalog_remote(session, args).await,
-            |r| format!("imported={} skipped={}", r.imported, r.skipped),
-        ));
-    }
-    Ok(
-        op.finish_result_ok_extra(super::import_catalog(args, Some(&app)).await, |r| {
-            format!("imported={} skipped={}", r.imported, r.skipped)
-        }),
-    )
 }

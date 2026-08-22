@@ -9,8 +9,6 @@ pub mod commands;
 pub mod job_runners;
 pub mod paper_import;
 pub mod pdf_parse;
-#[cfg(feature = "desktop")]
-pub mod zotero_commands;
 
 mod assets;
 pub(crate) mod batch;
@@ -19,9 +17,6 @@ pub(crate) mod parse;
 pub(crate) mod pdf_recognize;
 mod skill_import;
 pub(crate) mod title_search;
-#[cfg(feature = "desktop")]
-pub(crate) mod zotero_db;
-pub(crate) mod zotero_io;
 
 pub use crate::features::catalog::{has_local_pdf, has_local_tex};
 pub use assets::{
@@ -34,28 +29,26 @@ pub use skill_import::{
     SkillDiscovery, SkillImportResult,
 };
 pub use title_search::{PaperSearchCandidate, PaperSearchGroup};
-#[cfg(feature = "desktop")]
-pub use zotero_db::{
-    migrate_zotero, scan_zotero, MigrateProgress, ZoteroMigrateArgs, ZoteroMigrateResult,
-    ZoteroScan, ZoteroScanArgs,
-};
-pub use zotero_io::{
-    export_catalog, import_catalog, PaperExportArgs, PaperExportResult, PaperImportArgs,
-    PaperImportResult,
-};
 
-// Stable top-level API for the remote import bridge (`remote/import_bridge.rs`).
-// Other features must depend on these re-exports, not reach into the
-// `batch` / `parse` / `map` / `zotero_io` internals. Desktop-only because
-// the remote bridge is the sole consumer.
+// Stable top-level API for the remote import bridge (`remote/import_bridge.rs`)
+// and the Zotero feature (`features/zotero/io.rs`). Other features must depend
+// on these re-exports, not reach into the `batch` / `parse` / `map` internals.
 #[cfg(feature = "desktop")]
 pub(crate) use batch::{preflight_identifier_batch, SkillBatchMode};
 #[cfg(feature = "desktop")]
 pub(crate) use map::doi_slug;
-#[cfg(feature = "desktop")]
 pub(crate) use parse::extract_arxiv_id;
 #[cfg(feature = "desktop")]
-pub(crate) use zotero_io::translator_import_items;
+pub(crate) use parse::strip_arxiv_version;
+// pdf_parse surface consumed by other features (layout_remote compares the
+// cancellation message; settings/app refresh the engine config snapshot).
+#[cfg(all(
+    feature = "desktop",
+    not(any(target_os = "ios", target_os = "android"))
+))]
+pub use pdf_parse::engines::refresh_parser_config;
+#[cfg(feature = "desktop")]
+pub(crate) use pdf_parse::CANCELLED_MESSAGE;
 
 use crate::core::error::AppError;
 use crate::features::catalog::{
@@ -89,9 +82,6 @@ pub(crate) fn local_pdf_meta_for_import(id: String, title: String) -> PaperMeta 
 /// Override via Settings → `translatorBaseUrl` / `LookupImportArgs.translator_base_url`.
 pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "https://translator.philfan.cn";
 
-/// Prefix for Zotero tags that are not user-created or are otherwise internal.
-pub const ZOTERO_INTERNAL_TAG_PREFIX: &str = "@zotero:";
-
 /// Upper bound for the network asset phase of one paper import.
 ///
 /// Individual requests have shorter reqwest timeouts, but an import may try
@@ -106,14 +96,8 @@ pub(crate) fn check_task_not_cancelled(task_id: Option<&str>) -> Result<(), AppE
     Ok(())
 }
 
-#[cfg(feature = "desktop")]
 pub(crate) fn is_background_task_cancelled(task_id: &str) -> bool {
-    crate::features::agent::background_tasks::is_cancelled(task_id)
-}
-
-#[cfg(not(feature = "desktop"))]
-pub(crate) fn is_background_task_cancelled(_task_id: &str) -> bool {
-    false
+    crate::core::background_tasks::is_cancelled(task_id)
 }
 
 #[derive(Debug, Deserialize)]
@@ -140,6 +124,31 @@ pub struct PaperDownloadAssetsArgs {
     /// Frontend background-task id for byte-level download progress events.
     #[serde(default)]
     pub task_id: Option<String>,
+}
+
+/// Bibliography file (BibTeX / RIS / …) import via Translator `/import`.
+/// Consumed by `features/zotero` (`import_catalog`) and the remote bridge.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperImportArgs {
+    pub vault_path: String,
+    /// Vault-relative parent, e.g. `papers`.
+    #[serde(default)]
+    pub parent_dir: Option<String>,
+    /// Raw file contents (BibTeX, RIS, …).
+    pub content: String,
+    #[serde(default)]
+    pub translator_base_url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperImportResult {
+    pub imported: usize,
+    pub skipped: usize,
+    pub paths: Vec<String>,
+    pub titles: Vec<String>,
+    pub errors: Vec<String>,
 }
 
 /// Per-file overrides when importing a local PDF (metadata confirm dialog).
@@ -1148,6 +1157,74 @@ fn translator_request(text: &str, base: &str) -> (String, String) {
             }
         }
     }
+}
+
+/// Resolve the Translator Runtime base URL: non-empty override wins, else the
+/// hosted default; trailing slash stripped.
+fn translator_base(override_url: Option<&str>) -> String {
+    override_url
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_TRANSLATOR_BASE_URL)
+        .trim_end_matches('/')
+        .to_string()
+}
+
+/// Fetch Zotero-shaped items from Translator `/import` (used by local + remote
+/// vault bibliography import; the Zotero feature and the remote bridge both
+/// go through this stable entry point).
+pub(crate) async fn translator_import_items(
+    content: &str,
+    translator_base_url: Option<&str>,
+) -> Result<Vec<serde_json::Value>, AppError> {
+    let base = translator_base(translator_base_url);
+    translator_import(content, &base).await
+}
+
+async fn translator_import(content: &str, base: &str) -> Result<Vec<serde_json::Value>, AppError> {
+    let client =
+        crate::core::http::client_with(Duration::from_secs(60), 10, crate::core::http::USER_AGENT)?;
+    let url = format!("{base}/import");
+    let res = client
+        .post(&url)
+        .header("Content-Type", "text/plain")
+        .body(content.to_string())
+        .send()
+        .await
+        .map_err(|e| AppError::message(format!("translator import: {e}")))?;
+
+    let status = res.status();
+    let bytes = res
+        .bytes()
+        .await
+        .map_err(|e| AppError::message(format!("import body: {e}")))?;
+    if !status.is_success() {
+        let snippet = String::from_utf8_lossy(&bytes);
+        let short: String = snippet.chars().take(200).collect();
+        return Err(AppError::message(format!(
+            "translator import HTTP {status}: {short}"
+        )));
+    }
+
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|e| AppError::message(format!("import JSON: {e}")))?;
+
+    let arr = if value.is_array() {
+        value
+            .as_array()
+            .cloned()
+            .ok_or_else(|| AppError::message("import returned empty array"))?
+    } else if value.is_object() {
+        // Some servers may return a single item
+        vec![value]
+    } else {
+        return Err(AppError::message("unexpected import response shape"));
+    };
+
+    if arr.is_empty() {
+        return Err(AppError::message("import returned no items"));
+    }
+    Ok(arr)
 }
 
 pub(crate) async fn fetch_arxiv_metadata(

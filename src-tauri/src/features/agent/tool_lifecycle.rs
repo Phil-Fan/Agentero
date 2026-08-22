@@ -820,7 +820,7 @@ fn acquire_lifecycle_lock(
 }
 
 fn check_lifecycle_cancelled(task_id: Option<&str>) -> Result<(), String> {
-    if task_id.is_some_and(crate::features::agent::background_tasks::is_cancelled) {
+    if task_id.is_some_and(crate::core::background_tasks::is_cancelled) {
         return Err("background task cancelled".to_string());
     }
     Ok(())
@@ -846,7 +846,7 @@ fn run_command_with_cancellation(
     let mut last_emit = Instant::now() - Duration::from_secs(1);
 
     loop {
-        if task_id.is_some_and(crate::features::agent::background_tasks::is_cancelled) {
+        if task_id.is_some_and(crate::core::background_tasks::is_cancelled) {
             let _ = child.kill();
             let _ = child.wait();
             let _ = join_pipe_reader(stdout.take());

@@ -812,7 +812,7 @@ arXiv URL 推导：
   1. **无 Vault 欢迎页**：与 Create / Open vault 同一行的 **Migrate from Zotero**（先创建 Vault，再打开对话框）；
   2. **论文库工具栏**（已打开 Vault 时）：图标按钮。
   共用 `ZoteroMigrateDialog`。打开时自动探测默认 `~/Zotero` 目录（否则手动选含 `zotero.sqlite` + `storage/` 的目录）；扫描预览以 chips 显示文献 / PDF / 笔记数，迁移后展示结果小结（导入 / 补笔记 / 拷 PDF / 清理）。
-- Host：`zotero_scan`（只读预览：文献数 / 有本地 PDF 数）、`zotero_migrate`（执行）；实现在 `services/lookup/zotero_db.rs`。
+- Host：`zotero_scan`（只读预览：文献数 / 有本地 PDF 数）、`zotero_migrate`（执行）；实现在 `features/zotero/db.rs`。
 - 读库：把 `zotero.sqlite`（含 `-wal`/`-shm`）**拷到临时目录**再只读打开（容忍 Zotero 正在运行）；查 `items`/`itemData`/`creators`/`itemTags`/`itemAttachments`，跳过 `deletedItems` 与 attachment/note/annotation 类型，并排除插件产生的 `computerProgram` 垃圾条目（如标题为 "Addon Item" 的项）。
 - 映射：每条**拼装成 Zotero-API-JSON item** → 复用 `map_zotero_item` + `enrich_remote_urls` + `write_paper_shell` + `paper_record_from_meta` + catalog upsert，落到 `{parent_dir}/{id}/`（id/citekey 与魔棒 / 文件导入一致）。
 - 附件 PDF URL：`map_zotero_item` 未给出 `pdf_url` 时，采用 Connector `attachments[]` 里的 PDF 链接（浏览器侧捕获，ACM/IEEE 等常仅经此暴露）。

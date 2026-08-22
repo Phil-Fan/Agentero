@@ -23,7 +23,7 @@ pub async fn layout_model_ensure(
         .filter(|s| !s.is_empty());
     let result = ensure(Some(&app), task_id).await;
     if let Some(id) = task_id {
-        crate::features::agent::background_tasks::finish(id);
+        crate::core::background_tasks::finish(id);
     }
     match result {
         Ok(s) => ApiResult::ok(s),

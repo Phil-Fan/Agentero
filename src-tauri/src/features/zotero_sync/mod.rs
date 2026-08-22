@@ -7,7 +7,6 @@
 //!
 //! See `docs/backend/identifier-lookup.md` §17.
 
-pub mod codec;
 pub mod commands;
 pub mod link;
 pub mod pull;
@@ -15,7 +14,7 @@ pub mod push;
 
 use crate::core::error::AppError;
 use crate::features::catalog::papers;
-use crate::features::import::zotero_db::{copy_zotero_sqlite, read_sync_items};
+use crate::features::zotero::db::{copy_zotero_sqlite, read_sync_items};
 use chrono::{DateTime, Utc};
 use pull::{PullOptions, PullReport, SyncConflict};
 use push::PushCandidate;

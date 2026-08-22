@@ -1197,23 +1197,23 @@ mod tests {
     #[tokio::test]
     async fn cancelled_task_does_not_enter_pdf_parse_admission() {
         let task_id = format!("pdf-parse-test-{}", uuid::Uuid::new_v4());
-        crate::features::agent::background_tasks::cancel(&task_id);
+        crate::core::background_tasks::cancel(&task_id);
 
         let result = enter_pdf_parse(Path::new("missing-test-input.pdf"), Some(&task_id)).await;
 
-        crate::features::agent::background_tasks::finish(&task_id);
+        crate::core::background_tasks::finish(&task_id);
         assert_eq!(result.unwrap_err().to_string(), "background task cancelled");
     }
 
     #[tokio::test]
     async fn cancelled_task_does_not_start_parser_worker() {
         let task_id = format!("pdf-parse-test-{}", uuid::Uuid::new_v4());
-        crate::features::agent::background_tasks::cancel(&task_id);
+        crate::core::background_tasks::cancel(&task_id);
 
         let result =
             run_liteparse_markdown(Path::new("missing-test-input.pdf"), Some(&task_id)).await;
 
-        crate::features::agent::background_tasks::finish(&task_id);
+        crate::core::background_tasks::finish(&task_id);
         assert_eq!(result.unwrap_err().to_string(), "background task cancelled");
     }
 }

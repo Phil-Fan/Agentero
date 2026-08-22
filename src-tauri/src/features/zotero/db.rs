@@ -6,13 +6,13 @@
 //! id/citekey and field mapping match the magic-wand / file import exactly.
 //! Everything is local: no Translator is contacted.
 
-use super::map::{enrich_remote_urls, map_zotero_item};
-use super::{
-    allocate_paper_path, normalize_parent_dir, paper_record_from_meta, write_paper_shell,
-    ZOTERO_INTERNAL_TAG_PREFIX,
-};
+use super::ZOTERO_INTERNAL_TAG_PREFIX;
 use crate::core::error::AppError;
 use crate::features::catalog::papers;
+use crate::features::import::{
+    allocate_paper_path, enrich_remote_urls, map_zotero_item, normalize_parent_dir,
+    paper_record_from_meta, write_paper_shell, PaperMeta,
+};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -573,7 +573,7 @@ fn note_blocks(item: &ReadItem, migrate_notes: bool, migrate_annotations: bool) 
         for html in &item.note_html {
             // Never import Agentero's own sync notes back into the vault
             // (intact, escaped or otherwise damaged marker forms alike).
-            if crate::features::zotero_sync::codec::looks_like_sync_note(html) {
+            if super::codec::looks_like_sync_note(html) {
                 continue;
             }
             let md = htmd::convert(html).unwrap_or_else(|_| html.clone());
@@ -627,12 +627,12 @@ impl Dedup {
         d
     }
 
-    fn contains(&self, meta: &super::map::PaperMeta) -> bool {
+    fn contains(&self, meta: &PaperMeta) -> bool {
         self.existing_path(meta).is_some()
     }
 
     /// Vault-relative path of the already-present paper matching `meta`, if any.
-    fn existing_path(&self, meta: &super::map::PaperMeta) -> Option<String> {
+    fn existing_path(&self, meta: &PaperMeta) -> Option<String> {
         if let Some(a) = meta.arxiv_id.as_deref().filter(|s| !s.is_empty()) {
             if let Some(p) = self.arxiv.get(&a.to_lowercase()) {
                 return Some(p.clone());
@@ -652,7 +652,7 @@ impl Dedup {
         None
     }
 
-    fn insert(&mut self, meta: &super::map::PaperMeta, path: &str) {
+    fn insert(&mut self, meta: &PaperMeta, path: &str) {
         if let Some(a) = meta.arxiv_id.as_deref().filter(|s| !s.is_empty()) {
             self.arxiv.insert(a.to_lowercase(), path.to_string());
         }

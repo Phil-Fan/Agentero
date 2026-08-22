@@ -3,12 +3,14 @@
 //! Export body must be a **JSON array of Zotero items** (`Content-Type: application/json`).
 //! Import body is plain text (BibTeX / RIS / …) → returns the same item array shape.
 
-use super::map::{enrich_remote_urls, map_zotero_item};
-#[cfg(not(feature = "desktop"))]
-use super::AppHandle;
-use super::{normalize_parent_dir, DEFAULT_TRANSLATOR_BASE_URL};
 use crate::core::error::AppError;
 use crate::features::catalog::papers::{self, PaperRecord};
+#[cfg(not(feature = "desktop"))]
+use crate::features::import::AppHandle;
+use crate::features::import::{
+    enrich_remote_urls, map_zotero_item, normalize_parent_dir, translator_import_items,
+    PaperImportArgs, PaperImportResult, DEFAULT_TRANSLATOR_BASE_URL,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -45,29 +47,6 @@ pub struct PaperExportResult {
     pub content: String,
     pub count: usize,
     pub filename: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PaperImportArgs {
-    pub vault_path: String,
-    /// Vault-relative parent, e.g. `papers`.
-    #[serde(default)]
-    pub parent_dir: Option<String>,
-    /// Raw file contents (BibTeX, RIS, …).
-    pub content: String,
-    #[serde(default)]
-    pub translator_base_url: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PaperImportResult {
-    pub imported: usize,
-    pub skipped: usize,
-    pub paths: Vec<String>,
-    pub titles: Vec<String>,
-    pub errors: Vec<String>,
 }
 
 pub async fn export_catalog(args: PaperExportArgs) -> Result<PaperExportResult, AppError> {
@@ -135,9 +114,8 @@ pub async fn import_catalog(
         return Err(AppError::message("import content is empty"));
     }
     let parent_rel = normalize_parent_dir(args.parent_dir.as_deref().unwrap_or("papers"))?;
-    let base = resolve_base(args.translator_base_url.as_deref());
 
-    let items = translator_import(content, &base).await?;
+    let items = translator_import_items(content, args.translator_base_url.as_deref()).await?;
     let mut imported = 0usize;
     let mut skipped = 0usize;
     let mut paths = Vec::new();
@@ -204,61 +182,6 @@ async fn import_one_item(
         CommitStatus::Created => Ok(Some((commit.path, commit.title))),
         CommitStatus::Skipped | CommitStatus::Deduped => Ok(None),
     }
-}
-
-/// Fetch Zotero-shaped items from Translator `/import` (used by local + remote vault import).
-#[cfg_attr(not(feature = "desktop"), allow(dead_code))]
-pub(crate) async fn translator_import_items(
-    content: &str,
-    translator_base_url: Option<&str>,
-) -> Result<Vec<Value>, AppError> {
-    let base = resolve_base(translator_base_url);
-    translator_import(content, &base).await
-}
-
-async fn translator_import(content: &str, base: &str) -> Result<Vec<Value>, AppError> {
-    let client = http_client(Duration::from_secs(60))?;
-    let url = format!("{base}/import");
-    let res = client
-        .post(&url)
-        .header("Content-Type", "text/plain")
-        .body(content.to_string())
-        .send()
-        .await
-        .map_err(|e| AppError::message(format!("translator import: {e}")))?;
-
-    let status = res.status();
-    let bytes = res
-        .bytes()
-        .await
-        .map_err(|e| AppError::message(format!("import body: {e}")))?;
-    if !status.is_success() {
-        let snippet = String::from_utf8_lossy(&bytes);
-        let short: String = snippet.chars().take(200).collect();
-        return Err(AppError::message(format!(
-            "translator import HTTP {status}: {short}"
-        )));
-    }
-
-    let value: Value = serde_json::from_slice(&bytes)
-        .map_err(|e| AppError::message(format!("import JSON: {e}")))?;
-
-    let arr = if value.is_array() {
-        value
-            .as_array()
-            .cloned()
-            .ok_or_else(|| AppError::message("import returned empty array"))?
-    } else if value.is_object() {
-        // Some servers may return a single item
-        vec![value]
-    } else {
-        return Err(AppError::message("unexpected import response shape"));
-    };
-
-    if arr.is_empty() {
-        return Err(AppError::message("import returned no items"));
-    }
-    Ok(arr)
 }
 
 /// Build a Zotero API JSON item from a catalog row (fields expected by `/export`).

@@ -88,7 +88,7 @@ impl ProgressCtx<'_> {
     fn check_cancelled(&self) -> Result<(), AppError> {
         if self
             .task_id
-            .is_some_and(crate::features::agent::background_tasks::is_cancelled)
+            .is_some_and(crate::core::background_tasks::is_cancelled)
         {
             return Err(AppError::message("background task cancelled"));
         }
@@ -392,7 +392,7 @@ pub fn spawn_background_download(app: AppHandle) {
                 log::warn!(target: TARGET, "startup layout model download failed: {e}");
             }
         }
-        crate::features::agent::background_tasks::finish(task_id);
+        crate::core::background_tasks::finish(task_id);
     });
 }
 

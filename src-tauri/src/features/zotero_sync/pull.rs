@@ -5,13 +5,13 @@
 //! New Zotero items are NOT imported here (that is migration's job); Zotero
 //! deletions never remove vault papers.
 
-use super::codec;
 use super::link::{self, MatchedBy};
 use super::{file_newer_than, parse_dt};
 use crate::core::error::AppError;
 use crate::features::catalog::papers;
-use crate::features::import::map::{map_zotero_item, PaperMeta};
-use crate::features::import::zotero_db::{append_markdown_blocks, SyncItem};
+use crate::features::import::{map_zotero_item, PaperMeta};
+use crate::features::zotero::codec;
+use crate::features::zotero::db::{append_markdown_blocks, SyncItem};
 use serde::Serialize;
 use std::fs;
 use std::path::Path;

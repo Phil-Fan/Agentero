@@ -1,3 +1,12 @@
+//! Cooperative-cancellation registry for frontend background tasks.
+//!
+//! Frontend-tracked tasks (imports, downloads, parses, citing scans, …) pass a
+//! `task_id`; long-running work polls [`is_cancelled`], the cancel command sets
+//! it, and command exits call [`finish`] so a stale flag never kills the next
+//! task reusing the id. Lives in `core` (not any one domain) because
+//! import/refs/layout_model/agent all participate; JobCenter routes its
+//! `cancel` through the same registry.
+
 use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
 

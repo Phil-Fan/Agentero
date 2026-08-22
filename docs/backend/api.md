@@ -1096,7 +1096,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   ```
 
 - **返回**：`{ ok: true; data: { format, content, count, filename } }`
-- **注意**：`/export` **要求 body 为 Zotero items 数组**，不是 Agentero `PaperMetadata` 蛇形字段；转换在 Host `zotero_io::paper_record_to_zotero_item`。
+- **注意**：`/export` **要求 body 为 Zotero items 数组**，不是 Agentero `PaperMetadata` 蛇形字段；转换在 Host `zotero::io::paper_record_to_zotero_item`。
 
 #### `paper_import`
 

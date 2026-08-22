@@ -139,7 +139,7 @@ M0 先验证 Word 的 HTTP 请求确实到达、`addEditCitation` 能打开 Agen
 
 ### 4. Catalog 到 CSL 的映射
 
-现有 `features/import/zotero_io.rs` 已能把 Catalog 行转成 Zotero API JSON 并经 Translator 导出。Word 引用不能把每次击键交给远端 Translator，也不能依赖网络；应新增纯 Rust 的 `features/citation/` 映射层：
+现有 `features/zotero/io.rs` 已能把 Catalog 行转成 Zotero API JSON 并经 Translator 导出。Word 引用不能把每次击键交给远端 Translator，也不能依赖网络；应新增纯 Rust 的 `features/citation/` 映射层：
 
 - `PaperRecord -> CslItem`：优先保留 title、author/editor、issued、container-title、volume、issue、page、DOI、URL、publisher、edition、type；类型映射与现有 Zotero import map 对齐。
 - 生成稳定候选 ID：`doi:<normalized>` → `arxiv:<id>` → `bib:<bibtexKey>` → 本地 UUID。ID 不能仅使用可变的 Vault 相对路径。

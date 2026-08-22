@@ -3,7 +3,6 @@ pub mod acp;
 mod acp_tests;
 pub mod ask_user;
 pub mod background_commands;
-pub mod background_tasks;
 pub mod commands;
 pub mod discover;
 pub mod elicitation;

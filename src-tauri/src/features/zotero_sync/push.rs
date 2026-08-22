@@ -13,8 +13,8 @@
 //! in local Zotero but are not auto-queued for Zotero cloud sync until the
 //! user edits them inside Zotero. Documented in identifier-lookup.md §17.
 
-use super::codec;
 use crate::core::error::AppError;
+use crate::features::zotero::codec;
 use rusqlite::{params, Connection};
 use std::fs;
 use std::path::{Path, PathBuf};

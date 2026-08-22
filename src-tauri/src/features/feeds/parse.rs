@@ -1,7 +1,7 @@
 //! Feed parsing, HTML autodiscovery, URL normalization, paper-id extraction.
 
 use crate::core::error::AppError;
-use crate::features::import::parse::extract_arxiv_id;
+use crate::features::import::extract_arxiv_id;
 use feed_rs::model::{Entry, Feed};
 use feed_rs::parser;
 use url::Url;

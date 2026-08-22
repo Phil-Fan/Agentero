@@ -139,7 +139,6 @@ pub fn run() {
             let center = app.state::<crate::features::jobs::JobCenter>();
             crate::features::refs::register_job_runners(&center);
             crate::features::import::job_runners::register_job_runners(&center);
-            center.set_task_canceller(crate::features::agent::background_tasks::cancel);
             let handle = app.handle().clone();
             center.set_layout_backend_source(move || {
                 handle.state::<AppSettingsStore>().layout_backend()
@@ -166,7 +165,7 @@ pub fn run() {
             &settings.network_proxy_url,
         )?;
         #[cfg(not(any(target_os = "ios", target_os = "android")))]
-        crate::features::import::pdf_parse::engines::refresh_parser_config(&settings_store);
+        crate::features::import::refresh_parser_config(&settings_store);
         let _ = agents.set_proxy(
             settings.network_proxy_enabled,
             settings.network_proxy_url.clone(),

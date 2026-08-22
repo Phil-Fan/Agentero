@@ -7,7 +7,7 @@
 
 use crate::core::error::AppError;
 use crate::core::http;
-use crate::features::import::pdf_parse::CANCELLED_MESSAGE;
+use crate::features::import::CANCELLED_MESSAGE;
 use crate::features::layout_remote::engine::{AnalyzeCtx, ProviderCredentials, RemoteLayoutEngine};
 use crate::features::layout_remote::{
     emit_cloud_progress, LayoutRemoteAnalyzePdfResult, LayoutRemoteBox, LayoutRemotePageResult,

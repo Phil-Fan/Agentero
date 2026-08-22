@@ -185,9 +185,8 @@ pub async fn library_citing_scan(
     let task_id = args.task_id.unwrap_or_default();
 
     let cancel_id = task_id.clone();
-    let cancelled = move || {
-        !cancel_id.is_empty() && crate::features::agent::background_tasks::is_cancelled(&cancel_id)
-    };
+    let cancelled =
+        move || !cancel_id.is_empty() && crate::core::background_tasks::is_cancelled(&cancel_id);
 
     let progress_app = app.clone();
     let progress_id = task_id.clone();
@@ -229,7 +228,7 @@ pub async fn library_citing_scan(
     // Always clear the flag: a leftover cancellation would immediately kill the
     // next task that reuses this id.
     if !task_id.is_empty() {
-        crate::features::agent::background_tasks::finish(&task_id);
+        crate::core::background_tasks::finish(&task_id);
     }
     Ok(op.finish_result(result))
 }

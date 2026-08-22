@@ -43,7 +43,7 @@ fn parse_body_runner(
             Some(&cache),
         )
         .await;
-        crate::features::agent::background_tasks::finish(&task_id);
+        crate::core::background_tasks::finish(&task_id);
         // A skipped or successful parse returns Ok with no error; a real
         // liteparse failure also returns Ok, carrying the reason.
         match result {

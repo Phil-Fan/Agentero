@@ -220,7 +220,7 @@ pub async fn agent_run_tool_lifecycle(
     .await
     .map_err(|e| format!("tool lifecycle task join error: {e}"))?;
     if let Some(task_id) = task_id.as_deref() {
-        crate::features::agent::background_tasks::finish(task_id);
+        crate::core::background_tasks::finish(task_id);
     }
 
     match result {
