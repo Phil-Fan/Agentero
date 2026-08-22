@@ -1,6 +1,5 @@
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { MarkdownExportSurface } from "@/components/editor/markdown-export-surface";
 import i18n from "@/i18n";
 import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
@@ -16,6 +15,7 @@ import { collectExportTextLayer } from "@/lib/markdown/export/text-layer";
 import type {
 	MarkdownExportRequest,
 	MarkdownExportResult,
+	MarkdownExportSurfaceComponent,
 } from "@/lib/markdown/export/types";
 import { writeVaultBytes } from "@/lib/vault/fs";
 import { WikiNavContext } from "@/lib/wiki/nav-context";
@@ -45,9 +45,13 @@ async function loadSystemCjkFontBytes(): Promise<Uint8Array | null> {
 /**
  * Render the note offscreen, wait for embeds, capture PNG/PDF, open save dialog.
  * Returns `cancelled` when the user dismisses the dialog.
+ *
+ * The render `Surface` is injected by the caller (components layer) so this
+ * lib module never imports a React component.
  */
 export async function runMarkdownExport(
 	request: MarkdownExportRequest,
+	Surface: MarkdownExportSurfaceComponent,
 ): Promise<MarkdownExportResult> {
 	if (!isTauri()) {
 		throw new Error("export-desktop-only");
@@ -89,7 +93,7 @@ export async function runMarkdownExport(
 				createElement(
 					WikiNavContext.Provider,
 					{ value: wikiNavValue },
-					createElement(MarkdownExportSurface, {
+					createElement(Surface, {
 						markdown: request.markdown,
 						filePath: request.filePath,
 						expandEmbeds: request.options.expandEmbeds,

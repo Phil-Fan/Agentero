@@ -23,6 +23,7 @@ import { useMarkdownPersistence } from "@/components/editor/hooks/use-markdown-p
 import { useSelectionContextPublish } from "@/components/editor/hooks/use-selection-context-publish";
 import { useWikilinkEditing } from "@/components/editor/hooks/use-wikilink-editing";
 import { MarkdownExportDialog } from "@/components/editor/markdown-export-dialog";
+import { MarkdownExportSurface } from "@/components/editor/markdown-export-surface";
 import { ImageElement } from "@/components/editor/nodes/block/image-node";
 import { EditorStatusBar } from "@/components/editor/overlays/editor-status-bar";
 import { FindReplaceBar } from "@/components/editor/overlays/find-replace-bar";
@@ -560,15 +561,18 @@ export function MarkdownEditor({
 			const gen = exportGenerationRef.current;
 			setExportBusy(true);
 			try {
-				const result = await runMarkdownExport({
-					markdown: serialize(),
-					filePath: filePath ?? null,
-					vaultPath: wikiNav?.vaultPath ?? null,
-					mdFiles: wikiNav?.mdFiles,
-					defaultName: exportDefaultName(filePath ?? null, exportPaperHeader),
-					options,
-					paperHeader: exportPaperHeader,
-				});
+				const result = await runMarkdownExport(
+					{
+						markdown: serialize(),
+						filePath: filePath ?? null,
+						vaultPath: wikiNav?.vaultPath ?? null,
+						mdFiles: wikiNav?.mdFiles,
+						defaultName: exportDefaultName(filePath ?? null, exportPaperHeader),
+						options,
+						paperHeader: exportPaperHeader,
+					},
+					MarkdownExportSurface,
+				);
 				if (gen !== exportGenerationRef.current) return;
 				if (result.status === "cancelled") return;
 				notifySuccess(i18n.t("editor:export.success"));

@@ -10,6 +10,7 @@ export {
 	PLAZA_SOURCES,
 	PLAZA_VIRTUAL_PATH,
 	type PlazaSource,
+	type PlazaSourceIcon,
 	plazaSourceForPath,
 	plazaSourceLabel,
 	plazaTitleForPath,

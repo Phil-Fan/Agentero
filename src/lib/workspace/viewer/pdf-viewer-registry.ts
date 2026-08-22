@@ -1,15 +1,53 @@
 /**
- * PDF viewer imperative handles by tab id (component-layer registry so the
- * annotations panel can drive the active viewer without React prop threading).
+ * PDF viewer imperative handles by tab id.
+ *
+ * Lib-layer registry (no JSX) so business logic — workspace actions, the
+ * annotations panel, the command palette — can drive the active viewer without
+ * React prop threading and without lib importing components. The
+ * {@link PdfViewerHandle} contract lives here (not on the component) so this
+ * module never imports `components/viewer/pdf/pdf-viewer`; the component side
+ * re-exports the type from here.
  */
 
-import type { PdfViewerHandle } from "@/components/viewer/pdf/pdf-viewer";
+import type { PromptImage } from "@/lib/agent/api";
 import {
 	paperAbsFromWorkspaceTab,
 	pdfTabIdForPaper,
 } from "@/lib/pdf/annotation-ref";
+import type { PdfAskNormalizedRect } from "@/lib/pdf/ask";
+import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import { getVaultPath, vaultStore } from "@/lib/vault/store";
 import { getActiveTab } from "@/lib/workspace/store";
+
+/** Imperative surface consumed through the pdf viewer registry. */
+export type PdfViewerHandle = {
+	getHighlights: () => PdfHighlight[];
+	scrollToHighlight: (id: string) => void;
+	editComment: (id: string) => void;
+	deleteHighlight: (id: string) => void;
+	/** Jump to an ask pin and reopen its conversation card. */
+	scrollToAsk: (id: string) => void;
+	deleteAsk: (id: string) => void;
+	/** Jump to a visual agent-trace pin and open its preview card. */
+	scrollToVisualTrace: (id: string) => void;
+	deleteVisualTrace: (id: string) => void;
+	/** Toggle visual-region annotation mode (⌘.). */
+	toggleVisualAnnotation: () => void;
+	/** Run EmbedPDF layout analysis for figures / tables / formulas. */
+	analyzeLayout: () => void;
+	/** Jump to a layout region (0-based page) and focus its overlay. */
+	scrollToLayoutRegion: (region: {
+		id: string;
+		pageIndex: number;
+		bbox: PdfAskNormalizedRect;
+	}) => void;
+	/** Crop a normalized page region (for figure sidebar thumbnails). */
+	renderRegion: (args: {
+		pageIndex: number;
+		bbox: PdfAskNormalizedRect;
+		maxEdgePx?: number;
+	}) => Promise<PromptImage | null>;
+};
 
 const handles = new Map<string, PdfViewerHandle>();
 const listeners = new Set<() => void>();

@@ -14,36 +14,9 @@ import type {
 } from "@/lib/pdf/ask";
 import type { CrossrefKind } from "@/lib/pdf/citation-dest-keys";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
+import type { PdfViewerHandle } from "@/lib/workspace/viewer/pdf-viewer-registry";
 
-/** Imperative surface consumed through `pdf-viewer-registry`. */
-export type PdfViewerHandle = {
-	getHighlights: () => PdfHighlight[];
-	scrollToHighlight: (id: string) => void;
-	editComment: (id: string) => void;
-	deleteHighlight: (id: string) => void;
-	/** Jump to an ask pin and reopen its conversation card. */
-	scrollToAsk: (id: string) => void;
-	deleteAsk: (id: string) => void;
-	/** Jump to a visual agent-trace pin and open its preview card. */
-	scrollToVisualTrace: (id: string) => void;
-	deleteVisualTrace: (id: string) => void;
-	/** Toggle visual-region annotation mode (⌘.). */
-	toggleVisualAnnotation: () => void;
-	/** Run EmbedPDF layout analysis for figures / tables / formulas. */
-	analyzeLayout: () => void;
-	/** Jump to a layout region (0-based page) and focus its overlay. */
-	scrollToLayoutRegion: (region: {
-		id: string;
-		pageIndex: number;
-		bbox: PdfAskNormalizedRect;
-	}) => void;
-	/** Crop a normalized page region (for figure sidebar thumbnails). */
-	renderRegion: (args: {
-		pageIndex: number;
-		bbox: PdfAskNormalizedRect;
-		maxEdgePx?: number;
-	}) => Promise<PromptImage | null>;
-};
+export type { PdfViewerHandle };
 
 export type PdfViewerProps = {
 	/**

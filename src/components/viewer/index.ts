@@ -32,4 +32,4 @@ export {
 	registerPdfHandle,
 	resolveActivePdfHandle,
 	subscribePdfHandles,
-} from "@/components/viewer/pdf-viewer-registry";
+} from "@/lib/workspace/viewer/pdf-viewer-registry";

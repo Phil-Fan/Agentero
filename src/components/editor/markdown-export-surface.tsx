@@ -15,7 +15,7 @@ import {
 import { ImageElement } from "@/components/editor/nodes/block/image-node";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
 import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
-import type { MarkdownExportPaperHeader } from "@/lib/markdown/export/types";
+import type { MarkdownExportSurfaceProps } from "@/lib/markdown/export/types";
 import { splitFrontmatter } from "@/lib/markdown/frontmatter";
 
 export function MarkdownExportSurface({
@@ -24,13 +24,7 @@ export function MarkdownExportSurface({
 	expandEmbeds,
 	paperHeader,
 	onMounted,
-}: {
-	markdown: string;
-	filePath: string | null;
-	expandEmbeds: boolean;
-	paperHeader: MarkdownExportPaperHeader | null;
-	onMounted: (el: HTMLElement) => void;
-}) {
+}: MarkdownExportSurfaceProps) {
 	const surfaceRef = useRef<HTMLDivElement | null>(null);
 	const exportMode = useMemo<MarkdownExportMode>(
 		() => ({

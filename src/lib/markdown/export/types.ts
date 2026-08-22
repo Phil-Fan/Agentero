@@ -1,3 +1,4 @@
+import type { ComponentType } from "react";
 import type { PaperMetadata } from "@/lib/paper/types";
 
 /** Export format chosen in the dialog. */
@@ -24,6 +25,23 @@ export type MarkdownExportPaperHeader = {
 	link: string | null;
 	linkLabel: string | null;
 };
+
+/**
+ * Props of the offscreen render surface. The runner mounts this component in a
+ * detached React root; it is injected by the caller so lib never imports a
+ * React component from the components layer.
+ */
+export type MarkdownExportSurfaceProps = {
+	markdown: string;
+	filePath: string | null;
+	expandEmbeds: boolean;
+	paperHeader: MarkdownExportPaperHeader | null;
+	onMounted: (el: HTMLElement) => void;
+};
+
+/** Renderable surface component injected into {@link runMarkdownExport}. */
+export type MarkdownExportSurfaceComponent =
+	ComponentType<MarkdownExportSurfaceProps>;
 
 export type MarkdownExportRequest = {
 	/** Full Markdown including optional frontmatter (body is rendered; FM stripped). */

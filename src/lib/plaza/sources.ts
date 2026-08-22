@@ -9,14 +9,22 @@
  */
 
 import type { ParseKeys } from "i18next";
-import { Rss, Sparkles, Telescope } from "lucide-react";
-import type { ComponentType, SVGProps } from "react";
-import { CoolPapersIcon } from "@/components/icons/cool-papers-icon";
-import { ModelScopeIcon } from "@/components/icons/modelscope-icon";
 import i18n from "@/i18n";
 
 /** Virtual tree/tab path for the Plaza parent node. */
 export const PLAZA_VIRTUAL_PATH = "agentero:plaza";
+
+/**
+ * Icon key for a plaza source. Lib only carries the name; the
+ * name→component map lives in the components layer
+ * (`components/plaza/source-icons.ts`).
+ */
+export type PlazaSourceIcon =
+	| "coolPapers"
+	| "modelScope"
+	| "sparkles"
+	| "rss"
+	| "telescope";
 
 export type PlazaSource = {
 	id: string;
@@ -42,7 +50,8 @@ export type PlazaSource = {
 	 * `null` embeds {@link url} as-is.
 	 */
 	embedOrigin: (() => string) | null;
-	icon: ComponentType<SVGProps<SVGSVGElement>>;
+	/** Icon name; rendered through the components-layer icon map. */
+	icon: PlazaSourceIcon;
 };
 
 function sourcePath(id: string): string {
@@ -64,7 +73,7 @@ export const PLAZA_SOURCES: readonly PlazaSource[] = [
 		description: "plaza.arxivDescription",
 		url: "https://papers.cool/",
 		embedOrigin: () => schemeOrigin("agentero-coolpapers"),
-		icon: CoolPapersIcon,
+		icon: "coolPapers",
 	},
 	{
 		id: "modelscope",
@@ -73,7 +82,7 @@ export const PLAZA_SOURCES: readonly PlazaSource[] = [
 		description: "plaza.modelscopeDescription",
 		url: "https://modelscope.cn/papers",
 		embedOrigin: () => schemeOrigin("agentero-modelscope"),
-		icon: ModelScopeIcon,
+		icon: "modelScope",
 	},
 	{
 		id: "skills",
@@ -83,7 +92,7 @@ export const PLAZA_SOURCES: readonly PlazaSource[] = [
 		url: null,
 		embedOrigin: null,
 		panel: "skills",
-		icon: Sparkles,
+		icon: "sparkles",
 	},
 	{
 		id: "feeds",
@@ -93,7 +102,7 @@ export const PLAZA_SOURCES: readonly PlazaSource[] = [
 		url: null,
 		embedOrigin: null,
 		panel: "feeds",
-		icon: Rss,
+		icon: "rss",
 	},
 	{
 		id: "arxiv-rec",
@@ -103,7 +112,7 @@ export const PLAZA_SOURCES: readonly PlazaSource[] = [
 		url: null,
 		embedOrigin: null,
 		panel: "arxivRec",
-		icon: Telescope,
+		icon: "telescope",
 	},
 ];
 

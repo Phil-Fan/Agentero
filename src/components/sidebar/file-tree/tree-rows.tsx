@@ -17,6 +17,7 @@ import {
 	FileTreeName,
 	useFileTree,
 } from "@/components/ai-elements/file-tree";
+import { PLAZA_SOURCE_ICONS } from "@/components/plaza/source-icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -351,7 +352,7 @@ export function PlazaRow({ expanded }: { expanded: boolean }) {
 }
 
 export function PlazaSourceRow({ source }: { source: PlazaSource }) {
-	const Icon = source.icon;
+	const Icon = PLAZA_SOURCE_ICONS[source.icon];
 	const label = plazaSourceLabel(source);
 	return (
 		<FileTreeFile path={source.path} name={label}>

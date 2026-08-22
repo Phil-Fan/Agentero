@@ -74,6 +74,11 @@ import {
 	updateTab,
 } from "@/lib/workspace/store";
 import {
+	type PdfViewerHandle,
+	pdfHandleFor,
+	subscribePdfHandles,
+} from "@/lib/workspace/viewer/pdf-viewer-registry";
+import {
 	basenameOf,
 	createNotesSplitPane,
 	createPlaceholderTab,
@@ -668,52 +673,48 @@ let wikiNavigationIntentId = 0;
 /** Wait for the PDF handle registration after openPaper, then jump. */
 function scheduleAnnotationJump(paperAbs: string, annotationId: string): void {
 	const tabId = tabIdForPath(paperAbs);
-	void import("@/components/viewer/pdf-viewer-registry").then(
-		({ pdfHandleFor, subscribePdfHandles }) => {
-			let unsubscribe: (() => void) | null = null;
-			let timeoutId: number | null = null;
-			let finished = false;
+	let unsubscribe: (() => void) | null = null;
+	let timeoutId: number | null = null;
+	let finished = false;
 
-			const finish = () => {
-				if (finished) return false;
-				finished = true;
-				unsubscribe?.();
-				if (timeoutId !== null) window.clearTimeout(timeoutId);
-				return true;
-			};
+	const finish = () => {
+		if (finished) return false;
+		finished = true;
+		unsubscribe?.();
+		if (timeoutId !== null) window.clearTimeout(timeoutId);
+		return true;
+	};
 
-			const jump = (handle: NonNullable<ReturnType<typeof pdfHandleFor>>) => {
-				if (!finish()) return;
-				void lookupAnnotationRef(paperAbs, annotationId).then((ref) => {
-					if (!ref) {
-						notifyError(
-							i18n.t("app:errors.wikiLinkInvalidFragment", {
-								target: `@${annotationId}`,
-							}),
-						);
-						return;
-					}
-					if (ref.kind === "visual" || ref.kind === "agent-trace") {
-						handle.scrollToVisualTrace(ref.id);
-					} else {
-						handle.scrollToHighlight(ref.id);
-					}
-				});
-			};
+	const jump = (handle: PdfViewerHandle) => {
+		if (!finish()) return;
+		void lookupAnnotationRef(paperAbs, annotationId).then((ref) => {
+			if (!ref) {
+				notifyError(
+					i18n.t("app:errors.wikiLinkInvalidFragment", {
+						target: `@${annotationId}`,
+					}),
+				);
+				return;
+			}
+			if (ref.kind === "visual" || ref.kind === "agent-trace") {
+				handle.scrollToVisualTrace(ref.id);
+			} else {
+				handle.scrollToHighlight(ref.id);
+			}
+		});
+	};
 
-			const tryJump = () => {
-				const handle = pdfHandleFor(tabId);
-				if (handle) jump(handle);
-			};
+	const tryJump = () => {
+		const handle = pdfHandleFor(tabId);
+		if (handle) jump(handle);
+	};
 
-			tryJump();
-			if (finished) return;
-			unsubscribe = subscribePdfHandles(tryJump);
-			timeoutId = window.setTimeout(() => {
-				finish();
-			}, 2000);
-		},
-	);
+	tryJump();
+	if (finished) return;
+	unsubscribe = subscribePdfHandles(tryJump);
+	timeoutId = window.setTimeout(() => {
+		finish();
+	}, 2000);
 }
 
 export async function navigateWiki(nav: WikiNavTarget): Promise<void> {

@@ -20,7 +20,7 @@
 
 | 区域 | 路径 |
 |---|---|
-| 来源注册表 | `src/lib/plaza/sources.ts`（新增来源 = 一条数组项） |
+| 来源注册表 | `src/lib/plaza/sources.ts`（新增来源 = 一条数组项；`icon` 只存名称键，组件映射在 `src/components/plaza/source-icons.ts`） |
 | 中间栏 | `src/components/plaza/plaza-view.tsx`、`plaza-web-frame.tsx`、`plaza-skills-view.tsx` |
 | Skill 精选 | `src/lib/plaza/skill-catalog.ts` |
 | 入库 | `src/lib/plaza/import.ts`（论文 + Skill 仓库） |

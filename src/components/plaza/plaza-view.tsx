@@ -11,6 +11,7 @@ import { PlazaArxivRecView } from "@/components/plaza/plaza-arxiv-rec-view";
 import { PlazaFeedsView } from "@/components/plaza/plaza-feeds-view";
 import { PlazaSkillsView } from "@/components/plaza/plaza-skills-view";
 import { PlazaWebFrame } from "@/components/plaza/plaza-web-frame";
+import { PLAZA_SOURCE_ICONS } from "@/components/plaza/source-icons";
 import { cn } from "@/lib/core/utils";
 import {
 	PLAZA_SOURCES,
@@ -27,7 +28,7 @@ function SourceCard({
 	onOpen: (source: PlazaSource) => void;
 }) {
 	const { t } = useTranslation("sidebar");
-	const Icon = source.icon;
+	const Icon = PLAZA_SOURCE_ICONS[source.icon];
 	const available = Boolean(source.url || source.panel);
 	const label = plazaSourceLabel(source);
 	return (

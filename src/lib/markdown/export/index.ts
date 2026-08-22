@@ -25,5 +25,7 @@ export type {
 	MarkdownExportPaperHeader,
 	MarkdownExportRequest,
 	MarkdownExportResult,
+	MarkdownExportSurfaceComponent,
+	MarkdownExportSurfaceProps,
 	ResolvePaperHeaderInput,
 } from "@/lib/markdown/export/types";
