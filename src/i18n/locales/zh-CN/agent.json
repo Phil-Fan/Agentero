@@ -118,6 +118,7 @@
 	},
 	"thinking": "思考中……",
 	"copy": "复制",
+	"copied": "已复制",
 	"edit": {
 		"action": "编辑",
 		"resend": "重新发送",

@@ -1,6 +1,6 @@
-import { CopyIcon, Pencil } from "lucide-react";
+import { Check, CopyIcon, Pencil } from "lucide-react";
 import type { RefObject } from "react";
-import { memo, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	ChatAttachedImages,
@@ -119,6 +119,41 @@ type RowHandlers = {
 		onCompositionEnd?: () => void;
 	};
 };
+
+/** Copy button with a brief checkmark feedback state. */
+function CopyAction({ text }: { text: string }) {
+	const { t } = useTranslation("agent");
+	const [copied, setCopied] = useState(false);
+
+	const handleCopy = useCallback(async () => {
+		try {
+			await copyText(text);
+			setCopied(true);
+		} catch {
+			// Keep the existing silent failure behavior.
+		}
+	}, [text]);
+
+	useEffect(() => {
+		if (!copied) return;
+		const timer = setTimeout(() => setCopied(false), 2000);
+		return () => clearTimeout(timer);
+	}, [copied]);
+
+	return (
+		<MessageAction
+			tooltip={copied ? t("copied") : t("copy")}
+			label={copied ? t("copied") : t("copy")}
+			onClick={handleCopy}
+		>
+			{copied ? (
+				<Check className="size-3.5 text-green-600" />
+			) : (
+				<CopyIcon className="size-3.5" />
+			)}
+		</MessageAction>
+	);
+}
 
 /**
  * One transcript line. Memoized so a streaming update to the last line does
@@ -247,13 +282,7 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 							<Pencil className="size-3.5" />
 						</MessageAction>
 					)}
-					<MessageAction
-						tooltip={t("copy")}
-						label={t("copy")}
-						onClick={() => void copyText(copyPayload)}
-					>
-						<CopyIcon className="size-3.5" />
-					</MessageAction>
+					<CopyAction text={copyPayload} />
 				</MessageActions>
 			</Message>
 		);
@@ -454,13 +483,7 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 					</MessageContent>
 					{!line.streaming && agentText ? (
 						<MessageActions className="-mt-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-							<MessageAction
-								tooltip={t("copy")}
-								label={t("copy")}
-								onClick={() => void copyText(agentText)}
-							>
-								<CopyIcon className="size-3.5" />
-							</MessageAction>
+							<CopyAction text={agentText} />
 						</MessageActions>
 					) : null}
 				</Message>

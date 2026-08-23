@@ -118,6 +118,7 @@
 	},
 	"thinking": "Thinking…",
 	"copy": "Copy",
+	"copied": "Copied",
 	"edit": {
 		"action": "Edit",
 		"resend": "Resend",
