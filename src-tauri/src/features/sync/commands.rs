@@ -5,6 +5,7 @@
 use super::config::{self, SyncBackendConfig};
 use super::engine::{self, SyncOutcome};
 use super::local;
+use super::snapshot;
 use super::SyncService;
 use crate::core::error::{map_err, ApiResult, AppError};
 use serde::{Deserialize, Serialize};
@@ -137,6 +138,59 @@ pub async fn sync_disconnect(
             service.stop_scheduler(&key);
             ApiResult::ok(())
         }
+        Err(e) => map_err(e),
+    })
+}
+
+/// Local disk usage per bulky-asset category (bytes), for the sync-scope UI.
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncScopeSizes {
+    pub pdf: u64,
+    pub source: u64,
+    pub attachments: u64,
+}
+
+#[tauri::command]
+pub async fn sync_scope_sizes(args: SyncVaultArgs) -> Result<ApiResult<SyncScopeSizes>, String> {
+    let inner = async {
+        let dir = vault_dir(&args.vault_path)?;
+        tokio::task::spawn_blocking(move || {
+            let mut sizes = SyncScopeSizes::default();
+            let walker = walkdir::WalkDir::new(&dir)
+                .follow_links(false)
+                .into_iter()
+                .filter_entry(|e| {
+                    e.depth() == 0 || !snapshot::is_ignored_name(&e.file_name().to_string_lossy())
+                });
+            for entry in walker.flatten() {
+                if !entry.file_type().is_file() {
+                    continue;
+                }
+                let Some(rel) = entry
+                    .path()
+                    .strip_prefix(&dir)
+                    .ok()
+                    .and_then(|p| p.to_str())
+                    .map(|s| s.replace('\\', "/"))
+                else {
+                    continue;
+                };
+                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                match snapshot::scope_category(&rel) {
+                    Some("pdf") => sizes.pdf += size,
+                    Some("source") => sizes.source += size,
+                    Some("attachments") => sizes.attachments += size,
+                    _ => {}
+                }
+            }
+            sizes
+        })
+        .await
+        .map_err(|e| AppError::message(format!("scope sizes: {e}")))
+    };
+    Ok(match inner.await {
+        Ok(sizes) => ApiResult::ok(sizes),
         Err(e) => map_err(e),
     })
 }

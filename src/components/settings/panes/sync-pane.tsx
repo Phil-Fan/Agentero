@@ -13,6 +13,7 @@ import {
 	SettingsRow,
 } from "@/components/settings/settings-layout";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import {
 	Collapsible,
 	CollapsibleContent,
@@ -32,6 +33,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatBytes } from "@/lib/core/background-tasks";
 import { errorMessage, notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { listenSafe } from "@/lib/core/tauri-events";
@@ -43,12 +45,14 @@ import {
 	SYNC_STATE_EVENT,
 	type SyncBackendConfig,
 	type SyncProgressEvent,
+	type SyncScopeSizes,
 	type SyncStateEvent,
 	type SyncStatus,
 	syncConfigure,
 	syncDisconnect,
 	syncGetStatus,
 	syncNow,
+	syncScopeSizes,
 } from "@/lib/sync/api";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 
@@ -85,6 +89,7 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 	const [syncing, setSyncing] = useState(false);
 	const [progress, setProgress] = useState<SyncProgressEvent | null>(null);
 	const [advancedOpen, setAdvancedOpen] = useState(false);
+	const [scopeSizes, setScopeSizes] = useState<SyncScopeSizes | null>(null);
 
 	const refresh = useCallback(async () => {
 		if (!localVault) return;
@@ -128,6 +133,19 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 		};
 	}, [localVault, refresh]);
 
+	useEffect(() => {
+		if (!localVault) return;
+		let cancelled = false;
+		syncScopeSizes(localVault)
+			.then((sizes) => {
+				if (!cancelled) setScopeSizes(sizes);
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, [localVault]);
+
 	if (!localVault) {
 		return (
 			<section>
@@ -141,6 +159,14 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 
 	const patch = (partial: Partial<SyncBackendConfig>) =>
 		setForm((prev) => ({ ...prev, ...partial }));
+
+	const scope = form.scope;
+	const scopeAll = scope.pdf && scope.source && scope.attachments;
+	const scopeNone = !scope.pdf && !scope.source && !scope.attachments;
+	const setScopePreset = (all: boolean) =>
+		patch({ scope: { pdf: all, source: all, attachments: all } });
+	const patchScope = (key: keyof SyncBackendConfig["scope"], value: boolean) =>
+		patch({ scope: { ...scope, [key]: value } });
 
 	const save = async () => {
 		setSaving(true);
@@ -306,6 +332,66 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 						</Select>
 					</SettingsRow>
 				) : null}
+			</SettingsGroup>
+
+			<SettingsGroup>
+				<SettingsRow label={helpLabel(t("sync.scope"), t("sync.scopeHint"))}>
+					<ButtonGroup>
+						<Button
+							type="button"
+							size="sm"
+							variant={scopeAll ? "secondary" : "outline"}
+							aria-pressed={scopeAll}
+							onClick={() => setScopePreset(true)}
+						>
+							{t("sync.scopeFull")}
+						</Button>
+						<Button
+							type="button"
+							size="sm"
+							variant={scopeNone ? "secondary" : "outline"}
+							aria-pressed={scopeNone}
+							onClick={() => setScopePreset(false)}
+						>
+							{t("sync.scopeNotesOnly")}
+						</Button>
+					</ButtonGroup>
+				</SettingsRow>
+				<SettingsRow
+					label={t("sync.scopePdf")}
+					description={scopeSizes ? formatBytes(scopeSizes.pdf) : undefined}
+					htmlFor="sync-scope-pdf"
+				>
+					<Switch
+						id="sync-scope-pdf"
+						checked={scope.pdf}
+						onCheckedChange={(checked) => patchScope("pdf", checked)}
+					/>
+				</SettingsRow>
+				<SettingsRow
+					label={t("sync.scopeSource")}
+					description={scopeSizes ? formatBytes(scopeSizes.source) : undefined}
+					htmlFor="sync-scope-source"
+				>
+					<Switch
+						id="sync-scope-source"
+						checked={scope.source}
+						onCheckedChange={(checked) => patchScope("source", checked)}
+					/>
+				</SettingsRow>
+				<SettingsRow
+					label={t("sync.scopeAttachments")}
+					description={
+						scopeSizes ? formatBytes(scopeSizes.attachments) : undefined
+					}
+					htmlFor="sync-scope-attachments"
+				>
+					<Switch
+						id="sync-scope-attachments"
+						checked={scope.attachments}
+						onCheckedChange={(checked) => patchScope("attachments", checked)}
+					/>
+				</SettingsRow>
 			</SettingsGroup>
 
 			<Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>

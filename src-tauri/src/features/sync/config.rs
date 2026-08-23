@@ -7,6 +7,7 @@
 use crate::core::error::AppError;
 use crate::core::paths;
 use crate::features::settings::{is_translate_api_key_mask, mask_translate_api_key};
+use crate::features::sync::snapshot::SyncScope;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -40,6 +41,10 @@ pub struct SyncBackendConfig {
     /// Sync then degrades to plain PUTs; the runtime fallback re-detects.
     #[serde(default = "default_true")]
     pub conditional_writes: bool,
+    /// Which bulky paper assets (PDF / LaTeX source / attachments) take part
+    /// in sync. Notes, sidecars and marks always sync. Default: everything.
+    #[serde(default)]
+    pub scope: SyncScope,
 }
 
 fn default_region() -> String {
@@ -186,6 +191,7 @@ mod tests {
         .unwrap();
         assert!(cfg.auto_sync);
         assert_eq!(cfg.interval_minutes, 30);
+        assert!(cfg.scope.is_all());
     }
 
     #[test]

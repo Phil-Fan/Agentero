@@ -83,10 +83,14 @@ pub async fn sync_vault(
 
     progress("scan", 0, 0);
     let base = local::read_base(vault);
-    let mut base_files = base.files.clone();
+    // Symmetric filtering: the same predicate blinds the local scan, the
+    // base, and the remote manifest, so excluded files are inert — never
+    // uploaded, downloaded, or mistaken for deletions.
+    let mut base_files = snapshot::filter_files(base.files.clone(), &cfg.scope);
     let mut local_files = {
         let vault = vault.to_path_buf();
-        tokio::task::spawn_blocking(move || snapshot::scan_vault(&vault, &base))
+        let scope = cfg.scope;
+        tokio::task::spawn_blocking(move || snapshot::scan_vault(&vault, &base, &scope))
             .await
             .map_err(|e| AppError::message(format!("scan task: {e}")))??
     };
@@ -102,7 +106,7 @@ pub async fn sync_vault(
             ),
             None => (None, None),
         };
-        let remote_files = match &head_ptr {
+        let (remote_files, remote_scope) = match &head_ptr {
             Some(ptr) => {
                 let (bytes, _) = client.get(&ptr.manifest_key).await?.ok_or_else(|| {
                     AppError::message(format!("manifest {} missing", ptr.manifest_key))
@@ -110,12 +114,19 @@ pub async fn sync_vault(
                 let manifest: Manifest =
                     serde_json::from_slice(&gunzip_limited(&bytes, MAX_MANIFEST_BYTES)?)?;
                 validate_manifest(&manifest)?;
-                manifest.files
+                let scope = manifest.scope;
+                (snapshot::filter_files(manifest.files, &cfg.scope), scope)
             }
-            None => BTreeMap::new(),
+            None => (BTreeMap::new(), snapshot::SyncScope::all()),
         };
 
-        let plan = merge(&base_files, &local_files, &remote_files);
+        let plan = merge(
+            &base_files,
+            &local_files,
+            &remote_files,
+            &cfg.scope,
+            &remote_scope,
+        );
         apply_local(vault, &client, &plan, &mut outcome, progress).await?;
         let merged = plan.merged;
 
@@ -155,6 +166,7 @@ pub async fn sync_vault(
         let manifest = Manifest {
             version: new_version,
             files: merged.clone(),
+            scope: cfg.scope,
         };
         client
             .put(
@@ -298,10 +310,17 @@ struct MergePlan {
 /// Markdown keeps the newer version and saves the loser as a conflict copy;
 /// everything else (sidecars, marks, binaries) is last-writer-wins by mtime.
 /// Delete-vs-modify keeps the modification.
+///
+/// Sync scope makes paths *inert* instead of absent: a path the local scope
+/// filters never changes (it is not in the scan), and a path the remote
+/// publisher filtered is never read as a remote deletion — the best known
+/// entry is carried forward so devices without the filter keep seeing it.
 fn merge(
     base: &BTreeMap<String, FileEntry>,
     local: &BTreeMap<String, FileEntry>,
     remote: &BTreeMap<String, FileEntry>,
+    local_scope: &snapshot::SyncScope,
+    remote_scope: &snapshot::SyncScope,
 ) -> MergePlan {
     let mut plan = MergePlan {
         merged: BTreeMap::new(),
@@ -321,6 +340,24 @@ fn merge(
         let b = base.get(path);
         let l = local.get(path);
         let r = remote.get(path);
+
+        let local_blind = snapshot::is_scope_excluded(local_scope, path);
+        let remote_blind = snapshot::is_scope_excluded(remote_scope, path);
+        if local_blind || (remote_blind && l.is_some()) {
+            // Inert: never download, never delete; carry the best known
+            // entry forward (local edit if any, else the last synced one).
+            if let Some(entry) = l.or(b) {
+                plan.merged.insert(path.clone(), entry.clone());
+            }
+            continue;
+        }
+        if remote_blind {
+            // The local device sees this category and no longer has the file:
+            // a real local delete. Drop it from the merged manifest; the
+            // blind publisher never had it to begin with.
+            continue;
+        }
+
         let same = |a: Option<&FileEntry>, b: Option<&FileEntry>| match (a, b) {
             (Some(x), Some(y)) => x.hash == y.hash,
             (None, None) => true,
@@ -508,7 +545,13 @@ mod tests {
         let local = map(&[("a.md", entry("h1-local", 2)), ("b.pdf", entry("h2", 1))]);
         let remote = map(&[("a.md", entry("h1", 1))]); // remote deleted b.pdf
 
-        let plan = merge(&base, &local, &remote);
+        let plan = merge(
+            &base,
+            &local,
+            &remote,
+            &snapshot::SyncScope::all(),
+            &snapshot::SyncScope::all(),
+        );
         assert_eq!(plan.merged["a.md"].hash, "h1-local");
         assert!(!plan.merged.contains_key("b.pdf"));
         assert_eq!(plan.delete_local, vec!["b.pdf"]);
@@ -521,7 +564,13 @@ mod tests {
         let local = map(&[("n.md", entry("hl", 10))]);
         let remote = map(&[("n.md", entry("hr", 20))]);
 
-        let plan = merge(&base, &local, &remote);
+        let plan = merge(
+            &base,
+            &local,
+            &remote,
+            &snapshot::SyncScope::all(),
+            &snapshot::SyncScope::all(),
+        );
         // Remote newer: it takes the path, local survives as conflict copy.
         assert_eq!(plan.merged["n.md"].hash, "hr");
         assert_eq!(plan.preserve_local.len(), 1);
@@ -536,7 +585,13 @@ mod tests {
         let local = map(&[("m.json", entry("hl", 30))]);
         let remote = map(&[("m.json", entry("hr", 20))]);
 
-        let plan = merge(&base, &local, &remote);
+        let plan = merge(
+            &base,
+            &local,
+            &remote,
+            &snapshot::SyncScope::all(),
+            &snapshot::SyncScope::all(),
+        );
         assert_eq!(plan.merged["m.json"].hash, "hl");
         assert!(plan.downloads.is_empty());
         assert!(plan.preserve_local.is_empty());
@@ -548,9 +603,83 @@ mod tests {
         let local = map(&[]); // deleted locally
         let remote = map(&[("k.md", entry("hr", 5))]); // modified remotely
 
-        let plan = merge(&base, &local, &remote);
+        let plan = merge(
+            &base,
+            &local,
+            &remote,
+            &snapshot::SyncScope::all(),
+            &snapshot::SyncScope::all(),
+        );
         assert_eq!(plan.merged["k.md"].hash, "hr");
         assert_eq!(plan.downloads.len(), 1);
+    }
+
+    fn no_pdf_scope() -> snapshot::SyncScope {
+        snapshot::SyncScope {
+            pdf: false,
+            source: true,
+            attachments: true,
+        }
+    }
+
+    #[test]
+    fn merge_remote_filtered_path_is_not_a_delete() {
+        // The remote publisher syncs without PDFs: its manifest lacks the
+        // entry, but that absence must not delete the local file.
+        let base = map(&[("papers/x/x.pdf", entry("h0", 1))]);
+        let local = map(&[("papers/x/x.pdf", entry("h0", 1))]);
+        let remote = map(&[]);
+
+        let plan = merge(
+            &base,
+            &local,
+            &remote,
+            &snapshot::SyncScope::all(),
+            &no_pdf_scope(),
+        );
+        assert_eq!(plan.merged["papers/x/x.pdf"].hash, "h0");
+        assert!(plan.delete_local.is_empty());
+        assert!(plan.downloads.is_empty());
+    }
+
+    #[test]
+    fn merge_locally_filtered_path_is_inert() {
+        // This device skips PDFs: the remote entry must not be downloaded,
+        // and the base entry survives in the merged manifest.
+        let base = map(&[("papers/x/x.pdf", entry("h0", 1))]);
+        let local = map(&[]); // filtered out of the scan
+        let remote = map(&[("papers/x/x.pdf", entry("h0", 1))]);
+
+        let plan = merge(
+            &base,
+            &local,
+            &remote,
+            &no_pdf_scope(),
+            &snapshot::SyncScope::all(),
+        );
+        assert_eq!(plan.merged["papers/x/x.pdf"].hash, "h0");
+        assert!(plan.downloads.is_empty());
+        assert!(plan.delete_local.is_empty());
+    }
+
+    #[test]
+    fn merge_local_delete_wins_over_blind_remote() {
+        // This device sees PDFs and deleted one; the remote publisher was
+        // blind to the category, so the delete propagates (entry dropped).
+        let base = map(&[("papers/x/x.pdf", entry("h0", 1))]);
+        let local = map(&[]); // genuinely deleted
+        let remote = map(&[]); // blind publisher
+
+        let plan = merge(
+            &base,
+            &local,
+            &remote,
+            &snapshot::SyncScope::all(),
+            &no_pdf_scope(),
+        );
+        assert!(!plan.merged.contains_key("papers/x/x.pdf"));
+        assert!(plan.downloads.is_empty());
+        assert!(plan.delete_local.is_empty());
     }
 
     #[test]
@@ -559,6 +688,7 @@ mod tests {
         let valid = Manifest {
             version: 1,
             files: map(&[("papers/x/NOTES.md", entry(&ok_hash, 1))]),
+            scope: snapshot::SyncScope::all(),
         };
         assert!(validate_manifest(&valid).is_ok());
 
@@ -574,6 +704,7 @@ mod tests {
             let m = Manifest {
                 version: 1,
                 files: map(&[(bad, entry(&ok_hash, 1))]),
+                scope: snapshot::SyncScope::all(),
             };
             assert!(
                 validate_manifest(&m).is_err(),
@@ -585,6 +716,7 @@ mod tests {
             let m = Manifest {
                 version: 1,
                 files: map(&[("n.md", entry(bad_hash, 1))]),
+                scope: snapshot::SyncScope::all(),
             };
             assert!(
                 validate_manifest(&m).is_err(),
@@ -628,6 +760,7 @@ mod tests {
             auto_sync: false,
             interval_minutes: 30,
             conditional_writes: true,
+            scope: snapshot::SyncScope::all(),
         };
         let noop: &(dyn Fn(&str, usize, usize) + Send + Sync) = &|_, _, _| {};
 
@@ -666,7 +799,7 @@ mod tests {
         sync_vault(&a, &cfg, noop).await.expect("sync A converge");
         // Compare content only: mtimes legitimately differ across devices.
         let hashes = |vault: &Path| -> BTreeMap<String, String> {
-            snapshot::scan_vault(vault, &Manifest::default())
+            snapshot::scan_vault(vault, &Manifest::default(), &snapshot::SyncScope::all())
                 .unwrap()
                 .into_iter()
                 .map(|(k, v)| (k, v.hash))

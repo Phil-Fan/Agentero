@@ -15,6 +15,11 @@ pub struct Manifest {
     pub version: u64,
     #[serde(default)]
     pub files: BTreeMap<String, FileEntry>,
+    /// Categories the publishing device had filtered out of `files`. A path
+    /// absent here while matching this scope is "not synced", not "deleted".
+    /// Old manifests deserialize to the all-synced default.
+    #[serde(default, skip_serializing_if = "SyncScope::is_all")]
+    pub scope: SyncScope,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -33,9 +38,92 @@ pub(crate) fn is_ignored_name(name: &str) -> bool {
     matches!(name, ".agentero" | ".git" | "node_modules" | ".DS_Store") || name.ends_with(".tmp")
 }
 
+/// Which bulky, re-derivable paper assets participate in sync. Notes,
+/// sidecars, marks and embedded images always sync — they are small and not
+/// recoverable from any upstream source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SyncScope {
+    /// Paper-root PDFs: `papers/<id>/<id>.pdf`.
+    pub pdf: bool,
+    /// LaTeX / e-print trees: `papers/<id>/source/`.
+    pub source: bool,
+    /// Supplementary material: `papers/<id>/attachments/`.
+    pub attachments: bool,
+}
+
+impl Default for SyncScope {
+    /// Missing scope fields (legacy configs / old remote manifests) mean
+    /// "sync everything".
+    fn default() -> Self {
+        Self::all()
+    }
+}
+
+impl SyncScope {
+    pub fn all() -> Self {
+        Self {
+            pdf: true,
+            source: true,
+            attachments: true,
+        }
+    }
+
+    pub fn is_all(&self) -> bool {
+        self.pdf && self.source && self.attachments
+    }
+}
+
+/// Bulky-asset category of a vault-relative path, or `None` for always-synced
+/// content. Only the conventional paper layout is classified; PDFs nested in
+/// `source/` or `attachments/` follow their enclosing category.
+pub fn scope_category(rel: &str) -> Option<&'static str> {
+    let rest = rel.strip_prefix("papers/")?;
+    let (_, tail) = rest.split_once('/')?;
+    if tail == "source" || tail.starts_with("source/") {
+        return Some("source");
+    }
+    if tail == "attachments" || tail.starts_with("attachments/") {
+        return Some("attachments");
+    }
+    if !tail.contains('/') && tail.to_ascii_lowercase().ends_with(".pdf") {
+        return Some("pdf");
+    }
+    None
+}
+
+pub fn is_scope_excluded(scope: &SyncScope, rel: &str) -> bool {
+    match scope_category(rel) {
+        Some("pdf") => !scope.pdf,
+        Some("source") => !scope.source,
+        Some("attachments") => !scope.attachments,
+        _ => false,
+    }
+}
+
+/// Drop excluded paths from a manifest map. The same predicate blinds the
+/// local scan, the base, and the remote manifest, so a filtered file is
+/// neither uploaded nor downloaded — and never mistaken for a deletion.
+pub fn filter_files(
+    files: BTreeMap<String, FileEntry>,
+    scope: &SyncScope,
+) -> BTreeMap<String, FileEntry> {
+    if scope.is_all() {
+        return files;
+    }
+    files
+        .into_iter()
+        .filter(|(rel, _)| !is_scope_excluded(scope, rel))
+        .collect()
+}
+
 /// Scan the vault into manifest entries. Files whose `size + mtime` match the
 /// base entry reuse its hash instead of re-reading (cheap steady-state scans).
-pub fn scan_vault(vault: &Path, base: &Manifest) -> Result<BTreeMap<String, FileEntry>, AppError> {
+pub fn scan_vault(
+    vault: &Path,
+    base: &Manifest,
+    scope: &SyncScope,
+) -> Result<BTreeMap<String, FileEntry>, AppError> {
     let mut out = BTreeMap::new();
     let walker = walkdir::WalkDir::new(vault)
         .follow_links(false)
@@ -55,6 +143,9 @@ pub fn scan_vault(vault: &Path, base: &Manifest) -> Result<BTreeMap<String, File
         else {
             continue; // non-UTF-8 names cannot ride a JSON manifest
         };
+        if is_scope_excluded(scope, &rel) {
+            continue;
+        }
         let meta = entry
             .metadata()
             .map_err(|e| AppError::message(e.to_string()))?;
@@ -121,7 +212,7 @@ mod tests {
         fs::write(vault.join("papers/x/NOTES.md"), b"# x\n").unwrap();
         fs::write(vault.join("papers/x/.DS_Store"), b"junk").unwrap();
 
-        let files = scan_vault(&vault, &Manifest::default()).unwrap();
+        let files = scan_vault(&vault, &Manifest::default(), &SyncScope::all()).unwrap();
         assert_eq!(files.keys().collect::<Vec<_>>(), vec!["papers/x/NOTES.md"]);
 
         // Unchanged size+mtime → hash reused from base without re-reading.
@@ -129,9 +220,88 @@ mod tests {
         let mut entry = files["papers/x/NOTES.md"].clone();
         entry.hash = "sentinel".into();
         base.files.insert("papers/x/NOTES.md".into(), entry);
-        let again = scan_vault(&vault, &base).unwrap();
+        let again = scan_vault(&vault, &base, &SyncScope::all()).unwrap();
         assert_eq!(again["papers/x/NOTES.md"].hash, "sentinel");
 
         let _ = fs::remove_dir_all(&vault);
+    }
+
+    #[test]
+    fn scan_skips_scope_excluded_files() {
+        let vault = std::env::temp_dir().join(format!("agentero-scan-{}", Uuid::new_v4()));
+        fs::create_dir_all(vault.join("papers/x/source")).unwrap();
+        fs::create_dir_all(vault.join("papers/x/attachments")).unwrap();
+        fs::write(vault.join("papers/x/NOTES.md"), b"# x\n").unwrap();
+        fs::write(vault.join("papers/x/x.pdf"), b"%PDF").unwrap();
+        fs::write(vault.join("papers/x/source/main.tex"), b"tex").unwrap();
+        fs::write(vault.join("papers/x/attachments/supp.pdf"), b"%PDF").unwrap();
+        fs::write(vault.join("loose.pdf"), b"%PDF").unwrap(); // outside papers/
+
+        let scope = SyncScope {
+            pdf: false,
+            source: false,
+            attachments: true,
+        };
+        let files = scan_vault(&vault, &Manifest::default(), &scope).unwrap();
+        let keys: Vec<&String> = files.keys().collect();
+        assert_eq!(
+            keys,
+            vec![
+                "loose.pdf",
+                "papers/x/NOTES.md",
+                "papers/x/attachments/supp.pdf"
+            ]
+        );
+
+        let _ = fs::remove_dir_all(&vault);
+    }
+
+    #[test]
+    fn scope_category_classifies_paper_layout() {
+        assert_eq!(scope_category("papers/x/x.pdf"), Some("pdf"));
+        assert_eq!(scope_category("papers/x/X.PDF"), Some("pdf"));
+        assert_eq!(scope_category("papers/x/source/main.tex"), Some("source"));
+        assert_eq!(scope_category("papers/x/source"), Some("source"));
+        assert_eq!(
+            scope_category("papers/x/attachments/supp.pdf"),
+            Some("attachments")
+        );
+        // PDFs nested in a category dir follow the enclosing category.
+        assert_eq!(scope_category("papers/x/source/fig.pdf"), Some("source"));
+        // Always-synced content and non-paper paths.
+        assert_eq!(scope_category("papers/x/NOTES.md"), None);
+        assert_eq!(scope_category("papers/x/metadata.json"), None);
+        assert_eq!(scope_category("papers/x/marks/a.json"), None);
+        assert_eq!(scope_category("papers/x/assets/img.png"), None);
+        assert_eq!(scope_category("papers/x/attachments"), Some("attachments"));
+        assert_eq!(scope_category("loose.pdf"), None);
+        assert_eq!(scope_category("notes/todo.md"), None);
+    }
+
+    #[test]
+    fn manifest_scope_roundtrip_and_legacy_default() {
+        // All-synced scope is omitted on the wire.
+        let full = Manifest::default();
+        let json = serde_json::to_string(&full).unwrap();
+        assert!(!json.contains("scope"));
+
+        // Filtered scope travels with the manifest.
+        let partial = Manifest {
+            version: 1,
+            files: BTreeMap::new(),
+            scope: SyncScope {
+                pdf: false,
+                source: true,
+                attachments: true,
+            },
+        };
+        let back: Manifest =
+            serde_json::from_str(&serde_json::to_string(&partial).unwrap()).unwrap();
+        assert!(!back.scope.pdf);
+        assert!(back.scope.source && back.scope.attachments);
+
+        // Legacy manifests (no scope field) mean "everything synced".
+        let legacy: Manifest = serde_json::from_str(r#"{"version":1,"files":{}}"#).unwrap();
+        assert!(legacy.scope.is_all());
     }
 }

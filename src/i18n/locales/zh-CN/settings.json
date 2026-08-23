@@ -579,6 +579,13 @@
 		"save": "保存",
 		"autoSync": "自动同步",
 		"interval": "同步间隔",
-		"intervalMinutes": "{{count}} 分钟"
+		"intervalMinutes": "{{count}} 分钟",
+		"scope": "同步范围",
+		"scopeHint": "笔记、元数据与标注永远同步。未勾选的内容不会上传或下载，也不会因过滤而被删除。PDF 与 LaTeX 源码可随时从来源重新下载。",
+		"scopeFull": "完整同步",
+		"scopeNotesOnly": "仅笔记与元数据",
+		"scopePdf": "PDF 文件",
+		"scopeSource": "LaTeX 源码",
+		"scopeAttachments": "支撑材料"
 	}
 }

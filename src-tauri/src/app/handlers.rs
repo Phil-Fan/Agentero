@@ -172,6 +172,7 @@ pub fn attach_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
             crate::features::sync::commands::sync_configure,
             crate::features::sync::commands::sync_disconnect,
             crate::features::sync::commands::sync_now,
+            crate::features::sync::commands::sync_scope_sizes,
             crate::features::watcher::commands::fs_watch_start,
             crate::features::watcher::commands::fs_watch_stop,
             crate::features::connector::commands::connector_get_status,
