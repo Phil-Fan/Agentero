@@ -32,6 +32,7 @@ struct AcpTerminal {
     child: Arc<Mutex<Child>>,
     state: Arc<Mutex<AcpTerminalState>>,
     exit_tx: watch::Sender<Option<TerminalExitStatus>>,
+    readers: Vec<tokio::task::JoinHandle<()>>,
 }
 
 struct AcpTerminalState {
@@ -97,8 +98,8 @@ impl AcpTerminalManager {
         let child_arc = Arc::new(Mutex::new(child));
         let (exit_tx, _) = watch::channel(None);
 
-        spawn_reader(stdout, state.clone(), output_byte_limit);
-        spawn_reader(stderr, state.clone(), output_byte_limit);
+        let stdout_handle = spawn_reader(stdout, state.clone(), output_byte_limit);
+        let stderr_handle = spawn_reader(stderr, state.clone(), output_byte_limit);
         spawn_waiter(child_arc.clone(), state.clone(), exit_tx.clone());
 
         self.terminals.insert(
@@ -107,6 +108,7 @@ impl AcpTerminalManager {
                 child: child_arc,
                 state,
                 exit_tx,
+                readers: vec![stdout_handle, stderr_handle],
             },
         );
 
@@ -115,13 +117,14 @@ impl AcpTerminalManager {
 
     /// Return current output, truncation flag, and exit status if known.
     async fn output(
-        &self,
+        &mut self,
         request: &TerminalOutputRequest,
     ) -> Result<TerminalOutputResponse, String> {
         let terminal = self
             .terminals
-            .get(request.terminal_id.0.as_ref())
+            .get_mut(request.terminal_id.0.as_ref())
             .ok_or_else(|| "terminal not found".to_string())?;
+        drain_readers(terminal).await;
         let state = terminal.state.lock().await;
         let output = String::from_utf8_lossy(&state.output_bytes).to_string();
         Ok(TerminalOutputResponse::new(output, state.truncated)
@@ -130,12 +133,12 @@ impl AcpTerminalManager {
 
     /// Wait for the command to exit and return its exit status.
     async fn wait_for_exit(
-        &self,
+        &mut self,
         request: &WaitForTerminalExitRequest,
     ) -> Result<WaitForTerminalExitResponse, String> {
         let terminal = self
             .terminals
-            .get(request.terminal_id.0.as_ref())
+            .get_mut(request.terminal_id.0.as_ref())
             .ok_or_else(|| "terminal not found".to_string())?;
 
         // Fast path: already exited.
@@ -147,6 +150,7 @@ impl AcpTerminalManager {
         rx.changed()
             .await
             .map_err(|_| "terminal exit watcher dropped".to_string())?;
+        drain_readers(terminal).await;
         let status = rx
             .borrow()
             .clone()
@@ -186,7 +190,11 @@ impl Default for AcpTerminalManager {
     }
 }
 
-fn spawn_reader<R>(mut stream: R, state: Arc<Mutex<AcpTerminalState>>, output_byte_limit: u64)
+fn spawn_reader<R>(
+    mut stream: R,
+    state: Arc<Mutex<AcpTerminalState>>,
+    output_byte_limit: u64,
+) -> tokio::task::JoinHandle<()>
 where
     R: AsyncReadExt + Unpin + Send + 'static,
 {
@@ -207,7 +215,15 @@ where
                 Err(_) => break,
             }
         }
-    });
+    })
+}
+
+/// Wait for all output reader tasks to finish so captured output is complete.
+async fn drain_readers(terminal: &mut AcpTerminal) {
+    let handles = std::mem::take(&mut terminal.readers);
+    for handle in handles {
+        let _ = handle.await;
+    }
 }
 
 fn spawn_waiter(
