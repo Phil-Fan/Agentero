@@ -372,10 +372,55 @@ fn extract_path_from_source_line(raw: &str) -> Option<String> {
         }
     }
 
+    // 6) Trim trailing bracket tags like [blocked], [read], [failed], etc.
+    if cleaned.ends_with(']') {
+        if let Some(start) = cleaned.rfind('[') {
+            let prefix = cleaned[..start].trim();
+            if looks_like_source_path(prefix) {
+                return Some(prefix.to_string());
+            }
+        }
+    }
+
     if looks_like_source_path(&cleaned) {
         return Some(cleaned);
     }
     None
+}
+
+/// Recognize section headers that introduce agent source lists.
+fn is_sources_section_header(line: &str) -> bool {
+    let trimmed = line.trim();
+    let lower = trimmed.to_lowercase();
+
+    // Markdown headers of any depth that start a Sources section: # Sources,
+    // ## Sources, ### Sources, ## Sources (3), ## Sources: etc.
+    if lower.starts_with('#') {
+        let rest = lower.trim_start_matches('#').trim();
+        return rest == "sources"
+            || rest.starts_with("sources ")
+            || rest.starts_with("sources:")
+            || rest.starts_with("sources(")
+            || rest == "source"
+            || rest.starts_with("source ")
+            || rest.starts_with("source:")
+            || rest.starts_with("source(")
+            || rest == "来源"
+            || rest.starts_with("来源 ")
+            || rest.starts_with("来源(")
+            || rest == "引用"
+            || rest.starts_with("引用 ")
+            || rest.starts_with("引用(")
+            || rest.starts_with("读取文件");
+    }
+
+    // Plain "Sources" / "Source" / "来源" / "引用" line (no leading #).
+    lower == "sources"
+        || lower == "source"
+        || lower == "来源"
+        || lower == "引用"
+        || trimmed.eq_ignore_ascii_case("sources:")
+        || trimmed.eq_ignore_ascii_case("source:")
 }
 
 /// Best-effort extraction of local paths from agent text (Sources section or bare paths).
@@ -384,10 +429,7 @@ pub fn extract_sources(content: &str) -> Vec<String> {
     let mut in_sources = false;
     for line in content.lines() {
         let trimmed = line.trim();
-        if trimmed.eq_ignore_ascii_case("## sources")
-            || trimmed.starts_with("读取文件")
-            || trimmed.eq_ignore_ascii_case("sources:")
-        {
+        if is_sources_section_header(trimmed) {
             in_sources = true;
             continue;
         }
@@ -395,10 +437,16 @@ pub fn extract_sources(content: &str) -> Vec<String> {
             if trimmed.starts_with('#') {
                 break;
             }
+            if trimmed.is_empty() {
+                continue;
+            }
             if let Some(path) = extract_path_from_source_line(trimmed) {
                 if !sources.iter().any(|s| s == &path) {
                     sources.push(path);
                 }
+            } else {
+                // Non-source content ends the section.
+                break;
             }
         }
     }
@@ -448,6 +496,20 @@ mod tests {
                 "papers/Towards-Long-Horizon-Agent/PAPER.md".to_string(),
                 "papers/Towards-Long-Horizon-Agent/NOTES.md".to_string(),
                 "assets/image-38fac94f-4577-46b6-af56-bb4465f2bc13.png".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn extracts_sources_from_plain_sources_block_with_blocked_tag() {
+        let text = "Answer.\n\nSources\npapers/Dflash/2608.02438/NOTES.md [blocked]\npapers/Dflash/2608.02438/source/main.tex [blocked]\npapers/Dflash/2608.02438/metadata.json [blocked]\n";
+        let s = extract_sources(text);
+        assert_eq!(
+            s,
+            vec![
+                "papers/Dflash/2608.02438/NOTES.md".to_string(),
+                "papers/Dflash/2608.02438/source/main.tex".to_string(),
+                "papers/Dflash/2608.02438/metadata.json".to_string(),
             ]
         );
     }
