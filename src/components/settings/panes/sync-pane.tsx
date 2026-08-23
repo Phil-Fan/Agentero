@@ -246,6 +246,35 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 				: status?.configured
 					? t("sync.neverSynced")
 					: null;
+	const configChanged = JSON.stringify(form) !== JSON.stringify(status?.config);
+	const primaryAction =
+		!status?.configured || configChanged ? (
+			<Button
+				type="button"
+				size="sm"
+				onClick={() => void save()}
+				disabled={saving || syncing}
+			>
+				{saving ? (
+					<LoaderCircle data-icon="inline-start" className="animate-spin" />
+				) : null}
+				{status?.configured ? t("sync.save") : t("sync.connect")}
+			</Button>
+		) : (
+			<Button
+				type="button"
+				size="sm"
+				onClick={() => void runSync()}
+				disabled={syncing}
+			>
+				{syncing ? (
+					<LoaderCircle data-icon="inline-start" className="animate-spin" />
+				) : (
+					<CloudUpload data-icon="inline-start" />
+				)}
+				{t("sync.syncNow")}
+			</Button>
+		);
 
 	return (
 		<section>
@@ -260,26 +289,7 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 						) : null}
 					</>
 				}
-				actions={
-					status?.configured ? (
-						<Button
-							type="button"
-							size="sm"
-							onClick={() => void runSync()}
-							disabled={syncing}
-						>
-							{syncing ? (
-								<LoaderCircle
-									data-icon="inline-start"
-									className="animate-spin"
-								/>
-							) : (
-								<CloudUpload data-icon="inline-start" />
-							)}
-							{t("sync.syncNow")}
-						</Button>
-					) : undefined
-				}
+				actions={primaryAction}
 			/>
 
 			{status?.configured && !form.conditionalWrites ? (
@@ -448,20 +458,6 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 			</Collapsible>
 
 			<div className="flex items-center gap-2">
-				{!status?.configured ||
-				JSON.stringify(form) !== JSON.stringify(status.config) ? (
-					<Button
-						type="button"
-						size="sm"
-						onClick={() => void save()}
-						disabled={saving || syncing}
-					>
-						{saving ? (
-							<LoaderCircle data-icon="inline-start" className="animate-spin" />
-						) : null}
-						{status?.configured ? t("sync.save") : t("sync.connect")}
-					</Button>
-				) : null}
 				{status?.configured ? (
 					<Button
 						type="button"
