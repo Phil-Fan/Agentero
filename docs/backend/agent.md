@@ -73,6 +73,12 @@ ACP `terminal` 能力：Host 在 initialize 时声明 `terminal: true`，并本�
 让 Kimi Code 等需要执行 shell 命令的 Agent 可以在 Vault 工作目录下运行命令并
 读取结果。
 
+Kimi Code ACP 会把 `Bash`/`Glob`/`Grep` 等工具实现为 `terminal/create`：它发送
+`/bin/bash -c "cd '<cwd>' && <cmd>"`，Host 按收到的 `cwd` 直接 spawn 该 bash
+进程即可。若 Host 没有声明 `terminal` 能力，或 Kimi Code 版本过旧，这些工具会
+直接失败并报 `ACP runtime only supports interactive Bash tool processes`。
+此外 Kimi Code 的权限请求目前只返回通用 `"bash"` 字符串（[MoonshotAI/kimi-code#800](https://github.com/MoonshotAI/kimi-code/issues/800)），不会给出具体命令，因此 Agentero 默认的 Restricted 策略会拒绝、Ask 模式也只能看到 `bash`，需要用户在 Kimi 侧或 Agentero 侧开启自动批准（YOLO）才能静默执行。
+
 多轮续聊必须传 **provider session id**（不是 Agentero runtime id）。Grok Build ACP
 声明 `loadSession: true`、**不**声明 `resume`；对 Grok 调用 `session/resume` 会
 `Method not found`，Host 应改走 `session/load`。
