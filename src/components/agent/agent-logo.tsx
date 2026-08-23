@@ -64,6 +64,7 @@ export function AgentLogo({
 	const key = agentLogoKeyForTemplate(template);
 	const iconClass = cn("size-3.5", iconClassName);
 	const neutralIconClass = cn(iconClass, "!text-foreground");
+	const isolateSvgColorClass = "[&_svg_*]:!text-inherit";
 
 	let icon: ReactNode;
 	switch (key) {
@@ -122,6 +123,7 @@ export function AgentLogo({
 			<span
 				className={cn(
 					"inline-flex shrink-0 items-center justify-center",
+					isolateSvgColorClass,
 					className,
 				)}
 				aria-hidden
@@ -133,6 +135,7 @@ export function AgentLogo({
 
 	const shellClass = cn(
 		"inline-flex size-5 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background text-foreground shadow-xs",
+		isolateSvgColorClass,
 		className,
 	);
 
