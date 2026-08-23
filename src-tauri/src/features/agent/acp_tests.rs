@@ -74,6 +74,43 @@ mod acp_live {
         }
     }
 
+    #[tokio::test]
+    async fn probe_kimi_acp_if_installed() {
+        if resolve_command("kimi").is_none() {
+            eprintln!("skip: kimi not on PATH");
+            return;
+        }
+        let mut d = desc(
+            "test-kimi",
+            "Kimi Code",
+            AgentTemplate::KimiCode,
+            "kimi",
+            vec!["acp".into()],
+        );
+        for key in [
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+        ] {
+            if let Ok(v) = std::env::var(key) {
+                d.env.insert(key.to_string(), v);
+            }
+        }
+        let result = probe_agent(&d, None).await;
+        eprintln!("kimi probe result: {:?}", result);
+        // Kimi must be authenticated for the probe to succeed.
+        if !result.available {
+            eprintln!(
+                "skip assert: kimi probe failed in this environment: {:?}",
+                result.error
+            );
+            return;
+        }
+    }
+
     #[test]
     fn catalog_has_common_agents() {
         let cats = catalog_templates();
