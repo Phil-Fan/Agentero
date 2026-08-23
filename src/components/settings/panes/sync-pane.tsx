@@ -357,40 +357,50 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 						</Button>
 					</ButtonGroup>
 				</SettingsRow>
-				<SettingsRow
-					label={t("sync.scopePdf")}
-					description={scopeSizes ? formatBytes(scopeSizes.pdf) : undefined}
-					htmlFor="sync-scope-pdf"
-				>
-					<Switch
-						id="sync-scope-pdf"
-						checked={scope.pdf}
-						onCheckedChange={(checked) => patchScope("pdf", checked)}
-					/>
+				<SettingsRow label={t("sync.scopePdf")} htmlFor="sync-scope-pdf">
+					<span className="flex items-center gap-2">
+						{scopeSizes ? (
+							<span className="text-muted-foreground text-xs tabular-nums">
+								{formatBytes(scopeSizes.pdf)}
+							</span>
+						) : null}
+						<Switch
+							id="sync-scope-pdf"
+							checked={scope.pdf}
+							onCheckedChange={(checked) => patchScope("pdf", checked)}
+						/>
+					</span>
 				</SettingsRow>
-				<SettingsRow
-					label={t("sync.scopeSource")}
-					description={scopeSizes ? formatBytes(scopeSizes.source) : undefined}
-					htmlFor="sync-scope-source"
-				>
-					<Switch
-						id="sync-scope-source"
-						checked={scope.source}
-						onCheckedChange={(checked) => patchScope("source", checked)}
-					/>
+				<SettingsRow label={t("sync.scopeSource")} htmlFor="sync-scope-source">
+					<span className="flex items-center gap-2">
+						{scopeSizes ? (
+							<span className="text-muted-foreground text-xs tabular-nums">
+								{formatBytes(scopeSizes.source)}
+							</span>
+						) : null}
+						<Switch
+							id="sync-scope-source"
+							checked={scope.source}
+							onCheckedChange={(checked) => patchScope("source", checked)}
+						/>
+					</span>
 				</SettingsRow>
 				<SettingsRow
 					label={t("sync.scopeAttachments")}
-					description={
-						scopeSizes ? formatBytes(scopeSizes.attachments) : undefined
-					}
 					htmlFor="sync-scope-attachments"
 				>
-					<Switch
-						id="sync-scope-attachments"
-						checked={scope.attachments}
-						onCheckedChange={(checked) => patchScope("attachments", checked)}
-					/>
+					<span className="flex items-center gap-2">
+						{scopeSizes ? (
+							<span className="text-muted-foreground text-xs tabular-nums">
+								{formatBytes(scopeSizes.attachments)}
+							</span>
+						) : null}
+						<Switch
+							id="sync-scope-attachments"
+							checked={scope.attachments}
+							onCheckedChange={(checked) => patchScope("attachments", checked)}
+						/>
+					</span>
 				</SettingsRow>
 			</SettingsGroup>
 
