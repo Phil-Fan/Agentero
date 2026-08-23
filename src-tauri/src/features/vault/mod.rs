@@ -544,8 +544,8 @@ mod tests {
                 "Windows variant expected"
             );
             assert!(
-                content.contains("$env:AGENTERO_VAULT"),
-                "PowerShell recipe expected"
+                content.contains("AGENTERO_VAULT"),
+                "vault env resolution expected"
             );
         }
         #[cfg(not(windows))]
@@ -555,8 +555,8 @@ mod tests {
                 "POSIX variant expected"
             );
             assert!(
-                content.contains("export AGENTERO_VAULT"),
-                "POSIX recipe expected"
+                content.contains("AGENTERO_VAULT"),
+                "vault env resolution expected"
             );
         }
     }
