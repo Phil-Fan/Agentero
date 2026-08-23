@@ -15,7 +15,7 @@
 |---|---|---|---|
 | 欢迎 | `welcome` | 品牌 + 价值主张 + 特性 | — |
 | 外观 | `theme` | 明暗模式 + tweakcn 配色主题即时预览 | `patchSettings` + `applyUiTheme` / `next-themes` |
-| Agent | `agent` | 扫描本机 ACP Agent、探测、设默认（可跳过） | `scanCatalog` / `probeCatalogAgent` / `ensureCatalogAgent`（`src/lib/agent/api.ts`） |
+| Agent | `agent` | 扫描本机 ACP Agent、探测、设默认（可跳过）；卡片网格完整展示，不使用内部滚动条 | `scanCatalog` / `probeCatalogAgent` / `ensureCatalogAgent`（`src/lib/agent/api.ts`） |
 | 翻译 | `translate` | 直接内嵌 `TranslatePane` | 设置窗口同一组件，配置即落盘 |
 | 版面解析 | `layout` | 直接内嵌 `LayoutPane` | 设置窗口同一组件，配置即落盘 |
 | 收尾 | `vault` | 创建 Vault / 从 Zotero 导入 / 稍后再说 | `createNewVault()` / `migrateZoteroFromWelcome()`（`src/lib/vault/actions.ts`） |

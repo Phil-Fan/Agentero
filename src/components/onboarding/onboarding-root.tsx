@@ -249,7 +249,13 @@ function OnboardingDialog() {
 					) : null}
 				</div>
 
-				<div className="agentero-scroll max-h-[24rem] overflow-y-auto px-6 py-5">
+				<div
+					className={cn(
+						"px-6 py-5",
+						stepper.current.id !== "agent" &&
+							"agentero-scroll max-h-[24rem] overflow-y-auto",
+					)}
+				>
 					<AnimatePresence mode="wait" initial={false}>
 						<motion.div
 							key={stepper.current.id}

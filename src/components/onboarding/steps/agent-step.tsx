@@ -150,7 +150,7 @@ export const AgentStep = forwardRef<AgentStepHandle>(
 						<span>{scanning ? t("agent.scanning") : t("agent.none")}</span>
 					</div>
 				) : (
-					<ul className="grid max-h-[20rem] grid-cols-4 gap-3 overflow-y-auto pr-0.5">
+					<ul className="grid grid-cols-4 gap-3">
 						{entries.map((entry) => {
 							const available = isAvailable(entry);
 							const isDefault =
