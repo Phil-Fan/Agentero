@@ -3,7 +3,6 @@ import {
 	Calendar,
 	ChevronRight,
 	ExternalLink,
-	Info,
 	Pencil,
 	Tag,
 	Users,
@@ -72,18 +71,11 @@ function MetaRow({
 	children: ReactNode;
 }) {
 	return (
-		<div className="flex gap-2 px-3 py-1.5">
-			<Icon
-				className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
-				aria-hidden
-			/>
+		<div className="flex items-center gap-2 px-3 py-1.5">
+			<Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
 			<div className="min-w-0 flex-1">
-				<div className="text-[10px] text-muted-foreground uppercase tracking-wide leading-none">
-					{label}
-				</div>
-				<div className="mt-0.5 text-xs leading-snug text-foreground">
-					{children}
-				</div>
+				<span className="sr-only">{label}</span>
+				<div className="text-xs leading-snug text-foreground">{children}</div>
 			</div>
 		</div>
 	);
@@ -137,14 +129,43 @@ function LinkChip({
 			rel="noreferrer"
 			className={cn(
 				"inline-flex items-center gap-1 rounded-md border bg-background px-1.5 py-0.5",
-				"text-[11px] text-muted-foreground transition-colors",
+				"h-6 min-w-0 max-w-full text-[11px] leading-none text-muted-foreground transition-colors",
 				"hover:bg-muted hover:text-foreground",
+				"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 			)}
 		>
 			{icon}
-			{label}
-			<ExternalLink className="size-2.5 opacity-70" aria-hidden />
+			<span className="min-w-0 truncate">{label}</span>
+			<ExternalLink className="size-2.5 shrink-0 opacity-70" aria-hidden />
 		</a>
+	);
+}
+
+function AlphaXivIcon({ className }: { className?: string }) {
+	return (
+		<svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+			<title>alphaXiv</title>
+			<path
+				d="M2.8 10.2 8 5c1.3-1.3 3.5-1.2 4.7.2l3 3.3"
+				stroke="currentColor"
+				strokeWidth="3.1"
+				strokeLinecap="square"
+				strokeLinejoin="miter"
+			/>
+			<path
+				d="M12.2 8.4 7.7 13c-1.2 1.2-1.2 3.1 0 4.3 1.2 1.2 3.2 1.1 4.3-.1L21 8.1"
+				stroke="currentColor"
+				strokeWidth="3.1"
+				strokeLinecap="square"
+				strokeLinejoin="miter"
+			/>
+			<path
+				d="m16.9 14.2 4.2 4.2"
+				stroke="currentColor"
+				strokeWidth="3.1"
+				strokeLinecap="square"
+			/>
+		</svg>
 	);
 }
 
@@ -165,8 +186,8 @@ function ServiceLinkChip({
 			aria-label={label}
 			title={label}
 			className={cn(
-				"inline-flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-md border bg-background px-2",
-				"text-[11px] text-muted-foreground transition-colors",
+				"inline-flex h-6 min-w-0 max-w-full items-center gap-1 rounded-md border bg-background px-1.5",
+				"text-[11px] leading-none text-muted-foreground transition-colors",
 				"hover:bg-muted hover:text-foreground",
 				"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 			)}
@@ -527,7 +548,7 @@ export function PaperInfoPanel({
 					<CollapsibleTrigger
 						className={cn(
 							"flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left outline-none",
-							"text-muted-foreground text-xs font-medium tracking-wide",
+							"text-muted-foreground text-xs font-medium",
 							"hover:bg-muted/40 hover:text-foreground",
 							"focus-visible:ring-1 focus-visible:ring-ring",
 						)}
@@ -539,25 +560,8 @@ export function PaperInfoPanel({
 							)}
 							aria-hidden
 						/>
-						<Info className="size-3.5 shrink-0" aria-hidden />
 						<span className="truncate">{t("paperInfo.info")}</span>
 					</CollapsibleTrigger>
-					{canEditMeta && meta ? (
-						<button
-							type="button"
-							title={t("paperInfo.editMeta.title")}
-							aria-label={t("paperInfo.editMeta.title")}
-							onClick={() => setEditMetaDraft(meta)}
-							className={cn(
-								"flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md",
-								"text-muted-foreground transition-colors",
-								"hover:bg-muted hover:text-foreground",
-								"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-							)}
-						>
-							<Pencil className="size-3" aria-hidden />
-						</button>
-					) : null}
 					{arxivId ? (
 						<button
 							type="button"
@@ -575,7 +579,6 @@ export function PaperInfoPanel({
 								"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 							)}
 						>
-							<SiArxiv className="size-3 shrink-0" aria-hidden />
 							<span className="truncate">{arxivId}</span>
 						</button>
 					) : null}
@@ -621,35 +624,31 @@ export function PaperInfoPanel({
 									}}
 								/>
 							</MetaRow>
-							{(meta.pdf_url || meta.source_url || meta.arxiv_id) && (
-								<div className="flex flex-wrap gap-1.5 px-3 pt-1">
+							{meta.pdf_url || meta.arxiv_id || modelScopeUrl || alphaXivUrl ? (
+								<div className="flex flex-nowrap items-center gap-1.5 px-3 pt-1.5">
 									{meta.pdf_url || meta.arxiv_id ? (
 										<LinkChip
 											href={
 												meta.pdf_url ?? `https://arxiv.org/pdf/${meta.arxiv_id}`
 											}
 											label={t("paperInfo.pdf")}
-										/>
-									) : null}
-									{meta.source_url || meta.arxiv_id ? (
-										<LinkChip
-											href={
-												meta.source_url ??
-												`https://arxiv.org/abs/${meta.arxiv_id}`
+											icon={
+												<SiArxiv
+													className="size-3.5 shrink-0 text-[#B31B1B]"
+													aria-hidden
+												/>
 											}
-											label={t("paperInfo.abs")}
 										/>
 									) : null}
-								</div>
-							)}
-							{modelScopeUrl || alphaXivUrl ? (
-								<div className="flex flex-wrap gap-1.5 px-3 pt-1.5">
 									{modelScopeUrl ? (
 										<ServiceLinkChip
 											href={modelScopeUrl}
 											label={t("paperInfo.modelscopeInterpretation")}
 											icon={
-												<SiModelscope className="size-3.5 shrink-0 text-[#624AFF]" />
+												<SiModelscope
+													className="size-3.5 shrink-0 text-[#624AFF]"
+													aria-hidden
+												/>
 											}
 										/>
 									) : null}
@@ -658,10 +657,29 @@ export function PaperInfoPanel({
 											href={alphaXivUrl}
 											label={t("paperInfo.alphaXiv")}
 											icon={
-												<SiArxiv className="size-3.5 shrink-0 text-[#B31B1B]" />
+												<AlphaXivIcon className="size-3.5 shrink-0 text-[#B33131]" />
 											}
 										/>
 									) : null}
+								</div>
+							) : null}
+							{canEditMeta ? (
+								<div className="px-3 pt-2">
+									<button
+										type="button"
+										onClick={() => setEditMetaDraft(meta)}
+										className={cn(
+											"flex h-7 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md border bg-background px-2",
+											"text-xs leading-none text-muted-foreground transition-colors",
+											"hover:bg-muted hover:text-foreground",
+											"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+										)}
+									>
+										<Pencil className="size-3.5 shrink-0" aria-hidden />
+										<span className="truncate">
+											{t("paperInfo.editMeta.title")}
+										</span>
+									</button>
 								</div>
 							) : null}
 						</div>

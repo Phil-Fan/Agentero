@@ -336,8 +336,7 @@
 		"tagColorNamed": "颜色 {{color}}",
 		"tagsDesktopOnly": "编辑标签需要桌面应用。",
 		"tagsSaveFailed": "保存标签失败。",
-		"pdf": "PDF",
-		"abs": "摘要",
+		"pdf": "arXiv",
 		"modelscopeInterpretation": "魔搭解读",
 		"alphaXiv": "alphaXiv",
 		"arxivId": "arXiv 标识号",
@@ -345,7 +344,7 @@
 		"copied": "已复制{{label}}",
 		"copyFailed": "无法复制到剪贴板",
 		"editMeta": {
-			"title": "编辑元数据",
+			"title": "修改元信息",
 			"fieldTitle": "标题",
 			"fieldAuthors": "作者",
 			"authorsPlaceholder": "每行一位作者",
