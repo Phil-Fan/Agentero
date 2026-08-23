@@ -44,13 +44,14 @@ import {
 	ZoomMode,
 	ZoomPluginPackage,
 } from "@embedpdf/plugin-zoom/react";
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
 import { PdfBottomBar } from "@/components/viewer/pdf/chrome/pdf-bottom-bar";
 import { PdfCardStack } from "@/components/viewer/pdf/chrome/pdf-card-stack";
 import { PdfFindBar } from "@/components/viewer/pdf/chrome/pdf-find-bar";
 import { PdfOutlinePanel } from "@/components/viewer/pdf/chrome/pdf-outline-panel";
+import { PdfReferencesPanel } from "@/components/viewer/pdf/chrome/pdf-references-panel";
 import { PdfToolbar } from "@/components/viewer/pdf/chrome/pdf-toolbar";
 import { pageElByIndex, rectRightScreen } from "@/components/viewer/pdf/coords";
 import { usePdfEngineContext } from "@/components/viewer/pdf/engine-provider";
@@ -639,6 +640,20 @@ function PdfViewerInner({
 		paperAbsPath,
 		paperRelPath,
 	});
+
+	const [showReferences, setShowReferences] = useState(false);
+	const handleToggleReferences = useCallback(() => {
+		if (showOutline) {
+			toggleOutline();
+		}
+		setShowReferences((v) => !v);
+	}, [showOutline, toggleOutline]);
+	const handleToggleOutline = useCallback(() => {
+		if (showReferences) {
+			setShowReferences(false);
+		}
+		toggleOutline();
+	}, [showReferences, toggleOutline]);
 
 	// ---- In-text citation / internal PDF links ----
 
@@ -1318,8 +1333,14 @@ function PdfViewerInner({
 			<PdfOutlinePanel
 				outline={outline}
 				showOutline={showOutline}
-				onToggleOutline={toggleOutline}
+				onToggleOutline={handleToggleOutline}
 				onGoToPage={goToPage}
+			/>
+			<PdfReferencesPanel
+				vaultPath={vaultPath}
+				paperPath={paperRelPath}
+				showReferences={showReferences}
+				onToggleReferences={handleToggleReferences}
 			/>
 			<PdfFindBar
 				open={findOpen}

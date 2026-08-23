@@ -38,6 +38,8 @@ type ReferencesPanelProps = {
 	/** Vault-relative paper folder of the active document; null = not a paper. */
 	paperPath: string | null;
 	className?: string;
+	/** Hide the pane header and filter input for use inside a floating PDF panel. */
+	compact?: boolean;
 };
 
 function citationMatchesFilter(citation: Citation, needle: string): boolean {
@@ -68,6 +70,7 @@ export function ReferencesPanel({
 	vaultPath,
 	paperPath,
 	className,
+	compact,
 }: ReferencesPanelProps) {
 	const { t } = useTranslation("viewer");
 	const { sidecar, loading, setSidecar } = usePaperRefsSidecar(
@@ -153,15 +156,17 @@ export function ReferencesPanel({
 		</EmptyState>
 	) : (
 		<>
-			<div className="border-b px-2 py-1.5">
-				<Input
-					value={filter}
-					onChange={(e) => setFilter(e.target.value)}
-					placeholder={t("references.filterPlaceholder")}
-					className="h-7 text-xs"
-					spellCheck={false}
-				/>
-			</div>
+			{compact ? null : (
+				<div className="border-b px-2 py-1.5">
+					<Input
+						value={filter}
+						onChange={(e) => setFilter(e.target.value)}
+						placeholder={t("references.filterPlaceholder")}
+						className="h-7 text-xs"
+						spellCheck={false}
+					/>
+				</div>
+			)}
 			<div
 				ref={listRef}
 				className="agentero-scroll min-h-0 flex-1 overflow-y-auto p-2"
@@ -199,28 +204,30 @@ export function ReferencesPanel({
 			)}
 			aria-label={t("references.panelAria")}
 		>
-			<PaneHeader
-				trailing={
-					paperPath && sidecar ? (
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-xs"
-							className="size-6 text-muted-foreground hover:text-foreground"
-							aria-label={t("references.reparse")}
-							disabled={parsing}
-							onClick={() => void runParse(true)}
-						>
-							<RefreshCw
-								className={cn("size-3.5", parsing && "animate-spin")}
-							/>
-						</Button>
-					) : null
-				}
-			>
-				<BookMarked className="size-4 text-muted-foreground" aria-hidden />
-				<span className="font-medium text-sm">{t("references.title")}</span>
-			</PaneHeader>
+			{compact ? null : (
+				<PaneHeader
+					trailing={
+						paperPath && sidecar ? (
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								className="size-6 text-muted-foreground hover:text-foreground"
+								aria-label={t("references.reparse")}
+								disabled={parsing}
+								onClick={() => void runParse(true)}
+							>
+								<RefreshCw
+									className={cn("size-3.5", parsing && "animate-spin")}
+								/>
+							</Button>
+						) : null
+					}
+				>
+					<BookMarked className="size-4 text-muted-foreground" aria-hidden />
+					<span className="font-medium text-sm">{t("references.title")}</span>
+				</PaneHeader>
+			)}
 
 			{listBody}
 		</section>
