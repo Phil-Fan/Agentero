@@ -25,7 +25,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 |---|---|
 | 缩放 | 可输入 50%–300% 精确比例；支持 +/-、⌘滚轮、触控板捏合；适应宽度 / 适应整页放在底部栏的沉浸式按钮左侧；真实 scale 重渲染。⌘滚轮步进按动画帧合并（`createWheelZoomCoalescer`）：一帧内多个 wheel 事件先累加抵消，再一次性应用净步进，避免触控板高频事件逐事件触发整页重光栅。wheel 监听不常驻 non-passive（`bindWheelZoomGesture`）：普通滚动手势期间切成 passive，滚轮静默后再换回 non-passive，保证捏合缩放仍可 `preventDefault`，同时普通滚动不被主线程阻塞。WebKit（Safari / macOS WKWebView）的触控板捏合不以 ctrl+wheel 送达，而是 `gesturestart/change/end`，`bindWheelZoomGesture` 将其 magnification 比值换算为等价 wheel delta 走同一合并路径并 `preventDefault` 抑制平台放大 |
 | 导航 | 底部页码 pill、PageUp/Down、Home/End |
-| 大纲 / 参考文献 | 左侧书签浮层；参考文献同侧浮层（紧凑列表，无过滤） |
+| 大纲 / 参考文献 / 版面解析 | 左侧浮层：书签、参考文献（紧凑列表）、版面解析结果（图/表/算法/公式） |
 | 查找 | `⌘F` + 命中高亮 |
 | 明暗模式 | 底部换页栏旁可单独切换亮色 / 暗色页面，偏好保存在本地，不改变应用全局主题。EmbedPDF 尚无页面 color-scheme API，仅在 PDF 暗色模式下对 `RenderLayer` / `TilingLayer` 做柔和反相（`PDF_PAGE_RASTER_DARK_CLASS`：`invert(0.88)` + `hue-rotate(180)` + 轻亮度/对比）；全文翻译覆盖层同样按浅色纸面绘制后套用同一 filter，以匹配反转后的纸面。选区 / 搜索 / 批注覆盖层与 Agent 裁剪（`renderPageRect`）不受影响。扫描版/插图会被一并反相 |
 | 沉浸 | 底部换页栏旁切换；全屏 + 限宽居中 |
@@ -88,7 +88,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/pdf/region-crop.ts` | PDF 区域裁剪与 Agent 图片编码 |
 | `src/components/viewer/pdf/engine-provider.tsx` | PDFium engine 宿主：worker 优先 + 就绪探针 + 主线程回退 |
 | `src/components/viewer/pdf/layers/` | 页内绘制层：`page-layers`（memo 单页栈）/ `citation-links` / `layout-translate-overlay` / `region-select-layer` / `selection-gutter` |
-| `src/components/viewer/pdf/chrome/` | 纯展示 chrome：`pdf-toolbar` / `pdf-find-bar` / `pdf-outline-panel`（+`outline-tree`）/ `pdf-references-panel` / `pdf-bottom-bar` / `pdf-card-stack`（portal 卡片栈） |
+| `src/components/viewer/pdf/chrome/` | 纯展示 chrome：`pdf-toolbar` / `pdf-find-bar` / `pdf-outline-panel`（+`outline-tree`）/ `pdf-references-panel` / `pdf-figures-panel` / `pdf-bottom-bar` / `pdf-card-stack`（portal 卡片栈） |
 | `src/components/viewer/pdf/cards/` | 划词与 mark 卡片：`selection-menu` / `selection-card`（共用壳）/ `ask-popover` / `translate-card` / `visual-trace-card` / `visual-annotation-editor` / `annotation-editor` / `formula-annotation-card` / `citation-preview` |
 | `src/components/viewer/pdf/viewport/` | 宿主接线：`dockview-viewport`（resize 门控 + 滚动指标按帧提交）/ `wheel-zoom-handler` / `active-card-scroll-sync` |
 | `src/components/viewer/pdf/hooks/use-pdf-cards.ts` | 浮动卡生命周期：打开 / 定位（虚拟化重试）/ hover 收起 |
@@ -112,7 +112,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/pdf/hooks/use-pdf-find.ts` | `⌘F` 查找 |
 | `src/components/viewer/pdf/hooks/use-pdf-outline.ts` | 书签大纲加载 |
 | `src/components/viewer/pdf/hooks/use-pdf-viewer-handle.ts` | 注册命令式 handle（跨簇，唯一入口） |
-| `src/components/viewer/panels/figures-panel.tsx` | 版面分析入口（右栏 header：分析 / 显示 bbox） |
+| `src/components/viewer/panels/figures-panel.tsx` | 版面分析入口（右栏 header：分析 / 显示 bbox；PDF 内浮层复用同一组件） |
 | `src/components/viewer/panels/annotations-panel.tsx` | 批注 / 提问 / visual mark 总览（右栏） |
 | `src/components/viewer/panels/references-panel.tsx` | 参考文献解析与入库（右栏）；`compact` 模式用于 PDF 内浮层，隐藏 header 与过滤 |
 | `src/lib/workspace/viewer/pdf-viewer-registry.ts` | 按 tab 注册 `PdfViewerHandle`（类型契约也在此定义），供 shell / 命令面板 / workspace actions 调用；lib 层纯注册表，无 JSX |
