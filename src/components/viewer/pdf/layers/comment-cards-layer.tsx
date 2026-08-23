@@ -30,7 +30,7 @@ export const COMMENT_CARD_GAP_PX = 8;
 export const COMMENT_RAIL_WIDTH_PX =
 	COMMENT_CARD_WIDTH_PX + COMMENT_CARD_GAP_PX;
 /** Hosts narrower than this fall back to the in-page annotate gutter pins. */
-export const COMMENT_RAIL_MIN_HOST_WIDTH = 960;
+export const COMMENT_RAIL_MIN_HOST_WIDTH = 640;
 
 const CARD_GAP_PX = 8;
 /** text-xs leading-relaxed ≈ 12px × 1.625. */

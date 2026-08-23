@@ -76,10 +76,14 @@ export function DockviewViewport({
 			else cancelAnimationFrame(handle);
 		};
 		const commitResize = () => {
+			// Report a reduced width so EmbedPDF's fitWidth zoom leaves room for the
+			// comment rail that overflows into the reserved right gutter.
+			const width = Math.max(1, viewport.offsetWidth - rightGutter);
+			const clientWidth = Math.max(1, viewport.clientWidth - rightGutter);
 			viewportPlugin.setViewportResizeMetrics(documentId, {
-				width: viewport.offsetWidth,
+				width,
 				height: viewport.offsetHeight,
-				clientWidth: viewport.clientWidth,
+				clientWidth,
 				clientHeight: viewport.clientHeight,
 				scrollTop: viewport.scrollTop,
 				scrollLeft: viewport.scrollLeft,
@@ -167,7 +171,7 @@ export function DockviewViewport({
 			unsubscribeScrollRequest();
 			viewportPlugin.unregisterViewport(documentId);
 		};
-	}, [documentId, hostRef, viewportPlugin]);
+	}, [documentId, hostRef, viewportPlugin, rightGutter]);
 
 	const { style, ...restProps } = props;
 
