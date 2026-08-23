@@ -1,7 +1,7 @@
 "use client";
 
 import { BookIcon, ChevronDownIcon } from "lucide-react";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	Collapsible,
@@ -62,7 +62,13 @@ export const SourcesContent = ({
 	/>
 );
 
-export type SourceProps = ComponentProps<"a">;
+export type SourceProps = {
+	href?: string;
+	title?: string;
+	children?: ReactNode;
+	className?: string;
+	onClick?: () => void;
+};
 
 export const Source = ({
 	href,
@@ -70,17 +76,39 @@ export const Source = ({
 	children,
 	className,
 	onClick,
-	...props
 }: SourceProps) => {
-	const isExternal = Boolean(href && /^https?:\/\//i.test(href));
+	const content = children ?? (
+		<>
+			<BookIcon className="h-4 w-4 shrink-0" />
+			<span className="block min-w-0 truncate font-medium">{title}</span>
+		</>
+	);
 
+	const commonClassName = cn(
+		"flex items-center gap-2 rounded-md outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+		onClick || href ? "cursor-pointer" : undefined,
+		className,
+	);
+
+	// Action-only sources (e.g. external URLs opened via the opener plugin) should
+	// not render as <a> tags, otherwise Tauri may create an empty in-app webview
+	// window for target="_blank" before JS can prevent it.
+	if (onClick && !href) {
+		return (
+			<button
+				type="button"
+				className={cn(commonClassName, "text-left")}
+				onClick={onClick}
+			>
+				{content}
+			</button>
+		);
+	}
+
+	const isExternal = Boolean(href && /^https?:\/\//i.test(href));
 	return (
 		<a
-			className={cn(
-				"flex items-center gap-2 rounded-md outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
-				onClick || href ? "cursor-pointer" : undefined,
-				className,
-			)}
+			className={commonClassName}
 			href={href ?? "#"}
 			rel={isExternal ? "noreferrer" : undefined}
 			target={isExternal ? "_blank" : undefined}
@@ -88,17 +116,11 @@ export const Source = ({
 				// Vault paths / app navigation: parent handles open; prevent hash jump.
 				if (onClick) {
 					event.preventDefault();
-					onClick(event);
+					onClick();
 				}
 			}}
-			{...props}
 		>
-			{children ?? (
-				<>
-					<BookIcon className="h-4 w-4 shrink-0" />
-					<span className="block min-w-0 truncate font-medium">{title}</span>
-				</>
-			)}
+			{content}
 		</a>
 	);
 };

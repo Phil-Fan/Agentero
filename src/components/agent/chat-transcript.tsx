@@ -498,7 +498,10 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 									<Source
 										key={s}
 										title={s}
-										href={isHttp ? s : undefined}
+										// External URLs are opened by the opener plugin via onClick;
+										// do not render them as <a target="_blank"> to avoid Tauri
+										// creating an empty in-app webview window.
+										href={isHttp ? undefined : s}
 										onClick={onOpenSource ? () => onOpenSource(s) : undefined}
 									/>
 								);
