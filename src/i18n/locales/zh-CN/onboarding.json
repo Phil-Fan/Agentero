@@ -24,6 +24,7 @@
 		"none": "未发现 Agent。请安装一个 ACP Agent（如 opencode、claude-acp）后重新扫描。",
 		"setDefault": "设为默认",
 		"install": "安装",
+		"installAgentAria": "安装 {{name}} Agent",
 		"installFailed": "安装 Agent 失败",
 		"default": "默认",
 		"probe": "探测",

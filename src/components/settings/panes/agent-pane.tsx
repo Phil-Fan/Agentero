@@ -57,6 +57,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useAgentToolLifecycle } from "@/hooks/use-agent-tool-lifecycle";
 import {
 	type AgentTemplate,
 	acpStatusLabel,
@@ -69,11 +70,9 @@ import {
 	probeAgent,
 	probeCatalogAgent,
 	removeAgent,
-	runToolLifecycle,
 	scanCatalog,
 	setAgentUserAgent,
 	setDefaultAgent,
-	type ToolLifecycleAction,
 	toolUninstallInfo,
 	type UninstallInfo,
 	USER_AGENT_PRESETS,
@@ -82,7 +81,6 @@ import {
 import { errorText } from "@/lib/core/error";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
-import { listenSafe } from "@/lib/core/tauri-events";
 import { cn } from "@/lib/core/utils";
 import type { AppSettings, EmbeddingSettings } from "@/lib/settings";
 import { isTranslateApiKeyMask } from "@/lib/translate";
@@ -91,17 +89,6 @@ import {
 	remoteAgentProbe,
 	remoteAgentScan,
 } from "@/lib/vault/remote/remote-vault";
-
-type LifecycleProgressEvent = {
-	taskId: string;
-	phase: string;
-	progress: number | null;
-};
-
-type LifecycleProgressState = {
-	progress: number | null;
-	detail: string;
-};
 
 type UninstallTarget =
 	| { kind: "catalog"; entry: CatalogEntry; info: UninstallInfo | null }
@@ -117,13 +104,6 @@ export function AgentPane({
 	const { t } = useTranslation(["settings", "agent", "common"]);
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [loading, setLoading] = useState(false);
-	/** Template ids currently running or queued for silent install/update/uninstall, mapped to the action (row-level spinner). */
-	const [lifecycleBusyIds, setLifecycleBusyIds] = useState<
-		Map<string, ToolLifecycleAction>
-	>(() => new Map());
-	const [lifecycleProgress, setLifecycleProgress] = useState<
-		Record<string, LifecycleProgressState>
-	>({});
 	const [savingDefaultValue, setSavingDefaultValue] = useState<string | null>(
 		null,
 	);
@@ -380,114 +360,12 @@ export function AgentPane({
 		}
 	};
 
-	const patchLifecycleProgress = useCallback(
-		(templateId: string, patch: Partial<LifecycleProgressState>) => {
-			setLifecycleProgress((prev) => {
-				const current = prev[templateId] ?? {
-					progress: null,
-					detail: t("agent.lifecycleInstalling"),
-				};
-				return {
-					...prev,
-					[templateId]: { ...current, ...patch },
-				};
-			});
-		},
-		[t],
-	);
-
-	const clearLifecycleProgress = useCallback((templateId: string) => {
-		setLifecycleProgress((prev) => {
-			if (!(templateId in prev)) return prev;
-			const next = { ...prev };
-			delete next[templateId];
-			return next;
-		});
-	}, []);
-
-	const lifecyclePhaseLabel = useCallback(
-		(phase: string) => {
-			if (phase === "agent-lifecycle-waiting") {
-				return t("agent.lifecycleWaiting");
-			}
-			if (phase === "agent-lifecycle-uninstall") {
-				return t("agent.lifecycleUninstalling");
-			}
-			return t("agent.lifecycleInstalling");
-		},
-		[t],
-	);
-
 	/** Silent install/update/uninstall: Host scopes Agent vs ACP from PATH (no free-form shell). */
-	const onToolLifecycle = async (
-		entry: CatalogEntry,
-		action: ToolLifecycleAction,
-	) => {
-		if (!isTauri()) return;
-		setLifecycleBusyIds((prev) => {
-			const next = new Map(prev);
-			next.set(entry.templateId, action);
-			return next;
-		});
-		const taskId = `agent-lifecycle-${entry.templateId}-${Date.now().toString(36)}`;
-		// listenSafe registers asynchronously, so the host's initial
-		// progress=5 emit may race the subscription. That is harmless: the
-		// lost event is redundant with the local patch below, and later
-		// emits are throttled (≥750ms apart on the host).
-		const stopProgress = listenSafe<LifecycleProgressEvent>(
-			"agent-lifecycle:progress",
-			(payload) => {
-				if (payload.taskId !== taskId) return;
-				patchLifecycleProgress(entry.templateId, {
-					progress: payload.progress,
-					detail: lifecyclePhaseLabel(payload.phase),
-				});
-			},
-		);
-		try {
-			patchLifecycleProgress(entry.templateId, {
-				progress: 5,
-				detail: t(
-					action === "uninstall"
-						? "agent.lifecycleUninstalling"
-						: "agent.lifecycleInstalling",
-				),
-			});
-			await runToolLifecycle(entry.templateId, action, taskId);
-			patchLifecycleProgress(entry.templateId, {
-				progress: 70,
-				detail: t("agent.lifecycleScanning"),
-			});
-			const scan = await scanOnce();
-			if (scan) {
-				patchLifecycleProgress(entry.templateId, {
-					progress: 85,
-					detail: t("agent.lifecycleProbing"),
-				});
-				await probeInstalled(scan, true);
-			}
-			notifySuccess(
-				t(
-					action === "update"
-						? "agent.updateSuccess"
-						: action === "uninstall"
-							? "agent.uninstallSuccess"
-							: "agent.installSuccess",
-					{ name: entry.name },
-				),
-			);
-		} catch (e) {
-			notifyError(errorText(e));
-		} finally {
-			stopProgress();
-			clearLifecycleProgress(entry.templateId);
-			setLifecycleBusyIds((prev) => {
-				const next = new Map(prev);
-				next.delete(entry.templateId);
-				return next;
-			});
-		}
-	};
+	const {
+		lifecycleBusyIds,
+		lifecycleProgress,
+		runToolLifecycle: onToolLifecycle,
+	} = useAgentToolLifecycle({ scanOnce, probeInstalled });
 
 	const openUninstallDialog = useCallback((target: UninstallTarget) => {
 		if (!isTauri()) return;

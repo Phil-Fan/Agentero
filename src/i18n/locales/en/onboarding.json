@@ -24,6 +24,7 @@
 		"none": "No agents found. Install an ACP agent (e.g. opencode, claude-acp) and rescan.",
 		"setDefault": "Set as default",
 		"install": "Install",
+		"installAgentAria": "Install {{name}} agent",
 		"installFailed": "Could not install agent",
 		"default": "Default",
 		"probe": "Probe",
