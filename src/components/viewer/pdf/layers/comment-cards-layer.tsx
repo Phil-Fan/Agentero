@@ -22,7 +22,7 @@ import {
 	swatchColorClass,
 } from "@/lib/pdf/highlight/palette";
 
-/** Card width (`w-56`) — also the gutter width reserved on the viewport. */
+/** Card width in CSS px — also the gutter width reserved on the viewport. */
 export const COMMENT_CARD_WIDTH_PX = 224;
 /** Horizontal gap between the page edge and the rail. */
 export const COMMENT_CARD_GAP_PX = 8;
@@ -142,10 +142,12 @@ export const CommentCardsLayer = memo(function CommentCardsLayer({
 					return (
 						<div
 							key={item.id}
-							className="group pointer-events-auto absolute w-56 rounded-lg bg-background/95 px-2.5 py-2 shadow-sm ring-1 ring-border/60 backdrop-blur-sm"
+							className="group pointer-events-auto absolute overflow-hidden rounded-lg bg-background/95 px-2.5 py-2 shadow-sm ring-1 ring-border/60 backdrop-blur-sm"
 							style={{
 								left: `calc(100% + ${COMMENT_CARD_GAP_PX}px)`,
 								top: pos.topPx,
+								width: COMMENT_CARD_WIDTH_PX,
+								height: pos.heightPx,
 							}}
 						>
 							{/* biome-ignore lint/a11y/useSemanticElements: a native <button> cannot wrap the blockquote/p flow content */}

@@ -164,6 +164,9 @@ type PageTranslateTabProps = {
 	onToggle: (pageIndex: number) => void;
 };
 
+const PAGE_TRANSLATE_TAB_WIDTH_PX = 32;
+const PAGE_TRANSLATE_TAB_MIN_HEIGHT_PX = 72;
+
 function labelCharacters(label: string): { key: string; char: string }[] {
 	const seen = new Map<string, number>();
 	return Array.from(label, (char) => {
@@ -193,9 +196,14 @@ const PageTranslateTab = memo(function PageTranslateTab({
 		<button
 			type="button"
 			className={cn(
-				"absolute top-3 right-0 z-[6] flex min-h-[72px] w-8 translate-x-full flex-col items-center justify-center gap-1 rounded-r-md border border-l-0 border-border/80 bg-background/95 px-1 py-2 font-medium text-[11px] text-foreground shadow-sm ring-1 ring-black/5 backdrop-blur-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 dark:ring-white/10",
+				"absolute top-3 right-0 z-[6] flex translate-x-full flex-col items-center justify-center gap-1 rounded-r-md border border-l-0 border-border/80 bg-background/95 px-1 py-2 font-medium text-[11px] text-foreground shadow-sm ring-1 ring-black/5 backdrop-blur-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 dark:ring-white/10",
 				active && "border-primary/30 bg-primary/10 text-primary",
 			)}
+			style={{
+				width: PAGE_TRANSLATE_TAB_WIDTH_PX,
+				minWidth: PAGE_TRANSLATE_TAB_WIDTH_PX,
+				minHeight: PAGE_TRANSLATE_TAB_MIN_HEIGHT_PX,
+			}}
 			aria-label={label}
 			aria-pressed={active}
 			onClick={(event) => {
