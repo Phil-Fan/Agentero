@@ -40,7 +40,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | 动作 | 落盘 | UI |
 |---|---|---|
 | 高亮 | `marks/annotations.json` | 颜色 |
-| 批注 | 高亮 + `comment` | 页边针 + 右侧批注面板 |
+| 批注 | 高亮 + `comment` | 页右缘外侧常驻评论列（飞书式：色点 + quote + 评论卡，相邻卡片纵向避让；点击卡片开编辑器，hover 出复制链接/嵌入/删除）；视口窄于 960px 时回退为页边针 |
 | 提问 | `marks/<id>.json`（kind ask） | 迷你问答；页边针；**hover / 打开卡片时高亮**锚定选区原文；打开时停在用户问题处，不自动滚到回复底部；卡片右上角 ChatGPT / Claude 图标可把 论文标题 + 页码 + 划选文本 发送到对应外部 AI |
 | 加入对话 | 发送该轮后写 `marks/<id>.json`（kind `ask`） | 选区固定为 Agent composer 文本 chip；**发送**后在选区旁插入**对话卡片**页边针（与「提问」同一 ask 卡 / 非视觉批注）；hover / 打开同样高亮原文，见 [agent.md](agent.md) |
 | 翻译 | `marks/<id>.json`（kind translate） | 浮层结果卡：贴合选区随滚轮重定位；未悬停卡片 / 原文高亮 / 页边针时自动收起（流式中除外）。见 [translate.md](translate.md) |
@@ -57,7 +57,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 - 一次提交可包含多条视觉批注：prompt 按 `## Annotation N` 分点，图片顺序与 annotation 对齐。
 - PDF 内视觉批注草稿 / pin 卡片打开时，原页面显示框选区域；浮层不重复显示页码和裁剪图，裁剪图在 Agent 侧边栏视觉上下文与批注侧边栏视觉批注列表中展示。
 - 视觉裁剪按用户框选的实际区域生成截图（不隐式外扩），最长边 1600 px；不以 base64 写入 mark JSON。活动 PDF 的 marks 轮询只读取 metadata，悬浮卡片、打开 Agent 与 Wiki 嵌入按需读取图片。图片缺失时仍保留位置、批注和多轮 transcript。
-- **写进笔记**：批注面板复制 / `[[@id]]` / `![[…@id]]`，见 [wiki.md](wiki.md) 编辑器 `@` 说明。
+- **写进笔记**：评论卡 / 批注面板复制 / `[[@id]]` / `![[…@id]]`，见 [wiki.md](wiki.md) 编辑器 `@` 说明。
 
 ## CLI / Agent 写入的标注
 
@@ -87,10 +87,10 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/pdf/host-dom.ts` | 宿主 DOM 判定：可编辑目标、原生选区归属、文档关闭竞态错误 |
 | `src/components/viewer/pdf/region-crop.ts` | PDF 区域裁剪与 Agent 图片编码 |
 | `src/components/viewer/pdf/engine-provider.tsx` | PDFium engine 宿主：worker 优先 + 就绪探针 + 主线程回退 |
-| `src/components/viewer/pdf/layers/` | 页内绘制层：`page-layers`（memo 单页栈）/ `citation-links` / `layout-translate-overlay` / `region-select-layer` / `selection-gutter` |
+| `src/components/viewer/pdf/layers/` | 页内绘制层：`page-layers`（memo 单页栈）/ `citation-links` / `layout-translate-overlay` / `region-select-layer` / `selection-gutter` / `comment-cards-layer`（批注评论列：页右缘常驻卡片 + `layoutCommentCards` 纵向避让） |
 | `src/components/viewer/pdf/chrome/` | 纯展示 chrome：`pdf-toolbar` / `pdf-find-bar` / `pdf-outline-panel`（+`outline-tree`）/ `pdf-references-panel` / `pdf-figures-panel` / `pdf-bottom-bar` / `pdf-card-stack`（portal 卡片栈） |
 | `src/components/viewer/pdf/cards/` | 划词与 mark 卡片：`selection-menu` / `selection-card`（共用壳）/ `ask-popover` / `translate-card` / `visual-trace-card` / `visual-annotation-editor` / `annotation-editor` / `formula-annotation-card` / `citation-preview` |
-| `src/components/viewer/pdf/viewport/` | 宿主接线：`dockview-viewport`（resize 门控 + 滚动指标按帧提交）/ `wheel-zoom-handler` / `active-card-scroll-sync` |
+| `src/components/viewer/pdf/viewport/` | 宿主接线：`dockview-viewport`（resize 门控 + 滚动指标按帧提交 + `rightGutter` 为评论列预留页外空间）/ `wheel-zoom-handler` / `active-card-scroll-sync` |
 | `src/components/viewer/pdf/hooks/use-pdf-cards.ts` | 浮动卡生命周期：打开 / 定位（虚拟化重试）/ hover 收起 |
 | `src/components/viewer/pdf/hooks/use-pdf-highlights.ts` | EmbedPDF 标注桥：高亮视图模型、页边针锚点、链接分页图、导入迁移与防抖导出；annotation 事件按微任务合并重建 |
 | `src/components/viewer/pdf/hooks/use-pdf-marks-io.ts` | `marks/` 并发读取与文件监听刷新（自写回声跳过；指纹比对后再提交 state） |
@@ -113,7 +113,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/pdf/hooks/use-pdf-outline.ts` | 书签大纲加载 |
 | `src/components/viewer/pdf/hooks/use-pdf-viewer-handle.ts` | 注册命令式 handle（跨簇，唯一入口） |
 | `src/components/viewer/panels/figures-panel.tsx` | 版面分析入口（PDF 左侧浮层按钮触发；PDF 内浮层复用同一组件） |
-| `src/components/viewer/panels/annotations-panel.tsx` | 批注 / 提问 / visual mark 总览（右栏） |
+| `src/components/viewer/panels/annotations-panel.tsx` | 提问 / visual mark 总览（右栏；文字批注已迁移到 PDF 页右缘评论列） |
 | `src/components/viewer/panels/references-panel.tsx` | 参考文献解析与入库（PDF 左侧浮层面板）；`compact` 模式隐藏 header 与过滤 |
 | `src/lib/workspace/viewer/pdf-viewer-registry.ts` | 按 tab 注册 `PdfViewerHandle`（类型契约也在此定义），供 shell / 命令面板 / workspace actions 调用；lib 层纯注册表，无 JSX |
 | `src/lib/agent/visual-context-store.ts` | Agent composer 视觉批注草稿 |
