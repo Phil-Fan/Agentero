@@ -66,12 +66,7 @@
 		"menuSettings": "Settings…",
 		"menuKeyboardShortcuts": "Keyboard Shortcuts",
 		"menuQuickOpen": "Quick Open…",
-		"menuCommandPalette": "Command Palette…",
-		"layout": "Layout",
-		"layoutHint": "Configure panels",
-		"layoutPanels": "Panels",
-		"layoutLeftSidebar": "Left sidebar",
-		"layoutRightSidebar": "Right sidebar"
+		"menuCommandPalette": "Command Palette…"
 	},
 	"editor": {
 		"markdownPlaceholder": "Type Markdown here...",

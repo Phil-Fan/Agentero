@@ -66,12 +66,7 @@
 		"menuSettings": "设置…",
 		"menuKeyboardShortcuts": "键盘快捷键",
 		"menuQuickOpen": "快速打开…",
-		"menuCommandPalette": "命令面板…",
-		"layout": "布局",
-		"layoutHint": "配置面板",
-		"layoutPanels": "面板",
-		"layoutLeftSidebar": "左侧边栏",
-		"layoutRightSidebar": "右侧边栏"
+		"menuCommandPalette": "命令面板…"
 	},
 	"editor": {
 		"markdownPlaceholder": "在此输入 Markdown……",

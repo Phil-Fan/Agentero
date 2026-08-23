@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutMenu } from "@/components/shell/layout-menu";
 import { UpdateIndicator } from "@/components/shell/update-indicator";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,8 +47,6 @@ type TitleBarProps = {
 	isMacDesktop: boolean;
 	showSettingsGear: boolean;
 	sidebarCollapsed: boolean;
-	notesEligible: boolean;
-	showNotes: boolean;
 	rightSidebarOpen: boolean;
 	rightSidebarTab:
 		| "agent"
@@ -58,8 +55,6 @@ type TitleBarProps = {
 		| "references"
 		| "figures";
 	onToggleSidebar: () => void;
-	/** Toggle NOTES panel for the active paper (state lives in dockview). */
-	onToggleNotes: (open?: boolean) => void;
 	onToggleRightSidebar: () => void;
 	onOpenRightTab: (
 		tab: "agent" | "backlinks" | "annotations" | "references" | "figures",
@@ -75,12 +70,9 @@ export const TitleBar = memo(function TitleBar({
 	isMacDesktop,
 	showSettingsGear,
 	sidebarCollapsed,
-	notesEligible,
-	showNotes,
 	rightSidebarOpen,
 	rightSidebarTab,
 	onToggleSidebar,
-	onToggleNotes,
 	onToggleRightSidebar,
 	onOpenRightTab,
 	onOpenSettings,
@@ -135,15 +127,6 @@ export const TitleBar = memo(function TitleBar({
 				<div className="min-w-0 flex-1 self-stretch" data-tauri-drag-region />
 				<div className="flex shrink-0 items-center gap-0.5 pr-2">
 					<UpdateIndicator />
-					<LayoutMenu
-						leftSidebarOpen={!sidebarCollapsed}
-						onToggleLeftSidebar={onToggleSidebar}
-						notesAvailable={notesEligible}
-						notesOpen={showNotes}
-						onToggleNotes={onToggleNotes}
-						rightSidebarOpen={rightSidebarOpen}
-						onToggleRightSidebar={onToggleRightSidebar}
-					/>
 					{rightSidebarOpen
 						? (
 								[

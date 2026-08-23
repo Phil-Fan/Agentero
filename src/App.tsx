@@ -28,11 +28,7 @@ import { resolveActivePdfHandle } from "@/components/viewer";
 import { WorkspaceHost } from "@/components/workspace/workspace-host";
 import { useAppBootstrap } from "@/hooks/use-app-bootstrap";
 import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
-import {
-	useUiStore,
-	useVaultStore,
-	useWorkspaceStore,
-} from "@/hooks/use-app-stores";
+import { useUiStore, useVaultStore } from "@/hooks/use-app-stores";
 import { useConnectorSync } from "@/hooks/use-connector-sync";
 import { useExternalFileDrop } from "@/hooks/use-external-file-drop";
 import { useLayoutModelPrefetch } from "@/hooks/use-layout-model-prefetch";
@@ -96,15 +92,8 @@ import {
 	dirtyVaultPaths,
 	reopenClosedTab,
 	splitActivePane,
-	toggleNotesSplit,
 } from "@/lib/workspace/actions";
 import { workspaceStore } from "@/lib/workspace/store";
-import {
-	normalizeTabPath,
-	tabHasNotesSplit,
-	tabIsPaperNotes,
-	tabNotesEligible,
-} from "@/lib/workspace/tabs";
 
 // macOS keeps native traffic lights (Overlay title bar) and a native menu bar.
 // Other desktop platforms also use native decorations, but have no native menu
@@ -140,41 +129,15 @@ function AppTitleBar() {
 	const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
 	const rightSidebarOpen = useUiStore((s) => s.rightSidebarOpen);
 	const rightSidebarTab = useUiStore((s) => s.rightSidebarTab);
-	const tabs = useWorkspaceStore((s) => s.tabs);
-	const activeTabId = useWorkspaceStore((s) => s.activeTabId);
-
-	/** NOTES toggle: active panel is a paper PDF/HTML, or its NOTES. */
-	const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
-	let notesEligiblePaper =
-		activeTab && tabNotesEligible(activeTab) ? activeTab : null;
-	if (
-		!notesEligiblePaper &&
-		activeTab?.notesPath &&
-		tabIsPaperNotes(activeTab)
-	) {
-		const paperDir = activeTab.notesPath.replace(/[\\/]NOTES\.md$/i, "");
-		notesEligiblePaper =
-			tabs.find(
-				(t) =>
-					t.kind === "paper" &&
-					normalizeTabPath(t.path) === normalizeTabPath(paperDir),
-			) ?? null;
-	}
-	const notesSplitOpen = notesEligiblePaper
-		? tabHasNotesSplit(tabs, notesEligiblePaper)
-		: false;
 
 	return (
 		<TitleBar
 			isMacDesktop={isMacDesktop}
 			showSettingsGear={showSettingsGear}
 			sidebarCollapsed={sidebarCollapsed}
-			notesEligible={Boolean(notesEligiblePaper)}
-			showNotes={notesSplitOpen}
 			rightSidebarOpen={rightSidebarOpen}
 			rightSidebarTab={rightSidebarTab}
 			onToggleSidebar={toggleSidebar}
-			onToggleNotes={toggleNotesSplit}
 			onToggleRightSidebar={toggleRightSidebar}
 			onOpenRightTab={openRightTab}
 			onOpenSettings={openSettingsWindow}
