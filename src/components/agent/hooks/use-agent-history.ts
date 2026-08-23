@@ -16,8 +16,16 @@ import type {
 	AgentPanelT,
 } from "@/components/agent/hooks/use-agent-panel-context";
 import { useUiStore } from "@/hooks/use-app-stores";
-import { listSessions, loadSession } from "@/lib/agent";
-import type { AgentSessionRecord } from "@/lib/agent/agent-session-store";
+import {
+	type AcpLoadSessionResult,
+	type AcpSessionInfo,
+	listSessions,
+	loadSession,
+} from "@/lib/agent";
+import {
+	type AgentSessionRecord,
+	agentSessionStore,
+} from "@/lib/agent/agent-session-store";
 import {
 	type AgentOption,
 	type AgentPart,
@@ -34,6 +42,7 @@ import {
 	stripPromptEnvelopeForDisplay,
 } from "@/lib/agent/prompt-display";
 import { isTauri } from "@/lib/core/tauri";
+import { mapLimit } from "@/lib/core/utils";
 import {
 	buildVisualTraceHistoryItem,
 	visualTraceHistoryId,
@@ -60,6 +69,165 @@ const sanitizeChatLines = (raw: ChatLine[]): ChatLine[] =>
 			};
 		})
 		.filter((line): line is ChatLine => line !== null);
+
+/** Derive a human-readable title from a loaded ACP session's first user turn. */
+export function titleFromLoadedHistory(history: AcpLoadSessionResult): string {
+	const firstUser = history.lines.find((line) => line.kind === "user");
+	if (firstUser) {
+		return displayHistoryTitle(firstUser.text, history.title ?? "");
+	}
+	return displayHistoryTitle(history.title ?? "");
+}
+
+type HydrateTitleOptions = {
+	generation: number;
+	historyGenRef: { current: number };
+	selectedAgentId: string;
+	vaultPath: string | null;
+	setSessionHistory: (
+		update:
+			| AgentSessionRecord[]
+			| ((prev: AgentSessionRecord[]) => AgentSessionRecord[]),
+	) => void;
+};
+
+/** Background-hydrate titles for ACP sessions that arrived without one. */
+export async function hydrateSessionTitles(
+	items: AgentSessionRecord[],
+	opts: HydrateTitleOptions,
+): Promise<void> {
+	const {
+		generation,
+		historyGenRef,
+		selectedAgentId,
+		vaultPath,
+		setSessionHistory,
+	} = opts;
+	if (generation !== historyGenRef.current) return;
+
+	const started = Date.now();
+	const BUDGET_MS = 5000;
+
+	await mapLimit(items, 3, async (item) => {
+		if (generation !== historyGenRef.current) return;
+		if (Date.now() - started > BUDGET_MS) return;
+
+		try {
+			const providerSessionId = providerSessionIdForHistoryLoad(item);
+			const history = await loadSession({
+				agentId: selectedAgentId,
+				sessionId: providerSessionId,
+				vaultPath: vaultPath ?? undefined,
+			});
+			if (generation !== historyGenRef.current) return;
+
+			const title = titleFromLoadedHistory(history);
+			if (!title) return;
+
+			setSessionHistory((prev) =>
+				prev.map((s) =>
+					s.id === item.id && s.agentId === item.agentId ? { ...s, title } : s,
+				),
+			);
+		} catch {
+			// Title is supplementary; a failed load must not block the drawer.
+		}
+	});
+}
+
+type MergeImportedSessionsResult = {
+	sessions: AgentSessionRecord[];
+	hydrationCandidates: AgentSessionRecord[];
+};
+
+/**
+ * Merge ACP `session/list` results with the local session store.
+ * Returns the merged list plus external sessions that lack an ACP title and
+ * have no local transcript — these are candidates for background title hydration.
+ */
+export function mergeImportedSessions(
+	prev: AgentSessionRecord[],
+	chatSessions: AcpSessionInfo[],
+	selectedAgentId: string,
+	agentName: string,
+	i18nLanguage: string,
+): MergeImportedSessionsResult {
+	const existingForAgent = prev.filter(
+		(item) => item.agentId === selectedAgentId,
+	);
+	const existingById = new Map(existingForAgent.map((item) => [item.id, item]));
+	const existingByProvider = new Map(
+		existingForAgent
+			.filter((item) => item.providerSessionId?.trim())
+			.map((item) => [item.providerSessionId?.trim() as string, item]),
+	);
+
+	const hydrationCandidates: AgentSessionRecord[] = [];
+
+	const imported = chatSessions.map((session) => {
+		const current =
+			existingById.get(session.sessionId) ??
+			existingByProvider.get(session.sessionId);
+		const startedAt = session.updatedAt
+			? new Date(session.updatedAt).toLocaleString(i18nLanguage)
+			: "";
+		const acpTitle = session.title ?? "";
+		const titleFallback = session.sessionId.slice(0, 8);
+		const title = acpTitle
+			? displayHistoryTitle(acpTitle, titleFallback)
+			: titleFallback;
+
+		if (current) {
+			const record: AgentSessionRecord = {
+				...current,
+				source:
+					current.source === "local"
+						? ("local" as const)
+						: ("external" as const),
+				agentName,
+				title: current.lines.length > 0 ? current.title : title,
+				startedAt: current.startedAt || startedAt,
+				providerSessionId: session.sessionId,
+			};
+			if (!acpTitle && current.lines.length === 0) {
+				hydrationCandidates.push(record);
+			}
+			return record;
+		}
+
+		const record: AgentSessionRecord = {
+			id: session.sessionId,
+			agentId: selectedAgentId,
+			source: "external" as const,
+			title,
+			agentName,
+			startedAt,
+			lines: [],
+			status: "completed" as const,
+			providerSessionId: session.sessionId,
+		};
+		if (!acpTitle) {
+			hydrationCandidates.push(record);
+		}
+		return record;
+	});
+
+	const importedIds = new Set(chatSessions.map((session) => session.sessionId));
+	const localOnly = prev.filter(
+		(item) =>
+			item.agentId === selectedAgentId &&
+			!importedIds.has(item.id) &&
+			!importedIds.has(item.providerSessionId?.trim() ?? "") &&
+			!isBackgroundWorkflowHistoryTitle(item.title) &&
+			(item.status === "running" ||
+				(item.source === "local" && item.lines.length > 0)),
+	);
+
+	return {
+		sessions: [...localOnly, ...imported],
+		hydrationCandidates,
+	};
+}
 
 export type UseAgentHistoryOptions = {
 	refs: Pick<
@@ -145,76 +313,28 @@ export function useAgentHistory({
 			const chatSessions = result.sessions.filter(
 				(s) => !isBackgroundWorkflowHistoryTitle(s.title ?? ""),
 			);
-			setSessionHistory((prev) => {
-				const existingForAgent = prev.filter(
-					(item) => item.agentId === selectedAgentId,
+			const { sessions: nextSessions, hydrationCandidates } =
+				mergeImportedSessions(
+					agentSessionStore.getState().sessions,
+					chatSessions,
+					selectedAgentId,
+					selected?.name ?? "Agent",
+					i18nLanguage,
 				);
-				const existingById = new Map(
-					existingForAgent.map((item) => [item.id, item]),
-				);
-				const existingByProvider = new Map(
-					existingForAgent
-						.filter((item) => item.providerSessionId?.trim())
-						.map((item) => [item.providerSessionId?.trim() as string, item]),
-				);
-				const imported = chatSessions.map((session) => {
-					// A local runtime row may have a different id from the durable
-					// provider session returned by session/list after a resumed turn.
-					const current =
-						existingById.get(session.sessionId) ??
-						existingByProvider.get(session.sessionId);
-					const startedAt = session.updatedAt
-						? new Date(session.updatedAt).toLocaleString(i18nLanguage)
-						: "";
-					if (current) {
-						const title =
-							current.lines.length > 0
-								? current.title
-								: displayHistoryTitle(
-										session.title ?? "",
-										session.sessionId.slice(0, 8),
-									);
-						return {
-							...current,
-							source:
-								current.source === "local"
-									? ("local" as const)
-									: ("external" as const),
-							agentName: selected?.name ?? "Agent",
-							title,
-							startedAt: current.startedAt || startedAt,
-							providerSessionId: session.sessionId,
-						};
-					}
-					return {
-						id: session.sessionId,
-						agentId: selectedAgentId,
-						source: "external" as const,
-						title: displayHistoryTitle(
-							session.title ?? "",
-							session.sessionId.slice(0, 8),
-						),
-						agentName: selected?.name ?? "Agent",
-						startedAt,
-						lines: [],
-						status: "completed" as const,
-						providerSessionId: session.sessionId,
-					};
+			setSessionHistory(nextSessions);
+
+			if (
+				hydrationCandidates.length > 0 &&
+				generation === historyGenRef.current
+			) {
+				void hydrateSessionTitles(hydrationCandidates, {
+					generation,
+					historyGenRef,
+					selectedAgentId,
+					vaultPath,
+					setSessionHistory,
 				});
-				const importedIds = new Set(
-					chatSessions.map((session) => session.sessionId),
-				);
-				const localOnly = prev.filter(
-					(item) =>
-						item.agentId === selectedAgentId &&
-						!importedIds.has(item.id) &&
-						!importedIds.has(item.providerSessionId?.trim() ?? "") &&
-						!isBackgroundWorkflowHistoryTitle(item.title) &&
-						(item.status === "running" ||
-							(item.source === "local" && item.lines.length > 0)),
-				);
-				return [...localOnly, ...imported];
-			});
+			}
 		} catch {
 			// History is supplementary: a failed scan must not block the Composer.
 		} finally {
