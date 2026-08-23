@@ -301,9 +301,53 @@ pub fn enrich_remote_urls(meta: &mut PaperMeta) {
             meta.source_url = Some(format!("https://doi.org/{doi}"));
         }
     }
+
+    // ACL Anthology landing pages don't expose a PDF attachment, but the PDF
+    // is always available at <landing>.pdf.
+    if meta.pdf_url.is_none() {
+        if let Some(url) = meta.source_url.as_deref().or(meta.html_url.as_deref()) {
+            if let Some(pdf) = acl_anthology_pdf_url(url) {
+                meta.pdf_url = Some(pdf);
+            }
+        }
+    }
+
     if meta.bibtex_key.is_none() {
         meta.bibtex_key = Some(meta.id.replace(['/', '.'], "_"));
     }
+}
+
+/// Derive the canonical ACL Anthology PDF URL from a paper landing page.
+/// ACL Anthology paper URLs look like:
+///   https://aclanthology.org/2026.acl-long.1248/
+/// and the PDF is always:
+///   https://aclanthology.org/2026.acl-long.1248.pdf
+fn acl_anthology_pdf_url(url: &str) -> Option<String> {
+    let lower = url.to_ascii_lowercase();
+    if !lower.contains("aclanthology.org/") {
+        return None;
+    }
+    // Already a PDF.
+    if lower.ends_with(".pdf") {
+        return Some(url.trim().to_string());
+    }
+    let trimmed = url.trim_end_matches('/');
+    let slug = trimmed.rsplit('/').next()?;
+    // Expect: YYYY.venue-type.number (e.g. 2026.acl-long.1248)
+    let parts: Vec<&str> = slug.split('.').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    if parts[0].len() != 4 || !parts[0].chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    if !parts[1].contains('-') {
+        return None;
+    }
+    if !parts[2].chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    Some(format!("{}.pdf", trimmed))
 }
 
 pub fn map_arxiv_atom(xml: &str, bare_id: &str) -> Result<PaperMeta, AppError> {
@@ -712,5 +756,45 @@ mod tests {
         assert!(json.contains("\"pdf_url\""), "got {json}");
         assert!(json.contains("\"arxiv_id\""), "got {json}");
         assert!(!json.contains("\"pdfUrl\""));
+    }
+
+    #[test]
+    fn acl_anthology_pdf_url_derivation() {
+        assert_eq!(
+            acl_anthology_pdf_url("https://aclanthology.org/2026.acl-long.1248/"),
+            Some("https://aclanthology.org/2026.acl-long.1248.pdf".to_string())
+        );
+        assert_eq!(
+            acl_anthology_pdf_url("https://aclanthology.org/2026.acl-long.1248.pdf"),
+            Some("https://aclanthology.org/2026.acl-long.1248.pdf".to_string())
+        );
+        assert_eq!(
+            acl_anthology_pdf_url("https://www.aclanthology.org/2025.emnlp-main.42/"),
+            Some("https://www.aclanthology.org/2025.emnlp-main.42.pdf".to_string())
+        );
+        assert!(acl_anthology_pdf_url("https://aclanthology.org/venues/acl/").is_none());
+        assert!(acl_anthology_pdf_url("https://example.com/2026.acl-long.1248/").is_none());
+    }
+
+    #[test]
+    fn enrich_remote_urls_fills_acl_anthology_pdf() {
+        // Translator response shape for an ACL Anthology conference paper.
+        let item = json!({
+            "itemType": "conferencePaper",
+            "title": "Enabling Agents to Communicate Entirely in Latent Space",
+            "creators": [
+                {"firstName": "Zhuoyun", "lastName": "Du", "creatorType": "author"}
+            ],
+            "date": "2026-07",
+            "url": "https://aclanthology.org/2026.acl-long.1248/",
+            "DOI": "10.18653/v1/2026.acl-long.1248",
+            "libraryCatalog": "ACLWeb"
+        });
+        let mut meta = map_zotero_item(&item).expect("map");
+        enrich_remote_urls(&mut meta);
+        assert_eq!(
+            meta.pdf_url.as_deref(),
+            Some("https://aclanthology.org/2026.acl-long.1248.pdf")
+        );
     }
 }
