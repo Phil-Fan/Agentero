@@ -36,6 +36,11 @@ import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
 import { useAnyOverlayOpen } from "@/hooks/use-overlay-registration";
 import { SIDEBAR_DEFAULT_PX, useShellLayout } from "@/hooks/use-shell-layout";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
+import {
+	agentChromeStore,
+	getAgentChromeState,
+} from "@/lib/agent/agent-chrome-store";
+import { listAgents } from "@/lib/agent/api";
 import { focusAgentComposer } from "@/lib/agent/composer-focus";
 import {
 	listenOpenAgentWithPrompt,
@@ -201,6 +206,24 @@ export default function App() {
 	const vaultPath = useVaultStore((s) => s.vaultPath);
 	const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
 	const rightSidebarOpen = useUiStore((s) => s.rightSidebarOpen);
+
+	// Seed the chrome agent icon with the registry default before the Agent panel
+	// is ever opened. If the panel mounts first, it wins via agentChromeStore.
+	useEffect(() => {
+		if (!isTauri()) return;
+		if (getAgentChromeState().agentId) return;
+		void listAgents().then((res) => {
+			if (!res.defaultId) return;
+			const agent = res.agents.find((a) => a.id === res.defaultId);
+			if (agent) {
+				agentChromeStore.setState({
+					agentId: agent.id,
+					name: agent.name,
+					template: agent.template,
+				});
+			}
+		});
+	}, []);
 
 	// The Settings window is a separate WebView. Mirror unsaved Markdown paths
 	// into Host state so Doctor can reject a batch before touching any file.

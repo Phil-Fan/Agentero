@@ -22,6 +22,7 @@ import {
 	ensureCatalogAgent,
 	setDefaultAgent,
 } from "@/lib/agent";
+import { agentChromeStore } from "@/lib/agent/agent-chrome-store";
 import {
 	applyAgentSessionHandoffOnce,
 	useActiveChatLines,
@@ -201,6 +202,16 @@ export function useAgentPanel({
 
 	const options = buildOptions(registry, catalog);
 	const selected = resolveSelected(options, selectedAgentId, registry);
+
+	// Keep app chrome (title bar, mobile nav, …) in sync with the active agent.
+	useEffect(() => {
+		if (!selected) return;
+		agentChromeStore.setState({
+			agentId: selected.id,
+			name: selected.name,
+			template: selected.template ?? null,
+		});
+	}, [selected]);
 
 	const activeTabSession = sessionHistory.find(
 		(session) => session.id === activeTabId,
