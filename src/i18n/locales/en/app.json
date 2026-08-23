@@ -55,8 +55,6 @@
 		"hideSidebarHint": "Hide sidebar ({{shortcut}})",
 		"agentPanel": "Agent panel",
 		"annotationsPanel": "Annotations",
-		"referencesPanel": "References",
-		"figuresPanel": "Analysis",
 		"showRightSidebar": "Show right sidebar",
 		"hideRightSidebar": "Hide right sidebar",
 		"showRightSidebarHint": "Show right sidebar ({{shortcut}})",
@@ -118,8 +116,6 @@
 		"docDesktopOnly": "Document windows require the desktop app.",
 		"titleAgent": "Agent",
 		"titleAnnotations": "Annotations",
-		"titleReferences": "References",
-		"titleFigures": "Analysis",
 		"titleDocument": "Document"
 	},
 	"errors": {

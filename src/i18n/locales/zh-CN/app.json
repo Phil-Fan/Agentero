@@ -55,8 +55,6 @@
 		"hideSidebarHint": "隐藏侧边栏 ({{shortcut}})",
 		"agentPanel": "Agent 面板",
 		"annotationsPanel": "批注",
-		"referencesPanel": "参考文献",
-		"figuresPanel": "解析",
 		"showRightSidebar": "显示右侧边栏",
 		"hideRightSidebar": "隐藏右侧边栏",
 		"showRightSidebarHint": "显示右侧边栏 ({{shortcut}})",
@@ -118,8 +116,6 @@
 		"docDesktopOnly": "文档窗口需要桌面应用。",
 		"titleAgent": "Agent",
 		"titleAnnotations": "批注",
-		"titleReferences": "参考文献",
-		"titleFigures": "解析",
 		"titleDocument": "文档"
 	},
 	"errors": {
