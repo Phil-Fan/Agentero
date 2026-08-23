@@ -112,9 +112,9 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/pdf/hooks/use-pdf-find.ts` | `⌘F` 查找 |
 | `src/components/viewer/pdf/hooks/use-pdf-outline.ts` | 书签大纲加载 |
 | `src/components/viewer/pdf/hooks/use-pdf-viewer-handle.ts` | 注册命令式 handle（跨簇，唯一入口） |
-| `src/components/viewer/panels/figures-panel.tsx` | 版面分析入口（右栏 header：分析 / 显示 bbox；PDF 内浮层复用同一组件） |
+| `src/components/viewer/panels/figures-panel.tsx` | 版面分析入口（PDF 左侧浮层按钮触发；PDF 内浮层复用同一组件） |
 | `src/components/viewer/panels/annotations-panel.tsx` | 批注 / 提问 / visual mark 总览（右栏） |
-| `src/components/viewer/panels/references-panel.tsx` | 参考文献解析与入库（右栏）；`compact` 模式用于 PDF 内浮层，隐藏 header 与过滤 |
+| `src/components/viewer/panels/references-panel.tsx` | 参考文献解析与入库（PDF 左侧浮层面板）；`compact` 模式隐藏 header 与过滤 |
 | `src/lib/workspace/viewer/pdf-viewer-registry.ts` | 按 tab 注册 `PdfViewerHandle`（类型契约也在此定义），供 shell / 命令面板 / workspace actions 调用；lib 层纯注册表，无 JSX |
 | `src/lib/agent/visual-context-store.ts` | Agent composer 视觉批注草稿 |
 | `src/lib/pdf/agent-trace/` | visual mark 契约（v2 + 读兼容 v1）/ mark 资产 IO / prompt / Open-in-Agent / 会话 pending |
@@ -132,9 +132,9 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 
 组织约定：`pdf/` 放阅读器实现（外壳 + `hooks/` 按域状态 + `layers/` 页内绘制 + `chrome/` 工具栏浮层 + `cards/` 划词卡片 + `viewport/` 宿主接线），`panels/` 放右栏面板（只被 shell 引用）。folder 外部只从 `@/components/viewer` 导入；folder 内部一律用具体路径，且不得反向导入该 barrel。
 
-## 版面分析（Figures 侧栏）
+## 版面分析（Figures 浮层）
 
-右栏 **Figures**（原「解析」header：分析 / 叠加层）→ 页内检测 → 列表（image/chart、table、algorithm、**有编号 formula 置底**）。
+PDF 左侧 **Figures** 按钮 → 页内浮层（原「解析」：分析 / 叠加层）→ 列表（image/chart、table、algorithm、**有编号 formula 置底**）。
 
 **完整流水线、14 条核心规则、阈值与代码地图**见：
 
@@ -157,4 +157,4 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 
 Host 下载/解析：[../backend/paper-import.md](../backend/paper-import.md)。
 
-引用元数据解析与 References 侧栏：[../backend/citation-parsing.md](../backend/citation-parsing.md)。
+引用元数据解析与 References 面板：[../backend/citation-parsing.md](../backend/citation-parsing.md)。
