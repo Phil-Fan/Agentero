@@ -49,6 +49,7 @@ import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
 import { PdfBottomBar } from "@/components/viewer/pdf/chrome/pdf-bottom-bar";
 import { PdfCardStack } from "@/components/viewer/pdf/chrome/pdf-card-stack";
+import { PdfFiguresPanel } from "@/components/viewer/pdf/chrome/pdf-figures-panel";
 import { PdfFindBar } from "@/components/viewer/pdf/chrome/pdf-find-bar";
 import { PdfOutlinePanel } from "@/components/viewer/pdf/chrome/pdf-outline-panel";
 import { PdfReferencesPanel } from "@/components/viewer/pdf/chrome/pdf-references-panel";
@@ -85,6 +86,7 @@ import {
 	type PdfPageMarksSlice,
 	type PdfPageModeSlice,
 } from "@/components/viewer/pdf/layers/page-layers";
+import { renderPdfRegionPromptImage } from "@/components/viewer/pdf/region-crop";
 import type {
 	PdfViewerInnerProps,
 	PdfViewerProps,
@@ -112,6 +114,7 @@ import {
 	getPdfAiRuntime,
 	layoutAnalysisStore,
 	type PdfLayoutRegion,
+	setFocusedLayoutRegion,
 } from "@/lib/pdf/layout";
 import {
 	type ActiveSelectionCard,
@@ -642,18 +645,23 @@ function PdfViewerInner({
 	});
 
 	const [showReferences, setShowReferences] = useState(false);
-	const handleToggleReferences = useCallback(() => {
-		if (showOutline) {
-			toggleOutline();
-		}
-		setShowReferences((v) => !v);
-	}, [showOutline, toggleOutline]);
+	const [showFigures, setShowFigures] = useState(false);
+
 	const handleToggleOutline = useCallback(() => {
-		if (showReferences) {
-			setShowReferences(false);
-		}
+		if (showReferences) setShowReferences(false);
+		if (showFigures) setShowFigures(false);
 		toggleOutline();
-	}, [showReferences, toggleOutline]);
+	}, [showReferences, showFigures, toggleOutline]);
+	const handleToggleReferences = useCallback(() => {
+		if (showOutline) toggleOutline();
+		if (showFigures) setShowFigures(false);
+		setShowReferences((v) => !v);
+	}, [showOutline, showFigures, toggleOutline]);
+	const handleToggleFigures = useCallback(() => {
+		if (showOutline) toggleOutline();
+		if (showReferences) setShowReferences(false);
+		setShowFigures((v) => !v);
+	}, [showOutline, showReferences, toggleOutline]);
 
 	// ---- In-text citation / internal PDF links ----
 
@@ -891,6 +899,50 @@ function PdfViewerInner({
 		docCap,
 		docCapRef,
 	});
+
+	const handleAnalyzeLayout = useCallback(() => {
+		startLayoutAnalysisRef.current({
+			force: false,
+			openFigures: true,
+			showOverlay: true,
+			asBackgroundTask: true,
+			notifyOnError: true,
+		});
+	}, [startLayoutAnalysisRef]);
+	const handleJumpToLayoutRegion = useCallback(
+		(region: PdfLayoutRegion) => {
+			scrollRef.current?.scrollToPage({
+				pageNumber: region.pageIndex + 1,
+				behavior: "instant",
+			});
+			setFocusedLayoutRegion(docId, region.id);
+		},
+		[docId],
+	);
+	const handleRenderLayoutThumb = useCallback(
+		async (region: PdfLayoutRegion) => {
+			const eng = engineRef.current;
+			const docs = docCapRef.current;
+			if (!eng || !docs) return null;
+			if (!docs.isDocumentOpen(docId)) return null;
+			const document = docs.getDocument(docId);
+			if (!document) return null;
+			try {
+				const image = await renderPdfRegionPromptImage({
+					engine: eng,
+					document,
+					pageIndex: region.pageIndex,
+					region: region.bbox,
+					maxEdgePx: 360,
+				});
+				if (!docs.isDocumentOpen(docId)) return null;
+				return image;
+			} catch {
+				return null;
+			}
+		},
+		[docId],
+	);
 
 	const {
 		visualDraftEditor,
@@ -1341,6 +1393,14 @@ function PdfViewerInner({
 				paperPath={paperRelPath}
 				showReferences={showReferences}
 				onToggleReferences={handleToggleReferences}
+			/>
+			<PdfFiguresPanel
+				documentId={docId}
+				showFigures={showFigures}
+				onToggleFigures={handleToggleFigures}
+				onAnalyze={handleAnalyzeLayout}
+				onJump={handleJumpToLayoutRegion}
+				onRenderThumb={handleRenderLayoutThumb}
 			/>
 			<PdfFindBar
 				open={findOpen}

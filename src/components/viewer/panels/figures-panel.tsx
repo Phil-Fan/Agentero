@@ -55,6 +55,8 @@ type FiguresPanelProps = {
 	/** Crop a region for sidebar thumbnails (null when viewer unavailable). */
 	onRenderThumb?: (region: PdfLayoutRegion) => Promise<PromptImage | null>;
 	className?: string;
+	/** Hide the pane header for use inside a floating PDF panel. */
+	compact?: boolean;
 };
 
 type SidebarKind = "image" | "chart" | "table" | "algorithm" | "formula";
@@ -225,6 +227,7 @@ export function FiguresPanel({
 	onJump,
 	onRenderThumb,
 	className,
+	compact,
 }: FiguresPanelProps) {
 	const { t } = useTranslation("viewer");
 	const result = useStore(layoutAnalysisStore, (s) =>
@@ -399,76 +402,81 @@ export function FiguresPanel({
 			)}
 			aria-label={t("figures.panelAria")}
 		>
-			<PaneHeader
-				trailing={
-					documentId && viewerReady ? (
-						<TooltipProvider delayDuration={200}>
-							<div className="flex items-center gap-0.5">
-								{hasOverlaySource ? (
+			{compact ? null : (
+				<PaneHeader
+					trailing={
+						documentId && viewerReady ? (
+							<TooltipProvider delayDuration={200}>
+								<div className="flex items-center gap-0.5">
+									{hasOverlaySource ? (
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<Button
+													type="button"
+													variant={overlayVisible ? "secondary" : "ghost"}
+													size="icon-xs"
+													className={cn(
+														"size-6 text-muted-foreground hover:text-foreground",
+														overlayVisible && "text-primary",
+													)}
+													aria-label={t("figures.toggleOverlay")}
+													aria-pressed={overlayVisible}
+													onClick={handleToggleOverlay}
+												>
+													{overlayVisible ? (
+														<Eye className="size-3.5" aria-hidden />
+													) : (
+														<EyeOff className="size-3.5" aria-hidden />
+													)}
+												</Button>
+											</TooltipTrigger>
+											<TooltipContent
+												side="bottom"
+												className="max-w-52 text-xs"
+											>
+												{overlayVisible
+													? t("figures.hideOverlay")
+													: t("figures.showOverlay")}
+											</TooltipContent>
+										</Tooltip>
+									) : null}
 									<Tooltip>
 										<TooltipTrigger asChild>
 											<Button
 												type="button"
-												variant={overlayVisible ? "secondary" : "ghost"}
+												variant={running ? "secondary" : "ghost"}
 												size="icon-xs"
-												className={cn(
-													"size-6 text-muted-foreground hover:text-foreground",
-													overlayVisible && "text-primary",
-												)}
-												aria-label={t("figures.toggleOverlay")}
-												aria-pressed={overlayVisible}
-												onClick={handleToggleOverlay}
+												className="size-6 text-muted-foreground hover:text-foreground"
+												aria-label={
+													result ? t("figures.reanalyze") : t("figures.analyze")
+												}
+												aria-busy={running}
+												disabled={running}
+												onClick={onAnalyze}
 											>
-												{overlayVisible ? (
-													<Eye className="size-3.5" aria-hidden />
+												{running ? (
+													<Loader2
+														className="size-3.5 animate-spin"
+														aria-hidden
+													/>
 												) : (
-													<EyeOff className="size-3.5" aria-hidden />
+													<Boxes className="size-3.5" aria-hidden />
 												)}
 											</Button>
 										</TooltipTrigger>
-										<TooltipContent side="bottom" className="max-w-52 text-xs">
-											{overlayVisible
-												? t("figures.hideOverlay")
-												: t("figures.showOverlay")}
+										<TooltipContent side="bottom" className="max-w-64 text-xs">
+											{analyzeTooltip}
 										</TooltipContent>
 									</Tooltip>
-								) : null}
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											type="button"
-											variant={running ? "secondary" : "ghost"}
-											size="icon-xs"
-											className="size-6 text-muted-foreground hover:text-foreground"
-											aria-label={
-												result ? t("figures.reanalyze") : t("figures.analyze")
-											}
-											aria-busy={running}
-											disabled={running}
-											onClick={onAnalyze}
-										>
-											{running ? (
-												<Loader2
-													className="size-3.5 animate-spin"
-													aria-hidden
-												/>
-											) : (
-												<Boxes className="size-3.5" aria-hidden />
-											)}
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent side="bottom" className="max-w-64 text-xs">
-										{analyzeTooltip}
-									</TooltipContent>
-								</Tooltip>
-							</div>
-						</TooltipProvider>
-					) : null
-				}
-			>
-				<ImageIcon className="size-4 text-muted-foreground" aria-hidden />
-				<span className="font-medium text-sm">{t("figures.title")}</span>
-			</PaneHeader>
+								</div>
+							</TooltipProvider>
+						) : null
+					}
+				>
+					<ImageIcon className="size-4 text-muted-foreground" aria-hidden />
+					<span className="font-medium text-sm">{t("figures.title")}</span>
+				</PaneHeader>
+			)}
 
 			{!documentId ? (
 				<p className="px-3 py-8 text-center text-muted-foreground text-xs">
