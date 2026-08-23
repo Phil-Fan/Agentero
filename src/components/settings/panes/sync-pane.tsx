@@ -5,8 +5,11 @@ import {
 	LoaderCircle,
 	Unplug,
 } from "lucide-react";
+import type { ComponentType } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { FaAws } from "react-icons/fa6";
+import { SiAlibabacloud, SiBaidu, SiCloudflare, SiMinio } from "react-icons/si";
 import {
 	PageTitle,
 	SettingsGroup,
@@ -34,6 +37,7 @@ import {
 } from "@/components/ui/tooltip";
 import { formatBytes } from "@/lib/core/background-tasks";
 import { errorMessage, notifyError, notifySuccess } from "@/lib/core/notify";
+import { openExternalUrl } from "@/lib/core/open-external";
 import { isTauri } from "@/lib/core/tauri";
 import { listenSafe } from "@/lib/core/tauri-events";
 import { cn } from "@/lib/core/utils";
@@ -74,6 +78,55 @@ function helpLabel(label: string, help: string) {
 		</span>
 	);
 }
+
+type SyncProviderLink = {
+	id: string;
+	name: string;
+	docsUrl: string;
+	icon: ComponentType<{ className?: string }>;
+	iconClassName: string;
+};
+
+const SYNC_PROVIDER_LINKS: SyncProviderLink[] = [
+	{
+		id: "aws",
+		name: "AWS S3",
+		docsUrl:
+			"https://docs.aws.amazon.com/AmazonS3/latest/userguide/GetStartedWithS3.html",
+		icon: FaAws,
+		iconClassName: "text-[#FF9900]",
+	},
+	{
+		id: "cloudflare-r2",
+		name: "Cloudflare R2",
+		docsUrl: "https://developers.cloudflare.com/r2/get-started/s3/",
+		icon: SiCloudflare,
+		iconClassName: "text-[#F38020]",
+	},
+	{
+		id: "minio",
+		name: "MinIO",
+		docsUrl:
+			"https://docs.min.io/aistor/administration/console/security-and-access/",
+		icon: SiMinio,
+		iconClassName: "text-[#C72E49]",
+	},
+	{
+		id: "alibaba-oss",
+		name: "Alibaba Cloud OSS",
+		docsUrl:
+			"https://www.alibabacloud.com/help/en/oss/developer-reference/use-aws-sdks-to-access-oss",
+		icon: SiAlibabacloud,
+		iconClassName: "text-[#FF6A00]",
+	},
+	{
+		id: "baidu-bos",
+		name: "Baidu BOS",
+		docsUrl: "https://cloud.baidu.com/doc/BOS/s/ojwvyq973",
+		icon: SiBaidu,
+		iconClassName: "text-[#2932E1]",
+	},
+];
 
 export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 	const { t } = useTranslation("settings");
@@ -329,6 +382,34 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 					{t("sync.noConditionalWrites")}
 				</p>
 			) : null}
+
+			<div className="mb-3 flex flex-wrap items-center gap-1.5">
+				{SYNC_PROVIDER_LINKS.map((provider) => {
+					const Icon = provider.icon;
+					return (
+						<Tooltip key={provider.id}>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-lg"
+									variant="outline"
+									className="size-9 bg-background"
+									aria-label={t("sync.providerDocsAria", {
+										name: provider.name,
+									})}
+									onClick={() => openExternalUrl(provider.docsUrl)}
+								>
+									<Icon
+										className={cn("size-5", provider.iconClassName)}
+										aria-hidden
+									/>
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">{provider.name}</TooltipContent>
+						</Tooltip>
+					);
+				})}
+			</div>
 
 			<SettingsGroup>
 				<SettingsRow label={t("sync.endpoint")} htmlFor="sync-endpoint">

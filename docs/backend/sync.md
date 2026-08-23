@@ -1,6 +1,8 @@
 # 云同步（S3）
 
-多设备间同步整个 Vault 到 S3 兼容对象存储（R2 / MinIO / AWS S3 / OSS / B2）。设计草稿与分期：[../development/cloud-sync-s3.md](../development/cloud-sync-s3.md)。当前已落地 Phase 0–1 与 Phase 2 的自动同步（状态栏指示、GC、multipart 除外）。
+多设备间同步整个 Vault 到 S3 兼容对象存储（AWS S3 / R2 / MinIO / OSS / BOS 等）。设计草稿与分期：[../development/cloud-sync-s3.md](../development/cloud-sync-s3.md)。当前已落地 Phase 0–1 与 Phase 2 的自动同步（状态栏指示、GC、multipart 除外）。
+
+设置页顶部提供常见 S3 兼容服务商的官方配置入口。当前同步引擎只接收 S3 API 的 endpoint / bucket / access key / secret key；Azure Blob、百度网盘、坚果云等非 S3 凭据模型不能直接作为后端接入。
 
 ## 模块
 
@@ -59,7 +61,7 @@
 
 ## 前端
 
-设置窗口「同步」pane：`src/components/settings/panes/sync-pane.tsx`；命令封装 `src/lib/sync/api.ts`。仅本地 Vault 可配置（`remote:` 句柄显示提示）。标题旁用小色点展示连接状态（灰=未连接，绿=已连接，蓝=同步中，红=最近一次同步/连接失败）。同步范围（见上）在同一 pane：小标题 + 逐类开关（行内显示本地体积，默认全开）。
+设置窗口「同步」pane：`src/components/settings/panes/sync-pane.tsx`；命令封装 `src/lib/sync/api.ts`。仅本地 Vault 可配置（`remote:` 句柄显示提示）。标题旁用小色点展示连接状态（灰=未连接，绿=已连接，蓝=同步中，红=最近一次同步/连接失败）。表单顶部的服务商 logo 按钮打开官方 S3 配置指南，用于创建 bucket / endpoint / access key；不会通过外链自动创建或回填凭据。同步范围（见上）在同一 pane：小标题 + 逐类开关（行内显示本地体积，默认全开）。
 
 ## 自动同步
 

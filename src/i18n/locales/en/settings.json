@@ -568,6 +568,7 @@
 		"statusDisconnected": "Not connected",
 		"statusSyncing": "Syncing",
 		"statusError": "Connection error",
+		"providerDocsAria": "Open {{name}} S3 setup guide",
 		"lastSync": "Last synced {{time}}",
 		"neverSynced": "Not synced yet.",
 		"done": "Sync complete: {{up}} uploaded, {{down}} downloaded",

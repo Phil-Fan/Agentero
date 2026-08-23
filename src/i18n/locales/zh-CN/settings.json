@@ -568,6 +568,7 @@
 		"statusDisconnected": "未连接",
 		"statusSyncing": "同步中",
 		"statusError": "连接异常",
+		"providerDocsAria": "打开 {{name}} 的 S3 配置指南",
 		"lastSync": "上次同步 {{time}}",
 		"neverSynced": "尚未同步。",
 		"done": "同步完成：上传 {{up}}，下载 {{down}}",
