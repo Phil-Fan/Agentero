@@ -179,11 +179,10 @@ export function usePdfLayoutRun({
 							if (opts?.showOverlay) {
 								setLayoutOverlayVisible(docId, true);
 							}
-							if (opts?.openFigures) {
-								void import("@/lib/shell/ui-store").then(({ openRightTab }) =>
-									openRightTab("figures"),
-								);
-							}
+							// Note: figures now lives in the PDF viewer left overlay, not
+							// the right sidebar. Callers that want the panel visible after
+							// analysis should toggle it themselves (the panel button is
+							// inside the viewer, so this is normally already open).
 							finish(() => resolve());
 						},
 						onError: (message, aborted) => {

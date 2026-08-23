@@ -9,8 +9,6 @@ import {
 	type AnnotationRow,
 	AnnotationsPanel,
 	type AskRow,
-	FiguresPanel,
-	ReferencesPanel,
 	type VisualTraceRow,
 } from "@/components/viewer";
 import {
@@ -100,21 +98,12 @@ function readFeatureQuery(): {
 
 function viewTitleKey(
 	view: FeatureViewType,
-):
-	| "labels.agent"
-	| "titlebar.annotationsPanel"
-	| "titlebar.referencesPanel"
-	| "titlebar.figuresPanel" {
+): "labels.agent" | "titlebar.annotationsPanel" {
 	switch (view) {
 		case "agent":
 			return "labels.agent";
-		case "backlinks":
-		case "references":
-			return "titlebar.referencesPanel";
 		case "annotations":
 			return "titlebar.annotationsPanel";
-		case "figures":
-			return "titlebar.figuresPanel";
 	}
 }
 
@@ -385,19 +374,6 @@ export function FeatureWindowRoot() {
 		})();
 	}, [title]);
 
-	const referencesPaperPath = useMemo(() => {
-		if (
-			!selectedPath ||
-			!vaultPath ||
-			isLibraryVirtualPath(selectedPath) ||
-			isTrashVirtualPath(selectedPath)
-		) {
-			return null;
-		}
-		const relative = toVaultRelative(vaultPath, selectedPath);
-		return paperDirFromPath(relative, vaultPaperPaths);
-	}, [selectedPath, vaultPath, vaultPaperPaths]);
-
 	return (
 		<div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
 			{isMac ? (
@@ -444,22 +420,7 @@ export function FeatureWindowRoot() {
 						vaultPath={vaultPath}
 						vaultPaperPaths={vaultPaperPaths}
 					/>
-				) : view === "figures" ? (
-					// Layout results live in the main-window PDF viewer memory;
-					// the popout shows empty until sidecar persistence exists.
-					<FiguresPanel
-						documentId={null}
-						viewerReady={false}
-						onAnalyze={() => {}}
-						onJump={() => {}}
-					/>
-				) : (
-					// references (+ legacy backlinks/Graph popout): citation list
-					<ReferencesPanel
-						vaultPath={vaultPath}
-						paperPath={referencesPaperPath}
-					/>
-				)}
+				) : null}
 			</div>
 		</div>
 	);

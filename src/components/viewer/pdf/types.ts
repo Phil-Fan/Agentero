@@ -13,6 +13,7 @@ import type {
 	PdfAskThread,
 } from "@/lib/pdf/ask";
 import type { CrossrefKind } from "@/lib/pdf/citation-dest-keys";
+import type { HighlightColor } from "@/lib/pdf/highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import type { PdfViewerHandle } from "@/lib/workspace/viewer/pdf-viewer-registry";
 
@@ -112,4 +113,16 @@ export type VisualDraftEditorState = {
 	page: number;
 	region: PdfAskNormalizedRect;
 	image: PromptImage;
+};
+
+/** Persistent comment-rail card for one annotated highlight (per page). */
+export type PageAnnotationComment = {
+	id: string;
+	/** Normalized Y anchor on the page (0-1) used for initial placement. */
+	anchorY: number;
+	quote: string;
+	comment: string;
+	color: HighlightColor;
+	/** Pre-computed `[[alias|target]]` or null if no wiki target. */
+	linkAlias: string | null;
 };

@@ -8,12 +8,7 @@ import { createStore } from "zustand/vanilla";
 import type { PaperSearchGroup, SkillDiscovery } from "@/lib/paper/lookup";
 import type { PaletteMode } from "@/lib/shell/commands/types";
 
-export type RightSidebarTab =
-	| "agent"
-	| "backlinks"
-	| "annotations"
-	| "references"
-	| "figures";
+export type RightSidebarTab = "agent" | "annotations";
 
 /** Crop + multi-turn payload when opening a visual-trace pin in Agent. */
 export type AgentSessionOpenVisualTrace = {
@@ -62,7 +57,7 @@ export type PaperSearchDraftGroup = PaperSearchGroup & { parentDir: string };
 
 type UiStore = {
 	sidebarCollapsed: boolean;
-	/** Right sidebar (⌘L): Agent (default), Annotations, References, or Figures. */
+	/** Right sidebar (⌘L): Agent (default) or Annotations. */
 	rightSidebarOpen: boolean;
 	rightSidebarTab: RightSidebarTab;
 	/** Keep AgentPanel mounted when switching right-rail tabs. */
@@ -272,16 +267,13 @@ export function setFeaturePoppedOut(
 /**
  * Open a feature view. If its singleton native window is open, focus that
  * window and do not host a second copy in the main right rail (same policy for
- * Agent, Backlinks, Annotations, References).
+ * Agent and Annotations).
  */
 export function openRightTab(tab: RightSidebarTab): void {
-	// Legacy "backlinks"/Graph tab id still opens References so shortcuts and
-	// saved state keep working.
-	const resolved: RightSidebarTab = tab === "backlinks" ? "references" : tab;
 	void import("@/lib/shell/feature-window").then(
 		async ({ preferFeatureWindow }) => {
-			if (await preferFeatureWindow(resolved)) return;
-			openRightTabInRail(resolved);
+			if (await preferFeatureWindow(tab)) return;
+			openRightTabInRail(tab);
 		},
 	);
 }

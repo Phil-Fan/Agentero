@@ -1,27 +1,16 @@
 /**
- * Right rail: Agent chat, PDF annotations, References, and Figures
- * (layout-detected images/tables). Subscribes to stores directly.
+ * Right rail: Agent chat and PDF annotations.
+ * Subscribes to stores directly.
  */
 
-import {
-	lazy,
-	Suspense,
-	useCallback,
-	useEffect,
-	useMemo,
-	useState,
-	useSyncExternalStore,
-} from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { PdfViewerHandle } from "@/components/viewer";
 import {
 	type AnnotationRow,
 	AnnotationsPanel,
 	type AskRow,
-	FiguresPanel,
 	pdfHandleFor,
-	ReferencesPanel,
-	subscribePdfHandles,
 	type VisualTraceRow,
 } from "@/components/viewer";
 import {
@@ -35,8 +24,6 @@ import {
 import { normalizeAgentSourcePath } from "@/lib/agent/sources";
 import { toVaultRelative } from "@/lib/core/path";
 import { cn } from "@/lib/core/utils";
-import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
-import { paperDirFromPath } from "@/lib/paper/detect";
 import { listPdfVisualTraces } from "@/lib/pdf/agent-trace/io";
 import { tracePreview } from "@/lib/pdf/agent-trace/schema";
 import {
@@ -55,7 +42,6 @@ import {
 } from "@/lib/pdf/annotation-ref";
 import { listPdfAskThreads } from "@/lib/pdf/ask/io";
 import { normalizeHighlightColor } from "@/lib/pdf/highlight/palette";
-import type { PdfLayoutRegion } from "@/lib/pdf/layout";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { openGraphPath, openPaper } from "@/lib/workspace/actions";
 import { getActiveTabId } from "@/lib/workspace/store";
@@ -110,99 +96,6 @@ function annotationAction(
 		}
 	}
 	if (paperAbs) openPaper(paperAbs);
-}
-
-function ReferencesSidebar() {
-	const vaultPath = useVaultStore((s) => s.vaultPath);
-	const vaultPaperPaths = useVaultStore((s) => s.vaultPaperPaths);
-	const selectedPath = useWorkspaceStore(
-		(s) => s.tabs.find((tab) => tab.id === s.activeTabId)?.path ?? null,
-	);
-	const paperPath = useMemo(() => {
-		if (
-			!selectedPath ||
-			isLibraryVirtualPath(selectedPath) ||
-			isTrashVirtualPath(selectedPath)
-		) {
-			return null;
-		}
-		const relative = toVaultRelative(vaultPath, selectedPath);
-		return paperDirFromPath(relative, vaultPaperPaths);
-	}, [selectedPath, vaultPath, vaultPaperPaths]);
-
-	return <ReferencesPanel vaultPath={vaultPath} paperPath={paperPath} />;
-}
-
-function FiguresSidebar() {
-	const activeTab = useWorkspaceStore((s) =>
-		s.tabs.find((tab) => tab.id === s.activeTabId),
-	);
-	const vaultPath = useVaultStore((s) => s.vaultPath);
-	const paperFolders = useVaultStore((s) => s.paperFolders);
-	const paperAbs = useMemo(
-		() => paperAbsFromWorkspaceTab(activeTab ?? null, vaultPath, paperFolders),
-		[activeTab, vaultPath, paperFolders],
-	);
-	const pdfTabId = paperAbs ? pdfTabIdForPaper(paperAbs) : null;
-	const viewerReady = useSyncExternalStore(
-		subscribePdfHandles,
-		() => Boolean(pdfTabId && pdfHandleFor(pdfTabId)),
-		() => false,
-	);
-
-	const withHandle = useCallback(
-		(fn: (h: PdfViewerHandle) => void) => {
-			annotationAction(paperAbs, fn);
-		},
-		[paperAbs],
-	);
-
-	const onAnalyze = useCallback(() => {
-		withHandle((h) => h.analyzeLayout());
-	}, [withHandle]);
-
-	const onJump = useCallback(
-		(region: PdfLayoutRegion) => {
-			withHandle((h) =>
-				h.scrollToLayoutRegion({
-					id: region.id,
-					pageIndex: region.pageIndex,
-					bbox: region.bbox,
-				}),
-			);
-		},
-		[withHandle],
-	);
-
-	const onRenderThumb = useCallback(
-		async (region: PdfLayoutRegion) => {
-			const candidates = [
-				paperAbs ? pdfTabIdForPaper(paperAbs) : null,
-				getActiveTabId(),
-			].filter((id): id is string => Boolean(id));
-			for (const id of candidates) {
-				const handle = pdfHandleFor(id);
-				if (!handle) continue;
-				return handle.renderRegion({
-					pageIndex: region.pageIndex,
-					bbox: region.bbox,
-					maxEdgePx: 360,
-				});
-			}
-			return null;
-		},
-		[paperAbs],
-	);
-
-	return (
-		<FiguresPanel
-			documentId={pdfTabId}
-			viewerReady={viewerReady}
-			onAnalyze={onAnalyze}
-			onJump={onJump}
-			onRenderThumb={onRenderThumb}
-		/>
-	);
 }
 
 function AnnotationsSidebar() {
@@ -464,8 +357,6 @@ export function RightSidebar() {
 	// Singleton feature windows own the surface — do not also host in the rail.
 	const agentInWindow = Boolean(featurePoppedOut.agent);
 	const annotationsInWindow = Boolean(featurePoppedOut.annotations);
-	const referencesInWindow = Boolean(featurePoppedOut.references);
-	const figuresInWindow = Boolean(featurePoppedOut.figures);
 
 	return (
 		<>
@@ -503,15 +394,6 @@ export function RightSidebar() {
 			!annotationsInWindow &&
 			rightSidebarTab === "annotations" ? (
 				<AnnotationsSidebar />
-			) : null}
-			{rightSidebarOpen &&
-			!referencesInWindow &&
-			// Legacy "backlinks" tab id → References (citation list + graph)
-			(rightSidebarTab === "references" || rightSidebarTab === "backlinks") ? (
-				<ReferencesSidebar />
-			) : null}
-			{rightSidebarOpen && !figuresInWindow && rightSidebarTab === "figures" ? (
-				<FiguresSidebar />
 			) : null}
 		</>
 	);

@@ -1,5 +1,5 @@
 /**
- * Native singleton feature windows (Agent / Backlinks / Annotations / References).
+ * Native singleton feature windows (Agent / Annotations).
  *
  * Policy: at most one surface per view. If a feature window is open, all open
  * intents focus that window and the main right-rail must not host
@@ -15,34 +15,16 @@ import { isTauri } from "@/lib/core/tauri";
 import { getVaultPath } from "@/lib/vault/store";
 
 /** Same set as right-rail tabs / leaf feature views. */
-export type FeatureViewType =
-	| "agent"
-	| "backlinks"
-	| "annotations"
-	| "references"
-	| "figures";
+export type FeatureViewType = "agent" | "annotations";
 
-const FEATURE_TAB_ORDER: FeatureViewType[] = [
-	"agent",
-	"backlinks",
-	"annotations",
-	"references",
-	"figures",
-];
+const FEATURE_TAB_ORDER: FeatureViewType[] = ["agent", "annotations"];
 
 function featureWindowTitle(view: FeatureViewType): string {
 	switch (view) {
 		case "agent":
 			return i18n.t("app:windows.titleAgent");
-		case "backlinks":
-			// Legacy Graph popout id — content is now References.
-			return i18n.t("app:windows.titleReferences");
 		case "annotations":
 			return i18n.t("app:windows.titleAnnotations");
-		case "references":
-			return i18n.t("app:windows.titleReferences");
-		case "figures":
-			return i18n.t("app:windows.titleFigures");
 	}
 }
 

@@ -1,7 +1,5 @@
 import {
-	BookMarked,
 	Bot,
-	ImageIcon,
 	MessageSquareText,
 	PanelLeft,
 	PanelRight,
@@ -48,17 +46,10 @@ type TitleBarProps = {
 	showSettingsGear: boolean;
 	sidebarCollapsed: boolean;
 	rightSidebarOpen: boolean;
-	rightSidebarTab:
-		| "agent"
-		| "backlinks"
-		| "annotations"
-		| "references"
-		| "figures";
+	rightSidebarTab: "agent" | "annotations";
 	onToggleSidebar: () => void;
 	onToggleRightSidebar: () => void;
-	onOpenRightTab: (
-		tab: "agent" | "backlinks" | "annotations" | "references" | "figures",
-	) => void;
+	onOpenRightTab: (tab: "agent" | "annotations") => void;
 	onOpenSettings: () => void;
 };
 
@@ -142,18 +133,6 @@ export const TitleBar = memo(function TitleBar({
 										tooltip: t("annotations.title", { ns: "viewer" }),
 										Icon: MessageSquareText,
 									},
-									{
-										id: "references" as const,
-										aria: t("titlebar.referencesPanel"),
-										tooltip: t("references.title", { ns: "viewer" }),
-										Icon: BookMarked,
-									},
-									{
-										id: "figures" as const,
-										aria: t("titlebar.figuresPanel"),
-										tooltip: t("figures.title", { ns: "viewer" }),
-										Icon: ImageIcon,
-									},
 								] as const
 							).map(({ id, aria, tooltip, Icon }) => (
 								<ContextMenu key={id}>
@@ -165,15 +144,9 @@ export const TitleBar = memo(function TitleBar({
 													variant="ghost"
 													size="icon-xs"
 													aria-label={aria}
-													aria-pressed={
-														rightSidebarTab === id ||
-														(id === "references" &&
-															rightSidebarTab === "backlinks")
-													}
+													aria-pressed={rightSidebarTab === id}
 													className={cn(
-														(rightSidebarTab === id ||
-															(id === "references" &&
-																rightSidebarTab === "backlinks")) &&
+														rightSidebarTab === id &&
 															"bg-muted text-foreground",
 													)}
 													onClick={() => onOpenRightTab(id)}
