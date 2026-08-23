@@ -14,6 +14,12 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { InputGroupButton } from "@/components/ui/input-group";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { AgentEffortChoice, AgentModeChoice } from "@/lib/agent";
 import { cn } from "@/lib/core/utils";
 
@@ -54,21 +60,28 @@ export function ComposerToolbar({
 		<>
 			{!compact && collaborationOptions.length > 0 ? (
 				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<PromptInputButton
-							type="button"
-							className="h-7 max-w-[min(10rem,100%)] gap-1 px-1.5 text-xs font-medium text-foreground"
-							tooltip={t("composer.collaborationTooltip")}
-						>
-							<span className="truncate">
-								{t("composer.collaboration.label")}:{" "}
-								{selectedCollaborationName ??
-									collaborationModeId ??
-									t("composer.collaboration.label")}
-							</span>
-							<ChevronDown className="size-3 shrink-0 opacity-70" />
-						</PromptInputButton>
-					</DropdownMenuTrigger>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<DropdownMenuTrigger asChild>
+								<InputGroupButton
+									type="button"
+									size="sm"
+									className="h-7 max-w-[min(10rem,100%)] gap-1 px-1.5 text-xs font-medium text-foreground"
+								>
+									<span className="truncate">
+										{t("composer.collaboration.label")}:{" "}
+										{selectedCollaborationName ??
+											collaborationModeId ??
+											t("composer.collaboration.label")}
+									</span>
+									<ChevronDown className="size-3 shrink-0 opacity-70" />
+								</InputGroupButton>
+							</DropdownMenuTrigger>
+						</TooltipTrigger>
+						<TooltipContent side="top">
+							{t("composer.collaborationTooltip")}
+						</TooltipContent>
+					</Tooltip>
 					<DropdownMenuContent align="start" className="min-w-36 p-1">
 						{collaborationOptions.map((mode) => (
 							<DropdownMenuItem
@@ -90,19 +103,26 @@ export function ComposerToolbar({
 			) : null}
 			{!compact && effortOptionsInDisplayOrder.length > 0 ? (
 				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<PromptInputButton
-							type="button"
-							className="h-7 max-w-[min(8rem,100%)] gap-1 px-1.5 text-xs font-medium text-foreground"
-							tooltip={t("composer.effortTooltip")}
-						>
-							<span className="truncate">
-								{t("composer.effort.label")}:{" "}
-								{formatEffort(reasoningEffort ?? "medium")}
-							</span>
-							<ChevronDown className="size-3 shrink-0 opacity-70" />
-						</PromptInputButton>
-					</DropdownMenuTrigger>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<DropdownMenuTrigger asChild>
+								<InputGroupButton
+									type="button"
+									size="sm"
+									className="h-7 max-w-[min(8rem,100%)] gap-1 px-1.5 text-xs font-medium text-foreground"
+								>
+									<span className="truncate">
+										{t("composer.effort.label")}:{" "}
+										{formatEffort(reasoningEffort ?? "medium")}
+									</span>
+									<ChevronDown className="size-3 shrink-0 opacity-70" />
+								</InputGroupButton>
+							</DropdownMenuTrigger>
+						</TooltipTrigger>
+						<TooltipContent side="top">
+							{t("composer.effortTooltip")}
+						</TooltipContent>
+					</Tooltip>
 					<DropdownMenuContent align="start" className="min-w-28 p-1">
 						{effortOptionsInDisplayOrder.map((effort) => (
 							<DropdownMenuItem
