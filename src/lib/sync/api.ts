@@ -20,6 +20,8 @@ export type SyncBackendConfig = {
 	/** Background sync: on open, after 30s quiet, and every intervalMinutes. */
 	autoSync: boolean;
 	intervalMinutes: number;
+	/** Detected on connect: false when the backend rejects conditional PUTs. */
+	conditionalWrites: boolean;
 };
 
 export type SyncStatus = {
@@ -62,6 +64,7 @@ export const emptySyncConfig = (): SyncBackendConfig => ({
 	forcePathStyle: true,
 	autoSync: true,
 	intervalMinutes: 30,
+	conditionalWrites: true,
 });
 
 /** Interval choices shared with the Host (`config::INTERVAL_CHOICES`). */

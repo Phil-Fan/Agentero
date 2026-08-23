@@ -98,7 +98,7 @@ pub async fn sync_configure(
         let mut cfg = args.config.normalized();
         cfg.merge_mask(config::get(&key).as_ref());
         cfg.validate()?;
-        engine::test_connection(&cfg).await?;
+        cfg.conditional_writes = engine::test_connection(&cfg).await?;
         config::set(&key, cfg.clone())?;
         let meta = local::read_meta(&dir);
         Ok::<_, AppError>(SyncStatus {

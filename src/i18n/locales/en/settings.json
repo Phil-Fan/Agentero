@@ -560,6 +560,7 @@
 		"secretKey": "Secret access key",
 		"pathStyle": "Path-style addressing",
 		"pathStyleHint": "Keep on for R2 / MinIO; turn off for bucket subdomains.",
+		"noConditionalWrites": "This storage doesn't support conditional (atomic) writes, so sync falls back to plain uploads. Fine for single-device use; concurrent edits from multiple devices may need an extra sync round to converge.",
 		"saved": "Sync configured",
 		"disconnect": "Disconnect",
 		"syncNow": "Sync now",

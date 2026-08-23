@@ -560,6 +560,7 @@
 		"secretKey": "Secret Access Key",
 		"pathStyle": "Path-style 寻址",
 		"pathStyleHint": "R2 / MinIO 保持开启；使用 Bucket 子域名时关闭。",
+		"noConditionalWrites": "该存储不支持条件（原子）写入，同步已降级为普通上传。单设备使用不受影响；多设备并发修改可能需要多一轮同步才能收敛。",
 		"saved": "同步已配置",
 		"disconnect": "解绑",
 		"syncNow": "立即同步",

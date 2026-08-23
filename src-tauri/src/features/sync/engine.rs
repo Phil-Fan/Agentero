@@ -64,9 +64,13 @@ pub struct SyncOutcome {
 /// `(phase, current, total)` — totals of 0 mean indeterminate.
 pub type Progress<'a> = &'a (dyn Fn(&str, usize, usize) + Send + Sync);
 
-/// Quick credential/bucket check used by `sync_configure`.
-pub async fn test_connection(cfg: &SyncBackendConfig) -> Result<(), AppError> {
-    S3Client::new(cfg)?.list("", 1).await.map(|_| ())
+/// Quick credential/bucket check used by `sync_configure`; also probes
+/// conditional-write support so backends like Aliyun OSS degrade to plain
+/// PUTs before the first real sync instead of failing mid-pass.
+pub async fn test_connection(cfg: &SyncBackendConfig) -> Result<bool, AppError> {
+    let client = S3Client::new(cfg)?;
+    client.list("", 1).await?;
+    client.probe_conditional_writes().await
 }
 
 pub async fn sync_vault(
@@ -623,6 +627,7 @@ mod tests {
             force_path_style: true,
             auto_sync: false,
             interval_minutes: 30,
+            conditional_writes: true,
         };
         let noop: &(dyn Fn(&str, usize, usize) + Send + Sync) = &|_, _, _| {};
 

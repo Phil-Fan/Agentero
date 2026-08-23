@@ -256,6 +256,12 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 				}
 			/>
 
+			{status?.configured && !form.conditionalWrites ? (
+				<p className="mb-3 text-muted-foreground text-xs">
+					{t("sync.noConditionalWrites")}
+				</p>
+			) : null}
+
 			<SettingsGroup>
 				<SettingsRow label={t("sync.endpoint")} htmlFor="sync-endpoint">
 					{field("endpoint", { placeholder: "https://…" })}

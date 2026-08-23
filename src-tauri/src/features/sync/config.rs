@@ -35,6 +35,11 @@ pub struct SyncBackendConfig {
     pub auto_sync: bool,
     #[serde(default = "default_interval_minutes")]
     pub interval_minutes: u32,
+    /// Connection-test probe result: `false` for backends whose PutObject
+    /// rejects conditional headers (e.g. Aliyun OSS, 400 NotImplemented).
+    /// Sync then degrades to plain PUTs; the runtime fallback re-detects.
+    #[serde(default = "default_true")]
+    pub conditional_writes: bool,
 }
 
 fn default_region() -> String {
