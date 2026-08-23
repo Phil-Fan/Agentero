@@ -1,4 +1,4 @@
-import { PanelLeft, PanelRight, Settings } from "lucide-react";
+import { PanelLeft, Settings } from "lucide-react";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentLogo } from "@/components/agent/agent-logo";
@@ -28,7 +28,7 @@ import { cn } from "@/lib/core/utils";
 import { moveFeatureToWindow } from "@/lib/shell/leaf";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { formatShortcutById } from "@/lib/shell/shortcuts";
-import { openPalette, type RightSidebarTab } from "@/lib/shell/ui-store";
+import { openPalette } from "@/lib/shell/ui-store";
 
 /** Platform-formatted shortcut chips for title bar tooltips (⌥⌘… on macOS, Ctrl+… elsewhere). */
 const SIDEBAR_SHORTCUT = formatShortcutById("toggleSidebar");
@@ -42,10 +42,8 @@ type TitleBarProps = {
 	showSettingsGear: boolean;
 	sidebarCollapsed: boolean;
 	rightSidebarOpen: boolean;
-	rightSidebarTab: RightSidebarTab;
 	onToggleSidebar: () => void;
-	onToggleRightSidebar: () => void;
-	onOpenRightTab: (tab: RightSidebarTab) => void;
+	onToggleAgent: () => void;
 	onOpenSettings: () => void;
 };
 
@@ -58,10 +56,8 @@ export const TitleBar = memo(function TitleBar({
 	showSettingsGear,
 	sidebarCollapsed,
 	rightSidebarOpen,
-	rightSidebarTab,
 	onToggleSidebar,
-	onToggleRightSidebar,
-	onOpenRightTab,
+	onToggleAgent,
 	onOpenSettings,
 }: TitleBarProps) {
 	const { t } = useTranslation(["app"]);
@@ -115,74 +111,54 @@ export const TitleBar = memo(function TitleBar({
 				<div className="min-w-0 flex-1 self-stretch" data-tauri-drag-region />
 				<div className="flex shrink-0 items-center gap-0.5 pr-2">
 					<UpdateIndicator />
-					{rightSidebarOpen ? (
-						<ContextMenu>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<ContextMenuTrigger asChild>
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon-xs"
-											aria-label={t("titlebar.agentPanel")}
-											aria-pressed={rightSidebarTab === "agent"}
-											className={cn(
-												rightSidebarTab === "agent" &&
-													"bg-muted text-foreground",
-											)}
-											onClick={() => onOpenRightTab("agent")}
-										>
-											<AgentLogo
-												template={agentTemplate}
-												className="size-3.5"
-												iconClassName="size-3"
-												plain
-											/>
-										</Button>
-									</ContextMenuTrigger>
-								</TooltipTrigger>
-								<TooltipContent side="bottom">
-									{t("labels.agent")}
-								</TooltipContent>
-							</Tooltip>
-							<ContextMenuContent>
-								<ContextMenuItem
-									onSelect={() => {
-										void moveFeatureToWindow("agent");
-									}}
-								>
-									{t("tabs.contextMoveToNewWindow")}
-								</ContextMenuItem>
-							</ContextMenuContent>
-						</ContextMenu>
-					) : null}
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-xs"
-								aria-label={
-									rightSidebarOpen
-										? t("titlebar.hideRightSidebar")
-										: t("titlebar.showRightSidebar")
-								}
-								aria-pressed={rightSidebarOpen}
-								onClick={onToggleRightSidebar}
+					<ContextMenu>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<ContextMenuTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-xs"
+										aria-label={
+											rightSidebarOpen
+												? t("titlebar.hideRightSidebar")
+												: t("titlebar.showRightSidebar")
+										}
+										aria-pressed={rightSidebarOpen}
+										className={cn(
+											rightSidebarOpen && "bg-muted text-foreground",
+										)}
+										onClick={onToggleAgent}
+									>
+										<AgentLogo
+											template={agentTemplate}
+											className="size-3.5"
+											iconClassName="size-3"
+											plain
+										/>
+									</Button>
+								</ContextMenuTrigger>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{rightSidebarOpen
+									? t("titlebar.hideRightSidebarHint", {
+											shortcut: CHAT_SHORTCUT,
+										})
+									: t("titlebar.showRightSidebarHint", {
+											shortcut: CHAT_SHORTCUT,
+										})}
+							</TooltipContent>
+						</Tooltip>
+						<ContextMenuContent>
+							<ContextMenuItem
+								onSelect={() => {
+									void moveFeatureToWindow("agent");
+								}}
 							>
-								<PanelRight className="size-3.5" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent side="bottom">
-							{rightSidebarOpen
-								? t("titlebar.hideRightSidebarHint", {
-										shortcut: CHAT_SHORTCUT,
-									})
-								: t("titlebar.showRightSidebarHint", {
-										shortcut: CHAT_SHORTCUT,
-									})}
-						</TooltipContent>
-					</Tooltip>
+								{t("tabs.contextMoveToNewWindow")}
+							</ContextMenuItem>
+						</ContextMenuContent>
+					</ContextMenu>
 				</div>
 				{/*
 				  Windows / Linux have no native menu bar, so the gear doubles as a

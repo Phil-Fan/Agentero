@@ -66,7 +66,6 @@ import {
 	setRightSidebarOpenState,
 	setSidebarCollapsedState,
 	toggleChat,
-	toggleRightSidebar,
 	toggleSidebar,
 } from "@/lib/shell/ui-store";
 import {
@@ -133,7 +132,6 @@ function zoomReset(): void {
 function AppTitleBar() {
 	const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
 	const rightSidebarOpen = useUiStore((s) => s.rightSidebarOpen);
-	const rightSidebarTab = useUiStore((s) => s.rightSidebarTab);
 
 	return (
 		<TitleBar
@@ -141,10 +139,8 @@ function AppTitleBar() {
 			showSettingsGear={showSettingsGear}
 			sidebarCollapsed={sidebarCollapsed}
 			rightSidebarOpen={rightSidebarOpen}
-			rightSidebarTab={rightSidebarTab}
 			onToggleSidebar={toggleSidebar}
-			onToggleRightSidebar={toggleRightSidebar}
-			onOpenRightTab={openRightTab}
+			onToggleAgent={toggleChat}
 			onOpenSettings={openSettingsWindow}
 		/>
 	);

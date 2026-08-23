@@ -51,6 +51,7 @@ export default function MobileApp() {
 	const {
 		agents,
 		loading: agentsLoading,
+		selectedAgent,
 		selectedAgentId,
 		selectAgent,
 	} = useMobileAgents({
@@ -129,7 +130,11 @@ export default function MobileApp() {
 		>
 			<aside className="hidden w-20 shrink-0 flex-col items-center border-r bg-muted/25 py-6 md:flex">
 				<MobileBrand />
-				<MobileNav tab={tab} onTab={setTab} />
+				<MobileNav
+					tab={tab}
+					onTab={setTab}
+					agentTemplate={selectedAgent?.template}
+				/>
 			</aside>
 			<main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
 				<MobileHeader
