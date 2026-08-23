@@ -17,7 +17,7 @@ fn create_vault(dir: &Path) {
         .args(["vault", "create", dir.to_str().unwrap(), "--json"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"ok\": true"));
+        .stdout(predicate::str::contains("\"ok\":true"));
 }
 
 /// Minimal PDF (200x100 pt pages, Helvetica 12) with a real xref table, so
@@ -644,7 +644,7 @@ fn tree_and_vault_resolve_from_cwd() {
         .args(["vault", "which", "--json"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"ok\": true"));
+        .stdout(predicate::str::contains("\"ok\":true"));
 }
 
 #[test]
@@ -1057,7 +1057,7 @@ fn doctor_alias_fix_is_confirmed_preserves_content_and_is_idempotent() {
         .args(["--vault", vault.to_str().unwrap(), "doctor", "--json"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"ok\": true"));
+        .stdout(predicate::str::contains("\"ok\":true"));
 
     let rerun = agentero()
         .args([

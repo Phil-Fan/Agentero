@@ -14,6 +14,8 @@ pub struct GlobalOpts {
     pub quiet: bool,
     pub translator_url: Option<String>,
     pub format: OutputFormat,
+    /// Pretty-print JSON (default compact to save agent tokens).
+    pub pretty: bool,
     /// Text-mode paint switch (always false for JSON).
     pub style: Style,
 }

@@ -28,7 +28,7 @@ pub fn emit_ok(globals: &GlobalOpts, data: &Value) -> Result<(), CliError> {
                 ok: true,
                 data: payload,
             };
-            println!("{}", serde_json::to_string_pretty(&envelope)?);
+            println!("{}", render_json(&envelope, globals.pretty)?);
         }
         OutputFormat::Text => {
             if globals.quiet {
@@ -38,6 +38,15 @@ pub fn emit_ok(globals: &GlobalOpts, data: &Value) -> Result<(), CliError> {
         }
     }
     Ok(())
+}
+
+/// Serialize JSON compact by default; `--pretty` opts into indentation.
+fn render_json<T: Serialize>(v: &T, pretty: bool) -> Result<String, CliError> {
+    if pretty {
+        Ok(serde_json::to_string_pretty(v)?)
+    } else {
+        Ok(serde_json::to_string(v)?)
+    }
 }
 
 /// Prefer stable public shapes for `--json` (strip internal text helpers).
@@ -70,7 +79,7 @@ pub fn emit_err(globals: &GlobalOpts, err: &CliError) -> Result<(), CliError> {
         OutputFormat::Json => {
             // Business result only on stdout per cli.md.
             let fail = err.to_json_fail();
-            println!("{}", serde_json::to_string_pretty(&fail)?);
+            println!("{}", render_json(&fail, globals.pretty)?);
         }
         OutputFormat::Text => {
             let style = globals.style;

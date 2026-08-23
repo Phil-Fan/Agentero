@@ -140,6 +140,10 @@ struct Cli {
     #[arg(long = "output", global = true, value_enum, default_value = "text")]
     output: OutputFormat,
 
+    /// Pretty-print JSON output (default: compact single line, cheaper for agents).
+    #[arg(long = "pretty", global = true)]
+    pretty: bool,
+
     /// Quiet success messages (errors still on stderr).
     #[arg(short = 'q', long = "quiet", global = true)]
     quiet: bool,
@@ -322,6 +326,7 @@ fn main() -> StdExitCode {
         quiet: cli.quiet,
         translator_url: cli.translator_url.clone(),
         format,
+        pretty: cli.pretty,
         style,
     };
 
