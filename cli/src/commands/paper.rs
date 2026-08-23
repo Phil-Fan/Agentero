@@ -32,6 +32,12 @@ pub enum PaperCmd {
         /// Include internal `@zotero:` tags in filtering and output.
         #[arg(long = "all")]
         all: bool,
+        /// JSON: emit full PaperRecord rows (default: only id/path/title).
+        #[arg(long = "full")]
+        full: bool,
+        /// JSON: extra fields on top of id/path/title (comma-separated, repeatable).
+        #[arg(long = "fields", value_name = "FIELDS", value_delimiter = ',')]
+        fields: Vec<String>,
     },
     /// Tag inventory and per-paper tag edits.
     Tag {
@@ -169,6 +175,8 @@ pub async fn run(cmd: PaperCmd, globals: &GlobalOpts) -> Result<Value, CliError>
             unread,
             status,
             all,
+            full,
+            fields,
         } => list(
             globals,
             query.as_deref(),
@@ -176,6 +184,10 @@ pub async fn run(cmd: PaperCmd, globals: &GlobalOpts) -> Result<Value, CliError>
             unread,
             status.as_deref(),
             all,
+            ListOutput {
+                full,
+                fields: &fields,
+            },
         ),
         PaperCmd::Tag { cmd } => run_tag(cmd, globals),
         PaperCmd::Get { r#ref, all } => get(globals, &r#ref, all),
@@ -217,6 +229,12 @@ enum TagMode {
     Remove,
 }
 
+/// JSON payload shape for `paper list` (see [`list_items`]).
+struct ListOutput<'a> {
+    full: bool,
+    fields: &'a [String],
+}
+
 fn list(
     globals: &GlobalOpts,
     query: Option<&str>,
@@ -224,6 +242,7 @@ fn list(
     unread: bool,
     status: Option<&str>,
     include_all: bool,
+    out: ListOutput<'_>,
 ) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
     let mut rows = papers::list_all_unique_by_id(&vault)?;
@@ -288,11 +307,95 @@ fn list(
         )
     };
 
+    let items = list_items(&rows, out.full, out.fields)?;
+
     Ok(json!({
-        "items": rows,
+        "items": items,
         "lines": lines,
         "__paper_list": true,
     }))
+}
+
+/// JSON field names of `PaperRecord` valid for `paper list --fields`.
+const PAPER_LIST_FIELDS: [&str; 40] = [
+    "path",
+    "id",
+    "type",
+    "title",
+    "authors",
+    "creators",
+    "year",
+    "date",
+    "abstract",
+    "tags",
+    "arxiv_id",
+    "doi",
+    "isbn",
+    "issn",
+    "pmid",
+    "publication",
+    "volume",
+    "issue",
+    "pages",
+    "publisher",
+    "place",
+    "series",
+    "language",
+    "pdf_url",
+    "html_url",
+    "source_url",
+    "body_source",
+    "body_quality",
+    "bibtex_key",
+    "citation_count",
+    "zotero_item_type",
+    "meta_source",
+    "extra",
+    "summary",
+    "status",
+    "is_read",
+    "zotero_item_id",
+    "zotero_last_synced",
+    "added_at",
+    "updated_at",
+];
+
+/// JSON items for `paper list`: full rows with `--full`, otherwise only
+/// id/path/title plus `--fields` extras (token-cheap default for agents).
+fn list_items(rows: &[PaperRecord], full: bool, fields: &[String]) -> Result<Vec<Value>, CliError> {
+    if full {
+        return rows
+            .iter()
+            .map(|r| serde_json::to_value(r).map_err(CliError::from))
+            .collect();
+    }
+    let mut keep: Vec<&str> = vec!["id", "path", "title"];
+    for f in fields {
+        let f = f.trim();
+        if f.is_empty() {
+            continue;
+        }
+        if !PAPER_LIST_FIELDS.contains(&f) {
+            return Err(CliError::usage(format!(
+                "unknown field '{f}' (valid: {})",
+                PAPER_LIST_FIELDS.join(", ")
+            )));
+        }
+        if !keep.contains(&f) {
+            keep.push(f);
+        }
+    }
+    rows.iter()
+        .map(|r| {
+            let v = serde_json::to_value(r)?;
+            let obj = v.as_object().expect("PaperRecord serializes to object");
+            let slim = keep
+                .iter()
+                .filter_map(|k| obj.get(*k).map(|val| ((*k).to_string(), val.clone())))
+                .collect::<serde_json::Map<String, Value>>();
+            Ok(Value::Object(slim))
+        })
+        .collect()
 }
 
 fn list_tags(globals: &GlobalOpts, include_all: bool) -> Result<Value, CliError> {

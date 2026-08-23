@@ -335,6 +335,7 @@ fn paper_crud_catalog_only() {
             "list",
             "--tag",
             "NLP",
+            "--full",
             "--json",
         ])
         .assert()
@@ -623,6 +624,108 @@ fn paper_crud_catalog_only() {
         .assert()
         .success();
     assert!(!paper.exists());
+}
+
+#[test]
+fn paper_list_json_slim_by_default_fields_and_full() {
+    let tmp = tempdir().unwrap();
+    let vault = tmp.path().join("v");
+    create_vault(&vault);
+    seed_paper(&vault, "papers/demo", "demo", "Demo Paper");
+
+    // Default: only id/path/title, compact single line (token-cheap for agents).
+    let out = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "list",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert_eq!(String::from_utf8_lossy(&out).trim().lines().count(), 1);
+    let v: Value = serde_json::from_slice(&out).unwrap();
+    let row = &v["data"][0];
+    let mut keys: Vec<&str> = row
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(|k| k.as_str())
+        .collect();
+    keys.sort();
+    assert_eq!(keys, ["id", "path", "title"]);
+
+    // --fields adds requested keys on top of id/path/title.
+    let out = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "list",
+            "--fields",
+            "status,is_read",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let v: Value = serde_json::from_slice(&out).unwrap();
+    let row = &v["data"][0];
+    assert_eq!(row["status"], "completed");
+    assert_eq!(row["is_read"], false);
+
+    // --full restores the whole PaperRecord.
+    let out = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "list",
+            "--full",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let v: Value = serde_json::from_slice(&out).unwrap();
+    assert!(v["data"][0]["added_at"].as_str().is_some());
+
+    // Unknown field → usage error.
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "list",
+            "--fields",
+            "nope",
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("unknown field"));
+
+    // --pretty opts back into indented JSON.
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "--pretty",
+            "paper",
+            "list",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"ok\": true"));
 }
 
 #[test]

@@ -31,7 +31,9 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 | `usage` | 本机活动日志：`which` / `timeline` / `summary` / `clear`（XDG `usage.sqlite`） |
 | `feed` | 广场订阅：`add` / `list` / `remove`（XDG `feeds.sqlite`，与 UI 共用） |
 
-稳定 `--json` 输出，供脚本与外部 Agent 组合。
+稳定 `--json` 输出，供脚本与外部 Agent 组合。JSON 默认 **compact 单行**（省 token），`--pretty` 恢复缩进美化（[#367](https://github.com/poco-ai/Agentero/issues/367)）。
+
+`paper list --json` 默认每行只含 `id/path/title`；用 `--fields year,tags,abstract,…`（逗号分隔、可重复）按需加字段，或 `--full` 输出完整 `PaperRecord`。未知字段报 `usage` 错误并列出合法字段。text 表格输出不受影响。
 
 ### 版面索引与区域批注（已实现）
 
