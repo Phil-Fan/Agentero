@@ -127,16 +127,23 @@ function LinkChip({
 			href={href}
 			target="_blank"
 			rel="noreferrer"
+			aria-label={label}
+			title={label}
 			className={cn(
 				"inline-flex items-center gap-1 rounded-md border bg-background px-1.5 py-0.5",
-				"h-6 min-w-0 max-w-full text-[11px] leading-none text-muted-foreground transition-colors",
+				"h-6 min-w-0 flex-1 justify-center text-[11px] leading-none text-muted-foreground transition-colors",
 				"hover:bg-muted hover:text-foreground",
 				"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 			)}
 		>
 			{icon}
-			<span className="min-w-0 truncate">{label}</span>
-			<ExternalLink className="size-2.5 shrink-0 opacity-70" aria-hidden />
+			<span className="min-w-0 truncate @max-[18rem]/paper-links:hidden">
+				{label}
+			</span>
+			<ExternalLink
+				className="size-2.5 shrink-0 opacity-70 @max-[18rem]/paper-links:hidden"
+				aria-hidden
+			/>
 		</a>
 	);
 }
@@ -186,15 +193,20 @@ function ServiceLinkChip({
 			aria-label={label}
 			title={label}
 			className={cn(
-				"inline-flex h-6 min-w-0 max-w-full items-center gap-1 rounded-md border bg-background px-1.5",
+				"inline-flex h-6 min-w-0 flex-1 items-center justify-center gap-1 rounded-md border bg-background px-1.5",
 				"text-[11px] leading-none text-muted-foreground transition-colors",
 				"hover:bg-muted hover:text-foreground",
 				"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 			)}
 		>
 			{icon}
-			<span className="min-w-0 truncate">{label}</span>
-			<ExternalLink className="size-2.5 shrink-0 opacity-70" aria-hidden />
+			<span className="min-w-0 truncate @max-[18rem]/paper-links:hidden">
+				{label}
+			</span>
+			<ExternalLink
+				className="size-2.5 shrink-0 opacity-70 @max-[18rem]/paper-links:hidden"
+				aria-hidden
+			/>
 		</a>
 	);
 }
@@ -595,7 +607,7 @@ export function PaperInfoPanel({
 									text={meta.title}
 									label={t("paperInfo.title")}
 									onCopy={copyField}
-									className="line-clamp-2 font-medium"
+									className="line-clamp-2"
 								/>
 							</MetaRow>
 							{meta.authors?.length ? (
@@ -625,7 +637,7 @@ export function PaperInfoPanel({
 								/>
 							</MetaRow>
 							{meta.pdf_url || meta.arxiv_id || modelScopeUrl || alphaXivUrl ? (
-								<div className="flex flex-nowrap items-center gap-1.5 px-3 pt-1.5">
+								<div className="@container/paper-links flex flex-nowrap items-center gap-1.5 overflow-hidden px-3 pt-1.5">
 									{meta.pdf_url || meta.arxiv_id ? (
 										<LinkChip
 											href={

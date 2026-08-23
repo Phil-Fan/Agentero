@@ -2,7 +2,7 @@
 
 ## 布局
 
-- **左栏**：文件树 + Paper Info（显示最近选中的论文；切换到非论文文档时保持不消失；无卡片容器、常驻 collapsible；上边缘可拖拽调整高度，`preserve-pixel-size`；arXiv 论文在资源按钮下显示 arXiv PDF、魔搭论文解读与 alphaXiv 外链，不再显示摘要按钮；元信息修改入口位于 Info 底部）。Cool Papers / Kimi 解析入口在论文 `NOTES.md` 的 Markdown 工具栏，不在 Paper Info。
+- **左栏**：文件树 + Paper Info（显示最近选中的论文；切换到非论文文档时保持不消失；无卡片容器、常驻 collapsible；上边缘可拖拽调整高度，`preserve-pixel-size`；arXiv 论文在资源按钮下显示 arXiv PDF、魔搭论文解读与 alphaXiv 外链，不再显示摘要按钮；窄宽度下资源按钮退化为仅图标；元信息修改入口位于 Info 底部）。Cool Papers / Kimi 解析入口在论文 `NOTES.md` 的 Markdown 工具栏，不在 Paper Info。
 - **中间**：无 Vault 欢迎页；有 Vault 时为全局 Dockview（见 [workspace.md](workspace.md)）。
 - **右栏**（可选）：Agent / 批注。
   - 参考文献与版面解析已移入 PDF 阅读器左侧浮层面板（见 [pdf.md](pdf.md)），不再占用右栏。
