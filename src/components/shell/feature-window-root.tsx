@@ -6,7 +6,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-	type AnnotationRow,
 	AnnotationsPanel,
 	type AskRow,
 	type VisualTraceRow,
@@ -38,7 +37,6 @@ import {
 	wikiTargetForPaper,
 } from "@/lib/pdf/annotation-ref";
 import { listPdfAskThreads } from "@/lib/pdf/ask/io";
-import { normalizeHighlightColor } from "@/lib/pdf/highlight/palette";
 import {
 	type FeatureViewType,
 	readFeatureWindowView,
@@ -202,21 +200,6 @@ function FeatureAnnotations({
 		};
 	}, [paperAbs, diskVisuals]);
 
-	const items = useMemo<AnnotationRow[]>(
-		() =>
-			diskSummaries
-				.filter((s) => s.kind === "highlight")
-				.map((s) => ({
-					id: s.id,
-					page: s.page,
-					quote: s.quote,
-					comment: s.comment,
-					color: normalizeHighlightColor(s.color),
-					linkAlias: annotationWikilinkAlias(null, s.preview),
-				})),
-		[diskSummaries],
-	);
-
 	const visualTraceRows = useMemo<VisualTraceRow[]>(
 		() =>
 			diskVisuals.length
@@ -252,13 +235,9 @@ function FeatureAnnotations({
 	// Jump actions need the main-window PDF handle — list-only in the popout.
 	return (
 		<AnnotationsPanel
-			items={items}
 			asks={diskAsks}
 			visualTraces={visualTraceRows}
 			wikiTarget={wikiTarget}
-			onJump={() => {}}
-			onEdit={() => {}}
-			onDelete={() => {}}
 			onJumpAsk={() => {}}
 			onDeleteAsk={() => {}}
 			onJumpVisual={() => {}}

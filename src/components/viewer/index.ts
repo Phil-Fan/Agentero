@@ -14,7 +14,6 @@
 export { HtmlViewer } from "@/components/viewer/html-viewer";
 export { ImageViewer } from "@/components/viewer/image-viewer";
 export {
-	type AnnotationRow,
 	AnnotationsPanel,
 	type AskRow,
 	type VisualTraceRow,

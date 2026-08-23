@@ -7,7 +7,6 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { PdfViewerHandle } from "@/components/viewer";
 import {
-	type AnnotationRow,
 	AnnotationsPanel,
 	type AskRow,
 	pdfHandleFor,
@@ -41,7 +40,6 @@ import {
 	wikiTargetForPaper,
 } from "@/lib/pdf/annotation-ref";
 import { listPdfAskThreads } from "@/lib/pdf/ask/io";
-import { normalizeHighlightColor } from "@/lib/pdf/highlight/palette";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { openGraphPath, openPaper } from "@/lib/workspace/actions";
 import { getActiveTabId } from "@/lib/workspace/store";
@@ -108,12 +106,9 @@ function AnnotationsSidebar() {
 		() => paperAbsFromWorkspaceTab(activeTab ?? null, vaultPath, paperFolders),
 		[activeTab, vaultPath, paperFolders],
 	);
-	// Highlight store + PdfViewerHandle are keyed by the PDF body tab id.
+	// Mark stores + PdfViewerHandle are keyed by the PDF body tab id.
 	const pdfTabId = paperAbs ? pdfTabIdForPaper(paperAbs) : null;
 
-	const storeHighlights = useAnnotationsStore((s) =>
-		pdfTabId ? s.highlightsByTab[pdfTabId] : undefined,
-	);
 	const storeAsks = useAnnotationsStore((s) =>
 		pdfTabId ? s.asksByTab[pdfTabId] : undefined,
 	);
@@ -138,9 +133,8 @@ function AnnotationsSidebar() {
 			setDiskVisuals([]);
 			return;
 		}
-		const hasLive =
-			(storeHighlights?.length ?? 0) > 0 || (storeVisuals?.length ?? 0) > 0;
-		if (hasLive && (storeAsks?.length ?? 0) > 0) {
+		const hasLiveVisuals = (storeVisuals?.length ?? 0) > 0;
+		if (hasLiveVisuals && (storeAsks?.length ?? 0) > 0) {
 			setDiskSummaries([]);
 			setDiskAsks([]);
 			setDiskVisuals([]);
@@ -149,14 +143,16 @@ function AnnotationsSidebar() {
 		let cancelled = false;
 		void (async () => {
 			const [summaries, asks, visuals] = await Promise.all([
-				hasLive ? Promise.resolve([]) : listPaperAnnotationSummaries(paperAbs),
+				hasLiveVisuals
+					? Promise.resolve([])
+					: listPaperAnnotationSummaries(paperAbs),
 				storeAsks?.length ? Promise.resolve([]) : listPdfAskThreads(paperAbs),
 				storeVisuals?.length
 					? Promise.resolve([])
 					: listPdfVisualTraces(paperAbs),
 			]);
 			if (cancelled) return;
-			if (!hasLive) setDiskSummaries(summaries);
+			if (!hasLiveVisuals) setDiskSummaries(summaries);
 			if (!storeVisuals?.length) setDiskVisuals(visuals);
 			if (!storeAsks?.length) {
 				setDiskAsks(
@@ -180,7 +176,7 @@ function AnnotationsSidebar() {
 		return () => {
 			cancelled = true;
 		};
-	}, [paperAbs, storeHighlights, storeVisuals, storeAsks]);
+	}, [paperAbs, storeVisuals, storeAsks]);
 
 	const visualTraceSource = storeVisuals?.length ? storeVisuals : diskVisuals;
 	useEffect(() => {
@@ -207,37 +203,6 @@ function AnnotationsSidebar() {
 	}, [activeTab?.paperMeta?.path, paperAbs, vaultPath]);
 
 	const paperTitle = activeTab?.paperMeta?.title?.trim() || null;
-
-	const items = useMemo<AnnotationRow[]>(() => {
-		if (storeHighlights?.length) {
-			return [...storeHighlights]
-				.sort(
-					(a, b) =>
-						a.page - b.page || (a.rects[0]?.y ?? 0) - (b.rects[0]?.y ?? 0),
-				)
-				.map((h) => ({
-					id: h.id,
-					page: h.page,
-					quote: h.quote,
-					comment: h.comment ?? "",
-					color: normalizeHighlightColor(h.color),
-					linkAlias: annotationWikilinkAlias(
-						paperTitle,
-						annotationSnippet({ comment: h.comment, quote: h.quote }),
-					),
-				}));
-		}
-		return diskSummaries
-			.filter((s) => s.kind === "highlight")
-			.map((s) => ({
-				id: s.id,
-				page: s.page,
-				quote: s.quote,
-				comment: s.comment,
-				color: normalizeHighlightColor(s.color),
-				linkAlias: annotationWikilinkAlias(paperTitle, s.preview),
-			}));
-	}, [storeHighlights, diskSummaries, paperTitle]);
 
 	const askRows = useMemo<AskRow[]>(() => {
 		if (storeAsks?.length) {
@@ -311,17 +276,9 @@ function AnnotationsSidebar() {
 
 	return (
 		<AnnotationsPanel
-			items={items}
 			asks={askRows}
 			visualTraces={visualTraceRows}
 			wikiTarget={wikiTarget}
-			onJump={(id) =>
-				annotationAction(paperAbs, (h) => h.scrollToHighlight(id))
-			}
-			onEdit={(id) => annotationAction(paperAbs, (h) => h.editComment(id))}
-			onDelete={(id) =>
-				annotationAction(paperAbs, (h) => h.deleteHighlight(id))
-			}
 			onJumpAsk={(id) => annotationAction(paperAbs, (h) => h.scrollToAsk(id))}
 			onDeleteAsk={(id) => annotationAction(paperAbs, (h) => h.deleteAsk(id))}
 			onJumpVisual={(id) =>
