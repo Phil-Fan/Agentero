@@ -344,6 +344,30 @@ function rebalanceGridGroupWidths(api: DockviewApi): void {
 	}
 }
 
+/** Remove grid groups that ended up with no panels (e.g. persisted empty split). */
+function compactEmptyGroups(api: DockviewApi): void {
+	const gridGroups = api.groups.filter(
+		(group) => group.api.location.type === "grid",
+	);
+	if (gridGroups.length < 2) return;
+	if (!gridGroups.some((group) => group.panels.length > 0)) return;
+
+	let changed = false;
+	for (const group of gridGroups) {
+		if (group.panels.length === 0) {
+			try {
+				api.removeGroup(group);
+				changed = true;
+			} catch {
+				// ignore: dockview may refuse to remove a locked group
+			}
+		}
+	}
+	if (changed) {
+		rebalanceGridGroupWidths(api);
+	}
+}
+
 /** Push React tab title / persist params / renderer onto an existing dockview panel. */
 function applyTabPanelMeta(panel: IDockviewPanel, tab: DocTab): void {
 	if (panel.title !== tab.title) {
@@ -368,6 +392,7 @@ function reconcilePanelMembership(api: DockviewApi, list: DocTab[]): void {
 		if (api.getPanel(tab.id)) continue;
 		addPanelWithPlacement(api, tab, null);
 	}
+	compactEmptyGroups(api);
 }
 
 /**
