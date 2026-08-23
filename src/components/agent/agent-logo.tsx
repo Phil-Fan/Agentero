@@ -63,56 +63,57 @@ export function AgentLogo({
 }) {
 	const key = agentLogoKeyForTemplate(template);
 	const iconClass = cn("size-3.5", iconClassName);
+	const neutralIconClass = cn(iconClass, "!text-foreground");
 
 	let icon: ReactNode;
 	switch (key) {
 		case "opencode":
-			icon = <SiOpencode className={iconClass} />;
+			icon = <SiOpencode className={neutralIconClass} />;
 			break;
 		case "openclaw":
 			icon = (
 				<OpenClawMark
-					className={cn(iconClass, "text-red-600 dark:text-red-400")}
+					className={cn(iconClass, "!text-red-600 dark:!text-red-400")}
 				/>
 			);
 			break;
 		case "claude-acp":
-			icon = <SiClaude className={cn(iconClass, "text-[#D97757]")} />;
+			icon = <SiClaude className={cn(iconClass, "!text-[#D97757]")} />;
 			break;
 		case "codex-acp":
-			icon = <OpenAiMark className={iconClass} />;
+			icon = <OpenAiMark className={neutralIconClass} />;
 			break;
 		case "gemini":
-			icon = <SiGooglegemini className={cn(iconClass, "text-[#1A73E8]")} />;
+			icon = <SiGooglegemini className={cn(iconClass, "!text-[#1A73E8]")} />;
 			break;
 		case "hermes":
 			icon = (
 				<SiHermes
-					className={cn(iconClass, "text-[#8B5E3C] dark:text-[#D3A47A]")}
+					className={cn(iconClass, "!text-[#8B5E3C] dark:!text-[#D3A47A]")}
 				/>
 			);
 			break;
 		case "grok-build":
-			icon = <GrokMark className={iconClass} />;
+			icon = <GrokMark className={neutralIconClass} />;
 			break;
 		case "pi":
 			icon = (
 				<PiMark
-					className={cn(iconClass, "text-violet-700 dark:text-violet-300")}
+					className={cn(iconClass, "!text-violet-700 dark:!text-violet-300")}
 				/>
 			);
 			break;
 		case "dsh":
-			icon = <SiDeepseek className={cn(iconClass, "text-[#4D6BFE]")} />;
+			icon = <SiDeepseek className={cn(iconClass, "!text-[#4D6BFE]")} />;
 			break;
 		case "kimi-code":
 			icon = <KimiMark className={iconClass} />;
 			break;
 		case "qodercli":
-			icon = <QoderMark className={iconClass} />;
+			icon = <QoderMark className={neutralIconClass} />;
 			break;
 		case "custom":
-			icon = <Terminal className={cn(iconClass, "text-muted-foreground")} />;
+			icon = <Terminal className={cn(iconClass, "!text-muted-foreground")} />;
 			break;
 	}
 
