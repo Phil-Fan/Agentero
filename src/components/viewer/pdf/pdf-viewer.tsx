@@ -44,7 +44,15 @@ import {
 	ZoomMode,
 	ZoomPluginPackage,
 } from "@embedpdf/plugin-zoom/react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	memo,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
 import { PdfBottomBar } from "@/components/viewer/pdf/chrome/pdf-bottom-bar";
@@ -80,6 +88,10 @@ import { usePdfVisualMarks } from "@/components/viewer/pdf/hooks/use-pdf-visual-
 import { usePdfZoomControls } from "@/components/viewer/pdf/hooks/use-pdf-zoom-controls";
 import { useStableDerived } from "@/components/viewer/pdf/hooks/use-stable-derived";
 import {
+	COMMENT_RAIL_MIN_HOST_WIDTH,
+	COMMENT_RAIL_WIDTH_PX,
+} from "@/components/viewer/pdf/layers/comment-cards-layer";
+import {
 	type PdfPageHandlers,
 	PdfPageLayers,
 	type PdfPageLayoutSlice,
@@ -88,6 +100,7 @@ import {
 } from "@/components/viewer/pdf/layers/page-layers";
 import { renderPdfRegionPromptImage } from "@/components/viewer/pdf/region-crop";
 import type {
+	PageAnnotationComment,
 	PdfViewerInnerProps,
 	PdfViewerProps,
 } from "@/components/viewer/pdf/types";
@@ -99,16 +112,24 @@ import {
 	pinActiveSelection,
 	publishSelection,
 } from "@/lib/agent/selection-store";
+import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
 import { arxivUrls } from "@/lib/paper/arxiv";
 import { isVisualMarkKind, tracePreview } from "@/lib/pdf/agent-trace";
+import {
+	annotationSnippet,
+	annotationWikilinkAlias,
+	annotationWikilinkMarkdown,
+	wikiTargetForPaper,
+} from "@/lib/pdf/annotation-ref";
 import { threadHasUserQuestion, threadPreview } from "@/lib/pdf/ask/schema";
 import type { PdfAskNormalizedRect, PdfAskThread } from "@/lib/pdf/ask/types";
 import {
 	DEFAULT_HIGHLIGHT_COLOR,
 	HIGHLIGHT_HEX_LIST,
 	type HighlightColor,
+	normalizeHighlightColor,
 } from "@/lib/pdf/highlight/palette";
 import {
 	getPdfAiRuntime,
@@ -326,6 +347,7 @@ function PdfViewerInner({
 	onAsksChange,
 	onVisualTracesChange,
 }: PdfViewerInnerProps) {
+	const { t } = useTranslation("viewer");
 	// Parent often passes inline lambdas; keep latest in refs so data effects
 	// do not re-fire every parent render (was Maximum update depth exceeded).
 	const onAsksChangeRef = useRef(onAsksChange);
@@ -399,6 +421,11 @@ function PdfViewerInner({
 		return paperMetaByRelPath.get(key);
 	}, [paperRelPath, paperMetaByRelPath]);
 	const paperTitle = paperMeta?.title;
+	/** Resolvable wiki target for comment-rail copy-link/copy-embed. */
+	const commentWikiTarget = useMemo(() => {
+		if (!paperRelPath) return null;
+		return wikiTargetForPaper(paperRelPath, paperRelPath);
+	}, [paperRelPath]);
 	const paperLink = useMemo(() => {
 		if (!paperMeta) return undefined;
 		if (paperMeta.arxiv_id) return arxivUrls(paperMeta.arxiv_id)?.abs;
@@ -480,6 +507,24 @@ function PdfViewerInner({
 	const translateStreamingRef = useRef(false);
 
 	const hostRef = useRef<HTMLDivElement>(null);
+
+	/**
+	 * Host width drives the comment-rail fallback: narrow split views keep the
+	 * in-page annotate gutter pins instead of the right-edge comment cards.
+	 * Measured in a layout effect so the first paint already picks a mode.
+	 */
+	const [hostWidth, setHostWidth] = useState(0);
+	useLayoutEffect(() => {
+		const host = hostRef.current;
+		if (!host) return;
+		const measure = () => setHostWidth(host.clientWidth);
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(host);
+		return () => observer.disconnect();
+	}, []);
+	const commentRailEnabled =
+		hostWidth === 0 || hostWidth >= COMMENT_RAIL_MIN_HOST_WIDTH;
 
 	// ---- Text selection → floating action menu ----
 	// Placed after hostRef/zoomRef: the hook anchors the menu against the page
@@ -756,18 +801,39 @@ function PdfViewerInner({
 	 * placement walks the page's whole text-rect list, so doing it inside
 	 * renderPage cost that walk for every mounted page on every scroll frame.
 	 */
-	const pinsByPage = useMemo(() => {
-		const byPage = new Map<number, SelectionPin[]>();
+	const { pinsByPage, commentsByPage } = useMemo(() => {
+		const pins = new Map<number, SelectionPin[]>();
+		const comments = new Map<number, PageAnnotationComment[]>();
 		const add = (page: number, pin: SelectionPin) => {
-			const list = byPage.get(page);
+			const list = pins.get(page);
 			if (list) list.push(pin);
-			else byPage.set(page, [pin]);
+			else pins.set(page, [pin]);
 		};
 		for (const highlight of highlights) {
 			const comment = highlight.comment?.trim();
 			if (!comment) continue;
 			const anchor = highlightAnchors.get(highlight.id);
 			if (!anchor) continue;
+			// Wide host: persistent comment rail outside the page's right edge;
+			// narrow host: fall back to the in-page annotate gutter pin.
+			if (commentRailEnabled) {
+				const entry: PageAnnotationComment = {
+					id: highlight.id,
+					anchorY: anchor.y,
+					quote: highlight.quote,
+					comment,
+					color: normalizeHighlightColor(highlight.color),
+					linkAlias:
+						annotationWikilinkAlias(
+							paperTitle,
+							annotationSnippet({ comment, quote: highlight.quote }),
+						) ?? null,
+				};
+				const list = comments.get(highlight.page);
+				if (list) list.push(entry);
+				else comments.set(highlight.page, [entry]);
+				continue;
+			}
 			const pageText = pageTextMap.get(highlight.page - 1);
 			const pin = pinFromRects([anchor], pageText);
 			add(highlight.page, {
@@ -823,7 +889,7 @@ function PdfViewerInner({
 				side: pin.side,
 			});
 		}
-		return byPage;
+		return { pinsByPage: pins, commentsByPage: comments };
 	}, [
 		highlights,
 		highlightAnchors,
@@ -831,6 +897,8 @@ function PdfViewerInner({
 		translatePinAnchors,
 		visualTraces,
 		pageTextMap,
+		commentRailEnabled,
+		paperTitle,
 	]);
 
 	const activeThread = useMemo(() => {
@@ -1271,6 +1339,8 @@ function PdfViewerInner({
 			visualCropRegion,
 			focusedLayoutRegion,
 			pinsByPage,
+			commentsByPage,
+			commentWikiTarget,
 			citationLinks,
 			activeCardId: activeCard?.id ?? null,
 		}),
@@ -1282,6 +1352,8 @@ function PdfViewerInner({
 			visualCropRegion,
 			focusedLayoutRegion,
 			pinsByPage,
+			commentsByPage,
+			commentWikiTarget,
 			citationLinks,
 			activeCard?.id,
 		],
@@ -1320,6 +1392,37 @@ function PdfViewerInner({
 		[beginVisualAnnotation],
 	);
 
+	const handleCopyCommentLink = useCallback(
+		(comment: PageAnnotationComment) => {
+			if (!commentWikiTarget) return;
+			void copyTextToClipboard(
+				annotationWikilinkMarkdown({
+					target: commentWikiTarget,
+					id: comment.id,
+					...(comment.linkAlias ? { alias: comment.linkAlias } : {}),
+				}),
+				{ successMessage: t("annotations.linkCopied") },
+			);
+		},
+		[commentWikiTarget, t],
+	);
+
+	const handleCopyCommentEmbed = useCallback(
+		(comment: PageAnnotationComment) => {
+			if (!commentWikiTarget) return;
+			void copyTextToClipboard(
+				annotationWikilinkMarkdown({
+					target: commentWikiTarget,
+					id: comment.id,
+					embed: true,
+					...(comment.linkAlias ? { alias: comment.linkAlias } : {}),
+				}),
+				{ successMessage: t("annotations.embedCopied") },
+			);
+		},
+		[commentWikiTarget, t],
+	);
+
 	const pageHandlers = useMemo<PdfPageHandlers>(
 		() => ({
 			onOpenPin: handleOpenPin,
@@ -1333,6 +1436,10 @@ function PdfViewerInner({
 			onDeleteHighlightAnnotation: handleDeleteHighlightAnnotation,
 			onEditHighlightAnnotation: handleEditHighlightAnnotation,
 			onChangeHighlightColor: handleChangeHighlightColor,
+			onOpenComment: handleEditHighlightAnnotation,
+			onDeleteComment: handleDeleteHighlightAnnotation,
+			onCopyCommentLink: handleCopyCommentLink,
+			onCopyCommentEmbed: handleCopyCommentEmbed,
 		}),
 		[
 			handleOpenPin,
@@ -1346,6 +1453,8 @@ function PdfViewerInner({
 			handleDeleteHighlightAnnotation,
 			handleEditHighlightAnnotation,
 			handleChangeHighlightColor,
+			handleCopyCommentLink,
+			handleCopyCommentEmbed,
 		],
 	);
 
@@ -1436,6 +1545,7 @@ function PdfViewerInner({
 			<DockviewViewport
 				documentId={docId}
 				hostRef={hostRef}
+				rightGutter={commentRailEnabled ? COMMENT_RAIL_WIDTH_PX : 0}
 				className="agentero-scroll-both min-h-0 min-w-0 flex-1"
 			>
 				<WheelZoomHandler docId={docId} />

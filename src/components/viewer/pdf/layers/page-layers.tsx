@@ -24,6 +24,7 @@ import { memo, type RefObject, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	EMPTY_CITATION_LINKS,
+	EMPTY_COMMENTS,
 	EMPTY_PINS,
 	PAGE_LAYER_STYLE,
 	PDF_BASE_LAYER_SCALE_CAP,
@@ -32,10 +33,12 @@ import {
 } from "@/components/viewer/pdf/constants";
 import { EMBED_PAGE_ATTR } from "@/components/viewer/pdf/coords";
 import { CitationLinkLayer } from "@/components/viewer/pdf/layers/citation-links";
+import { CommentCardsLayer } from "@/components/viewer/pdf/layers/comment-cards-layer";
 import { HighlightAnnotationMenu } from "@/components/viewer/pdf/layers/highlight-annotation-menu";
 import { LayoutTranslateOverlay } from "@/components/viewer/pdf/layers/layout-translate-overlay";
 import { PdfRegionSelectLayer } from "@/components/viewer/pdf/layers/region-select-layer";
 import { SelectionGutter } from "@/components/viewer/pdf/layers/selection-gutter";
+import type { PageAnnotationComment } from "@/components/viewer/pdf/types";
 import { cn } from "@/lib/core/utils";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
@@ -80,6 +83,10 @@ export type PdfPageMarksSlice = {
 	visualCropRegion: PageRegion;
 	focusedLayoutRegion: PdfLayoutRegion | null;
 	pinsByPage: ReadonlyMap<number, SelectionPin[]>;
+	/** Annotated highlights per page for the right-edge comment rail. */
+	commentsByPage: ReadonlyMap<number, PageAnnotationComment[]>;
+	/** Resolvable wiki target for comment copy-link/copy-embed; null hides them. */
+	commentWikiTarget: string | null;
 	citationLinks: ReadonlyMap<number, PdfLinkAnnoObject[]>;
 	activeCardId: string | null;
 };
@@ -126,6 +133,14 @@ export type PdfPageHandlers = {
 		id: string,
 		color: HighlightColor,
 	) => void;
+	/** Open the note editor for a comment-rail card. */
+	onOpenComment: (id: string) => void;
+	/** Delete a highlight annotation from its comment-rail card. */
+	onDeleteComment: (pageIndex: number, id: string) => void;
+	/** Copy the comment card's `[[target@id]]` wikilink. */
+	onCopyCommentLink: (comment: PageAnnotationComment) => void;
+	/** Copy the comment card's `![[target@id]]` embed. */
+	onCopyCommentEmbed: (comment: PageAnnotationComment) => void;
 };
 
 export type PdfPageLayersProps = {
@@ -247,6 +262,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 			? marks.focusedLayoutRegion
 			: null;
 	const pins = marks.pinsByPage.get(pageNumber) ?? EMPTY_PINS;
+	const comments = marks.commentsByPage.get(pageNumber) ?? EMPTY_COMMENTS;
 	const layoutTranslateOnPage =
 		layout.layoutTranslateItemsByPage.get(pageIndex);
 	const pageTranslateState = layout.layoutTranslatePageStateByPage.get(
@@ -573,6 +589,16 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 					onOpen={handlers.onOpenPin}
 					onEnter={handlers.onCardHoverEnter}
 					onLeave={handlers.onCardHoverLeave}
+				/>
+				<CommentCardsLayer
+					items={comments}
+					pageHeightPx={height}
+					pageIndex={pageIndex}
+					wikiTarget={marks.commentWikiTarget}
+					onOpen={handlers.onOpenComment}
+					onDelete={handlers.onDeleteComment}
+					onCopyLink={handlers.onCopyCommentLink}
+					onCopyEmbed={handlers.onCopyCommentEmbed}
 				/>
 			</PagePointerProvider>
 		</div>

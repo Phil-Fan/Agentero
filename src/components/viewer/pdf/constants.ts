@@ -8,6 +8,7 @@
 
 import type { PdfLinkAnnoObject } from "@embedpdf/models";
 import type { CSSProperties } from "react";
+import type { PageAnnotationComment } from "@/components/viewer/pdf/types";
 import type { PdfLayoutRegion } from "@/lib/pdf/layout";
 import type { SelectionPin } from "@/lib/pdf/selection";
 
@@ -50,6 +51,8 @@ export const EMPTY_LAYOUT_REGIONS_BY_PAGE: ReadonlyMap<
 > = new Map();
 
 export const EMPTY_PINS: SelectionPin[] = [];
+
+export const EMPTY_COMMENTS: PageAnnotationComment[] = [];
 
 export const EMPTY_CITATION_LINKS: PdfLinkAnnoObject[] = [];
 

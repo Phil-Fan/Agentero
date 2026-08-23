@@ -20,6 +20,12 @@ type DockviewViewportProps = HTMLAttributes<HTMLDivElement> & {
 	children: ReactNode;
 	documentId: string;
 	hostRef: RefObject<HTMLDivElement | null>;
+	/**
+	 * Extra right padding (px) beyond the viewport gap, reserving room for
+	 * overlays pinned outside the page's right edge (comment rail) so they do
+	 * not grow scrollWidth into a horizontal scrollbar.
+	 */
+	rightGutter?: number;
 };
 
 /**
@@ -33,6 +39,7 @@ export function DockviewViewport({
 	children,
 	documentId,
 	hostRef,
+	rightGutter = 0,
 	...props
 }: DockviewViewportProps) {
 	const [viewportGap, setViewportGap] = useState(0);
@@ -177,6 +184,9 @@ export function DockviewViewport({
 					overflow: "auto",
 					...style,
 					padding: `${viewportGap}px`,
+					// The shorthand above would clobber a caller's paddingRight; merge
+					// the reserved rail gutter explicitly.
+					paddingRight: `${viewportGap + rightGutter}px`,
 				}}
 			>
 				{!isGated && children}
