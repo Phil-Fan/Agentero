@@ -50,10 +50,18 @@ impl AcpTerminalManager {
     }
 
     /// Spawn a command and return its terminal id.
-    async fn create(
+    pub(crate) async fn create(
         &mut self,
         request: CreateTerminalRequest,
     ) -> Result<CreateTerminalResponse, String> {
+        log::debug!(
+            target: "agentero::agent::terminal",
+            "create: command={} args={:?} cwd={:?} env_count={}",
+            request.command,
+            request.args,
+            request.cwd,
+            request.env.len()
+        );
         let command = resolve_command(&request.command)
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| request.command.clone());
@@ -116,7 +124,7 @@ impl AcpTerminalManager {
     }
 
     /// Return current output, truncation flag, and exit status if known.
-    async fn output(
+    pub(crate) async fn output(
         &mut self,
         request: &TerminalOutputRequest,
     ) -> Result<TerminalOutputResponse, String> {
@@ -132,7 +140,7 @@ impl AcpTerminalManager {
     }
 
     /// Wait for the command to exit and return its exit status.
-    async fn wait_for_exit(
+    pub(crate) async fn wait_for_exit(
         &mut self,
         request: &WaitForTerminalExitRequest,
     ) -> Result<WaitForTerminalExitResponse, String> {
@@ -159,7 +167,10 @@ impl AcpTerminalManager {
     }
 
     /// Kill a running terminal command without releasing its resources.
-    async fn kill(&self, request: &KillTerminalRequest) -> Result<KillTerminalResponse, String> {
+    pub(crate) async fn kill(
+        &self,
+        request: &KillTerminalRequest,
+    ) -> Result<KillTerminalResponse, String> {
         let terminal = self
             .terminals
             .get(request.terminal_id.0.as_ref())
@@ -170,9 +181,9 @@ impl AcpTerminalManager {
     }
 
     /// Release a terminal, killing it if still running and removing it from the manager.
-    async fn release(
+    pub(crate) async fn release(
         &mut self,
-        request: &ReleaseTerminalRequest,
+        request: ReleaseTerminalRequest,
     ) -> Result<ReleaseTerminalResponse, String> {
         let terminal_id = request.terminal_id.0.as_ref();
         if let Some(terminal) = self.terminals.get(terminal_id) {
@@ -328,7 +339,7 @@ impl HandleDispatchFrom<Agent> for AcpTerminalHandler {
             .if_request({
                 let terminals = terminals.clone();
                 async move |request: ReleaseTerminalRequest, responder| {
-                    let response = terminals.lock().await.release(&request).await;
+                    let response = terminals.lock().await.release(request).await;
                     match response {
                         Ok(resp) => responder.respond(resp),
                         Err(e) => responder.respond_with_internal_error(e),
@@ -393,7 +404,7 @@ mod tests {
         assert!(output.exit_status.is_some());
 
         let release_req = ReleaseTerminalRequest::new("session-1", TerminalId::new(terminal_id));
-        manager.lock().await.release(&release_req).await.unwrap();
+        manager.lock().await.release(release_req).await.unwrap();
     }
 
     #[tokio::test]
