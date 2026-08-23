@@ -48,6 +48,7 @@
 阿里云 OSS 的 PutObject 不支持任何条件请求头（`If-Match` / `If-None-Match` 等，带则返回 `400 NotImplemented`），S3 / R2 / MinIO 均支持。处理：
 
 - **连接测试探测**：`sync_configure` 在 ListObjects 之后用一次性 key（`.sync-probe-<uuid>`）带 `If-None-Match: *` 试写并删除；`400 NotImplemented` → `conditionalWrites=false` 持久化到 `sync.json`，探测无结论时按支持处理（fail open）。
+- **命令面**：当前没有独立 `sync_probe`；配置保存即执行连接探测，失败则不保存，成功后设置页按已连接展示。
 - **运行时兜底**：旧配置未探测过时，首个条件 PUT 收到 `400 NotImplemented` 即在客户端内标记并立即以无条件 PUT 重试，同一 pass 内后续写入全部降级。
 - **降级语义**：blobs / manifests 内容寻址或 key 唯一，无条件 PUT 幂等无害；HEAD 指针退化为 GET → PUT，牺牲严格 CAS，靠三方合并与重试收敛（单用户场景最终一致）。设置页对 `conditionalWrites=false` 显示一行小字提示。
 
@@ -58,7 +59,7 @@
 
 ## 前端
 
-设置窗口「同步」pane：`src/components/settings/panes/sync-pane.tsx`；命令封装 `src/lib/sync/api.ts`。仅本地 Vault 可配置（`remote:` 句柄显示提示）。同步范围（见上）在同一 pane：预设按钮 + 逐类开关（行内显示本地体积）。
+设置窗口「同步」pane：`src/components/settings/panes/sync-pane.tsx`；命令封装 `src/lib/sync/api.ts`。仅本地 Vault 可配置（`remote:` 句柄显示提示）。标题旁用小色点展示连接状态（灰=未连接，绿=已连接，蓝=同步中，红=最近一次同步/连接失败）。同步范围（见上）在同一 pane：预设按钮 + 逐类开关（行内显示本地体积）。
 
 ## 自动同步
 

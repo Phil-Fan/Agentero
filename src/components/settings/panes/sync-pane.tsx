@@ -88,6 +88,7 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 	const [saving, setSaving] = useState(false);
 	const [syncing, setSyncing] = useState(false);
 	const [progress, setProgress] = useState<SyncProgressEvent | null>(null);
+	const [syncError, setSyncError] = useState<string | null>(null);
 	const [advancedOpen, setAdvancedOpen] = useState(false);
 	const [scopeSizes, setScopeSizes] = useState<SyncScopeSizes | null>(null);
 
@@ -119,6 +120,11 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 			listenSafe<SyncStateEvent>(SYNC_STATE_EVENT, (payload) => {
 				if (payload.vaultPath !== localVault) return;
 				setSyncing(payload.status === "syncing");
+				setSyncError(
+					payload.status === "error"
+						? (payload.error ?? t("sync.statusError"))
+						: null,
+				);
 				if (payload.status !== "syncing") {
 					setProgress(null);
 					void refresh().catch(() => undefined);
@@ -131,7 +137,7 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 		return () => {
 			for (const off of offs) off();
 		};
-	}, [localVault, refresh]);
+	}, [localVault, refresh, t]);
 
 	useEffect(() => {
 		if (!localVault) return;
@@ -174,9 +180,12 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 			const next = await syncConfigure(localVault, form);
 			setStatus(next);
 			if (next.config) setForm(next.config);
+			setSyncError(null);
 			notifySuccess(t("sync.saved"));
 		} catch (error) {
-			notifyError(errorMessage(error));
+			const message = errorMessage(error);
+			setSyncError(message);
+			notifyError(message);
 		} finally {
 			setSaving(false);
 		}
@@ -186,6 +195,7 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 		setSyncing(true);
 		try {
 			const outcome = await syncNow(localVault);
+			setSyncError(null);
 			notifySuccess(
 				t("sync.done", {
 					up: outcome.uploaded,
@@ -198,7 +208,9 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 				);
 			}
 		} catch (error) {
-			notifyError(errorMessage(error));
+			const message = errorMessage(error);
+			setSyncError(message);
+			notifyError(message);
 		} finally {
 			setSyncing(false);
 			setProgress(null);
@@ -211,9 +223,12 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 			await syncDisconnect(localVault);
 			setStatus(null);
 			setForm(emptySyncConfig());
+			setSyncError(null);
 			void refresh().catch(() => undefined);
 		} catch (error) {
-			notifyError(errorMessage(error));
+			const message = errorMessage(error);
+			setSyncError(message);
+			notifyError(message);
 		}
 	};
 
@@ -246,6 +261,20 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 				: status?.configured
 					? t("sync.neverSynced")
 					: null;
+	const syncStatusLabel = syncError
+		? t("sync.statusError")
+		: syncing
+			? t("sync.statusSyncing")
+			: status?.configured
+				? t("sync.statusConnected")
+				: t("sync.statusDisconnected");
+	const syncStatusDotClass = syncError
+		? "bg-destructive"
+		: syncing
+			? "bg-sky-500"
+			: status?.configured
+				? "bg-emerald-500"
+				: "bg-muted-foreground/35";
 	const configChanged = JSON.stringify(form) !== JSON.stringify(status?.config);
 	const primaryAction =
 		!status?.configured || configChanged ? (
@@ -281,7 +310,15 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 			<PageTitle
 				title={
 					<>
-						{t("sync.title")}
+						<span className="inline-flex items-center gap-2">
+							{t("sync.title")}
+							<span
+								role="status"
+								aria-label={syncStatusLabel}
+								title={syncError ?? syncStatusLabel}
+								className={cn("size-2 rounded-full", syncStatusDotClass)}
+							/>
+						</span>
 						{statusText ? (
 							<span className="ml-2 font-normal text-muted-foreground text-xs">
 								{statusText}
