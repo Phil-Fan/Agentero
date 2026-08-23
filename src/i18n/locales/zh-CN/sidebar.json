@@ -91,6 +91,8 @@
 		"loading": "正在加载论文…",
 		"rowOpen": "打开",
 		"rowEditMeta": "编辑元数据",
+		"rowDownloadPdf": "从来源下载 PDF",
+		"noLocalPdf": "本地无 PDF",
 		"discoverCiting": "发现引用我的新论文",
 		"discoveringCiting": "正在扫描引用…",
 		"citingScanDone": "{{count}} 篇候选",

@@ -91,6 +91,8 @@
 		"loading": "Loading papers…",
 		"rowOpen": "Open",
 		"rowEditMeta": "Edit metadata",
+		"rowDownloadPdf": "Download PDF from source",
+		"noLocalPdf": "No local PDF",
 		"discoverCiting": "Find citing papers",
 		"discoveringCiting": "Scanning citations…",
 		"citingScanDone": "{{count}} candidates",

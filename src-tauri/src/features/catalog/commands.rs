@@ -132,23 +132,44 @@ pub struct PaperListArgs {
     pub vault_path: String,
 }
 
+/// One library row: the catalog record plus a local-PDF probe.
+#[derive(Debug, Serialize)]
+pub struct PaperListRow {
+    #[serde(flatten)]
+    pub paper: PaperRecord,
+    /// List projection only: whether `papers/<id>/` currently holds a PDF.
+    pub has_pdf: bool,
+}
+
 /// List all papers for the library table (catalog.sqlite).
 ///
 /// Returns one row per logical paper `id` so the Library never shows duplicate
 /// entries when the same paper was imported under multiple paths (#248).
 #[tauri::command]
-pub async fn paper_list(args: PaperListArgs) -> ApiResult<Vec<PaperRecord>> {
-    run_blocking(move || {
+pub async fn paper_list(
+    args: PaperListArgs,
+    cache: State<'_, CapsCache>,
+) -> Result<ApiResult<Vec<PaperListRow>>, String> {
+    let cache = cache.inner().clone();
+    Ok(run_blocking(move || {
         let vault = match resolve_vault(&args.vault_path) {
             Ok(vault) => vault,
             Err(e) => return map_err(e),
         };
         match papers::list_all_unique_by_id(&vault) {
-            Ok(rows) => ApiResult::ok(rows),
+            Ok(rows) => ApiResult::ok(
+                rows.into_iter()
+                    .map(|paper| {
+                        let has_pdf =
+                            !paper.path.is_empty() && cache.caps_for(&vault, &paper.path).has_pdf();
+                        PaperListRow { paper, has_pdf }
+                    })
+                    .collect(),
+            ),
             Err(e) => map_err(e),
         }
     })
-    .await
+    .await)
 }
 
 #[derive(Debug, Deserialize)]

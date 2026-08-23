@@ -180,6 +180,39 @@ export async function libraryImport(): Promise<void> {
 }
 
 /**
+ * Shared download core: background task + tree/library refresh + layout
+ * analysis. Returns the download result for follow-up workflows (reader).
+ */
+async function runPaperAssetsDownload(vaultPath: string, rel: string) {
+	return enqueueBackgroundTask(
+		{
+			kind: "download",
+			title: i18n.t("app:tasks.downloadPaper"),
+			detail: rel,
+		},
+		async ({ id, setDetail }) => {
+			setDetail(rel);
+			const r = await downloadPaperAssets({
+				vaultRoot: vaultPath,
+				paperPath: rel,
+				progressTaskId: id,
+			});
+			setDetail(i18n.t("app:tasks.downloadRefreshing", { path: rel }));
+			await refreshTree(vaultPath);
+			await refreshLibrary();
+			enqueuePaperLayoutAnalysis({
+				paperAbsPath: joinVaultPath(vaultPath, rel),
+			});
+			track("asset.download", {
+				path: rel,
+				extra: { pdf: r.pdf, tex: r.tex, paperMd: r.paperMd },
+			});
+			return r;
+		},
+	);
+}
+
+/**
  * On-demand assets: missing local PDF, and/or arXiv TeX when fetchable but
  * absent. Auto-runs the paper reader afterwards when everything is ready.
  */
@@ -190,32 +223,7 @@ export async function downloadPaperAssetsAction(node: FileNode): Promise<void> {
 		.replace(/\\/g, "/")
 		.replace(/^\/+|\/+$/g, "");
 	try {
-		const assets = await enqueueBackgroundTask(
-			{
-				kind: "download",
-				title: i18n.t("app:tasks.downloadPaper"),
-				detail: rel,
-			},
-			async ({ id, setDetail }) => {
-				setDetail(rel);
-				const r = await downloadPaperAssets({
-					vaultRoot: vaultPath,
-					paperPath: rel,
-					progressTaskId: id,
-				});
-				setDetail(i18n.t("app:tasks.downloadRefreshing", { path: rel }));
-				await refreshTree(vaultPath);
-				await refreshLibrary();
-				enqueuePaperLayoutAnalysis({
-					paperAbsPath: joinVaultPath(vaultPath, rel),
-				});
-				track("asset.download", {
-					path: rel,
-					extra: { pdf: r.pdf, tex: r.tex, paperMd: r.paperMd },
-				});
-				return r;
-			},
-		);
+		const assets = await runPaperAssetsDownload(vaultPath, rel);
 		// After PDF/TeX/PAPER.md ready → auto paper-reader with task progress.
 		if (
 			paperAssetsReadyForReader({
@@ -246,6 +254,23 @@ export async function downloadPaperAssetsAction(node: FileNode): Promise<void> {
 					notifyError(errorText(e));
 				});
 		}
+	} catch (e) {
+		notifyError(errorText(e));
+	}
+}
+
+/**
+ * Library-table row action: re-download assets (PDF / TeX) from the paper's
+ * upstream source — the row for papers synced without bulky attachments.
+ */
+export async function downloadLibraryPaper(
+	paper: PaperMetadata,
+): Promise<void> {
+	const vaultPath = getVaultPath();
+	if (!vaultPath || !paper.path) return;
+	const rel = paper.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+	try {
+		await runPaperAssetsDownload(vaultPath, rel);
 	} catch (e) {
 		notifyError(errorText(e));
 	}

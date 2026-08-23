@@ -12,6 +12,8 @@ import {
 	ArrowUp,
 	ArrowUpDown,
 	BookOpen,
+	Download,
+	FileWarning,
 	ListFilter,
 	Pencil,
 	RefreshCw,
@@ -63,6 +65,7 @@ import {
 	listPaperPageCounts,
 	savePaperPageCounts,
 } from "@/lib/paper/api";
+import { downloadLibraryPaper } from "@/lib/paper/library-actions";
 import { setEditMetaDraft } from "@/lib/paper/library-store";
 import {
 	aggregateReadingHeatmap,
@@ -337,8 +340,26 @@ const COLUMN_META = {
 					className="block w-full text-left font-medium"
 				>
 					<ReadingTitleHeat heatmap={ctx.heat} className="line-clamp-1">
-						<span className="block truncate" title={p.title}>
-							{p.title}
+						<span className="flex min-w-0 items-center gap-1">
+							<span className="block truncate" title={p.title}>
+								{p.title}
+							</span>
+							{p.has_pdf === false ? (
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<span
+											role="img"
+											className="shrink-0 cursor-help text-muted-foreground"
+											aria-label={ctx.t("papersLibrary.noLocalPdf")}
+										>
+											<FileWarning className="size-3" aria-hidden />
+										</span>
+									</TooltipTrigger>
+									<TooltipContent>
+										{ctx.t("papersLibrary.noLocalPdf")}
+									</TooltipContent>
+								</Tooltip>
+							) : null}
 						</span>
 					</ReadingTitleHeat>
 				</CopyCellButton>
@@ -1187,6 +1208,14 @@ export function PapersLibrary({
 													<BookOpen className="size-3.5" />
 													{t("papersLibrary.rowOpen")}
 												</ContextMenuItem>
+												{canEditMeta && p.has_pdf === false ? (
+													<ContextMenuItem
+														onSelect={() => void downloadLibraryPaper(p)}
+													>
+														<Download className="size-3.5" />
+														{t("papersLibrary.rowDownloadPdf")}
+													</ContextMenuItem>
+												) : null}
 												{canEditMeta ? (
 													<ContextMenuItem onSelect={() => setEditMetaDraft(p)}>
 														<Pencil className="size-3.5" />

@@ -26,6 +26,8 @@ export type PaperMetadata = {
 	id: string;
 	/** Vault-relative paper folder path when known (catalog). */
 	path?: string;
+	/** Library list projection only: local PDF present on disk. */
+	has_pdf?: boolean;
 	type: "arxiv" | "pdf" | "html" | "doi" | "other";
 	title: string;
 	/** Display names */
