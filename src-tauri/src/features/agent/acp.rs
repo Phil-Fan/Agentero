@@ -20,6 +20,7 @@ use crate::features::agent::skills::{
     load_skill_instructions, skill_activation_prefix, skill_mention_style,
 };
 use crate::features::agent::stream_coalesce::{StreamCoalescer, STREAM_COALESCE_WINDOW};
+use crate::features::agent::terminal_acp::{AcpTerminalHandler, AcpTerminalManager};
 use agent_client_protocol::schema::v1::{
     AvailableCommandInput, CancelNotification, ClientCapabilities, ContentBlock,
     CreateElicitationRequest, CreateElicitationResponse, ElicitationAcceptAction,
@@ -42,11 +43,13 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::watch;
 use uuid::Uuid;
 
-/// Advertise form elicitation so codex-acp bridges `request_user_input` to the client.
+/// Advertise form elicitation so codex-acp bridges `request_user_input` to the client,
+/// and terminal execution so agents like Kimi Code can run shell commands.
 fn client_initialize_request() -> InitializeRequest {
     InitializeRequest::new(ProtocolVersion::V1).client_capabilities(
         ClientCapabilities::new()
-            .elicitation(ElicitationCapabilities::new().form(ElicitationFormCapabilities::new())),
+            .elicitation(ElicitationCapabilities::new().form(ElicitationFormCapabilities::new()))
+            .terminal(true),
     )
 }
 
@@ -1170,10 +1173,12 @@ pub async fn probe_agent(
     let captured: Arc<Mutex<Option<(String, String, AcpSessionCapabilities)>>> =
         Arc::new(Mutex::new(None));
     let captured_clone = captured.clone();
+    let terminals = Arc::new(tokio::sync::Mutex::new(AcpTerminalManager::new()));
 
     let connect = agent_client_protocol::Client
         .builder()
         .name("agentero")
+        .with_handler(AcpTerminalHandler::new(terminals))
         .on_receive_request(
             async move |request: RequestPermissionRequest, responder, _cx| {
                 let _ = responder.respond(permission_response(&request, false));
@@ -1433,6 +1438,8 @@ struct RunOnceContext {
     /// turn N-1 into the new streaming bubble (Grok multi-turn).
     live_stream: Arc<AtomicBool>,
     stop_reason: Arc<Mutex<Option<String>>>,
+    /// Terminal capability: headless command execution on behalf of the agent.
+    terminals: Arc<tokio::sync::Mutex<AcpTerminalManager>>,
 }
 
 impl RunOnceContext {
@@ -1468,6 +1475,7 @@ impl RunOnceContext {
                 params.resume_session_id.is_none() || dsh_fresh_sessions,
             )),
             stop_reason: Arc::new(Mutex::new(None)),
+            terminals: Arc::new(tokio::sync::Mutex::new(AcpTerminalManager::new())),
         }
     }
 
@@ -1583,6 +1591,7 @@ impl RunOnceContext {
         agent_client_protocol::Client
             .builder()
             .name("agentero")
+            .with_handler(AcpTerminalHandler::new(self.terminals.clone()))
             .on_receive_notification(
                 {
                     let state = self.clone();
@@ -2115,10 +2124,12 @@ pub async fn warm_agent(
     let app_for_conn = app.clone();
     let session_for_conn = session_id.clone();
     let agent_for_conn = agent_id.clone();
+    let terminals = Arc::new(tokio::sync::Mutex::new(AcpTerminalManager::new()));
 
     let result = agent_client_protocol::Client
         .builder()
         .name("agentero")
+        .with_handler(AcpTerminalHandler::new(terminals))
         .on_receive_notification(
             async move |notification: SessionNotification, _cx| {
                 if let SessionUpdate::UsageUpdate(u) = &notification.update {
@@ -2337,10 +2348,12 @@ pub async fn list_acp_sessions(
     remote: Option<&crate::features::remote::RemoteAgentTarget>,
 ) -> Result<AcpListSessionsResult, AppError> {
     let acp = to_acp_agent(desc, remote)?;
+    let terminals = Arc::new(tokio::sync::Mutex::new(AcpTerminalManager::new()));
 
     let result = agent_client_protocol::Client
         .builder()
         .name("agentero")
+        .with_handler(AcpTerminalHandler::new(terminals))
         .on_receive_request(
             async move |request: RequestPermissionRequest, responder, _cx| {
                 let _ = responder.respond(permission_response(&request, false));
@@ -2653,10 +2666,12 @@ pub async fn load_acp_session(
     let last_replay: Arc<Mutex<std::time::Instant>> =
         Arc::new(Mutex::new(std::time::Instant::now()));
     let last_replay_for_notif = last_replay.clone();
+    let terminals = Arc::new(tokio::sync::Mutex::new(AcpTerminalManager::new()));
 
     let result = agent_client_protocol::Client
         .builder()
         .name("agentero")
+        .with_handler(AcpTerminalHandler::new(terminals))
         .on_receive_notification(
             async move |notification: SessionNotification, _cx| {
                 if let Ok(mut at) = last_replay_for_notif.lock() {

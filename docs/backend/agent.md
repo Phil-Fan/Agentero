@@ -66,6 +66,13 @@ spawn 用户配置的 agent
 之前都会先 flush，保证顺序与文本无损。`agent:tool` 的 `input`/`output` 超过
 32KB 时截断为「头部 + truncated 标记」（前端只做预览渲染）。
 
+ACP `terminal` 能力：Host 在 initialize 时声明 `terminal: true`，并本地实现
+`terminal/create`、`terminal/output`、`terminal/release`、`terminal/wait_for_exit`、
+`terminal/kill`。每个 ACP 连接持有独立的 `AcpTerminalManager`，按 `TerminalId`
+管理子进程；输出按 `outputByteLimit` 从头部截断并保证 UTF-8 字符边界。该能力
+让 Kimi Code 等需要执行 shell 命令的 Agent 可以在 Vault 工作目录下运行命令并
+读取结果。
+
 多轮续聊必须传 **provider session id**（不是 Agentero runtime id）。Grok Build ACP
 声明 `loadSession: true`、**不**声明 `resume`；对 Grok 调用 `session/resume` 会
 `Method not found`，Host 应改走 `session/load`。

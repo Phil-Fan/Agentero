@@ -15,6 +15,7 @@ pub mod runtime;
 pub mod skills;
 pub mod stream_coalesce;
 pub mod templates;
+pub mod terminal_acp;
 pub mod tool_lifecycle;
 
 pub use acp::{
