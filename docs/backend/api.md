@@ -51,6 +51,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 | `agent:tool` | Agent tool call 创建/更新 | `{ sessionId, toolCallId, title?, kind?, status?, input?, output?, full? }`；`input`/`output` 超过 32KB 时 Host 截断为「头部 + truncated 标记」字符串（前端仅做预览展示） |
 | `agent:plan` | ACP 执行计划 | `{ sessionId, entries: { content, status, priority }[] }` |
 | `agent:usage` | 上下文 token 用量 | `{ sessionId, used, size }` |
+| `agent:session-info` | ACP `session_info_update` 通知：Agent 推送会话元数据（标题/最近活动时间） | `{ sessionId, agentId, providerSessionId?, title?, updatedAt? }`；仅当 title/updatedAt 至少一个非空时 emit，前端按 sessionId 或 providerSessionId 匹配会话记录并更新标题 |
 | `agent:models` | Agent 上报可用模型 | `{ sessionId, agentId, configId, currentId, models: { id, name, group? }[] }`；`currentId` 若不在 selector 目录中会被 Host 注入到 `models`（第三方 / 网关默认模型） |
 | `agent:collaboration` | 会话模式（UI「模式」；Codex `collaboration_mode` Default/Plan） | `{ sessionId, agentId, configId, currentId, modes: { id, name, description? }[] }`（无上报则不 emit；UI 仅显示 name） |
 | `agent:effort` | ACP 上报 reasoning effort 选项 | `{ sessionId, agentId, configId, currentId, efforts: { id, name, description? }[] }` |

@@ -205,6 +205,14 @@ export type AgentUsageEvent = {
 	size: number;
 };
 
+export type AgentSessionInfoEvent = {
+	sessionId: string;
+	agentId: string;
+	providerSessionId?: string | null;
+	title?: string | null;
+	updatedAt?: string | null;
+};
+
 export type AgentCommand = {
 	name: string;
 	description: string;
@@ -689,6 +697,12 @@ export async function listenAgentUsage(
 	handler: (e: AgentUsageEvent) => void,
 ): Promise<UnlistenFn> {
 	return listenAgentEvent("agent:usage", handler);
+}
+
+export async function listenAgentSessionInfo(
+	handler: (e: AgentSessionInfoEvent) => void,
+): Promise<UnlistenFn> {
+	return listenAgentEvent("agent:session-info", handler);
 }
 
 export async function listenAgentCommands(

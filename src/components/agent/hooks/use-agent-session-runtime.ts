@@ -22,6 +22,7 @@ import {
 	type AgentResultPayload,
 	type AgentStreamEvent,
 	type AgentToolEvent,
+	displayHistoryTitle,
 	listenAgentCollaboration,
 	listenAgentCommands,
 	listenAgentCompleted,
@@ -30,6 +31,7 @@ import {
 	listenAgentFastMode,
 	listenAgentModels,
 	listenAgentPlan,
+	listenAgentSessionInfo,
 	listenAgentStream,
 	listenAgentTool,
 	listenAgentUsage,
@@ -615,6 +617,24 @@ export function useAgentSessionRuntime({
 					[ev.agentId]: mapAcpCommands(ev.commands),
 				}));
 			});
+			const uSessionInfo = await listenAgentSessionInfo((ev) => {
+				const title = ev.title ? displayHistoryTitle(ev.title) : "";
+				if (!title) return;
+				const providerId = ev.providerSessionId?.trim() ?? "";
+				agentSessionStore.getState().setSessions((prev) => {
+					let changed = false;
+					const next = prev.map((s) => {
+						const matches =
+							s.id === ev.sessionId ||
+							(providerId !== "" && s.providerSessionId === providerId);
+						// Visual-trace titles are user-meaningful; never override them.
+						if (!matches || s.visualTraceId || s.title === title) return s;
+						changed = true;
+						return { ...s, title };
+					});
+					return changed ? next : prev;
+				});
+			});
 			const uModels = await listenAgentModels((ev) => {
 				applyModelsEvent(ev);
 			});
@@ -654,6 +674,7 @@ export function useAgentSessionRuntime({
 				uPlan();
 				uUsage();
 				uCommands();
+				uSessionInfo();
 				uModels();
 				uCollab();
 				uEffort();
@@ -668,6 +689,7 @@ export function useAgentSessionRuntime({
 				uPlan,
 				uUsage,
 				uCommands,
+				uSessionInfo,
 				uModels,
 				uCollab,
 				uEffort,

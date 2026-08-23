@@ -11,8 +11,9 @@ use crate::features::agent::models::{
     AcpSessionCapabilities, AcpSessionInfo, AgentCollaborationEvent, AgentCommand,
     AgentCommandInput, AgentCommandsEvent, AgentDescriptor, AgentEffortChoice, AgentEffortEvent,
     AgentFailedEvent, AgentFastModeEvent, AgentModeChoice, AgentModelChoice, AgentModelsEvent,
-    AgentPlanEntry, AgentPlanEvent, AgentResultPayload, AgentStreamEvent, AgentStreamKind,
-    AgentTemplate, AgentToolEvent, AgentUsageEvent, ProbeResult, PromptImage, WarmResult,
+    AgentPlanEntry, AgentPlanEvent, AgentResultPayload, AgentSessionInfoEvent, AgentStreamEvent,
+    AgentStreamKind, AgentTemplate, AgentToolEvent, AgentUsageEvent, ProbeResult, PromptImage,
+    WarmResult,
 };
 use crate::features::agent::permission::PermissionGate;
 use crate::features::agent::prompts::{build_prompt, extract_sources};
@@ -610,9 +611,9 @@ fn emit_rich_session_update(
     app: &AgentEventEmitter,
     session_id: &str,
     agent_id: &str,
-    update: &SessionUpdate,
+    notification: &SessionNotification,
 ) {
-    match update {
+    match &notification.update {
         SessionUpdate::AvailableCommandsUpdate(upd) => {
             let commands = upd
                 .available_commands
@@ -699,6 +700,28 @@ fn emit_rich_session_update(
                     session_id: session_id.to_string(),
                     used: u.used,
                     size: u.size,
+                },
+            );
+        }
+        SessionUpdate::SessionInfoUpdate(info) => {
+            use agent_client_protocol::schema::MaybeUndefined;
+            let pick = |v: &MaybeUndefined<String>| match v {
+                MaybeUndefined::Value(s) if !s.trim().is_empty() => Some(s.clone()),
+                _ => None,
+            };
+            let title = pick(&info.title);
+            let updated_at = pick(&info.updated_at);
+            if title.is_none() && updated_at.is_none() {
+                return;
+            }
+            let _ = app.emit(
+                "agent:session-info",
+                AgentSessionInfoEvent {
+                    session_id: session_id.to_string(),
+                    agent_id: agent_id.to_string(),
+                    provider_session_id: Some(notification.session_id.to_string()),
+                    title,
+                    updated_at,
                 },
             );
         }
@@ -1487,12 +1510,13 @@ impl RunOnceContext {
             match &notification.update {
                 SessionUpdate::AvailableCommandsUpdate(_)
                 | SessionUpdate::ConfigOptionUpdate(_)
-                | SessionUpdate::UsageUpdate(_) => {
+                | SessionUpdate::UsageUpdate(_)
+                | SessionUpdate::SessionInfoUpdate(_) => {
                     emit_rich_session_update(
                         &self.app,
                         &self.session_id,
                         &self.agent_id,
-                        &notification.update,
+                        notification,
                     );
                 }
                 _ => {}
@@ -1527,12 +1551,7 @@ impl RunOnceContext {
             // so the transcript order stays text → tool/plan.
             self.coalescer.flush();
         }
-        emit_rich_session_update(
-            &self.app,
-            &self.session_id,
-            &self.agent_id,
-            &notification.update,
-        );
+        emit_rich_session_update(&self.app, &self.session_id, &self.agent_id, notification);
     }
 
     /// Flush buffered stream text, then emit `agent:completed` (ordered after text).
@@ -2150,7 +2169,7 @@ pub async fn warm_agent(
                         &app_for_notif,
                         &session_for_notif,
                         &agent_for_notif,
-                        &notification.update,
+                        &notification,
                     );
                 }
                 if let SessionUpdate::ConfigOptionUpdate(upd) = &notification.update {
