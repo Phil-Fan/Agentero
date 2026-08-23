@@ -10,7 +10,7 @@
 - 标题 fragment 以 `LinkFragment::Heading { path: Vec<String> }` 保存 Markdown 实际写下的完整路径或连续后缀。完整 heading path 是 canonical identity；任意长度的路径后缀仅在唯一命中时解析成功。
 - **单向写入** Markdown + 索引反查（不做目标文件自动插回链）。
 - 未解析目标可为 stub 节点。
-- 与 **文献引用图**（References 下方 / `paper_refs_graph`，见 [citation-parsing.md](citation-parsing.md)）分层，边语义不复用；双链索引不驱动关系图 UI。
+- 与 **文献引用解析**（References 下方卡片 / `paper_refs_list`，见 [citation-parsing.md](citation-parsing.md)）分层，边语义不复用；双链索引不驱动关系图。
 - `PAPER.md` 是派生全文：保留 document 与 heading anchors 供其它笔记链接，但不提取其 outgoing occurrences，避免 LiteParse 生成的裸域名和参考文献污染双链诊断。
 
 ## Host 能力
@@ -19,7 +19,7 @@
 - 标题候选：展示 canonical `outer › inner` 路径，`insert_text` 写完整 `target#outer#inner`；查询中的 `#` 与 `›` 会归一到同一路径分隔语义
 - 逐级补全：尾部 `#` 保留层级状态，已确认路径按 canonical ancestor path 的后缀匹配，候选只返回其直接子标题；可连续输入任意多个层级
 - 反链 / 出链查询
-- `graph_get_graph` 等（双链 nodes / edges / center / depth，供索引/调试；关系图 UI 用 `paper_refs_graph`）— 见 [api.md](api.md)
+- `graph_get_graph` 等（双链 nodes / edges / center / depth，供索引/调试）— 见 [api.md](api.md)
 - 嵌入目标解析（供前端 `![[...]]`）
 - 链接感知重命名/移动；标题重命名事务
 - 索引：`.md` 变更防抖重建（前端调度 + Host 重建）

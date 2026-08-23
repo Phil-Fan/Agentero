@@ -18,7 +18,6 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { CitationImportPopover } from "@/components/viewer/citation-import-menu";
-import { GraphPanel } from "@/components/wiki/graph-panel";
 import { useCitationImport } from "@/hooks/use-citation-import";
 import { usePaperRefsSidecar } from "@/hooks/use-paper-refs-sidecar";
 import { errorText } from "@/lib/core/error";
@@ -32,7 +31,7 @@ import {
 	paperRefsParse,
 } from "@/lib/paper/refs";
 import { joinVaultPath } from "@/lib/vault/path";
-import { openGraphPath, openPaper } from "@/lib/workspace/actions";
+import { openPaper } from "@/lib/workspace/actions";
 
 type ReferencesPanelProps = {
 	vaultPath: string | null;
@@ -125,11 +124,6 @@ export function ReferencesPanel({
 	const visible = needle
 		? rows.filter((row) => citationMatchesFilter(row.citation, needle))
 		: rows;
-
-	/** Bump graph when the sidecar fingerprint changes (import / reparse). */
-	const graphRevision = sidecar?.source.fingerprint
-		? hashString(sidecar.source.fingerprint)
-		: 0;
 
 	const listBody = !paperPath ? (
 		<EmptyState text={t("references.noPaper")} />
@@ -228,35 +222,9 @@ export function ReferencesPanel({
 				<span className="font-medium text-sm">{t("references.title")}</span>
 			</PaneHeader>
 
-			{/* Upper ~65%: citation cards; lower ~35%: citation graph */}
-			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-					{listBody}
-				</div>
-				{paperPath ? (
-					<div className="h-[35%] min-h-[140px] shrink-0 overflow-hidden border-t border-border">
-						<GraphPanel
-							vaultPath={vaultPath}
-							selectedPath={paperPath}
-							onOpenPath={openGraphPath}
-							wikiIndexRevision={graphRevision}
-							embedded
-							className="h-full min-h-0"
-						/>
-					</div>
-				) : null}
-			</div>
+			{listBody}
 		</section>
 	);
-}
-
-/** Stable non-crypto hash so fingerprint strings can drive a numeric revision. */
-function hashString(s: string): number {
-	let h = 0;
-	for (let i = 0; i < s.length; i++) {
-		h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-	}
-	return h === 0 ? 1 : h;
 }
 
 function EmptyState({

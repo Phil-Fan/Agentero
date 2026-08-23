@@ -1,6 +1,6 @@
 /**
- * Right rail: Agent chat, PDF annotations, References (with citation graph),
- * and Figures (layout-detected images/tables). Subscribes to stores directly.
+ * Right rail: Agent chat, PDF annotations, References, and Figures
+ * (layout-detected images/tables). Subscribes to stores directly.
  */
 
 import {

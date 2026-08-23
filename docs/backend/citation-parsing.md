@@ -1,6 +1,6 @@
 # 参考文献解析（Citation Parsing）
 
-> 状态：**M1 + M2 + M3(PDF 内交互) + M4(引用图谱 MVP) + 反向引用发现 已实现**（M1：Host `features/refs/` — L1 在线 S2/Crossref + L2 本地 bib/bbl/thebibliography + sidecar + 库内匹配，命令契约见 [api.md](api.md) `paper_refs_parse` / `paper_refs_list` / `paper_refs_graph`；M2：右侧栏 References tab 引用卡片，见 [../frontend/shell.md](../frontend/shell.md)；M3：PDF Link annotation 覆盖层 — 点击 GoTo 跳页 / URI 外链、hover 引用锚文本显示元数据预览并联动引用卡片高亮；M4：右侧 Graph 改用引用图谱，非双链图；反向引用发现：`library_citing_scan`，见 §7）。剩余草稿：卡片 → PDF 反向 hover 高亮、Agent `#` 提及、Connected Papers 式布局。
+> 状态：**M1 + M2 + M3(PDF 内交互) + 反向引用发现 已实现**（M1：Host `features/refs/` — L1 在线 S2/Crossref + L2 本地 bib/bbl/thebibliography + sidecar + 库内匹配，命令契约见 [api.md](api.md) `paper_refs_parse` / `paper_refs_list`；M2：右侧栏 References tab 引用卡片，见 [../frontend/shell.md](../frontend/shell.md)；M3：PDF Link annotation 覆盖层 — 点击 GoTo 跳页 / URI 外链、hover 引用锚文本显示元数据预览并联动引用卡片高亮；反向引用发现：`library_citing_scan`，见 §7）。剩余草稿：卡片 → PDF 反向 hover 高亮、Agent `#` 提及。
 
 ## 1. 背景与现状
 
@@ -45,7 +45,6 @@
 - **事实来源：`{paper}/source/agentero-cite.json` sidecar**，可重建、可删除、不碰用户文件——这同时回答「没有 bib 文件时的持久化」：L1 在线结果与 L3 的 raw + 尽力字段都写入 sidecar，重开应用不重解析、不重复请求 API（fingerprint 判断；`source` 字段记 `s2 | crossref | bib | bbl | tex | pdf-text`）。
 - 库内匹配（`localMatch`）：DOI → arXiv id → 归一化 title+author+year，只查本地 catalog。
 - **catalog 建 `paper_refs` 索引表**推迟到需要大规模跨论文查询 / 被引统计时再评估，避免双写；MVP 单论文 sidecar 足够。
-- **引用图谱（MVP）**：Host `paper_refs_graph` 扫描各 paper 的 sidecar + `localMatch` 构图：近邻模式（默认）以当前论文为中心，出边含未入库 stub、入边为库内被引，节点带 `role`（`center`/`reference`/`citedBy`）；全图仅库内边。嵌在 **References 侧栏下方约 35%**，**不再**使用双链 `graph_get_graph`。入库 `paper_commit`（Created）后后台自动解析 sidecar。见 [api.md](api.md) / [../frontend/wiki.md](../frontend/wiki.md)。
 - 导出：右键论文提供 **导出 references.bib**（本地 BibTeX 序列化 sidecar 条目），非默认落盘。
 
 ## 4. 文中 citation 交互与引用侧栏
@@ -90,7 +89,6 @@
 | M1（首版） | **L1 在线（S2 / Crossref）+ L2 本地（含 `.bbl`）** + sidecar 写入 + 库内匹配 + 在线开关设置 | 已实现 |
 | M2 | Paper Content 侧栏 Citations 卡片 + hover/click 双向联动 | 已实现 PDF→预览/卡片单向联动 |
 | M3 | Agent：`@` 分组 + 拖拽 + **`#` 编号提及** + prompt 注入 | 部分实现 |
-| M4 | 引用图谱 UI：`paper_refs_graph` + 右侧 Graph 换源（双链图 → 引用图） | 已实现（MVP） |
 | M5 | L3 文本层切分 + Crossref raw string 富化 + references.bib 导出 + 未入库一键导入 | 延后 |
 
 ## 7. 反向引用发现（谁引用了我的库）

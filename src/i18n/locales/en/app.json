@@ -1,7 +1,6 @@
 {
 	"labels": {
 		"agent": "Agent",
-		"graph": "Citation graph",
 		"notes": "Notes",
 		"untitled": "Untitled"
 	},
@@ -55,7 +54,6 @@
 		"showSidebarHint": "Show sidebar ({{shortcut}})",
 		"hideSidebarHint": "Hide sidebar ({{shortcut}})",
 		"agentPanel": "Agent panel",
-		"graphPanel": "Graph panel",
 		"annotationsPanel": "Annotations",
 		"referencesPanel": "References",
 		"figuresPanel": "Analysis",
@@ -124,7 +122,6 @@
 		"featureDesktopOnly": "Feature windows require the desktop app.",
 		"docDesktopOnly": "Document windows require the desktop app.",
 		"titleAgent": "Agent",
-		"titleGraph": "Graph",
 		"titleAnnotations": "Annotations",
 		"titleReferences": "References",
 		"titleFigures": "Analysis",
@@ -172,7 +169,7 @@
 		"writeDesktopOnly": "Writing local files requires the Tauri app.",
 		"noVaultName": "No vault",
 		"noVaultOpenTitle": "No vault open",
-		"noVaultOpenDescription": "Open or create a vault folder to view files, notes, and graph.",
+		"noVaultOpenDescription": "Open or create a vault folder to view files and notes.",
 		"recentTitle": "Recent",
 		"recentEmpty": "No recent vaults yet.",
 		"removeRecent": "Remove {{name}} from recent",

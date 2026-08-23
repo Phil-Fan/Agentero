@@ -454,7 +454,7 @@ export function FeatureWindowRoot() {
 						onJump={() => {}}
 					/>
 				) : (
-					// references (+ legacy backlinks/Graph popout): list + citation graph
+					// references (+ legacy backlinks/Graph popout): citation list
 					<ReferencesPanel
 						vaultPath={vaultPath}
 						paperPath={referencesPaperPath}

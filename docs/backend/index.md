@@ -93,7 +93,6 @@ src-tauri/src/
 | 文件 IO / 树 / 回收站 | command + 事件 | 展示与交互 |
 | 入库 / 下载 / parse | `paper_commit`、lookup、assets | 进度与确认 UI |
 | 双链索引 | 解析、查询、修复事务 | 渲染与补全 |
-| 引用图谱 | sidecar + `paper_refs_graph` | References 近邻 / 全库图 |
 | 使用记录 | XDG `usage.sqlite` 写入与查询 | `track()` 缓冲上报 |
 | Agent | spawn、session、prompt、权限桥 | 会话 UI |
 | 远程 | SFTP + 远端 ACP | 连接与伪路径 |

@@ -89,7 +89,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 - 同步 `#[tauri::command]` 在主线程内执行；Windows 主线程即 UI 消息泵，重 IO 同步 command 执行期间整窗冻结。
 - **重 IO command（扫盘、SQLite、全库索引、字体/大文件读取等）必须写成 `async fn`**，阻塞体统一用 `core::blocking::run_blocking`（内部 `tauri::async_runtime::spawn_blocking`）移出调用线程；对外返回 JSON 结构不变，前端 invoke 透明。
 - 使用 `State<'_, T>` 的 async command 受 Tauri 限制必须返回 `Result`（惯例 `Result<ApiResult<T>, String>`，恒为 `Ok(...)`）。`std::sync::Mutex` guard 不能跨 `await`：把「拿锁 + 干活」整体放进 `run_blocking` 闭包，State 先 clone 出可 `Send + 'static` 的 Arc 句柄（如 `WikiIndexState::handle()`、`CapsCache`、`ExternalRenameRepairStore`）。
-- 已按此约定改造：`vault_*`（create/ensure/tree_build/tree_children）、`wiki_*` 全部、`graph_*`、`vault_search`、`paper_*`（catalog）、`usage_*`/`activity_record_events`、`zotero_sync`/`zotero_scan`、`doctor_*`（除纯内存的 `doctor_set_dirty_paths`）、`list_system_fonts`（另有进程级缓存）、`export_system_cjk_font`、`paper_stage_import_file`、`paper_refs_list`/`paper_refs_graph`、`connector_set_enabled`/`connector_set_port`（bind 改真 async，不再 `block_on`）。
+- 已按此约定改造：`vault_*`（create/ensure/tree_build/tree_children）、`wiki_*` 全部、`graph_*`、`vault_search`、`paper_*`（catalog）、`usage_*`/`activity_record_events`、`zotero_sync`/`zotero_scan`、`doctor_*`（除纯内存的 `doctor_set_dirty_paths`）、`list_system_fonts`（另有进程级缓存）、`export_system_cjk_font`、`paper_stage_import_file`、`paper_refs_list`、`connector_set_enabled`/`connector_set_port`（bind 改真 async，不再 `block_on`）。
 
 ## 3. Host 层 Tauri invoke API
 
@@ -1158,49 +1158,6 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 - **参数**（`args`）：`{ vaultPath: string; path: string }`
 - **返回**：`{ ok: true; data: CiteSidecar | null }`
-
-#### `paper_refs_graph`
-
-从已有引用 sidecar + catalog `localMatch` 构建**文献引用关系图**（与双链 `graph_get_graph` 分层，边语义不复用）。不解析缺失 sidecar。支持全库图与当前论文近邻图两种模式（前端默认近邻，可切换全库）。
-
-- **参数**（`args`）：
-
-  ```ts
-  {
-    vaultPath: string;
-    /** 论文文件夹或其中文件；省略 / 空 = 全库库内引用边 */
-    center?: string | null;
-    /** 近邻深度；目前钳制为 1（直接引用）。全图时忽略 */
-    depth?: number | null;
-  }
-  ```
-
-- **返回**：`{ ok: true; data: CiteGraphResponse }`，其中：
-
-  ```ts
-  type CiteGraphResponse = {
-    nodes: Array<{
-      id: string;           // 库内 paper path，或 stub:{center}#{citationId}
-      label: string;        // catalog title 或引用标题/编号
-      type: "paper" | "stub" | "note" | "index";
-      path?: string;        // 仅 paper：Vault 相对路径
-      role?: "center" | "reference" | "citedBy"; // 仅近邻模式；全图无
-    }>;
-    edges: Array<{
-      id: string;
-      source: string;
-      target: string;
-      targetRaw?: string;   // 引用 display / key / title 提示
-    }>;
-    center: string | null;  // 规范化 paper path；全图为 null
-    depth: number;
-  };
-  ```
-
-- **行为**
-  - **近邻**（`center` 非空）：中心论文（`role: center`）+ 全部出边——`localMatch` 命中的库内论文（`role: reference`）与未入库引用（`stub` 节点，label 取引用标题/key）——加上入边：其他论文 sidecar `localMatch` 指向中心的库内论文（`role: citedBy`）。互引时先到先得，保留 `reference` 角色。
-  - **全图**：仅库内 `localMatch` 边；节点为参与至少一条边的 paper；不含 stub、无 role。
-  - 中心路径可传 `papers/…/NOTES.md` 等，Host 逐级归一到 catalog paper folder；不在 catalog 中报错。
 
 #### `library_citing_scan`
 
@@ -2443,7 +2400,7 @@ CLI 对照：`agentero usage which|timeline|summary|clear`（见 [cli.md](cli.md
 
 - `importer:import` 统一来源入口。
 - `lookup:*` 与 PDF prepare 共用元数据管道。
-- ~~`citation:list_neighbors`~~ → 已用 `paper_refs_graph`（sidecar + localMatch）；全库 cites/cited_by 持久缓存与 Connected Papers 式布局仍可加深。
+- ~~`citation:list_neighbors`~~ → 参考文献解析与库内匹配通过 `paper_refs_list` 提供；全库 cites/cited_by 持久缓存仍可加深。
 - ~~`search:full_text`~~ → 已用 walk 式 `vault_search`（命令面板）；FTS5 / PDF 正文层仍可替换增强。
 - `reader:annotations`（历史规划；划词标注现为前端 `marks/*.json`，不经 Host command）。
 - `sync:*` 多设备同步（远期）。

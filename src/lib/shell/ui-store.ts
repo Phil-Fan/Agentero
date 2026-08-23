@@ -62,7 +62,7 @@ export type PaperSearchDraftGroup = PaperSearchGroup & { parentDir: string };
 
 type UiStore = {
 	sidebarCollapsed: boolean;
-	/** Right sidebar (⌘L): Agent (default), Annotations, References (+ citation graph), or Figures. */
+	/** Right sidebar (⌘L): Agent (default), Annotations, References, or Figures. */
 	rightSidebarOpen: boolean;
 	rightSidebarTab: RightSidebarTab;
 	/** Keep AgentPanel mounted when switching right-rail tabs. */
@@ -275,8 +275,8 @@ export function setFeaturePoppedOut(
  * Agent, Backlinks, Annotations, References).
  */
 export function openRightTab(tab: RightSidebarTab): void {
-	// Citation graph lives inside the References panel; legacy "backlinks"/Graph
-	// tab id still opens References so shortcuts and saved state keep working.
+	// Legacy "backlinks"/Graph tab id still opens References so shortcuts and
+	// saved state keep working.
 	const resolved: RightSidebarTab = tab === "backlinks" ? "references" : tab;
 	void import("@/lib/shell/feature-window").then(
 		async ({ preferFeatureWindow }) => {

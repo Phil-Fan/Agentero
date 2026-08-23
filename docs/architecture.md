@@ -80,7 +80,7 @@ Plate + `@platejs/markdown`。普通文本粘贴默认按 Markdown 解析。右�
 
 ### 双链与图谱
 
-嵌套标题双链：`[[文件#外层标题#内层标题]]`。Wiki 索引 `.md` 变更防抖重建（~900ms）。反链见编辑器状态栏；**文献引用图谱**嵌在右侧 **References** 下方约 35% 高度（`agentero-cite.json` + catalog `localMatch`），入库后自动解析。与 Markdown 双链索引分层、不共用边语义。详见 [frontend/wiki.md](frontend/wiki.md) / [backend/wiki.md](backend/wiki.md) / [backend/citation-parsing.md](backend/citation-parsing.md)。
+嵌套标题双链：`[[文件#外层标题#内层标题]]`。Wiki 索引 `.md` 变更防抖重建（~900ms）。反链见编辑器状态栏；文献引用解析入库后自动生成 `{paper}/source/agentero-cite.json`，与 Markdown 双链索引分层、不共用边语义。详见 [frontend/wiki.md](frontend/wiki.md) / [backend/wiki.md](backend/wiki.md) / [backend/citation-parsing.md](backend/citation-parsing.md)。
 
 ## 数据流
 

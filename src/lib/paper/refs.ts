@@ -56,59 +56,6 @@ export async function paperRefsList(
 	return sidecar ?? null;
 }
 
-/** Node type for the citation relationship graph (same shape as wiki graph). */
-export type CiteGraphNodeType = "paper" | "note" | "index" | "stub";
-
-/** Role of a node relative to the center paper (neighborhood mode only). */
-export type CiteGraphRole = "center" | "reference" | "citedBy";
-
-export type CiteGraphNode = {
-	id: string;
-	label: string;
-	type: CiteGraphNodeType;
-	path?: string;
-	role?: CiteGraphRole;
-};
-
-export type CiteGraphEdge = {
-	id: string;
-	source: string;
-	target: string;
-	targetRaw?: string;
-};
-
-export type CiteGraphResponse = {
-	nodes: CiteGraphNode[];
-	edges: CiteGraphEdge[];
-	center?: string | null;
-	depth: number;
-};
-
-/**
- * Citation relationship graph from reference sidecars + catalog localMatch.
- * Neighborhood: pass `center` (paper folder or file under it). Full library:
- * omit center. Does not parse missing sidecars.
- */
-export async function paperRefsGraph(
-	vaultPath: string | null,
-	opts?: { center?: string | null; depth?: number | null },
-): Promise<CiteGraphResponse> {
-	if (!vaultPath) {
-		return { nodes: [], edges: [], center: null, depth: opts?.depth ?? 1 };
-	}
-	return invokeApi<CiteGraphResponse>(
-		"paper_refs_graph",
-		{
-			args: {
-				vaultPath,
-				center: opts?.center ?? null,
-				depth: opts?.depth ?? null,
-			},
-		},
-		{ fallback: "paper_refs_graph failed" },
-	);
-}
-
 /** Parse (or force-refresh) references for one paper and persist the sidecar. */
 export async function paperRefsParse(
 	vaultPath: string,

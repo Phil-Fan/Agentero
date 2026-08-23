@@ -68,7 +68,6 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | 文件树 | 展示/选中/打开/拖拽 | 建树、读写、删除、终端 |
 | Markdown | Plate 编辑与序列化 | 落盘 |
 | 双链 | 渲染、补全、嵌入、反链 | 索引与 `graph_*` |
-| 引用图谱 | References 近邻 / 全库图 | `paper_refs_graph` |
 | PDF | EmbedPDF 渲染与划词 | 下载、liteparse、路径 |
 | 入库 | 魔棒 UI、进度、确认 | Translator / commit |
 | Agent | 会话 UI、权限对话框 | spawn ACP、prompt |
@@ -102,7 +101,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | PDF 版面分析（Figures / Tables / Algorithms / Formulas） | [pdf-layout-analysis.md](pdf-layout-analysis.md) |
 | Agent 面板 | [agent.md](agent.md) |
 | 移动端壳与 Bridge 客户端 | [mobile.md](mobile.md) |
-| 双链 UI / 引用图谱 | [wiki.md](wiki.md) |
+| 双链 UI | [wiki.md](wiki.md) |
 | 命令面板 | [command-palette.md](command-palette.md) |
 | 翻译 | [translate.md](translate.md) |
 | 设置与主题 | [settings.md](settings.md) |

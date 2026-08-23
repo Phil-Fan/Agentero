@@ -1,6 +1,6 @@
 # 双链 UI
 
-编辑器状态栏展示反链数量与列表。右侧 **References** 下方的图为**文献引用图谱**（非 Markdown 双链图）；数据来自参考文献 sidecar 与库内匹配，见 [../backend/citation-parsing.md](../backend/citation-parsing.md)。
+编辑器状态栏展示反链数量与列表。右侧 **References** 展示当前论文的参考文献卡片；数据来自参考文献 sidecar 与库内匹配，见 [../backend/citation-parsing.md](../backend/citation-parsing.md)。
 
 ## 编辑器
 
@@ -15,20 +15,6 @@
 - 序列化必须写回 `[[...]]`（Obsidian 兼容）。
 - `![[...]]`：嵌入 Markdown 区段、图片、PDF、批注（只读）；普通编辑不刷新无关嵌入。批注嵌入（`contentKind: annotation`）与其它 embed 共用 `max-h` 滚动壳；位置优先大纲路径否则页码。视觉批注：备注以图标 + 文字显示在裁剪图上方；仅当有 Agent 对话时才展示下方 transcript（无对话不显示空状态）；**正文不可点跳转**，仅顶栏 ExternalLink 打开 PDF。Host `wiki check` 校验 path + id 形态，不读 `marks/` 验存活。
 - **导出模式**（笔记导出 PDF/PNG）：`MarkdownExportModeProvider` 下展开 `max-h`、去掉打开源按钮；图片/批注裁剪图取消高度上限；完整 PDF 附件改为路径占位。见 [markdown.md](markdown.md)。
-
-## Graph（引用图谱）
-
-| 项 | 说明 |
-|---|---|
-| 库 | `react-force-graph-2d`（Canvas 力导向） |
-| 数据 | Host `paper_refs_graph` → nodes / edges（`agentero-cite.json` + `localMatch`） |
-| 节点 | 四级编码：**本论文** `role=center`（brand 圆 + 描边环）/ **本文引用·库内** `role=reference`（foreground 圆）/ **引用本文·库内** `role=citedBy`（chart-3 方形）/ **库外引用** `type=stub`（highlight 菱形，不可打开） |
-| 模式 | 默认**当前论文近邻图**（出边含库外 stub + 入边被引）；header 图标按钮可切换**全库**库内引用边（全库下当前论文仍高亮） |
-| 边 | 方向箭头指向被引文献 |
-| 壳 | **References 侧栏下方约 35% 高度**（与引用卡片同 tab；无独立 Graph 轨）；近邻模式底部显示图例 |
-| 交互 | 缩放、拖拽、点击打开库内 paper；stub 不可打开 |
-
-入库成功（`paper_commit` Created）后 Host 后台自动 `paper_refs_parse`。打开论文 / References 时前端 `loadPaperRefsAuto` 再兜底。引用图谱只读已有 sidecar，不批量解析；近邻深度固定 1（直接引用）。
 
 与 **Markdown 双链**（`graph_get_graph` / 反链）分层；双链索引仍服务编辑器补全、嵌入与状态栏反链，不驱动关系图。
 

@@ -293,7 +293,7 @@ cargo test -p agentero-cli
 
 ---
 
-## 8. Markdown、双链、引用图谱
+## 8. Markdown、双链
 
 | # | 界面 | 操作 | 预期 | 结果 |
 |---|---|---|---|---|
