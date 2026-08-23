@@ -13,7 +13,6 @@ import {
 	SettingsRow,
 } from "@/components/settings/settings-layout";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
 import {
 	Collapsible,
 	CollapsibleContent,
@@ -167,10 +166,6 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 		setForm((prev) => ({ ...prev, ...partial }));
 
 	const scope = form.scope;
-	const scopeAll = scope.pdf && scope.source && scope.attachments;
-	const scopeNone = !scope.pdf && !scope.source && !scope.attachments;
-	const setScopePreset = (all: boolean) =>
-		patch({ scope: { pdf: all, source: all, attachments: all } });
 	const patchScope = (key: keyof SyncBackendConfig["scope"], value: boolean) =>
 		patch({ scope: { ...scope, [key]: value } });
 
@@ -381,29 +376,10 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 				) : null}
 			</SettingsGroup>
 
+			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+				{helpLabel(t("sync.scope"), t("sync.scopeHint"))}
+			</p>
 			<SettingsGroup>
-				<SettingsRow label={helpLabel(t("sync.scope"), t("sync.scopeHint"))}>
-					<ButtonGroup>
-						<Button
-							type="button"
-							size="sm"
-							variant={scopeAll ? "secondary" : "outline"}
-							aria-pressed={scopeAll}
-							onClick={() => setScopePreset(true)}
-						>
-							{t("sync.scopeFull")}
-						</Button>
-						<Button
-							type="button"
-							size="sm"
-							variant={scopeNone ? "secondary" : "outline"}
-							aria-pressed={scopeNone}
-							onClick={() => setScopePreset(false)}
-						>
-							{t("sync.scopeNotesOnly")}
-						</Button>
-					</ButtonGroup>
-				</SettingsRow>
 				<SettingsRow label={t("sync.scopePdf")} htmlFor="sync-scope-pdf">
 					<span className="flex items-center gap-2">
 						{scopeSizes ? (
