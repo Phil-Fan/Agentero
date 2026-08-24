@@ -138,8 +138,13 @@ fn parse_windows_proxy_server(server: &str) -> Option<String> {
             _ => {}
         }
     }
-    http.map(|v| with_proxy_scheme(v, "http"))
-        .or_else(|| https.map(|v| with_proxy_scheme(v, "https")))
+    // The `http=`/`https=` keys name which traffic a proxy serves, not how the
+    // proxy itself is reached — the proxy is contacted over plain HTTP (HTTPS
+    // targets tunnel via CONNECT). So both map to an `http://` proxy URL;
+    // returning `https://` would make reqwest TLS-handshake with a plain HTTP
+    // proxy and fail. Prefer the `http=` entry, then `https=`.
+    http.or(https)
+        .map(|v| with_proxy_scheme(v, "http"))
         .or_else(|| socks.map(|v| with_proxy_scheme(v, "socks5h")))
 }
 
@@ -303,7 +308,8 @@ mod tests {
         );
         assert_eq!(
             parse_windows_proxy_server("https=proxy.local:8443").as_deref(),
-            Some("https://proxy.local:8443")
+            // https= still yields an http:// proxy URL (see fn comment).
+            Some("http://proxy.local:8443")
         );
         assert_eq!(parse_windows_proxy_server("  ").as_deref(), None);
     }
