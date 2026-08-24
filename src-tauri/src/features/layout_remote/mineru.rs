@@ -2,8 +2,9 @@
 //! flow: `POST {base}/api/v4/file-urls/batch` (request a presigned upload
 //! URL) → `PUT` the PDF bytes → poll
 //! `GET {base}/api/v4/extract-results/batch/{batch_id}` → download the result
-//! zip and read `*content_list.json` (0–1000 normalized boxes) plus
-//! `*middle.json` (per-page sizes).
+//! zip and read `*content_list.json` (0–1000 normalized boxes) plus the
+//! intermediate result — `*middle.json` in older zips, `layout.json` in
+//! cloud v4 — for per-page sizes.
 
 use crate::core::error::AppError;
 use crate::core::http;
@@ -249,23 +250,53 @@ fn build_pages(
     Ok(pages)
 }
 
-/// Find a zip entry by name suffix (MinerU prefixes entries with the task id).
-pub(crate) fn read_zip_entry_by_suffix(bytes: &[u8], suffix: &str) -> Result<String, AppError> {
+/// Find a zip entry by candidate names — an exact entry name match wins
+/// first, then a name-suffix match (MinerU prefixes entries with the task
+/// id). On miss, the error lists the actual entries so cloud-side naming
+/// changes are diagnosable.
+pub(crate) fn read_zip_entry_by_candidates(
+    bytes: &[u8],
+    candidates: &[&str],
+) -> Result<String, AppError> {
     let cursor = std::io::Cursor::new(bytes);
     let mut archive = zip::ZipArchive::new(cursor)
         .map_err(|e| AppError::message(format!("MinerU result zip open failed: {e}")))?;
     let mut index = None;
-    for i in 0..archive.len() {
-        let entry = archive
-            .by_index(i)
-            .map_err(|e| AppError::message(format!("MinerU result zip entry failed: {e}")))?;
-        if entry.name().ends_with(suffix) {
-            index = Some(i);
+    for candidate in candidates {
+        for i in 0..archive.len() {
+            let entry = archive
+                .by_index(i)
+                .map_err(|e| AppError::message(format!("MinerU result zip entry failed: {e}")))?;
+            if entry.name() == *candidate {
+                index = Some(i);
+                break;
+            }
+        }
+        if index.is_none() {
+            for i in 0..archive.len() {
+                let entry = archive.by_index(i).map_err(|e| {
+                    AppError::message(format!("MinerU result zip entry failed: {e}"))
+                })?;
+                if entry.name().ends_with(candidate) {
+                    index = Some(i);
+                    break;
+                }
+            }
+        }
+        if index.is_some() {
             break;
         }
     }
-    let index = index
-        .ok_or_else(|| AppError::message(format!("MinerU result zip missing `*{suffix}` entry")))?;
+    let index = index.ok_or_else(|| {
+        let names: Vec<String> = (0..archive.len())
+            .filter_map(|i| archive.by_index(i).ok().map(|e| e.name().to_string()))
+            .collect();
+        AppError::message(format!(
+            "MinerU result zip missing {:?} entry (entries: {})",
+            candidates,
+            names.join(", ")
+        ))
+    })?;
     let entry = archive
         .by_index(index)
         .map_err(|e| AppError::message(format!("MinerU result zip entry failed: {e}")))?;
@@ -276,15 +307,20 @@ pub(crate) fn read_zip_entry_by_suffix(bytes: &[u8], suffix: &str) -> Result<Str
         .map_err(|e| AppError::message(format!("MinerU result zip read failed: {e}")))?;
     if text.len() as u64 > MAX_JSON_ENTRY_BYTES {
         return Err(AppError::message(format!(
-            "MinerU result zip entry `*{suffix}` too large"
+            "MinerU result zip entry {:?} too large",
+            candidates
         )));
     }
     Ok(text)
 }
 
+/// Intermediate-result entry names: `*_middle.json` / `middle.json` in older
+/// zips, `layout.json` in cloud v4 (same `pdf_info[].page_size` schema).
+const MIDDLE_CANDIDATES: &[&str] = &["middle.json", "layout.json"];
+
 fn parse_result_zip(bytes: &[u8]) -> Result<LayoutRemoteAnalyzePdfResult, AppError> {
-    let content_list_text = read_zip_entry_by_suffix(bytes, "content_list.json")?;
-    let middle_text = read_zip_entry_by_suffix(bytes, "middle.json")?;
+    let content_list_text = read_zip_entry_by_candidates(bytes, &["content_list.json"])?;
+    let middle_text = read_zip_entry_by_candidates(bytes, MIDDLE_CANDIDATES)?;
     let content_list: Value = serde_json::from_str(&content_list_text)
         .map_err(|e| AppError::message(format!("MinerU result parse failed: content_list: {e}")))?;
     let middle: Value = serde_json::from_str(&middle_text)
@@ -680,6 +716,63 @@ mod tests {
         assert_eq!(boxes.len(), 1);
         assert_eq!(boxes[0].label, "table");
         assert_eq!(boxes[0].coordinate, [100.0, 200.0, 900.0, 1800.0]);
+    }
+
+    #[test]
+    fn parses_result_zip_with_cloud_v4_layout_json() {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+        // Mirrors a real cloud v4 VLM result zip: the intermediate result is
+        // `layout.json` (no task-id prefix) and there is no `*middle.json`.
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        {
+            let mut writer = zip::ZipWriter::new(&mut cursor);
+            let opts = SimpleFileOptions::default();
+            writer.start_file("abc123_model.json", opts).unwrap();
+            writer.write_all(b"{}").unwrap();
+            writer.start_file("full.md", opts).unwrap();
+            writer.write_all(b"# md").unwrap();
+            writer.start_file("layout.json", opts).unwrap();
+            writer
+                .write_all(br#"{"pdf_info":[{"page_size":[1000.0,2000.0]}]}"#)
+                .unwrap();
+            writer.start_file("abc123_content_list.json", opts).unwrap();
+            writer
+                .write_all(br#"[{"type":"table","page_idx":0,"bbox":[100,100,900,900]}]"#)
+                .unwrap();
+            writer
+                .start_file("abc123_content_list_v2.json", opts)
+                .unwrap();
+            writer.write_all(b"[]").unwrap();
+            writer.finish().unwrap();
+        }
+        let result = parse_result_zip(cursor.get_ref()).unwrap();
+        assert_eq!(result.pages.len(), 1);
+        assert_eq!(result.rendered_pages, vec![(1000, 2000)]);
+        let boxes = &result.pages[0].boxes;
+        assert_eq!(boxes.len(), 1);
+        assert_eq!(boxes[0].label, "table");
+        assert_eq!(boxes[0].coordinate, [100.0, 200.0, 900.0, 1800.0]);
+    }
+
+    #[test]
+    fn missing_middle_error_lists_zip_entries() {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        {
+            let mut writer = zip::ZipWriter::new(&mut cursor);
+            let opts = SimpleFileOptions::default();
+            writer.start_file("abc123_content_list.json", opts).unwrap();
+            writer.write_all(b"[]").unwrap();
+            writer.start_file("full.md", opts).unwrap();
+            writer.write_all(b"# md").unwrap();
+            writer.finish().unwrap();
+        }
+        let err = parse_result_zip(cursor.get_ref()).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("abc123_content_list.json"), "{msg}");
+        assert!(msg.contains("full.md"), "{msg}");
     }
 
     #[test]

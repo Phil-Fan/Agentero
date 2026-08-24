@@ -2210,10 +2210,10 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
   - `apiKey` 为空 / 掩码时由 Host 从设置注入（WebView 不持有明文）；`baseUrl` 一律由 Host 从设置读取。
   - `requestId` 用于并行任务把 `layout-remote:progress` 对回调用方。
 - **Paddle 流程**：multipart 提交任务 `POST /api/v2/ocr/jobs`（`model: PP-StructureV3`，`Authorization: bearer <token>`，端点固定 `https://paddleocr.aistudio-app.com`）→ 每 3s 轮询 `GET /api/v2/ocr/jobs/{jobId}`（总时限 10 分钟）→ 完成后下载 `resultUrl.jsonUrl`（JSONL）并提取每页 `prunedResult.layout_det_res.boxes`。
-- **MinerU 流程**：`POST {base}/api/v4/file-urls/batch` 申请预签名上传 URL → `PUT` 上传 PDF 字节 → 每 3s 轮询 `GET {base}/api/v4/extract-results/batch/{batchId}`（总时限 10 分钟）→ 下载结果 zip，解析 `*content_list.json`（bbox 为 0–1000 归一化，Host 换算回页面像素）+ `*middle.json`（每页尺寸），label 映射到与 PP-DocLayoutV3 统一的词表。不受信 zip 设下载（256 MB）与单条目解压（128 MB）上限。
+- **MinerU 流程**：`POST {base}/api/v4/file-urls/batch` 申请预签名上传 URL → `PUT` 上传 PDF 字节 → 每 3s 轮询 `GET {base}/api/v4/extract-results/batch/{batchId}`（总时限 10 分钟）→ 下载结果 zip，解析 `*content_list.json`（bbox 为 0–1000 归一化，Host 换算回页面像素）+ 中间结果（每页尺寸；条目名按候选匹配：旧版 `*middle.json` / `middle.json`，云端 v4 为 `layout.json`），label 映射到与 PP-DocLayoutV3 统一的词表。不受信 zip 设下载（256 MB）与单条目解压（128 MB）上限；候选条目缺失时报错并列出 zip 实际 entries。
 - **进度**：轮询期间 emit `layout-remote:progress`，payload `{ phase, extractedPages, totalPages, requestId? }`（phase：`uploading` / `pending` / `running` / `downloading` / `done`）。
 - **并发**：`settings.layout.backend` 为远程 provider 时 JobCenter `layoutAnalyze` **无并发上限**（远端排队）；本地 ONNX 仍 cap=1。
-- **返回**：`{ pages: [{ boxes: [{ clsId, label, score, coordinate }], widthPx, heightPx }] }`；渲染像素尺寸优先取服务端报告（Paddle：`dataInfo` / `inputImage` JPEG 头；MinerU：`middle.json` 页尺寸），缺失为 `null`（前端按 200 DPI 估算）。
+- **返回**：`{ pages: [{ boxes: [{ clsId, label, score, coordinate }], widthPx, heightPx }] }`；渲染像素尺寸优先取服务端报告（Paddle：`dataInfo` / `inputImage` JPEG 头；MinerU：中间结果 `middle.json` / `layout.json` 页尺寸），缺失为 `null`（前端按 200 DPI 估算）。
 - **超时 / 代理**：单请求 120s；走 Host 全局代理（`core::http::client_builder`）。
 - 实现：`src-tauri/src/features/layout_remote/`（`commands.rs` 命令壳 + `engine.rs` `RemoteLayoutEngine` trait / 注册 + `paddle.rs` + `mineru.rs`）；前端 `src/lib/pdf/layout/paddle.ts`（IPC 封装）+ `providers.ts`（`LAYOUT_PROVIDERS` 注册表）。
 

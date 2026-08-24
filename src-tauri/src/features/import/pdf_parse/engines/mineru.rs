@@ -4,7 +4,7 @@
 use super::{BodyParseCtx, BodyParseEngine, BodyParseOutcome};
 use crate::core::error::AppError;
 use crate::features::layout_remote::engine::ProviderCredentials;
-use crate::features::layout_remote::mineru::{read_zip_entry_by_suffix, run_mineru_extract};
+use crate::features::layout_remote::mineru::{read_zip_entry_by_candidates, run_mineru_extract};
 use async_trait::async_trait;
 
 pub(crate) struct MineruBodyEngine;
@@ -33,7 +33,7 @@ impl BodyParseEngine for MineruBodyEngine {
                 ctx.is_cancelled()
             })
             .await?;
-        let markdown = read_zip_entry_by_suffix(&zip_bytes, "full.md")?;
+        let markdown = read_zip_entry_by_candidates(&zip_bytes, &["full.md"])?;
         Ok(BodyParseOutcome {
             markdown,
             body_source: "mineru".to_string(),
@@ -84,7 +84,7 @@ mod tests {
             .collect();
         println!("zip entries: {names:?}");
 
-        let markdown = read_zip_entry_by_suffix(&zip, "full.md").expect("full.md entry");
+        let markdown = read_zip_entry_by_candidates(&zip, &["full.md"]).expect("full.md entry");
         println!("--- markdown ({} chars) ---\n{markdown}", markdown.len());
         assert!(!markdown.trim().is_empty());
     }
