@@ -109,6 +109,9 @@ pub fn system_proxy_url() -> Option<String> {
 
 /// Parse the Windows `ProxyServer` registry value: either a bare `host:port`
 /// or `http=host:port;https=host:port;socks=host:port`.
+// Only called from the Windows branch + unit tests; keep it compiled (and
+// tested) on every platform.
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
 fn parse_windows_proxy_server(server: &str) -> Option<String> {
     let trimmed = server.trim();
     if trimmed.is_empty() {
@@ -141,6 +144,7 @@ fn parse_windows_proxy_server(server: &str) -> Option<String> {
         .or_else(|| socks.map(|v| with_proxy_scheme(v, "socks5h")))
 }
 
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
 fn with_proxy_scheme(value: &str, default_scheme: &str) -> String {
     if value.contains("://") {
         value.to_string()
