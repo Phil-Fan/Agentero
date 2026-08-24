@@ -39,8 +39,6 @@ export type PdfViewerProps = {
 	paperRelPath?: string | null;
 	/** Current vault root for ACP cwd */
 	vaultPath?: string | null;
-	/** Open the annotations overview (App-level right sidebar tab). */
-	onOpenAnnotations?: () => void;
 	/** Open Translate settings from a translation error card. */
 	onOpenSettings?: () => void;
 	className?: string;

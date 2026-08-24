@@ -1,12 +1,5 @@
 import type { PdfEngine } from "@embedpdf/models";
-import {
-	Languages,
-	Loader2,
-	MessageSquareText,
-	Minus,
-	Plus,
-	ScanSearch,
-} from "lucide-react";
+import { Languages, Loader2, Minus, Plus, ScanSearch } from "lucide-react";
 import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -44,11 +37,9 @@ type PdfToolbarProps = {
 	layoutTranslateActive: boolean;
 	layoutTranslateLabel: string;
 	onToggleLayoutTranslate: () => void;
-	/** Absent when the host has no annotations sidebar to open. */
-	onOpenAnnotations?: () => void;
 };
 
-/** Top-right toolbar: zoom, region select, bulk translate, annotations. */
+/** Top-right toolbar: zoom, region select, bulk translate. */
 export function PdfToolbar({
 	zoomLevel,
 	onZoomIn,
@@ -66,7 +57,6 @@ export function PdfToolbar({
 	layoutTranslateActive,
 	layoutTranslateLabel,
 	onToggleLayoutTranslate,
-	onOpenAnnotations,
 }: PdfToolbarProps) {
 	const { t } = useTranslation("viewer");
 
@@ -202,25 +192,6 @@ export function PdfToolbar({
 							{layoutTranslateLabel}
 						</TooltipContent>
 					</Tooltip>
-					{onOpenAnnotations ? (
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-xs"
-									variant="ghost"
-									className="shrink-0 self-center"
-									aria-label={t("annotations.title")}
-									onClick={onOpenAnnotations}
-								>
-									<MessageSquareText className="size-3.5" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">
-								{t("annotations.title")}
-							</TooltipContent>
-						</Tooltip>
-					) : null}
 				</div>
 			</TooltipProvider>
 		</div>

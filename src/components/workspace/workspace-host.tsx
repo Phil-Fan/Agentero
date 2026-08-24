@@ -34,7 +34,6 @@ import type { LibraryColumnPref } from "@/lib/settings";
 import { resolveFontFamilyCss } from "@/lib/settings";
 import { patchSettings } from "@/lib/settings/react-store";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
-import { openRightTab } from "@/lib/shell/ui-store";
 import { joinVaultPath } from "@/lib/vault";
 import { handleTrashChanged } from "@/lib/vault/actions";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
@@ -239,10 +238,6 @@ export function WorkspaceHost() {
 		if (vaultPath) void refreshTree(vaultPath);
 	}, [vaultPath]);
 	const handleTrashReload = useCallback(() => void handleTrashChanged(), []);
-	const handleOpenAnnotations = useCallback(
-		() => openRightTab("annotations"),
-		[],
-	);
 	const handleOpenSettings = useCallback(
 		() => openSettingsWindow("translate"),
 		[],
@@ -306,14 +301,13 @@ export function WorkspaceHost() {
 	);
 	const pdfProps = useMemo(
 		() => ({
-			onOpenAnnotations: handleOpenAnnotations,
 			onOpenSettings: handleOpenSettings,
 			registerHandle: registerPdfHandle,
 			onHighlightsChange: setTabHighlights,
 			onAsksChange: setTabAsks,
 			onVisualTracesChange: setTabVisualTraces,
 		}),
-		[handleOpenAnnotations, handleOpenSettings],
+		[handleOpenSettings],
 	);
 	const centerProps = useMemo(
 		() => ({

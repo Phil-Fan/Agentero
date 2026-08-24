@@ -54,7 +54,6 @@ const LIBRARY_STUB: DocViewLibraryProps = {
 	onRescan: () => {},
 };
 const PDF_STUB: DocViewPdfProps = {
-	onOpenAnnotations: () => {},
 	onOpenSettings: () => openSettingsWindow("general"),
 	registerHandle: () => {},
 	onHighlightsChange: () => {},

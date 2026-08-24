@@ -73,7 +73,6 @@ export type DocViewEditorProps = {
 
 /** PDF viewer props. */
 export type DocViewPdfProps = {
-	onOpenAnnotations: () => void;
 	onOpenSettings: () => void;
 	registerHandle: (tabId: string, handle: PdfViewerHandle | null) => void;
 	onHighlightsChange: (tabId: string, list: PdfHighlight[]) => void;
@@ -306,7 +305,6 @@ export const DocView = memo(function DocView({
 						}
 						vaultPath={vaultPath}
 						isActive={active}
-						onOpenAnnotations={pdf.onOpenAnnotations}
 						onOpenSettings={pdf.onOpenSettings}
 						className="h-full w-full"
 						onHandle={handlePdfHandle}

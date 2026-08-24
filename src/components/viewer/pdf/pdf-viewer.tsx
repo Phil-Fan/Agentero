@@ -340,7 +340,6 @@ function PdfViewerInner({
 	paperRelPath = null,
 	vaultPath = null,
 	isActive = true,
-	onOpenAnnotations,
 	onOpenSettings,
 	onHandle,
 	onHighlightsChange,
@@ -1539,7 +1538,6 @@ function PdfViewerInner({
 				layoutTranslateActive={layoutTranslateActive}
 				layoutTranslateLabel={layoutTranslateLabel}
 				onToggleLayoutTranslate={toggleLayoutTranslate}
-				onOpenAnnotations={onOpenAnnotations}
 			/>
 
 			<DockviewViewport
