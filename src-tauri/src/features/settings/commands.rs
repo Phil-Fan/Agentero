@@ -17,6 +17,14 @@ pub fn settings_get(store: State<'_, AppSettingsStore>) -> ApiResult<SettingsGet
     }
 }
 
+/// Detected OS system proxy (Windows "Internet Settings"). Host requests
+/// already fall back to it when the app proxy is off; the updater plugin and
+/// the settings UI query it here.
+#[tauri::command]
+pub fn network_system_proxy() -> ApiResult<Option<String>> {
+    ApiResult::ok(crate::core::http::system_proxy_url())
+}
+
 /// Return unique system font family names (sorted). Empty on mobile / failure.
 ///
 /// Scanning system fonts is slow (disk walk on Windows), so it runs in

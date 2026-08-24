@@ -82,7 +82,8 @@
 			"value": "同时 {{value}} 个"
 		},
 		"networkProxy": {
-			"label": "网络代理"
+			"label": "网络代理",
+			"systemDetected": "检测到系统代理（{{url}}）——开关关闭时将自动使用。"
 		},
 		"plaza": {
 			"label": "广场"

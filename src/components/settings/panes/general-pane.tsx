@@ -20,6 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { useTauriEvent } from "@/hooks/use-tauri-event";
 import { clearUsage } from "@/lib/activity";
 import { errorText } from "@/lib/core/error";
+import { invokeApi } from "@/lib/core/ipc";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import {
@@ -52,10 +53,26 @@ export function GeneralPane({
 }) {
 	const { t } = useTranslation("settings");
 	const [proxyUrlDraft, setProxyUrlDraft] = useState(settings.networkProxyUrl);
+	// OS system proxy detected by the Host (Windows "Internet Settings"); used
+	// automatically while the app proxy is off — surface it for transparency.
+	const [systemProxy, setSystemProxy] = useState<string | null>(null);
 
 	useEffect(() => {
 		setProxyUrlDraft(settings.networkProxyUrl);
 	}, [settings.networkProxyUrl]);
+
+	useEffect(() => {
+		if (!isTauri()) return;
+		let cancelled = false;
+		void invokeApi<string | null>("network_system_proxy")
+			.then((p) => {
+				if (!cancelled) setSystemProxy(p ?? null);
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	return (
 		<>
@@ -159,6 +176,13 @@ export function GeneralPane({
 				<NetworkProxyRow
 					htmlFor="network-proxy-enabled"
 					label={t("general.networkProxy.label")}
+					description={
+						!settings.networkProxyEnabled && systemProxy
+							? t("general.networkProxy.systemDetected", {
+									url: systemProxy,
+								})
+							: undefined
+					}
 					proxyUrl={proxyUrlDraft}
 					proxyEnabled={settings.networkProxyEnabled}
 					onProxyUrlChange={setProxyUrlDraft}

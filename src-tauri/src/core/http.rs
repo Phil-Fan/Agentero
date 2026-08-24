@@ -4,7 +4,7 @@
 
 use crate::core::error::AppError;
 use std::sync::{OnceLock, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Product User-Agent sent by Host HTTP clients by default.
 ///
@@ -30,6 +30,13 @@ const ERROR_SNIPPET_CHARS: usize = 180;
 
 static PROXY_URL: OnceLock<RwLock<Option<String>>> = OnceLock::new();
 static SHARED_CLIENT: OnceLock<RwLock<Option<CachedClient>>> = OnceLock::new();
+/// (last detected OS system proxy, when it was checked). `None` timestamp =
+/// never checked.
+static SYSTEM_PROXY: OnceLock<RwLock<(Option<String>, Option<Instant>)>> = OnceLock::new();
+
+/// The OS-level proxy can be toggled at runtime (Clash / V2RayN "system
+/// proxy" mode); re-read it at most this often.
+const SYSTEM_PROXY_TTL: Duration = Duration::from_secs(30);
 
 struct CachedClient {
     proxy: Option<String>,
@@ -71,10 +78,109 @@ fn cached_slot() -> &'static RwLock<Option<CachedClient>> {
     SHARED_CLIENT.get_or_init(|| RwLock::new(None))
 }
 
+/// The OS-wide ("system") proxy, if one is configured. reqwest only honors
+/// `HTTP_PROXY`-style env vars, so without this every Host request would
+/// bypass the system proxy that browsers and WebView2 use — the classic
+/// "browser works, app pages fail" split on Windows proxy clients.
+pub fn system_proxy_url() -> Option<String> {
+    #[cfg(windows)]
+    {
+        use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
+        use winreg::RegKey;
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let key = hkcu
+            .open_subkey_with_flags(
+                r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+                KEY_READ,
+            )
+            .ok()?;
+        let enabled: u32 = key.get_value("ProxyEnable").ok()?;
+        if enabled == 0 {
+            return None;
+        }
+        let server: String = key.get_value("ProxyServer").ok()?;
+        parse_windows_proxy_server(&server)
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+/// Parse the Windows `ProxyServer` registry value: either a bare `host:port`
+/// or `http=host:port;https=host:port;socks=host:port`.
+fn parse_windows_proxy_server(server: &str) -> Option<String> {
+    let trimmed = server.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if !trimmed.contains('=') {
+        return Some(with_proxy_scheme(trimmed, "http"));
+    }
+    let mut http = None;
+    let mut https = None;
+    let mut socks = None;
+    for part in trimmed.split(';') {
+        let Some((kind, value)) = part.split_once('=') else {
+            continue;
+        };
+        let value = value.trim();
+        if value.is_empty() {
+            continue;
+        }
+        match kind.trim().to_ascii_lowercase().as_str() {
+            "http" => http = Some(value),
+            "https" => https = Some(value),
+            "socks" => socks = Some(value),
+            _ => {}
+        }
+    }
+    https
+        .or(http)
+        .map(|v| with_proxy_scheme(v, "http"))
+        .or_else(|| socks.map(|v| with_proxy_scheme(v, "socks5h")))
+}
+
+fn with_proxy_scheme(value: &str, default_scheme: &str) -> String {
+    if value.contains("://") {
+        value.to_string()
+    } else {
+        format!("{default_scheme}://{value}")
+    }
+}
+
+/// TTL-cached [`system_proxy_url`] so request paths only touch the registry
+/// every [`SYSTEM_PROXY_TTL`].
+fn system_proxy_cached() -> Option<String> {
+    let slot = SYSTEM_PROXY.get_or_init(|| RwLock::new((None, None)));
+    if let Ok(guard) = slot.read() {
+        if guard.1.is_some_and(|t| t.elapsed() < SYSTEM_PROXY_TTL) {
+            return guard.0.clone();
+        }
+    }
+    let detected = system_proxy_url();
+    if let Ok(mut guard) = slot.write() {
+        *guard = (detected.clone(), Some(Instant::now()));
+    }
+    detected
+}
+
+/// Explicit app proxy setting, else the OS system proxy as a fallback so
+/// Clash / V2RayN "system proxy" modes work with zero configuration.
+fn effective_proxy_url() -> Option<String> {
+    if let Ok(guard) = proxy_slot().read() {
+        if guard.is_some() {
+            return guard.clone();
+        }
+    }
+    system_proxy_cached()
+}
+
 /// A process-wide reqwest client so TLS sessions and HTTP keep-alive survive
-/// across plaza / Cool Papers requests. Rebuilt when the proxy setting changes.
+/// across plaza / Cool Papers requests. Rebuilt when the effective proxy
+/// changes (explicit setting or detected system proxy).
 pub fn shared_client() -> Result<reqwest::Client, AppError> {
-    let proxy = proxy_slot().read().ok().and_then(|guard| guard.clone());
+    let proxy = effective_proxy_url();
     {
         let guard = cached_slot()
             .read()
@@ -111,7 +217,7 @@ pub fn shared_client() -> Result<reqwest::Client, AppError> {
 /// Prefer [`client`] / [`client_with`]; reach for this directly only when a
 /// flow must deviate from their defaults (e.g. no timeout at all).
 pub fn client_builder() -> reqwest::ClientBuilder {
-    let proxy = proxy_slot().read().ok().and_then(|guard| guard.clone());
+    let proxy = effective_proxy_url();
     let builder = reqwest::Client::builder();
     match proxy {
         Some(url) => match reqwest::Proxy::all(&url) {
@@ -173,6 +279,30 @@ mod tests {
     fn rejects_enabled_empty_proxy() {
         let error = configure_proxy(true, " ").expect_err("empty proxy should fail");
         assert!(error.to_string().contains("proxy URL is required"));
+    }
+
+    #[test]
+    fn parses_windows_proxy_server_forms() {
+        assert_eq!(
+            parse_windows_proxy_server("127.0.0.1:7890").as_deref(),
+            Some("http://127.0.0.1:7890")
+        );
+        assert_eq!(
+            parse_windows_proxy_server(
+                "http=127.0.0.1:10809;https=127.0.0.1:10809;socks=127.0.0.1:10808"
+            )
+            .as_deref(),
+            Some("http://127.0.0.1:10809")
+        );
+        assert_eq!(
+            parse_windows_proxy_server("socks=127.0.0.1:10808").as_deref(),
+            Some("socks5h://127.0.0.1:10808")
+        );
+        assert_eq!(
+            parse_windows_proxy_server("https=proxy.local:8443").as_deref(),
+            Some("https://proxy.local:8443")
+        );
+        assert_eq!(parse_windows_proxy_server("  ").as_deref(), None);
     }
 
     #[test]

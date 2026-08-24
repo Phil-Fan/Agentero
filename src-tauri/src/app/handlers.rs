@@ -10,6 +10,7 @@ macro_rules! common_commands {
         ::tauri::generate_handler![
             crate::features::settings::commands::settings_get,
             crate::features::settings::commands::settings_set,
+            crate::features::settings::commands::network_system_proxy,
             crate::features::settings::commands::list_system_fonts,
             crate::features::layout_model::commands::layout_model_status,
             crate::features::layout_model::commands::layout_model_ensure,

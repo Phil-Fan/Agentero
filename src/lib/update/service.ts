@@ -22,11 +22,23 @@ function isUpdaterSupported(): boolean {
 /**
  * Settings → General → network proxy, which the updater plugin would otherwise
  * ignore: it ships its own reqwest client instead of Host `network::client_builder`.
+ * When the app proxy is off, fall back to the OS system proxy detected by the
+ * Host (Windows "Internet Settings") — same fallback Host requests use.
  */
 async function resolveProxyUrl(): Promise<string | undefined> {
 	const settings = await ensureSettingsLoaded();
-	if (!settings.networkProxyEnabled) return undefined;
-	const url = settings.networkProxyUrl.trim();
+	let url: string | undefined;
+	if (settings.networkProxyEnabled) {
+		url = settings.networkProxyUrl.trim() || undefined;
+	} else {
+		try {
+			const { invokeApi } = await import("@/lib/core/ipc");
+			url =
+				(await invokeApi<string | null>("network_system_proxy")) ?? undefined;
+		} catch {
+			url = undefined;
+		}
+	}
 	if (!url) return undefined;
 	// The plugin's client has no SOCKS support, so forwarding such a URL would
 	// fail every check — even where a direct connection still works.

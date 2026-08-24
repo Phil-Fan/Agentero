@@ -82,7 +82,8 @@
 			"value": "{{value}} simultaneous"
 		},
 		"networkProxy": {
-			"label": "Network proxy"
+			"label": "Network proxy",
+			"systemDetected": "System proxy detected ({{url}}) — used automatically while this switch is off."
 		},
 		"plaza": {
 			"label": "Plaza"
