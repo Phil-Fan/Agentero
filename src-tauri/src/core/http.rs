@@ -138,9 +138,8 @@ fn parse_windows_proxy_server(server: &str) -> Option<String> {
             _ => {}
         }
     }
-    https
-        .or(http)
-        .map(|v| with_proxy_scheme(v, "http"))
+    http.map(|v| with_proxy_scheme(v, "http"))
+        .or_else(|| https.map(|v| with_proxy_scheme(v, "https")))
         .or_else(|| socks.map(|v| with_proxy_scheme(v, "socks5h")))
 }
 
