@@ -19,10 +19,10 @@ export type TreeContextMenuPortalProps = {
 	canPasteAtTarget: boolean;
 	/** Right-clicked Plaza source row — menu offers hiding it. */
 	plazaMenuSource?: PlazaSource;
-	/** Hidden sources listed on the Plaza parent row menu for restoring. */
-	plazaHiddenSources?: PlazaSource[];
+	/** All sources on the Plaza parent row menu — click toggles hide/restore. */
+	plazaRootSources?: { source: PlazaSource; hidden: boolean }[];
 	onHidePlazaSource?: () => void;
-	onShowPlazaSource?: (id: string) => void;
+	onTogglePlazaSource?: (id: string, hide: boolean) => void;
 	onClose: () => void;
 	/** Each callback is optional — `undefined` hides the matching menu item. */
 	onExportLibrary?: () => void;
@@ -56,9 +56,9 @@ export function TreeContextMenuPortal({
 	citingScanBusy,
 	canPasteAtTarget,
 	plazaMenuSource,
-	plazaHiddenSources,
+	plazaRootSources,
 	onHidePlazaSource,
-	onShowPlazaSource,
+	onTogglePlazaSource,
 	onClose,
 	onExportLibrary,
 	onDiscoverCiting,
@@ -195,16 +195,23 @@ export function TreeContextMenuPortal({
 					<EyeOff className="size-3.5 shrink-0" aria-hidden />
 					<span>{t("plaza.hideSource")}</span>
 				</button>
-			) : plazaHiddenSources && plazaHiddenSources.length > 0 ? (
-				plazaHiddenSources.map((source) => (
+			) : plazaRootSources && plazaRootSources.length > 0 ? (
+				plazaRootSources.map(({ source, hidden }) => (
 					<button
 						key={source.id}
 						type="button"
 						role="menuitem"
 						className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-						onClick={() => onShowPlazaSource?.(source.id)}
+						onClick={() => onTogglePlazaSource?.(source.id, !hidden)}
 					>
-						<Eye className="size-3.5 shrink-0" aria-hidden />
+						{hidden ? (
+							<Eye
+								className="size-3.5 shrink-0 text-muted-foreground"
+								aria-hidden
+							/>
+						) : (
+							<EyeOff className="size-3.5 shrink-0" aria-hidden />
+						)}
 						<span>{plazaSourceLabel(source)}</span>
 					</button>
 				))

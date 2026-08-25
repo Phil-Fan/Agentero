@@ -8,7 +8,7 @@
 - 路径：`$XDG_CONFIG_HOME/agentero/settings.json`（macOS 通常 `~/.config/agentero/`）。
 - `telemetryEnabled`：是否把行为事件脱敏投影到 PostHog（见 [telemetry.md](telemetry.md)）。本地 `usage.sqlite` 记录始终开启、无开关。
 - `plazaEnabled`：是否显示并加载广场（默认开）。关闭后侧栏不渲染广场节点，已开的广场 tab 关闭，且不挂载 `PlazaView`（含站点代理 iframe / 订阅轮询）。
-- `plazaHiddenSources`：被隐藏的广场来源 id 列表（默认空）。侧栏子行与广场首页卡片按此过滤；右键来源行隐藏、右键广场父节点恢复。
+- `plazaHiddenSources`：被隐藏的广场来源 id 列表（默认空）。侧栏子行与广场首页卡片按此过滤；右键来源行隐藏、右键广场父节点逐条切换显隐。
 - 网络代理（`networkProxyEnabled` / `networkProxyUrl`）：作用于 Host 全部 reqwest 客户端（广场站点代理、订阅、检索、翻译、模型下载）与 Agent 流量。**开关关闭时自动回退 Windows 系统代理**（读注册表 `Internet Settings` 的 `ProxyEnable`/`ProxyServer`，30s TTL 缓存以跟随代理软件开关）；reqwest 默认不读 Windows 系统代理，此回退避免“浏览器能开、应用内页面打不开”的割裂。`network_system_proxy` 命令暴露检测结果：更新器插件用它做代理回退，设置页在开关关闭时显示“检测到系统代理”。
 - 旧 localStorage 键一次性迁移。
 - Agent 注册表等同目录管理。

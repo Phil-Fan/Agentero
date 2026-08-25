@@ -114,13 +114,6 @@ export function useTreeContextMenu({
 			) {
 				return;
 			}
-			// Plaza root menu only restores hidden sources — skip when none are hidden.
-			if (
-				isPlazaRootPath(path) &&
-				getSettings().plazaHiddenSources.length === 0
-			) {
-				return;
-			}
 			// Library menu only when it has at least one action wired.
 			if (
 				path === LIBRARY_VIRTUAL_PATH &&
@@ -189,10 +182,14 @@ export function useTreeContextMenu({
 		}
 	}, []);
 
-	// Keep the menu open so several sources can be restored in one go.
-	const showPlazaSource = useCallback((id: string) => {
+	// Keep the menu open so several sources can be toggled in one go.
+	const togglePlazaSource = useCallback((id: string, hide: boolean) => {
 		const current = getSettings().plazaHiddenSources;
-		patchSettings({ plazaHiddenSources: current.filter((s) => s !== id) });
+		if (hide && !current.includes(id)) {
+			patchSettings({ plazaHiddenSources: [...current, id] });
+		} else if (!hide && current.includes(id)) {
+			patchSettings({ plazaHiddenSources: current.filter((s) => s !== id) });
+		}
 	}, []);
 
 	if (!menu) {
@@ -211,11 +208,12 @@ export function useTreeContextMenu({
 	const plazaMenuSource = isPlazaVirtualPath(menu.path)
 		? plazaSourceForPath(menu.path)
 		: null;
-	const plazaHiddenSources = isPlazaVirtualPath(menu.path)
-		? PLAZA_SOURCES.filter((s) =>
-				getSettings().plazaHiddenSources.includes(s.id),
-			)
-		: [];
+	const plazaRootSources = isPlazaRootPath(menu.path)
+		? PLAZA_SOURCES.map((source) => ({
+				source,
+				hidden: getSettings().plazaHiddenSources.includes(source.id),
+			}))
+		: undefined;
 	const targetKey = pathKey(menu.path);
 	const canPasteAtTarget =
 		cutPaths.length > 0 &&
@@ -234,12 +232,11 @@ export function useTreeContextMenu({
 		citingScanBusy,
 		canPasteAtTarget,
 		plazaMenuSource: plazaMenuSource ?? undefined,
-		plazaHiddenSources:
-			plazaHiddenSources.length > 0 ? plazaHiddenSources : undefined,
+		plazaRootSources,
 		onHidePlazaSource: plazaMenuSource
 			? () => hidePlazaSource(plazaMenuSource.id)
 			: undefined,
-		onShowPlazaSource: showPlazaSource,
+		onTogglePlazaSource: togglePlazaSource,
 		onClose: close,
 		onExportLibrary: onExportLibrary
 			? () => {
