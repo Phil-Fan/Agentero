@@ -14,4 +14,5 @@ export {
 	plazaSourceForPath,
 	plazaSourceLabel,
 	plazaTitleForPath,
+	visiblePlazaSources,
 } from "@/lib/plaza/sources";

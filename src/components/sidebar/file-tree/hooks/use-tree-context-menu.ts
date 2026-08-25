@@ -15,6 +15,13 @@ import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { isTauri } from "@/lib/core/tauri";
 import { isPaperDirectory } from "@/lib/paper";
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
+import {
+	isPlazaRootPath,
+	isPlazaVirtualPath,
+	PLAZA_SOURCES,
+	plazaSourceForPath,
+} from "@/lib/plaza";
+import { getSettings, patchSettings } from "@/lib/settings/react-store";
 import { type FileNode, resolveCreateParent } from "@/lib/vault";
 import { openInTerminal, revealInFileManager } from "@/lib/vault/reveal";
 import type { TreeContextMenuPortalProps } from "../tree-context-menu";
@@ -55,6 +62,7 @@ export function useTreeContextMenu({
 	onDiscoverCiting,
 	onEmptyTrash,
 	onOpenPaperNotes,
+	onEditPaperMeta,
 	onStartCreate,
 	onStartRename,
 	onDeletePath,
@@ -78,6 +86,7 @@ export function useTreeContextMenu({
 	onDiscoverCiting?: () => void | Promise<void>;
 	onEmptyTrash?: () => void | Promise<void>;
 	onOpenPaperNotes?: (paperDir: string) => void;
+	onEditPaperMeta?: (paperDir: string) => void;
 	onStartCreate?: (kind: TreeCreateKind, parentPath: string) => void;
 	onStartRename?: (path: string) => void;
 	onDeletePath?: (path: string) => void | Promise<void>;
@@ -96,11 +105,19 @@ export function useTreeContextMenu({
 	const handleContextMenuPath = useCallback(
 		(path: string, event: ReactMouseEvent) => {
 			if (createDraft || renameDraft) return;
-			// Real vault paths + virtual Library (export) / Recycle Bin (empty).
+			// Real vault paths + virtual Library (export) / Recycle Bin (empty) / Plaza (hide/show sources).
 			if (
 				!canRevealPath(path) &&
 				path !== TRASH_VIRTUAL_PATH &&
-				path !== LIBRARY_VIRTUAL_PATH
+				path !== LIBRARY_VIRTUAL_PATH &&
+				!isPlazaVirtualPath(path)
+			) {
+				return;
+			}
+			// Plaza root menu only restores hidden sources — skip when none are hidden.
+			if (
+				isPlazaRootPath(path) &&
+				getSettings().plazaHiddenSources.length === 0
 			) {
 				return;
 			}
@@ -164,6 +181,20 @@ export function useTreeContextMenu({
 		[t],
 	);
 
+	const hidePlazaSource = useCallback((id: string) => {
+		setMenu(null);
+		const current = getSettings().plazaHiddenSources;
+		if (!current.includes(id)) {
+			patchSettings({ plazaHiddenSources: [...current, id] });
+		}
+	}, []);
+
+	// Keep the menu open so several sources can be restored in one go.
+	const showPlazaSource = useCallback((id: string) => {
+		const current = getSettings().plazaHiddenSources;
+		patchSettings({ plazaHiddenSources: current.filter((s) => s !== id) });
+	}, []);
+
 	if (!menu) {
 		return { menuProps: null, revealError, handleContextMenuPath };
 	}
@@ -174,7 +205,17 @@ export function useTreeContextMenu({
 		menuNode?.kind === "directory" &&
 		isPaperDirectory(menuNode.path, menuNode.children);
 	const targetIsVirtual =
-		menu.path === LIBRARY_VIRTUAL_PATH || menu.path === TRASH_VIRTUAL_PATH;
+		menu.path === LIBRARY_VIRTUAL_PATH ||
+		menu.path === TRASH_VIRTUAL_PATH ||
+		isPlazaVirtualPath(menu.path);
+	const plazaMenuSource = isPlazaVirtualPath(menu.path)
+		? plazaSourceForPath(menu.path)
+		: null;
+	const plazaHiddenSources = isPlazaVirtualPath(menu.path)
+		? PLAZA_SOURCES.filter((s) =>
+				getSettings().plazaHiddenSources.includes(s.id),
+			)
+		: [];
 	const targetKey = pathKey(menu.path);
 	const canPasteAtTarget =
 		cutPaths.length > 0 &&
@@ -192,6 +233,13 @@ export function useTreeContextMenu({
 		libraryExportBusy,
 		citingScanBusy,
 		canPasteAtTarget,
+		plazaMenuSource: plazaMenuSource ?? undefined,
+		plazaHiddenSources:
+			plazaHiddenSources.length > 0 ? plazaHiddenSources : undefined,
+		onHidePlazaSource: plazaMenuSource
+			? () => hidePlazaSource(plazaMenuSource.id)
+			: undefined,
+		onShowPlazaSource: showPlazaSource,
 		onClose: close,
 		onExportLibrary: onExportLibrary
 			? () => {
@@ -217,6 +265,13 @@ export function useTreeContextMenu({
 					onOpenPaperNotes(menu.path);
 				}
 			: undefined,
+		onEditMeta:
+			isPaperMenu && onEditPaperMeta
+				? () => {
+						setMenu(null);
+						onEditPaperMeta(menu.path);
+					}
+				: undefined,
 		onAddToChat:
 			!targetIsVirtual && menu.path && !menu.path.startsWith("agentero:")
 				? () => {

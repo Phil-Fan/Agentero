@@ -136,6 +136,15 @@ export function plazaSourceForPath(
 	return PLAZA_SOURCES.find((source) => source.path === path) ?? null;
 }
 
+/** Sources not hidden by the user (`plazaHiddenSources` setting). */
+export function visiblePlazaSources(
+	hiddenIds: readonly string[],
+): PlazaSource[] {
+	if (hiddenIds.length === 0) return [...PLAZA_SOURCES];
+	const hidden = new Set(hiddenIds);
+	return PLAZA_SOURCES.filter((source) => !hidden.has(source.id));
+}
+
 /** Tab title for any Plaza path. */
 export function plazaSourceLabel(source: PlazaSource): string {
 	switch (source.id) {

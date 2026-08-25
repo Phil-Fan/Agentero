@@ -32,6 +32,7 @@ import {
 	libraryStore,
 	refreshLibrary,
 	setCitingScanDraft,
+	setEditMetaDraft,
 	setLibraryIoBusy,
 	setLibraryPapers,
 	setLibraryRescanning,
@@ -47,6 +48,7 @@ import { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout";
 import { getSettings } from "@/lib/settings/react-store";
 import type { FileNode } from "@/lib/vault";
 import { joinVaultPath, readVaultFile } from "@/lib/vault";
+import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 import { getVaultPath, refreshTree, vaultStore } from "@/lib/vault/store";
 import { toVaultRelative } from "@/lib/wiki";
 import { openPaper } from "@/lib/workspace/actions";
@@ -60,6 +62,17 @@ import {
 export function currentLookupParentDir(): string {
 	const { vaultPath, treeSelectedPath, tree } = vaultStore.getState();
 	return resolvePapersParentDir(vaultPath, treeSelectedPath, tree);
+}
+
+/** Open the metadata edit dialog for the paper folder right-clicked in the tree. */
+export function editPaperMetaFromTree(paperDir: string): void {
+	const vaultPath = getVaultPath();
+	if (!vaultPath || isRemoteVaultHandle(vaultPath)) return;
+	const rel = toVaultRelative(vaultPath, paperDir);
+	const meta = rel
+		? libraryStore.getState().paperMetaByRelPath.get(rel)
+		: undefined;
+	if (meta) setEditMetaDraft(meta);
 }
 
 /**

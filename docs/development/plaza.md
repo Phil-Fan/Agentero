@@ -4,6 +4,7 @@
 > 相关：[`../frontend/vault-tree.md`](../frontend/vault-tree.md)、[`../backend/paper-import.md`](../backend/paper-import.md)、[`../backend/index.md`](../backend/index.md)。  
 > 订阅 MVP（已落地）：[`plaza-feeds.md`](plaza-feeds.md)。  
 > 开关：设置 → 通用 → **广场**（`plazaEnabled`，默认开）；关闭后不显示、不加载。
+> 单来源显隐：`plazaHiddenSources`（默认空）。右键来源行 →「在侧栏隐藏」；右键广场父节点列出已隐藏来源逐条恢复（无隐藏时父节点无右键菜单）。侧栏子行与广场首页卡片同步过滤。
 
 ## 0. 产品结论（2026-07-25，2026-08-14 修订）
 
@@ -80,7 +81,7 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 | 位置 | Library 与 Recycle Bin **之下**，真实根目录 **之上** |
 | 父节点 | 单击 → 切换展开/收起并打开广场首页（与文件夹行相同） |
 | 子节点 | 单击 → 对应来源 panel（dockview 虚拟 tab） |
-| 右键 | Cool Papers：可选「在系统浏览器打开 papers.cool」；无删除/拖拽/Finder |
+| 右键 | 来源行：「在侧栏隐藏」（写入 `plazaHiddenSources`）；父节点：列出已隐藏来源逐条恢复；Cool Papers：可选「在系统浏览器打开 papers.cool」；无删除/拖拽/Finder |
 | 禁用 | 拖入拖出、删除、重命名、终端打开 |
 
 **图标（建议）**

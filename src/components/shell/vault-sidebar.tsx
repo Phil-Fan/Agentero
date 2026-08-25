@@ -31,6 +31,7 @@ import {
 	discoverCitingPapers,
 	downloadAllMissingAssets,
 	downloadPaperAssetsAction,
+	editPaperMetaFromTree,
 	libraryExport,
 	libraryImport,
 	paperTagsChange,
@@ -220,6 +221,11 @@ export function VaultSidebar() {
 					paperTreeSortMode={paperTreeSortMode}
 					onReadPaper={readPaper}
 					onOpenPaperNotes={openPaperNotes}
+					onEditPaperMeta={
+						vaultPath && !isRemoteVaultHandle(vaultPath)
+							? editPaperMetaFromTree
+							: undefined
+					}
 					onLoadDirChildren={loadDirChildren}
 				/>
 			</div>

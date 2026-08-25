@@ -1,8 +1,9 @@
-import { Download, Loader2, Radar, Trash2 } from "lucide-react";
+import { Download, Eye, EyeOff, Loader2, Radar, Trash2 } from "lucide-react";
 import { type RefObject, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { ViewportFloating } from "@/components/ui/viewport-floating";
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
+import { type PlazaSource, plazaSourceLabel } from "@/lib/plaza";
 import { formatShortcutById } from "@/lib/shell/shortcuts";
 import { revealInOsLabelKey } from "@/lib/vault/reveal";
 import type { TreeContextMenu } from "./types";
@@ -16,6 +17,12 @@ export type TreeContextMenuPortalProps = {
 	libraryExportBusy: boolean;
 	citingScanBusy: boolean;
 	canPasteAtTarget: boolean;
+	/** Right-clicked Plaza source row — menu offers hiding it. */
+	plazaMenuSource?: PlazaSource;
+	/** Hidden sources listed on the Plaza parent row menu for restoring. */
+	plazaHiddenSources?: PlazaSource[];
+	onHidePlazaSource?: () => void;
+	onShowPlazaSource?: (id: string) => void;
 	onClose: () => void;
 	/** Each callback is optional — `undefined` hides the matching menu item. */
 	onExportLibrary?: () => void;
@@ -23,6 +30,8 @@ export type TreeContextMenuPortalProps = {
 	onDiscoverCiting?: () => void;
 	onEmptyTrash?: () => void;
 	onOpenNotes?: () => void;
+	/** Paper row: open the catalog metadata editor. */
+	onEditMeta?: () => void;
 	/** Add the right-clicked file/paper to the Agent chat as a context chip. */
 	onAddToChat?: () => void;
 	onNewFile?: () => void;
@@ -46,11 +55,16 @@ export function TreeContextMenuPortal({
 	libraryExportBusy,
 	citingScanBusy,
 	canPasteAtTarget,
+	plazaMenuSource,
+	plazaHiddenSources,
+	onHidePlazaSource,
+	onShowPlazaSource,
 	onClose,
 	onExportLibrary,
 	onDiscoverCiting,
 	onEmptyTrash,
 	onOpenNotes,
+	onEditMeta,
 	onAddToChat,
 	onNewFile,
 	onNewFolder,
@@ -171,6 +185,29 @@ export function TreeContextMenuPortal({
 						<span>{t("recycleBin.emptyTrash")}</span>
 					</button>
 				) : null
+			) : plazaMenuSource && onHidePlazaSource ? (
+				<button
+					type="button"
+					role="menuitem"
+					className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+					onClick={onHidePlazaSource}
+				>
+					<EyeOff className="size-3.5 shrink-0" aria-hidden />
+					<span>{t("plaza.hideSource")}</span>
+				</button>
+			) : plazaHiddenSources && plazaHiddenSources.length > 0 ? (
+				plazaHiddenSources.map((source) => (
+					<button
+						key={source.id}
+						type="button"
+						role="menuitem"
+						className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+						onClick={() => onShowPlazaSource?.(source.id)}
+					>
+						<Eye className="size-3.5 shrink-0" aria-hidden />
+						<span>{plazaSourceLabel(source)}</span>
+					</button>
+				))
 			) : (
 				<>
 					{menuCount === 1 && isPaperMenu && onOpenNotes ? (
@@ -181,6 +218,16 @@ export function TreeContextMenuPortal({
 							onClick={onOpenNotes}
 						>
 							<span>{t("fileTree.openNotes")}</span>
+						</button>
+					) : null}
+					{menuCount === 1 && isPaperMenu && onEditMeta ? (
+						<button
+							type="button"
+							role="menuitem"
+							className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+							onClick={onEditMeta}
+						>
+							<span>{t("papersLibrary.rowEditMeta")}</span>
 						</button>
 					) : null}
 					{menuCount === 1 && onAddToChat ? (

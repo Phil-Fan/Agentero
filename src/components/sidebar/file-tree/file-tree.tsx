@@ -17,9 +17,9 @@ import type {
 	PaperTreeSortMode,
 } from "@/lib/paper";
 import {
-	PLAZA_SOURCES,
 	PLAZA_VIRTUAL_PATH,
 	type PlazaSource,
+	visiblePlazaSources,
 } from "@/lib/plaza";
 import type { FileNode } from "@/lib/vault";
 import { useMovePicker } from "./hooks/use-move-picker";
@@ -111,6 +111,8 @@ type FileTreeProps = {
 	onReadPaper?: (paperNode: FileNode) => Promise<void>;
 	/** Paper row context menu: open the paper's NOTES.md in the reading split. */
 	onOpenPaperNotes?: (paperDir: string) => void;
+	/** Paper row context menu: open the catalog metadata editor (local vaults). */
+	onEditPaperMeta?: (paperDir: string) => void;
 	/** Delete a real tree path (file / folder / paper). Parent confirms + performs IO. */
 	onDeletePath?: (path: string) => void | Promise<void>;
 	/** Batch delete multiple real tree paths (one confirm). */
@@ -189,6 +191,7 @@ export const FileTree = memo(
 			paperTreeSortMode = "folder",
 			onReadPaper,
 			onOpenPaperNotes,
+			onEditPaperMeta,
 			onDeletePath,
 			onDeletePaths,
 			onMoveTo,
@@ -204,6 +207,7 @@ export const FileTree = memo(
 	) {
 		const { t } = useTranslation("sidebar");
 		const plazaEnabled = useSettings((s) => s.plazaEnabled);
+		const plazaHiddenSources = useSettings((s) => s.plazaHiddenSources);
 		const containerRef = useRef<HTMLDivElement>(null);
 
 		const {
@@ -235,6 +239,7 @@ export const FileTree = memo(
 			createDraft,
 			vaultPath,
 			plazaEnabled,
+			plazaHiddenSources,
 		});
 
 		const selection = useTreeSelection({
@@ -308,6 +313,7 @@ export const FileTree = memo(
 				onDiscoverCiting,
 				onEmptyTrash,
 				onOpenPaperNotes,
+				onEditPaperMeta,
 				onStartCreate,
 				onStartRename,
 				onDeletePath,
@@ -358,7 +364,7 @@ export const FileTree = memo(
 			<>
 				<PlazaRow expanded={plazaExpanded} />
 				{plazaExpanded
-					? PLAZA_SOURCES.map((source) => (
+					? visiblePlazaSources(plazaHiddenSources).map((source) => (
 							<div key={source.id} className="pl-3">
 								<PlazaSourceRow source={source} />
 							</div>

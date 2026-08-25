@@ -118,6 +118,9 @@ pub struct AppSettings {
     /// Plaza discovery sources in the sidebar. Default on.
     #[serde(default = "default_true")]
     pub plaza_enabled: bool,
+    /// Plaza source ids hidden from the sidebar / Plaza home (right-click toggle).
+    #[serde(default)]
+    pub plaza_hidden_sources: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -269,6 +272,7 @@ impl Default for AppSettings {
             export_watermark_enabled: false,
             telemetry_enabled: default_true(),
             plaza_enabled: default_true(),
+            plaza_hidden_sources: Vec::new(),
         }
     }
 }

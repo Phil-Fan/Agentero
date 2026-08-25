@@ -12,12 +12,13 @@ import { PlazaFeedsView } from "@/components/plaza/plaza-feeds-view";
 import { PlazaSkillsView } from "@/components/plaza/plaza-skills-view";
 import { PlazaWebFrame } from "@/components/plaza/plaza-web-frame";
 import { PLAZA_SOURCE_ICONS } from "@/components/plaza/source-icons";
+import { useSettings } from "@/hooks/use-app-stores";
 import { cn } from "@/lib/core/utils";
 import {
-	PLAZA_SOURCES,
 	type PlazaSource,
 	plazaSourceForPath,
 	plazaSourceLabel,
+	visiblePlazaSources,
 } from "@/lib/plaza";
 
 function SourceCard({
@@ -73,6 +74,7 @@ export function PlazaView({
 	className?: string;
 }) {
 	const { t } = useTranslation("sidebar");
+	const plazaHiddenSources = useSettings((s) => s.plazaHiddenSources);
 	const source = plazaSourceForPath(path);
 	const sourceLabel = source ? plazaSourceLabel(source) : "";
 
@@ -121,7 +123,7 @@ export function PlazaView({
 				{t("plaza.plazaDescription")}
 			</p>
 			<div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-				{PLAZA_SOURCES.map((item) => (
+				{visiblePlazaSources(plazaHiddenSources).map((item) => (
 					<SourceCard key={item.id} source={item} onOpen={onOpenSource} />
 				))}
 			</div>

@@ -12,7 +12,7 @@ import {
 	paperAttachmentsNode,
 	sortFileTreeNodes,
 } from "@/lib/paper";
-import { PLAZA_SOURCES, PLAZA_VIRTUAL_PATH } from "@/lib/plaza";
+import { PLAZA_VIRTUAL_PATH, visiblePlazaSources } from "@/lib/plaza";
 import type { FileNode } from "@/lib/vault";
 import { toVaultRelative } from "@/lib/wiki";
 import {
@@ -180,12 +180,14 @@ export function useTreeRows({
 	createDraft,
 	vaultPath,
 	plazaEnabled,
+	plazaHiddenSources,
 }: {
 	displayNodes: FileNode[];
 	expanded: ReadonlySet<string>;
 	createDraft: TreeCreateDraft | null;
 	vaultPath: string | null;
 	plazaEnabled: boolean;
+	plazaHiddenSources: readonly string[];
 }): TreeRows {
 	const selectableOrder = useMemo(() => {
 		const out: string[] = [];
@@ -211,7 +213,7 @@ export function useTreeRows({
 		if (plazaEnabled) {
 			out.push({ key: "__plaza__", kind: "plaza" });
 			if (expanded.has(PLAZA_VIRTUAL_PATH)) {
-				for (const source of PLAZA_SOURCES) {
+				for (const source of visiblePlazaSources(plazaHiddenSources)) {
 					out.push({
 						key: `__plaza__${source.id}`,
 						kind: "plazaSource",
@@ -258,7 +260,14 @@ export function useTreeRows({
 		};
 		walk(displayNodes, 0);
 		return out;
-	}, [displayNodes, expanded, createDraft, vaultPath, plazaEnabled]);
+	}, [
+		displayNodes,
+		expanded,
+		createDraft,
+		vaultPath,
+		plazaEnabled,
+		plazaHiddenSources,
+	]);
 
 	return { selectableOrder, flatRows };
 }

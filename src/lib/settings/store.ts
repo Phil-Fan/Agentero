@@ -344,6 +344,17 @@ function normalizePartial(
 	if (typeof parsed.plazaEnabled !== "boolean") {
 		merged.plazaEnabled = DEFAULT_SETTINGS.plazaEnabled;
 	}
+	if (!Array.isArray(parsed.plazaHiddenSources)) {
+		merged.plazaHiddenSources = DEFAULT_SETTINGS.plazaHiddenSources;
+	} else {
+		merged.plazaHiddenSources = [
+			...new Set(
+				parsed.plazaHiddenSources.filter(
+					(id): id is string => typeof id === "string",
+				),
+			),
+		];
+	}
 	if (typeof parsed.onboardingDone !== "boolean") {
 		merged.onboardingDone = DEFAULT_SETTINGS.onboardingDone;
 	}

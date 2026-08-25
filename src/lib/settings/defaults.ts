@@ -60,6 +60,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	exportWatermarkEnabled: false,
 	telemetryEnabled: true,
 	plazaEnabled: true,
+	plazaHiddenSources: [],
 	onboardingDone: false,
 	theme: "system",
 	uiTheme: DEFAULT_UI_THEME,

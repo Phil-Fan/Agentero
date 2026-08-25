@@ -142,6 +142,12 @@ export type AppSettings = {
 	 */
 	plazaEnabled: boolean;
 	/**
+	 * Plaza source ids hidden from the sidebar and Plaza home page
+	 * (e.g. `"cool-papers"`). Right-click a source row to hide it, the Plaza
+	 * parent row to restore. Empty = show all sources.
+	 */
+	plazaHiddenSources: string[];
+	/**
 	 * First-run setup wizard completed (welcome → theme → agent →
 	 * translate/layout → create vault / Zotero import). `false` shows the
 	 * onboarding overlay on the main window for fresh installs.

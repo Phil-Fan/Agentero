@@ -150,6 +150,7 @@
 		"openInSystemBrowser": "Open in system browser",
 		"comingSoon": "Coming soon",
 		"comingSoonFor": "{{label}} is coming soon.",
+		"hideSource": "Hide from sidebar",
 		"arxivDescription": "Browse daily arXiv updates and conference papers",
 		"modelscope": "ModelScope Papers",
 		"modelscopeDescription": "Browse ModelScope daily papers and Chinese interpretations",

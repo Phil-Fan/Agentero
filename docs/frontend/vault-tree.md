@@ -8,7 +8,7 @@
 |---|---|---|
 | Library | `agentero:library` | 打开全库表格；右键导出 BibTeX / 发现引用我的新论文 |
 | Recycle Bin | `agentero:trash` | 打开回收站视图；右键清空 |
-| 广场 | `agentero:plaza` | 单击切换展开/收起并打开广场首页（与文件夹行相同）；`Globe` 图标。子来源含 Cool Papers、ModelScope 论文、Skill 推荐与 **订阅** |
+| 广场 | `agentero:plaza` | 单击切换展开/收起并打开广场首页（与文件夹行相同）；`Globe` 图标。子来源含 Cool Papers、ModelScope 论文、Skill 推荐与 **订阅**；右键来源行可隐藏（`plazaHiddenSources`），右键父节点恢复已隐藏来源 |
 
 ## 建树
 
@@ -48,6 +48,7 @@
 | Finder 显示 | 右键 / `⌥⌘R` |
 | 终端打开 | 右键 / `⌥⌘T`（文件夹=自身，文件=父目录） |
 | 删除 | 右键 / `⌘⌫` → 回收站（无确认） |
+| 编辑元数据 | Paper 行右键（仅本地 Vault；查 `paperMetaByRelPath` 打开与 Library 相同的编辑对话框） |
 | 多选拖拽 | ⌘/Shift + 拖到目标文件夹（内部拖动带 `application/x-agentero-vault-paths`，Composer / Library 不抢成图片或 PDF 导入）；拖动时高亮落点夹。论文单元是叶子，拖到论文行 = 落到它的父目录（`dropDirFor`）；两端都在 `papers/` 下走 `paper_move`，否则 `wiki_move` |
 | 外部 PDF | 拖到 `papers/` 组织夹，或拖到中间栏 Library 表（[#309](https://github.com/poco-ai/Agentero/issues/309)） |
 | 折叠 | `⌘←` 选中夹；`⇧⌘←` 折叠至默认 |

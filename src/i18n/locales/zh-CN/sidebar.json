@@ -150,6 +150,7 @@
 		"openInSystemBrowser": "在系统浏览器打开",
 		"comingSoon": "即将推出",
 		"comingSoonFor": "{{label}} 即将推出。",
+		"hideSource": "在侧栏隐藏",
 		"arxivDescription": "浏览 arXiv 日更与会议论文流",
 		"modelscope": "ModelScope 论文",
 		"modelscopeDescription": "浏览魔搭每日读论文与中文解读",
