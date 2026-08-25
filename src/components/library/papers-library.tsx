@@ -14,10 +14,13 @@ import {
 	BookOpen,
 	Download,
 	FileWarning,
+	FolderOpen,
 	ListFilter,
+	MessageSquarePlus,
 	Pencil,
 	RefreshCw,
 	Search,
+	Trash2,
 	X,
 } from "lucide-react";
 import {
@@ -56,8 +59,10 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useDebouncedCallback } from "@/hooks/use-debounce";
+import { broadcastAgentAttachContext } from "@/lib/agent/context-attach";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { logger } from "@/lib/core/logger";
+import { notifyError } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
 import { formatAuthorsShort, type PaperMetadata } from "@/lib/paper";
 import {
@@ -83,7 +88,9 @@ import {
 	useUiScale,
 } from "@/lib/settings";
 import { joinVaultPath } from "@/lib/vault";
+import { trashPathsAndNotify } from "@/lib/vault/actions";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
+import { revealInFileManager, revealInOsLabelKey } from "@/lib/vault/reveal";
 
 export type PapersLibraryProps = {
 	/** Full catalog list (or pre-scoped); further filtered by `scopePath`. */
@@ -1181,6 +1188,10 @@ export function PapersLibrary({
 									const row = rows[vr.index];
 									const p = row.paper;
 									const heat = heatmaps.get(heatmapCacheKey(p));
+									const paperAbsPath =
+										p.path && vaultPath
+											? joinVaultPath(vaultPath, p.path)
+											: null;
 									const cellCtx: CellCtx = {
 										t,
 										onCellCopy,
@@ -1221,6 +1232,41 @@ export function PapersLibrary({
 														<Pencil className="size-3.5" />
 														{t("papersLibrary.rowEditMeta")}
 													</ContextMenuItem>
+												) : null}
+												{paperAbsPath ? (
+													<>
+														<ContextMenuSeparator />
+														<ContextMenuItem
+															onSelect={() =>
+																broadcastAgentAttachContext([paperAbsPath])
+															}
+														>
+															<MessageSquarePlus className="size-3.5" />
+															{t("fileTree.addToChat")}
+														</ContextMenuItem>
+														{canEditMeta ? (
+															<ContextMenuItem
+																onSelect={() => {
+																	void revealInFileManager(paperAbsPath).catch(
+																		() =>
+																			notifyError(t("fileTree.revealFailed")),
+																	);
+																}}
+															>
+																<FolderOpen className="size-3.5" />
+																{t(revealInOsLabelKey())}
+															</ContextMenuItem>
+														) : null}
+														<ContextMenuItem
+															className="text-destructive focus:text-destructive"
+															onSelect={() =>
+																void trashPathsAndNotify([paperAbsPath])
+															}
+														>
+															<Trash2 className="size-3.5" />
+															{t("fileTree.delete")}
+														</ContextMenuItem>
+													</>
 												) : null}
 											</ContextMenuContent>
 										</ContextMenu>
