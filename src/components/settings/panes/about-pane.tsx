@@ -1,7 +1,9 @@
 import { getVersion } from "@tauri-apps/api/app";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { appLogDir } from "@tauri-apps/api/path";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import {
 	Download,
+	FolderOpen,
 	LoaderCircle,
 	RefreshCw,
 	Star,
@@ -117,6 +119,16 @@ export function AboutPane() {
 		void openUrl(url).catch(() =>
 			notifyError(t("about.cli.openReleaseFailed")),
 		);
+	};
+	const onOpenLogFolder = () => {
+		void appLogDir()
+			.then((dir) => openPath(dir))
+			.catch((err) => {
+				console.error("open log folder failed", err);
+				notifyError(t("about.logs.openFailed"), {
+					description: err instanceof Error ? err.message : String(err),
+				});
+			});
 	};
 
 	const cliDescription = (() => {
@@ -290,6 +302,25 @@ export function AboutPane() {
 							/>
 						</div>
 					) : null}
+				</SettingsGroup>
+			) : null}
+			{isTauri() ? (
+				<SettingsGroup>
+					<SettingsRow
+						label={
+							<span className="inline-flex items-center gap-1.5">
+								<FolderOpen
+									className="size-3.5 shrink-0 text-muted-foreground"
+									aria-hidden
+								/>
+								{t("about.logs.label")}
+							</span>
+						}
+					>
+						<Button variant="outline" size="sm" onClick={onOpenLogFolder}>
+							{t("about.logs.open")}
+						</Button>
+					</SettingsRow>
 				</SettingsGroup>
 			) : null}
 		</>

@@ -16,6 +16,10 @@
 		"core:webview:allow-create-webview-window",
 		"core:webview:allow-get-all-webviews",
 		"opener:default",
+		{
+			"identifier": "opener:allow-open-path",
+			"allow": [{ "path": "$APPLOG" }]
+		},
 		"fs:default",
 		"fs:allow-read-dir",
 		"fs:allow-read-file",

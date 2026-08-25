@@ -501,6 +501,11 @@
 		"title": "About",
 		"starGithub": "Star us on GitHub",
 		"version": "Version {{version}}",
+		"logs": {
+			"label": "Logs",
+			"open": "Open log folder",
+			"openFailed": "Couldn't open the log folder."
+		},
 		"update": {
 			"idle": "Check for the latest Agentero release",
 			"unsupported": "Updates are available in installed desktop builds",
