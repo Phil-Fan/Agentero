@@ -16,6 +16,7 @@ use crate::features::layout_remote::{
 };
 use async_trait::async_trait;
 use base64::Engine;
+use reqwest::StatusCode;
 use serde_json::{json, Value};
 use std::io::Read;
 use std::time::{Duration, Instant};
@@ -93,14 +94,18 @@ fn resolve_target(credentials: &ProviderCredentials) -> Result<(String, String),
     Ok((base, format!("Bearer {api_key}")))
 }
 
-/// MinerU top-level `code` may be a number (`0`, `-500`, `-10008`) or a
-/// string (`"A0202"`); canonicalize for matching.
+/// MinerU top-level `code` may be a number (`0`, `-500`, `-10002`) or a
+/// string (`"A0202"`); newer API versions use `msgCode` for auth errors.
+/// Canonicalize for matching.
 fn mineru_code(body: &Value) -> String {
-    match body.get("code") {
-        Some(Value::Number(n)) => n.to_string(),
-        Some(Value::String(s)) => s.trim().to_string(),
-        _ => String::new(),
+    for key in ["code", "msgCode"] {
+        match body.get(key) {
+            Some(Value::Number(n)) => return n.to_string(),
+            Some(Value::String(s)) => return s.trim().to_string(),
+            _ => {}
+        }
     }
+    String::new()
 }
 
 fn mineru_msg(body: &Value) -> String {
@@ -567,22 +572,10 @@ pub(crate) async fn run_mineru_extract(
 }
 
 /// Probe outcome for the settings connectivity check.
-#[derive(Debug, PartialEq, Eq)]
-enum ProbeOutcome {
-    /// The API understood the request under this token (`0` accepted,
-    /// `-500` rejected only the params — the empty `files` list).
-    TokenValid,
-    TokenInvalid(String),
-    Other(String),
-}
-
-fn classify_probe_response(body: &Value) -> ProbeOutcome {
-    let code = mineru_code(body);
-    match code.as_str() {
-        "0" | "-500" => ProbeOutcome::TokenValid,
-        c if is_token_error_code(c) => ProbeOutcome::TokenInvalid(code),
-        _ => ProbeOutcome::Other(format!("{code}: {}", mineru_msg(body))),
-    }
+/// A non-auth business response (currently `-10002 file list is empty`)
+/// proves the token was authenticated; token error codes or HTTP 401 do not.
+fn probe_token_valid(body: &Value, status: StatusCode) -> bool {
+    !is_token_error_code(&mineru_code(body)) && status != StatusCode::UNAUTHORIZED
 }
 
 /// Connectivity probe: send a minimal (invalid-params) batch request; a
@@ -611,20 +604,18 @@ async fn probe(
         let snippet = http::http_err_snippet(&text);
         AppError::message(format!("MinerU probe failed (HTTP {status}): {snippet}"))
     })?;
-    match classify_probe_response(&value) {
-        ProbeOutcome::TokenValid => Ok(LayoutRemoteProbeResult {
-            job_id: value
-                .get("trace_id")
-                .and_then(Value::as_str)
-                .unwrap_or("mineru-probe-ok")
-                .to_string(),
-        }),
-        ProbeOutcome::TokenInvalid(code) => Err(AppError::message(format!(
+    if probe_token_valid(&value, status) {
+        let job_id = ["traceId", "trace_id"]
+            .iter()
+            .find_map(|k| value.get(*k).and_then(Value::as_str))
+            .unwrap_or("mineru-probe-ok")
+            .to_string();
+        Ok(LayoutRemoteProbeResult { job_id })
+    } else {
+        let code = mineru_code(&value);
+        Err(AppError::message(format!(
             "MinerU probe failed: invalid API token ({code})"
-        ))),
-        ProbeOutcome::Other(detail) => {
-            Err(AppError::message(format!("MinerU probe failed ({detail})")))
-        }
+        )))
     }
 }
 
@@ -786,29 +777,26 @@ mod tests {
 
     #[test]
     fn classifies_probe_responses() {
-        let ok: Value = serde_json::from_str(r#"{"code":0,"msg":"ok"}"#).unwrap();
-        assert_eq!(classify_probe_response(&ok), ProbeOutcome::TokenValid);
-        let param_err: Value = serde_json::from_str(r#"{"code":-500,"msg":"参数错误"}"#).unwrap();
-        assert_eq!(
-            classify_probe_response(&param_err),
-            ProbeOutcome::TokenValid
-        );
+        let ok = StatusCode::OK;
+        let unauthorized = StatusCode::UNAUTHORIZED;
+        let param_err: Value =
+            serde_json::from_str(r#"{"code":-10002,"msg":"file list is empty"}"#).unwrap();
+        assert!(probe_token_valid(&param_err, ok));
+        let success: Value = serde_json::from_str(r#"{"code":0,"msg":"ok"}"#).unwrap();
+        assert!(probe_token_valid(&success, ok));
         let bad_token: Value =
             serde_json::from_str(r#"{"code":"A0202","msg":"Token 错误"}"#).unwrap();
-        assert_eq!(
-            classify_probe_response(&bad_token),
-            ProbeOutcome::TokenInvalid("A0202".to_string())
-        );
+        assert!(!probe_token_valid(&bad_token, ok));
         let expired: Value =
             serde_json::from_str(r#"{"code":"A0211","msg":"Token 已过期"}"#).unwrap();
-        assert_eq!(
-            classify_probe_response(&expired),
-            ProbeOutcome::TokenInvalid("A0211".to_string())
-        );
-        let quota: Value = serde_json::from_str(r#"{"code":-10008,"msg":"文件超限"}"#).unwrap();
-        assert_eq!(
-            classify_probe_response(&quota),
-            ProbeOutcome::Other("-10008: 文件超限".to_string())
-        );
+        assert!(!probe_token_valid(&expired, ok));
+        // Newer API returns `msgCode` with HTTP 401 for auth failures.
+        let msg_code: Value = serde_json::from_str(
+            r#"{"traceId":"a","msgCode":"A0211","msg":"user token expired","success":false}"#,
+        )
+        .unwrap();
+        assert!(!probe_token_valid(&msg_code, unauthorized));
+        let bare_401: Value = serde_json::from_str(r#"{"success":false}"#).unwrap();
+        assert!(!probe_token_valid(&bare_401, unauthorized));
     }
 }
