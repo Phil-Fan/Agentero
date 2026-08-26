@@ -99,13 +99,6 @@ export type CrossrefPreviewState = {
 	image: PromptImage | null;
 };
 
-export type EditorState = {
-	screen: ScreenPoint;
-	pageIndex: number;
-	id: string;
-	comment: string;
-};
-
 export type VisualDraftEditorState = {
 	screen: ScreenPoint;
 	page: number;
@@ -123,6 +116,8 @@ export type PageAnnotationComment = {
 	pageIndex: number;
 	/** Normalized Y anchor on the page (0-1) used for initial placement. */
 	anchorY: number;
+	/** Normalized rects covering the highlighted text / visual region. */
+	rects: PdfAskNormalizedRect[];
 	quote: string;
 	comment: string;
 	color: HighlightColor;
@@ -132,8 +127,8 @@ export type PageAnnotationComment = {
 };
 
 /**
- * In-place comment-rail edit (Notion-style). Used instead of the floating
- * AnnotationEditor when the host is wide enough for the rail.
+ * In-place comment-rail edit (Notion-style). All highlight / visual notes edit
+ * here; there is no floating note editor fallback.
  */
 export type RailEditState = {
 	id: string;
@@ -143,4 +138,6 @@ export type RailEditState = {
 	quote: string;
 	color: HighlightColor;
 	anchorY: number;
+	/** Normalized rects covering the highlighted text / visual region. */
+	rects: PdfAskNormalizedRect[];
 };

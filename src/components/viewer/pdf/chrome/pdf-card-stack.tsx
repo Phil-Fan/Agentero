@@ -1,5 +1,4 @@
 import { createPortal } from "react-dom";
-import { AnnotationEditor } from "@/components/viewer/pdf/cards/annotation-editor";
 import { AskPopover } from "@/components/viewer/pdf/cards/ask-popover";
 import {
 	type CitationPreviewImportMenu,
@@ -14,7 +13,6 @@ import type {
 	CardScreenPoint,
 	CitationPreviewState,
 	CrossrefPreviewState,
-	EditorState,
 	SelectionMenuState,
 	VisualDraftEditorState,
 } from "@/components/viewer/pdf/types";
@@ -93,12 +91,6 @@ type PdfCardStackProps = {
 		onHide: () => void;
 		onDelete: () => void;
 	};
-	editor: {
-		state: EditorState | null;
-		onSave: (text: string) => void;
-		onClose: () => void;
-		onDelete: () => void;
-	};
 };
 
 /**
@@ -116,7 +108,6 @@ export function PdfCardStack({
 	ask,
 	visualTrace,
 	translate,
-	editor,
 }: PdfCardStackProps) {
 	if (typeof document === "undefined") return null;
 
@@ -215,18 +206,6 @@ export function PdfCardStack({
 					onOpenSettings={translate.onOpenSettings}
 					onHide={translate.onHide}
 					onDelete={translate.onDelete}
-					onPointerEnter={onCardHoverEnter}
-					onPointerLeave={onCardHoverLeave}
-				/>
-			) : null}
-
-			{editor.state ? (
-				<AnnotationEditor
-					screen={editor.state.screen}
-					initialComment={editor.state.comment}
-					onSave={editor.onSave}
-					onClose={editor.onClose}
-					onDelete={editor.onDelete}
 					onPointerEnter={onCardHoverEnter}
 					onPointerLeave={onCardHoverLeave}
 				/>

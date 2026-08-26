@@ -1,27 +1,18 @@
 /**
  * The 批注 note editor for a text highlight or visual note.
  *
- * Wide host: edit in place on the right-rail comment card (Notion-style).
- * Narrow host / gutter pin: the floating AnnotationEditor card. The
- * annotations panel and a gutter pin both open it by annotation id, so it
- * reads the annotation straight from the plugin scope and claims the shared
- * hover surface so a pin leave cannot close it mid-edit.
+ * Comments always edit in-place on the right-rail comment card (Notion-style).
+ * The annotations panel and rail cards open it by annotation id, so it reads
+ * the annotation straight from the plugin scope.
  */
 
 import type { useAnnotationCapability } from "@embedpdf/plugin-annotation/react";
-import {
-	type Dispatch,
-	type RefObject,
-	type SetStateAction,
-	useCallback,
-	useState,
-} from "react";
-import { pageElByIndex, rectRightScreen } from "@/components/viewer/pdf/coords";
+import { useCallback, useState } from "react";
 import type {
-	EditorState,
 	PageAnnotationComment,
 	RailEditState,
 } from "@/components/viewer/pdf/types";
+import type { PdfAskNormalizedRect } from "@/lib/pdf/ask";
 import {
 	highlightColorOf,
 	highlightQuoteOf,
@@ -36,15 +27,10 @@ export type UsePdfNoteEditorOptions = {
 	docId: string;
 	/** EmbedPDF capability; owned by `PdfViewerInner` (plugin context). */
 	annotationCap: AnnotationCapabilityProvides;
-	hostRef: RefObject<HTMLDivElement | null>;
-	zoomRef: RefObject<number>;
-	/** When true, prefer in-place rail edit over the floating editor. */
-	commentRailEnabled: boolean;
 	/** Normalized Y of a highlight (0–1) for a pending rail card. */
 	anchorYForHighlight: (id: string) => number;
-	/** Cards cluster: opening claims the hover surface, like `openCard` does. */
-	cancelHoverHide: () => void;
-	cardHoverSurfaceRef: RefObject<boolean>;
+	/** Normalized rects of a highlight for hover emphasis; empty when unknown. */
+	rectsForHighlight: (id: string) => PdfAskNormalizedRect[];
 	/** Highlights cluster writers. */
 	updateHighlightComment: (
 		pageIndex: number,
@@ -58,43 +44,31 @@ export type UsePdfNoteEditorOptions = {
 };
 
 export type PdfNoteEditor = {
-	editor: EditorState | null;
-	/** In-place rail edit; null when idle or using the floating editor. */
+	/** In-place rail edit; null when idle. */
 	railEdit: RailEditState | null;
-	/** Open for a highlight that was just created from the selection menu. */
-	setEditor: Dispatch<SetStateAction<EditorState | null>>;
 	/** Open the rail editor (new note from the selection menu, or a rail card). */
 	beginRailEdit: (state: RailEditState) => void;
-	/** Open for an existing highlight (annotations panel row or gutter pin). */
+	/** Open for an existing highlight. */
 	openEditorForAnnotation: (id: string) => void;
-	closeEditor: () => void;
 	closeRailEdit: () => void;
-	saveEditor: (text: string) => void;
 	saveRailEdit: (comment: PageAnnotationComment, text: string) => void;
-	/** Header delete: remove the highlight and close. */
-	deleteEditorAnnotation: () => void;
+	/** Delete a highlight / visual note from its comment-rail card. */
 	deleteRailComment: (comment: PageAnnotationComment) => void;
 };
 
 export function usePdfNoteEditor({
 	docId,
 	annotationCap,
-	hostRef,
-	zoomRef,
-	commentRailEnabled,
 	anchorYForHighlight,
-	cancelHoverHide,
-	cardHoverSurfaceRef,
+	rectsForHighlight,
 	updateHighlightComment,
 	deleteHighlightAnnotation,
 	updateVisualComment,
 	deleteVisualTraceById,
 }: UsePdfNoteEditorOptions): PdfNoteEditor {
-	const [editor, setEditor] = useState<EditorState | null>(null);
 	const [railEdit, setRailEdit] = useState<RailEditState | null>(null);
 
 	const beginRailEdit = useCallback((state: RailEditState) => {
-		setEditor(null);
 		setRailEdit((current) => (current?.id === state.id ? current : state));
 	}, []);
 
@@ -106,55 +80,24 @@ export function usePdfNoteEditor({
 				?.forDocument(docId)
 				.getAnnotationById(id)?.object;
 			if (!obj || !isHighlightObject(obj)) return;
-			const comment = obj.contents?.trim() ?? "";
-			if (commentRailEnabled) {
-				beginRailEdit({
-					id,
-					pageIndex: obj.pageIndex,
-					kind: "highlight",
-					comment,
-					quote: highlightQuoteOf(obj),
-					color: highlightColorOf(obj),
-					anchorY: anchorYForHighlight(id),
-				});
-				return;
-			}
-			const pageEl = pageElByIndex(hostRef.current, obj.pageIndex);
-			if (!pageEl) return;
-			// Same sticky-hover contract as openCard — pin leave must not close
-			// the note editor while the user is moving onto / into the modal.
-			cancelHoverHide();
-			cardHoverSurfaceRef.current = true;
-			setRailEdit(null);
-			setEditor({
-				screen: rectRightScreen(pageEl, obj.rect, zoomRef.current),
-				pageIndex: obj.pageIndex,
+			beginRailEdit({
 				id,
-				comment,
+				pageIndex: obj.pageIndex,
+				kind: "highlight",
+				comment: obj.contents?.trim() ?? "",
+				quote: highlightQuoteOf(obj),
+				color: highlightColorOf(obj),
+				anchorY: anchorYForHighlight(id),
+				rects: rectsForHighlight(id),
 			});
 		},
 		[
 			annotationCap,
 			docId,
-			commentRailEnabled,
 			beginRailEdit,
 			anchorYForHighlight,
-			cancelHoverHide,
-			cardHoverSurfaceRef,
-			hostRef,
-			zoomRef,
+			rectsForHighlight,
 		],
-	);
-
-	const closeEditor = useCallback(() => setEditor(null), []);
-
-	const saveEditor = useCallback(
-		(text: string) => {
-			if (!editor) return;
-			updateHighlightComment(editor.pageIndex, editor.id, text);
-			setEditor(null);
-		},
-		[editor, updateHighlightComment],
 	);
 
 	const saveRailEdit = useCallback(
@@ -169,12 +112,6 @@ export function usePdfNoteEditor({
 		[updateHighlightComment, updateVisualComment],
 	);
 
-	const deleteEditorAnnotation = useCallback(() => {
-		if (!editor) return;
-		deleteHighlightAnnotation(editor.pageIndex, editor.id);
-		setEditor(null);
-	}, [editor, deleteHighlightAnnotation]);
-
 	const deleteRailComment = useCallback(
 		(comment: PageAnnotationComment) => {
 			if (comment.kind === "visual") {
@@ -188,16 +125,11 @@ export function usePdfNoteEditor({
 	);
 
 	return {
-		editor,
 		railEdit,
-		setEditor,
 		beginRailEdit,
 		openEditorForAnnotation,
-		closeEditor,
 		closeRailEdit,
-		saveEditor,
 		saveRailEdit,
-		deleteEditorAnnotation,
 		deleteRailComment,
 	};
 }
@@ -213,5 +145,6 @@ export function railEditFromComment(
 		quote: comment.quote,
 		color: comment.color,
 		anchorY: comment.anchorY,
+		rects: comment.rects,
 	};
 }

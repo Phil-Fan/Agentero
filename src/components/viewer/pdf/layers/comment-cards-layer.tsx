@@ -21,10 +21,7 @@ import {
 import type { PageAnnotationComment } from "@/components/viewer/pdf/types";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 import { cn } from "@/lib/core/utils";
-import {
-	swatchBorderClass,
-	swatchColorClass,
-} from "@/lib/pdf/highlight/palette";
+import { swatchColorClass } from "@/lib/pdf/highlight/palette";
 
 /** Card width in CSS px — also the gutter width reserved on the viewport. */
 export const COMMENT_CARD_WIDTH_PX = 224;
@@ -35,8 +32,6 @@ const COMMENT_RAIL_BLEED_PX = 4;
 /** Viewport right padding that keeps the rail clear of horizontal scroll. */
 export const COMMENT_RAIL_WIDTH_PX =
 	COMMENT_CARD_WIDTH_PX + COMMENT_CARD_GAP_PX + COMMENT_RAIL_BLEED_PX;
-/** Hosts narrower than this fall back to the in-page annotate gutter pins. */
-export const COMMENT_RAIL_MIN_HOST_WIDTH = 640;
 
 const CARD_GAP_PX = 8;
 /** text-xs leading-relaxed ≈ 12px × 1.625. */
@@ -61,12 +56,16 @@ type CommentCardsLayerProps = {
 	editingId: string | null;
 	/** Resolvable wiki target; copy buttons only render when set. */
 	wikiTarget: string | null;
+	/** Id of the card currently being hovered; null when idle. */
+	hoveredId: string | null;
 	onOpen: (comment: PageAnnotationComment) => void;
 	onSave: (comment: PageAnnotationComment, text: string) => void;
 	onCancel: () => void;
 	onDelete: (comment: PageAnnotationComment) => void;
 	onCopyLink: (comment: PageAnnotationComment) => void;
 	onCopyEmbed: (comment: PageAnnotationComment) => void;
+	onHover: (comment: PageAnnotationComment) => void;
+	onLeave: () => void;
 };
 
 export type CommentCardPlacement = {
@@ -75,7 +74,7 @@ export type CommentCardPlacement = {
 	heightPx: number;
 };
 
-/** Visual line count after clamping (quote: 2, comment: view 3 / edit 12). */
+/** Visual line count after clamping (comment: view 3 / edit 12). */
 function clampedLines(text: string, max: number): number {
 	let lines = 0;
 	for (const raw of text.split("\n")) {
@@ -85,21 +84,18 @@ function clampedLines(text: string, max: number): number {
 	return Math.max(1, lines);
 }
 
-/** Conservative card height estimate from clamped quote/comment lines. */
+/** Conservative card height estimate from clamped comment lines. */
 export function estimateCommentCardHeight(
 	item: PageAnnotationComment,
 	editing = false,
 ): number {
-	const quoteLines = item.quote.trim() ? clampedLines(item.quote, 2) : 0;
 	const commentLines = editing
 		? Math.max(
 				EDIT_MIN_COMMENT_LINES,
 				clampedLines(item.comment, EDIT_MAX_COMMENT_LINES),
 			)
 		: clampedLines(item.comment, VIEW_COMMENT_LINES);
-	return (
-		CARD_BASE_HEIGHT_PX + (quoteLines + commentLines) * CARD_LINE_HEIGHT_PX
-	);
+	return CARD_BASE_HEIGHT_PX + commentLines * CARD_LINE_HEIGHT_PX;
 }
 
 /**
@@ -153,12 +149,15 @@ type CommentCardProps = {
 	heightPx: number;
 	editing: boolean;
 	wikiTarget: string | null;
+	hovered: boolean;
 	onOpen: (comment: PageAnnotationComment) => void;
 	onSave: (comment: PageAnnotationComment, text: string) => void;
 	onCancel: () => void;
 	onDelete: (comment: PageAnnotationComment) => void;
 	onCopyLink: (comment: PageAnnotationComment) => void;
 	onCopyEmbed: (comment: PageAnnotationComment) => void;
+	onHover: (comment: PageAnnotationComment) => void;
+	onLeave: () => void;
 };
 
 const CommentCard = memo(function CommentCard({
@@ -167,12 +166,15 @@ const CommentCard = memo(function CommentCard({
 	heightPx,
 	editing,
 	wikiTarget,
+	hovered,
 	onOpen,
 	onSave,
 	onCancel,
 	onDelete,
 	onCopyLink,
 	onCopyEmbed,
+	onHover,
+	onLeave,
 }: CommentCardProps) {
 	const { t } = useTranslation("viewer");
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -224,8 +226,12 @@ const CommentCard = memo(function CommentCard({
 	return (
 		<div
 			className={cn(
-				"group pointer-events-auto absolute rounded-lg bg-background/95 shadow-sm ring-1 backdrop-blur-sm",
-				editing ? "z-[6] ring-2 ring-ring/50" : "ring-border/60",
+				"group pointer-events-auto absolute rounded-lg bg-background/95 shadow-sm ring-1 backdrop-blur-sm transition-all duration-200 ease-out hover:z-[7] hover:scale-[1.02] hover:shadow-md",
+				editing
+					? "z-[6] ring-2 ring-ring/50"
+					: hovered
+						? "z-[6] ring-2 ring-primary/40 shadow-md"
+						: "ring-border/60",
 			)}
 			style={{
 				left: `calc(100% + ${COMMENT_CARD_GAP_PX}px)`,
@@ -234,6 +240,8 @@ const CommentCard = memo(function CommentCard({
 				height: editing ? undefined : heightPx,
 				minHeight: heightPx,
 			}}
+			onPointerEnter={() => onHover(item)}
+			onPointerLeave={onLeave}
 		>
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: blur/pointer isolation for the in-place editor */}
 			<div
@@ -267,16 +275,6 @@ const CommentCard = memo(function CommentCard({
 								aria-hidden
 							/>
 						)}
-						{item.quote.trim() ? (
-							<blockquote
-								className={cn(
-									"mt-1.5 line-clamp-2 border-l-2 pl-2 text-muted-foreground/90 text-xs leading-relaxed",
-									swatchBorderClass(item.color),
-								)}
-							>
-								{item.quote}
-							</blockquote>
-						) : null}
 						<textarea
 							ref={textareaRef}
 							className="mt-1 max-h-60 w-full resize-none bg-transparent p-0 text-[13px] text-foreground/80 leading-relaxed outline-none placeholder:text-muted-foreground/70"
@@ -336,16 +334,6 @@ const CommentCard = memo(function CommentCard({
 								aria-hidden
 							/>
 						)}
-						{item.quote.trim() ? (
-							<blockquote
-								className={cn(
-									"mt-1.5 line-clamp-2 border-l-2 pl-2 text-muted-foreground/90 text-xs leading-relaxed",
-									swatchBorderClass(item.color),
-								)}
-							>
-								{item.quote}
-							</blockquote>
-						) : null}
 						<p
 							className={cn(
 								"mt-1 line-clamp-3 whitespace-pre-wrap break-words text-[13px] leading-relaxed",
@@ -438,12 +426,15 @@ export const CommentCardsLayer = memo(function CommentCardsLayer({
 	pageHeightPx,
 	editingId,
 	wikiTarget,
+	hoveredId,
 	onOpen,
 	onSave,
 	onCancel,
 	onDelete,
 	onCopyLink,
 	onCopyEmbed,
+	onHover,
+	onLeave,
 }: CommentCardsLayerProps) {
 	if (!items.length) return null;
 
@@ -464,12 +455,15 @@ export const CommentCardsLayer = memo(function CommentCardsLayer({
 							heightPx={pos.heightPx}
 							editing={item.id === editingId}
 							wikiTarget={wikiTarget}
+							hovered={item.id === hoveredId}
 							onOpen={onOpen}
 							onSave={onSave}
 							onCancel={onCancel}
 							onDelete={onDelete}
 							onCopyLink={onCopyLink}
 							onCopyEmbed={onCopyEmbed}
+							onHover={onHover}
+							onLeave={onLeave}
 						/>
 					);
 				})}

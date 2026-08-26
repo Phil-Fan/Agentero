@@ -99,6 +99,8 @@ export type PdfPageMarksSlice = {
 	commentWikiTarget: string | null;
 	citationLinks: ReadonlyMap<number, PdfLinkAnnoObject[]>;
 	activeCardId: string | null;
+	/** Id of the comment-rail card currently being hovered; null when idle. */
+	hoveredCommentId: string | null;
 };
 
 /** Layout-analysis derived overlays (hover targets, debug boxes, translations). */
@@ -155,6 +157,10 @@ export type PdfPageHandlers = {
 	onCopyCommentLink: (comment: PageAnnotationComment) => void;
 	/** Copy the comment card's `![[target@id]]` embed. */
 	onCopyCommentEmbed: (comment: PageAnnotationComment) => void;
+	/** Hover enters a comment-rail card. */
+	onHoverComment: (comment: PageAnnotationComment) => void;
+	/** Hover leaves a comment-rail card. */
+	onLeaveComment: () => void;
 };
 
 export type PdfPageLayersProps = {
@@ -629,17 +635,38 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 					onEnter={handlers.onCardHoverEnter}
 					onLeave={handlers.onCardHoverLeave}
 				/>
+				{/* Hover emphasis overlay for the comment-rail card under the cursor. */}
+				{(() => {
+					const hovered = comments.find((c) => c.id === marks.hoveredCommentId);
+					if (!hovered) return null;
+					return hovered.rects.map((rect) => (
+						<div
+							key={`comment-hover-${hovered.id}-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
+							className="pointer-events-none absolute z-[4] rounded-[1px] bg-primary/20 transition-opacity duration-200 dark:bg-primary/30"
+							style={{
+								left: `${rect.x * 100}%`,
+								top: `${rect.y * 100}%`,
+								width: `${rect.w * 100}%`,
+								height: `${rect.h * 100}%`,
+							}}
+							aria-hidden="true"
+						/>
+					));
+				})()}
 				<CommentCardsLayer
 					items={comments}
 					pageHeightPx={height}
 					editingId={marks.editingCommentId}
 					wikiTarget={marks.commentWikiTarget}
+					hoveredId={marks.hoveredCommentId}
 					onOpen={handlers.onOpenComment}
 					onSave={handlers.onSaveComment}
 					onCancel={handlers.onCancelComment}
 					onDelete={handlers.onDeleteComment}
 					onCopyLink={handlers.onCopyCommentLink}
 					onCopyEmbed={handlers.onCopyCommentEmbed}
+					onHover={handlers.onHoverComment}
+					onLeave={handlers.onLeaveComment}
 				/>
 			</PagePointerProvider>
 		</div>

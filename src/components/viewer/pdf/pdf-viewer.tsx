@@ -44,15 +44,7 @@ import {
 	ZoomMode,
 	ZoomPluginPackage,
 } from "@embedpdf/plugin-zoom/react";
-import {
-	memo,
-	useCallback,
-	useEffect,
-	useLayoutEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
 import { PdfBottomBar } from "@/components/viewer/pdf/chrome/pdf-bottom-bar";
@@ -63,7 +55,7 @@ import { PdfLeftToolbar } from "@/components/viewer/pdf/chrome/pdf-left-toolbar"
 import { PdfOutlinePanel } from "@/components/viewer/pdf/chrome/pdf-outline-panel";
 import { PdfReferencesPanel } from "@/components/viewer/pdf/chrome/pdf-references-panel";
 import { PdfToolbar } from "@/components/viewer/pdf/chrome/pdf-toolbar";
-import { pageElByIndex, rectRightScreen } from "@/components/viewer/pdf/coords";
+
 import { usePdfEngineContext } from "@/components/viewer/pdf/engine-provider";
 import { usePdfAskThreads } from "@/components/viewer/pdf/hooks/use-pdf-ask-threads";
 import { usePdfCards } from "@/components/viewer/pdf/hooks/use-pdf-cards";
@@ -91,10 +83,7 @@ import { usePdfVisualDraft } from "@/components/viewer/pdf/hooks/use-pdf-visual-
 import { usePdfVisualMarks } from "@/components/viewer/pdf/hooks/use-pdf-visual-marks";
 import { usePdfZoomControls } from "@/components/viewer/pdf/hooks/use-pdf-zoom-controls";
 import { useStableDerived } from "@/components/viewer/pdf/hooks/use-stable-derived";
-import {
-	COMMENT_RAIL_MIN_HOST_WIDTH,
-	COMMENT_RAIL_WIDTH_PX,
-} from "@/components/viewer/pdf/layers/comment-cards-layer";
+import { COMMENT_RAIL_WIDTH_PX } from "@/components/viewer/pdf/layers/comment-cards-layer";
 import {
 	type PdfPageHandlers,
 	PdfPageLayers,
@@ -511,24 +500,6 @@ function PdfViewerInner({
 
 	const hostRef = useRef<HTMLDivElement>(null);
 
-	/**
-	 * Host width drives the comment-rail fallback: narrow split views keep the
-	 * in-page annotate gutter pins instead of the right-edge comment cards.
-	 * Measured in a layout effect so the first paint already picks a mode.
-	 */
-	const [hostWidth, setHostWidth] = useState(0);
-	useLayoutEffect(() => {
-		const host = hostRef.current;
-		if (!host) return;
-		const measure = () => setHostWidth(host.clientWidth);
-		measure();
-		const observer = new ResizeObserver(measure);
-		observer.observe(host);
-		return () => observer.disconnect();
-	}, []);
-	const commentRailEnabled =
-		hostWidth === 0 || hostWidth >= COMMENT_RAIL_MIN_HOST_WIDTH;
-
 	// ---- Text selection → floating action menu ----
 	// Placed after hostRef/zoomRef: the hook anchors the menu against the page
 	// element and needs both refs injected.
@@ -595,7 +566,6 @@ function PdfViewerInner({
 		hideActiveCard,
 		placeActiveCard,
 		rePlaceActiveCardOnScroll,
-		cancelHoverHide,
 		markCardHoverEnter,
 		scheduleHoverHide,
 		cardHoverSurfaceRef,
@@ -694,6 +664,7 @@ function PdfViewerInner({
 
 	const [showReferences, setShowReferences] = useState(false);
 	const [showFigures, setShowFigures] = useState(false);
+	const [hoveredCommentId, setHoveredCommentId] = useState<string | null>(null);
 
 	const handleToggleOutline = useCallback(() => {
 		if (showReferences) setShowReferences(false);
@@ -817,39 +788,25 @@ function PdfViewerInner({
 			if (!comment) continue;
 			const anchor = highlightAnchors.get(highlight.id);
 			if (!anchor) continue;
-			// Wide host: persistent comment rail outside the page's right edge;
-			// narrow host: fall back to the in-page annotate gutter pin.
-			if (commentRailEnabled) {
-				const entry: PageAnnotationComment = {
-					id: highlight.id,
-					pageIndex: highlight.page - 1,
-					anchorY: anchor.y,
-					quote: highlight.quote,
-					comment,
-					color: normalizeHighlightColor(highlight.color),
-					kind: "highlight",
-					linkAlias:
-						annotationWikilinkAlias(
-							paperTitle,
-							annotationSnippet({ comment, quote: highlight.quote }),
-						) ?? null,
-				};
-				const list = comments.get(highlight.page);
-				if (list) list.push(entry);
-				else comments.set(highlight.page, [entry]);
-				continue;
-			}
-			const pageText = pageTextMap.get(highlight.page - 1);
-			const pin = pinFromRects([anchor], pageText);
-			add(highlight.page, {
+			// Highlight notes always live in the right-edge comment rail.
+			const entry: PageAnnotationComment = {
 				id: highlight.id,
-				kind: "annotate",
-				x: pin.x,
-				y: pin.y,
-				preview: comment,
-				overText: pinObscuresBodyText(pin, pageText),
-				side: pin.side,
-			});
+				pageIndex: highlight.page - 1,
+				anchorY: anchor.y,
+				rects: highlight.rects,
+				quote: highlight.quote,
+				comment,
+				color: normalizeHighlightColor(highlight.color),
+				kind: "highlight",
+				linkAlias:
+					annotationWikilinkAlias(
+						paperTitle,
+						annotationSnippet({ comment, quote: highlight.quote }),
+					) ?? null,
+			};
+			const list = comments.get(highlight.page);
+			if (list) list.push(entry);
+			else comments.set(highlight.page, [entry]);
 		}
 		for (const anchor of askPinAnchors) {
 			const pageText = pageTextMap.get(anchor.page - 1);
@@ -883,12 +840,13 @@ function PdfViewerInner({
 			const hasAgent = Boolean(trace.agent);
 			const note = trace.comment.trim();
 			// Note-only visual marks (and visual marks that already have a
-			// comment) live in the rail when the host is wide enough.
-			if (commentRailEnabled && (!hasAgent || note)) {
+			// comment) live in the comment rail.
+			if (!hasAgent || note) {
 				const entry: PageAnnotationComment = {
 					id: trace.id,
 					pageIndex: trace.page - 1,
 					anchorY: trace.rects[0]?.y ?? 0,
+					rects: trace.rects,
 					quote: "",
 					comment: trace.comment,
 					color: DEFAULT_HIGHLIGHT_COLOR,
@@ -926,7 +884,6 @@ function PdfViewerInner({
 		translatePinAnchors,
 		visualTraces,
 		pageTextMap,
-		commentRailEnabled,
 		paperTitle,
 	]);
 
@@ -1127,7 +1084,6 @@ function PdfViewerInner({
 		resolvePdfAskAgent,
 		visualDraftEditor,
 		closeVisualDraftEditor,
-		commentRailEnabled,
 	});
 	resetVisualCardChromeRef.current = resetVisualCardChrome;
 
@@ -1137,38 +1093,34 @@ function PdfViewerInner({
 	);
 
 	const {
-		editor,
 		railEdit,
-		setEditor,
 		beginRailEdit,
 		openEditorForAnnotation,
-		closeEditor,
 		closeRailEdit,
-		saveEditor,
 		saveRailEdit,
-		deleteEditorAnnotation,
 		deleteRailComment,
 	} = usePdfNoteEditor({
 		docId,
 		annotationCap,
-		hostRef,
-		zoomRef,
-		commentRailEnabled,
 		anchorYForHighlight,
-		cancelHoverHide,
-		cardHoverSurfaceRef,
+		rectsForHighlight: useCallback(
+			(id: string) => {
+				const rect = highlightAnchors.get(id);
+				return rect ? [rect] : [];
+			},
+			[highlightAnchors],
+		),
 		updateHighlightComment,
 		deleteHighlightAnnotation,
 		updateVisualComment,
 		deleteVisualTraceById,
 	});
 	closeEditorRef.current = () => {
-		closeEditor();
 		closeRailEdit();
 	};
 
 	const commentsByPage = useMemo(() => {
-		if (!railEdit || !commentRailEnabled) return commentsByPageBase;
+		if (!railEdit) return commentsByPageBase;
 		const page = railEdit.pageIndex + 1;
 		const existing = commentsByPageBase.get(page);
 		if (existing?.some((c) => c.id === railEdit.id)) return commentsByPageBase;
@@ -1179,6 +1131,7 @@ function PdfViewerInner({
 				id: railEdit.id,
 				pageIndex: railEdit.pageIndex,
 				anchorY: railEdit.anchorY,
+				rects: railEdit.rects,
 				quote: railEdit.quote,
 				comment: railEdit.comment,
 				color: railEdit.color,
@@ -1187,7 +1140,7 @@ function PdfViewerInner({
 			},
 		]);
 		return next;
-	}, [commentsByPageBase, railEdit, commentRailEnabled]);
+	}, [commentsByPageBase, railEdit]);
 
 	const focusedVisualRegion = useMemo(() => {
 		if (railEdit?.kind !== "visual") return null;
@@ -1254,37 +1207,23 @@ function PdfViewerInner({
 		setSelectionMenu(null);
 		selectionCap?.clear(docId);
 		if (!first || !anchorPage) return;
-		if (commentRailEnabled) {
-			beginRailEdit({
-				id: first.id,
-				pageIndex: first.pageIndex,
-				kind: "highlight",
-				comment: "",
-				quote,
-				color: DEFAULT_HIGHLIGHT_COLOR,
-				anchorY: selectionMenu.anchor.rects[0]?.y ?? 0,
-			});
-			return;
-		}
-		const pageEl = pageElByIndex(hostRef.current, anchorPage.pageIndex);
-		if (pageEl) {
-			setEditor({
-				screen: rectRightScreen(pageEl, anchorPage.rect, zoomRef.current),
-				pageIndex: first.pageIndex,
-				id: first.id,
-				comment: "",
-			});
-		}
+		beginRailEdit({
+			id: first.id,
+			pageIndex: first.pageIndex,
+			kind: "highlight",
+			comment: "",
+			quote,
+			color: DEFAULT_HIGHLIGHT_COLOR,
+			anchorY: selectionMenu.anchor.rects[0]?.y ?? 0,
+			rects: selectionMenu.anchor.rects,
+		});
 	}, [
 		selectionMenu,
 		createHighlights,
 		selectionCap,
 		docId,
 		setSelectionMenu,
-		setEditor,
 		beginRailEdit,
-		commentRailEnabled,
-		zoomRef,
 	]);
 
 	const handleCopy = useCallback(() => {
@@ -1435,6 +1374,7 @@ function PdfViewerInner({
 			commentWikiTarget,
 			citationLinks,
 			activeCardId: activeCard?.id ?? null,
+			hoveredCommentId,
 		}),
 		[
 			activeAskAnchor,
@@ -1450,6 +1390,7 @@ function PdfViewerInner({
 			commentWikiTarget,
 			citationLinks,
 			activeCard?.id,
+			hoveredCommentId,
 		],
 	);
 
@@ -1536,6 +1477,8 @@ function PdfViewerInner({
 			onDeleteComment: deleteRailComment,
 			onCopyCommentLink: handleCopyCommentLink,
 			onCopyCommentEmbed: handleCopyCommentEmbed,
+			onHoverComment: (comment) => setHoveredCommentId(comment.id),
+			onLeaveComment: () => setHoveredCommentId(null),
 		}),
 		[
 			handleOpenPin,
@@ -1651,7 +1594,7 @@ function PdfViewerInner({
 			<DockviewViewport
 				documentId={docId}
 				hostRef={hostRef}
-				rightGutter={commentRailEnabled ? COMMENT_RAIL_WIDTH_PX : 0}
+				rightGutter={COMMENT_RAIL_WIDTH_PX}
 				className="agentero-scroll-both min-h-0 min-w-0 flex-1"
 			>
 				<WheelZoomHandler docId={docId} />
@@ -1744,12 +1687,6 @@ function PdfViewerInner({
 					onOpenSettings: openTranslateSettings,
 					onHide: hideActiveCard,
 					onDelete: deleteTranslateCard,
-				}}
-				editor={{
-					state: editor,
-					onSave: saveEditor,
-					onClose: closeEditor,
-					onDelete: deleteEditorAnnotation,
 				}}
 			/>
 

@@ -88,11 +88,6 @@ export type UsePdfVisualMarksOptions = {
 	 */
 	visualDraftEditor: VisualDraftEditorState | null;
 	closeVisualDraftEditor: () => void;
-	/**
-	 * Wide host: persist the note into the comment rail instead of opening
-	 * the floating visual-trace card after a draft save.
-	 */
-	commentRailEnabled: boolean;
 };
 
 export type PdfVisualMarks = {
@@ -138,7 +133,6 @@ export function usePdfVisualMarks({
 	resolvePdfAskAgent,
 	visualDraftEditor,
 	closeVisualDraftEditor,
-	commentRailEnabled,
 }: UsePdfVisualMarksOptions): PdfVisualMarks {
 	const { t } = useTranslation("viewer");
 	const [visualError, setVisualError] = useState<string | null>(null);
@@ -152,7 +146,7 @@ export function usePdfVisualMarks({
 
 	/**
 	 * Save from the region editor: note-only visual mark (no Agent thread).
-	 * Same UX as text 批注备注 — open the pin in note mode.
+	 * Same UX as text 批注备注 — it lives in the right-edge comment rail.
 	 */
 	const handleVisualDraftSave = useCallback(
 		(comment: string) => {
@@ -182,11 +176,7 @@ export function usePdfVisualMarks({
 					notifyError(errorText(error));
 				});
 			}
-			if (commentRailEnabled) return;
-			setVisualCardExpanded(false);
-			cardScreenRef.current = draft.screen;
-			setCardScreen(draft.screen);
-			openCard({ kind: "visual", id: mark.id });
+			// Note-only visual marks render in the comment rail, not as a pin card.
 		},
 		[
 			visualDraftEditor,
@@ -194,10 +184,6 @@ export function usePdfVisualMarks({
 			paperAbsPath,
 			closeVisualDraftEditor,
 			upsertVisualTrace,
-			openCard,
-			cardScreenRef,
-			setCardScreen,
-			commentRailEnabled,
 		],
 	);
 
