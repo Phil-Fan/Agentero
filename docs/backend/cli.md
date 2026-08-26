@@ -129,7 +129,7 @@ agentero paper tag set papers/demo "nlp:green" "must-read:orange"
 
 只有合法颜色后缀会被解析为颜色；例如 `owner:alice` 仍是普通 Tag 名称。
 
-`@zotero:` 是 Connector 内部标签，默认不参与论文列表筛选和 Tag 汇总；需要包含它们时传 `--all`：
+`@zotero:`（Connector）和 `@arxiv:`（arXiv 学科分类，如 `Computer Science - Machine Learning`）是内部标签，默认不参与论文列表筛选和 Tag 汇总；需要包含它们时传 `--all`：
 
 ```bash
 agentero paper list --tag topic

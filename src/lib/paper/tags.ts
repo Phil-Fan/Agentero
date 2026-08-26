@@ -9,14 +9,54 @@ export type { PaperTag, PaperTagInput } from "@/lib/paper/types";
 
 /** Internal tags retained for provenance but omitted from user-facing tag UI. */
 export const CONNECTOR_TAG_PREFIX = "@zotero:";
+export const ARXIV_TAG_PREFIX = "@arxiv:";
+
+/** Zotero arXiv translator `"Archive - Sub-Field"` subject labels. */
+const ARXIV_CATEGORY_PREFIXES = [
+	"computer science - ",
+	"economics - ",
+	"electrical engineering and systems science - ",
+	"mathematics - ",
+	"nonlinear sciences - ",
+	"physics - ",
+	"quantitative finance - ",
+	"statistics - ",
+	"astrophysics - ",
+	"condensed matter - ",
+	"quantitative biology - ",
+	"high energy physics - ",
+] as const;
 
 export function isConnectorTagName(name: string): boolean {
 	return name.trim().toLocaleLowerCase().startsWith(CONNECTOR_TAG_PREFIX);
 }
 
+export function isArxivTagName(name: string): boolean {
+	return name.trim().toLocaleLowerCase().startsWith(ARXIV_TAG_PREFIX);
+}
+
+/** Unprefixed arXiv subject tags already stored in older catalogs. */
+export function isArxivCategoryLabel(name: string): boolean {
+	const lower = name.trim().toLocaleLowerCase();
+	if (!lower) return false;
+	return ARXIV_CATEGORY_PREFIXES.some((prefix) => lower.startsWith(prefix));
+}
+
+export function isInternalTagName(name: string): boolean {
+	return (
+		isConnectorTagName(name) ||
+		isArxivTagName(name) ||
+		isArxivCategoryLabel(name)
+	);
+}
+
 export function isVisiblePaperTag(tag: PaperTagInput): boolean {
 	const name = typeof tag === "string" ? tag : tag?.name;
-	return typeof name === "string" && !isConnectorTagName(name);
+	return (
+		typeof name === "string" &&
+		name.trim().length > 0 &&
+		!isInternalTagName(name)
+	);
 }
 
 export function visiblePaperTags(tags: readonly PaperTagInput[]): PaperTag[] {

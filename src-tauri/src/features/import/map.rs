@@ -1,6 +1,7 @@
 //! Map Translator (Zotero API JSON) / arXiv Atom → PaperMeta.
 
 use crate::core::error::AppError;
+use crate::features::catalog::papers::hide_arxiv_category_tag;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -214,7 +215,8 @@ pub fn map_zotero_item(item: &Value) -> Result<PaperMeta, AppError> {
                     t.get("tag")
                         .and_then(|v| v.as_str())
                         .or_else(|| t.as_str())
-                        .map(|s| s.to_string())
+                        .map(hide_arxiv_category_tag)
+                        .filter(|s| !s.is_empty())
                 })
                 .collect()
         })
@@ -734,11 +736,24 @@ mod tests {
             "libraryCatalog": "arXiv.org",
             "repository": "arXiv",
             "url": "http://arxiv.org/abs/1706.03762",
-            "DOI": "10.48550/arXiv.1706.03762"
+            "DOI": "10.48550/arXiv.1706.03762",
+            "tags": [
+                {"tag": "Computer Science - Machine Learning"},
+                {"tag": "Computer Science - Computation and Language"},
+                {"tag": "survey"}
+            ]
         });
         let mut meta = map_zotero_item(&item).expect("map");
         enrich_remote_urls(&mut meta);
         assert_eq!(meta.arxiv_id.as_deref(), Some("1706.03762"));
+        assert_eq!(
+            meta.tags,
+            vec![
+                "@arxiv:Computer Science - Machine Learning".to_string(),
+                "@arxiv:Computer Science - Computation and Language".to_string(),
+                "survey".to_string()
+            ]
+        );
         assert_eq!(
             meta.pdf_url.as_deref(),
             Some("https://arxiv.org/pdf/1706.03762")

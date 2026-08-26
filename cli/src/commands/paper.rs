@@ -29,7 +29,7 @@ pub enum PaperCmd {
         /// Filter by status field.
         #[arg(long = "status")]
         status: Option<String>,
-        /// Include internal `@zotero:` tags in filtering and output.
+        /// Include internal `@zotero:` / `@arxiv:` tags in filtering and output.
         #[arg(long = "all")]
         all: bool,
         /// JSON: emit full PaperRecord rows (default: only id/path/title).
@@ -49,7 +49,7 @@ pub enum PaperCmd {
         /// Vault-relative path or paper id.
         #[arg(value_hint = ValueHint::DirPath)]
         r#ref: String,
-        /// Include internal `@zotero:` tags in output.
+        /// Include internal `@zotero:` / `@arxiv:` tags in output.
         #[arg(long = "all")]
         all: bool,
     },
@@ -105,7 +105,7 @@ pub enum PaperCmd {
 pub enum TagCmd {
     /// List unique tags in the catalog with counts (and colors when set).
     List {
-        /// Include internal `@zotero:` tags.
+        /// Include internal `@zotero:` / `@arxiv:` tags.
         #[arg(long = "all")]
         all: bool,
     },
@@ -251,7 +251,7 @@ fn list(
     }
     if !include_all {
         for row in &mut rows {
-            row.tags.retain(|t| !is_connector_tag(&t.name));
+            row.tags.retain(|t| !papers::is_internal_tag_name(&t.name));
         }
     }
     if let Some(st) = status.map(str::trim).filter(|s| !s.is_empty()) {
@@ -402,7 +402,7 @@ fn list_tags(globals: &GlobalOpts, include_all: bool) -> Result<Value, CliError>
     let vault = resolve_vault(globals)?;
     let pairs = papers::list_all_tags(&vault)?
         .into_iter()
-        .filter(|t| include_all || !is_connector_tag(&t.name))
+        .filter(|t| include_all || !papers::is_internal_tag_name(&t.name))
         .collect::<Vec<_>>();
     let items: Vec<TagCountOut> = pairs
         .into_iter()
@@ -442,7 +442,9 @@ fn get(globals: &GlobalOpts, ref_: &str, include_all: bool) -> Result<Value, Cli
 
     let mut display_paper = paper.clone();
     if !include_all {
-        display_paper.tags.retain(|t| !is_connector_tag(&t.name));
+        display_paper
+            .tags
+            .retain(|t| !papers::is_internal_tag_name(&t.name));
     }
     let data = PaperGetData {
         paper: display_paper,
@@ -637,7 +639,7 @@ fn set_tags(
         paper
             .tags
             .iter()
-            .filter(|tag| is_connector_tag(&tag.name))
+            .filter(|tag| papers::is_internal_tag_name(&tag.name))
             .cloned()
             .chain(parsed_tags)
             .collect()
@@ -717,10 +719,6 @@ fn parse_tag_spec(raw: &str) -> Result<PaperTag, CliError> {
         });
     }
     Ok(PaperTag::new(value))
-}
-
-fn is_connector_tag(name: &str) -> bool {
-    name.trim().to_ascii_lowercase().starts_with("@zotero:")
 }
 
 async fn download(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {

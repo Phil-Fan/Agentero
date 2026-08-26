@@ -23,6 +23,29 @@ const PAPER_COLUMNS: &str = "\
     publisher, place, series, language, zotero_item_type, meta_source, extra, \
     is_read, zotero_item_id, zotero_last_synced";
 
+/// Prefix for Connector provenance tags (hidden from user-facing tag UI).
+pub const ZOTERO_INTERNAL_TAG_PREFIX: &str = "@zotero:";
+/// Prefix for arXiv subject-class tags imported from Translator.
+pub const ARXIV_INTERNAL_TAG_PREFIX: &str = "@arxiv:";
+
+/// Zotero arXiv translator writes `"Archive - Sub-Field"` subject tags
+/// (`cs.LG` → `Computer Science - Machine Learning`). These prefixes match
+/// that display form so we can hide them without a full category table.
+const ARXIV_CATEGORY_PREFIXES: &[&str] = &[
+    "computer science - ",
+    "economics - ",
+    "electrical engineering and systems science - ",
+    "mathematics - ",
+    "nonlinear sciences - ",
+    "physics - ",
+    "quantitative finance - ",
+    "statistics - ",
+    "astrophysics - ",
+    "condensed matter - ",
+    "quantitative biology - ",
+    "high energy physics - ",
+];
+
 /// One catalog tag: display name + optional color id.
 /// JSON: bare string when uncolored; `{"name","color"}` when colored.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +72,49 @@ impl From<&str> for PaperTag {
 impl From<String> for PaperTag {
     fn from(s: String) -> Self {
         PaperTag::new(s)
+    }
+}
+
+/// Internal provenance tags (`@zotero:`, `@arxiv:`) plus legacy unprefixed
+/// arXiv subject labels. Omitted from Library / Paper Info / CLI unless `--all`.
+pub fn is_internal_tag_name(name: &str) -> bool {
+    let n = name.trim();
+    if n.is_empty() {
+        return false;
+    }
+    let lower = n.to_ascii_lowercase();
+    lower.starts_with(ZOTERO_INTERNAL_TAG_PREFIX)
+        || lower.starts_with(ARXIV_INTERNAL_TAG_PREFIX)
+        || is_arxiv_category_label(n)
+}
+
+/// Translator-style arXiv subject tag, e.g. `Computer Science - Machine Learning`.
+pub fn is_arxiv_category_label(name: &str) -> bool {
+    let lower = name.trim().to_ascii_lowercase();
+    if lower.is_empty() {
+        return false;
+    }
+    ARXIV_CATEGORY_PREFIXES
+        .iter()
+        .any(|prefix| lower.starts_with(prefix))
+}
+
+/// Store an arXiv subject tag as hidden provenance (`@arxiv:…`).
+/// Already-internal names are left unchanged.
+pub fn hide_arxiv_category_tag(name: &str) -> String {
+    let n = name.trim();
+    if n.is_empty() {
+        return String::new();
+    }
+    let lower = n.to_ascii_lowercase();
+    if lower.starts_with(ZOTERO_INTERNAL_TAG_PREFIX) || lower.starts_with(ARXIV_INTERNAL_TAG_PREFIX)
+    {
+        return n.to_string();
+    }
+    if is_arxiv_category_label(n) {
+        format!("{ARXIV_INTERNAL_TAG_PREFIX}{n}")
+    } else {
+        n.to_string()
     }
 }
 
@@ -1451,6 +1517,29 @@ mod tests {
         assert!(update_meta(&dir, "papers/missing", &PaperMetaPatch::default()).is_err());
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn internal_arxiv_tags_are_hidden() {
+        assert!(is_internal_tag_name("@zotero:imported"));
+        assert!(is_internal_tag_name(
+            "@arxiv:Computer Science - Machine Learning"
+        ));
+        assert!(is_internal_tag_name("Computer Science - Machine Learning"));
+        assert!(is_internal_tag_name("Statistics - Machine Learning"));
+        assert!(is_arxiv_category_label("High Energy Physics - Theory"));
+        assert!(!is_internal_tag_name("survey"));
+        assert!(!is_arxiv_category_label("Machine Learning"));
+        assert_eq!(
+            hide_arxiv_category_tag("Computer Science - Machine Learning"),
+            "@arxiv:Computer Science - Machine Learning"
+        );
+        assert_eq!(hide_arxiv_category_tag("survey"), "survey");
+        assert_eq!(hide_arxiv_category_tag("@arxiv:cs.LG"), "@arxiv:cs.LG");
+        assert_eq!(
+            hide_arxiv_category_tag("@zotero:Computer Science - Machine Learning"),
+            "@zotero:Computer Science - Machine Learning"
+        );
     }
 
     #[test]

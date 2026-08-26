@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
 	coercePaperTags,
+	isArxivCategoryLabel,
 	isConnectorTagName,
+	isInternalTagName,
 	normalizePaperTags,
 	visiblePaperTags,
 } from "@/lib/paper/tags";
@@ -48,6 +50,25 @@ describe("tag colors", () => {
 		expect(visiblePaperTags(["survey", "@zotero:machine learning"])).toEqual([
 			{ name: "survey" },
 		]);
+	});
+
+	it("hides arXiv subject tags as internal provenance", () => {
+		expect(isArxivCategoryLabel("Computer Science - Machine Learning")).toBe(
+			true,
+		);
+		expect(isArxivCategoryLabel("Machine Learning")).toBe(false);
+		expect(
+			isInternalTagName("@arxiv:Computer Science - Machine Learning"),
+		).toBe(true);
+		expect(isInternalTagName("Computer Science - Machine Learning")).toBe(true);
+		expect(
+			visiblePaperTags([
+				"survey",
+				"Computer Science - Machine Learning",
+				"@arxiv:Statistics - Machine Learning",
+				"@zotero:imported",
+			]),
+		).toEqual([{ name: "survey" }]);
 	});
 
 	it("returns chip styles only for valid colors", () => {

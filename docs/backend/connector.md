@@ -20,7 +20,7 @@ Host 在 **`127.0.0.1:23119`** 模拟 Zotero 桌面 Connector HTTP，官方浏�
 - `connector:item-saved` 只在初次 finalizer 得到稳定路径后发出；前端随后刷新并打开该路径，
   现有 open/reconcile 流程再按需启动 backend parser。Connector 本身不主动解析。
 - Connector 返回的 Zotero 标签会以 `@zotero:` 前缀保存在 catalog 中，用于保留来源信息；
-  这类内部标签不会显示在 Library、Paper Info 或标签筛选中。
+  arXiv 学科分类标签则走 `@arxiv:`。两类内部标签都不会显示在 Library、Paper Info 或标签筛选中。
 - 远程：stage 后 SFTP；catalog 经 work mirror。
 - PDF 保存失败会通过 `connector:progress` 报错，但仍无条件进入 finalizer，使已有 paper
   壳和资源到达 `desired_parent`。移动失败时保留 `desired_parent`；错误与回滚语义沿用共享

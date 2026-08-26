@@ -4,6 +4,7 @@ use super::state::ProgressItem;
 use crate::core::error::AppError;
 use crate::core::fs::WriteOpts;
 use crate::features::catalog::papers;
+use crate::features::catalog::papers::is_internal_tag_name;
 use crate::features::connector::ConnectorController;
 use crate::features::import::{
     enrich_remote_urls, ensure_paper_assets_with_cookies, map_zotero_item, normalize_parent_dir,
@@ -368,7 +369,7 @@ pub async fn move_paper_folder_remote(
 fn connector_paper_meta(item: &Value, page_uri: Option<&str>) -> Result<PaperMeta, AppError> {
     let mut meta = map_zotero_item(item)?;
     for tag in &mut meta.tags {
-        if !tag.is_empty() && !tag.starts_with(ZOTERO_INTERNAL_TAG_PREFIX) {
+        if !tag.is_empty() && !is_internal_tag_name(tag) {
             *tag = format!("{ZOTERO_INTERNAL_TAG_PREFIX}{tag}");
         }
     }
@@ -934,6 +935,27 @@ mod tests {
             vec![
                 "@zotero:survey".to_string(),
                 "@zotero:machine learning".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn arxiv_category_tags_stay_arxiv_internal() {
+        let item = json!({
+            "itemType": "preprint",
+            "title": "Attention Is All You Need",
+            "url": "https://arxiv.org/abs/1706.03762",
+            "tags": [
+                {"tag": "Computer Science - Machine Learning"},
+                {"tag": "survey"}
+            ]
+        });
+        let meta = connector_paper_meta(&item, None).expect("map");
+        assert_eq!(
+            meta.tags,
+            vec![
+                "@arxiv:Computer Science - Machine Learning".to_string(),
+                "@zotero:survey".to_string()
             ]
         );
     }

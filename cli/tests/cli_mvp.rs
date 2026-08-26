@@ -452,7 +452,7 @@ fn paper_crud_catalog_only() {
     set_tags_json(
         &vault,
         "papers/demo",
-        r#"["nlp","draft",{"name":"@zotero:imported"}]"#,
+        r#"["nlp","draft",{"name":"@zotero:imported"},{"name":"Computer Science - Machine Learning"}]"#,
     );
     let hidden = agentero()
         .args([
@@ -491,6 +491,43 @@ fn paper_crud_catalog_only() {
     let all: Value = serde_json::from_slice(&all).unwrap();
     assert_eq!(all["data"].as_array().unwrap().len(), 1);
 
+    let arxiv_hidden = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "list",
+            "--tag",
+            "Computer Science - Machine Learning",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let arxiv_hidden: Value = serde_json::from_slice(&arxiv_hidden).unwrap();
+    assert!(arxiv_hidden["data"].as_array().unwrap().is_empty());
+
+    let arxiv_all = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "list",
+            "--tag",
+            "Computer Science - Machine Learning",
+            "--all",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let arxiv_all: Value = serde_json::from_slice(&arxiv_all).unwrap();
+    assert_eq!(arxiv_all["data"].as_array().unwrap().len(), 1);
+
     let tags_idx = agentero()
         .args([
             "--vault",
@@ -513,6 +550,12 @@ fn paper_crud_catalog_only() {
     assert!(items
         .iter()
         .any(|it| { it["tag"].as_str() == Some("draft") && it["count"].as_u64() == Some(1) }));
+    assert!(!items
+        .iter()
+        .any(|it| it["tag"].as_str() == Some("Computer Science - Machine Learning")));
+    assert!(!items
+        .iter()
+        .any(|it| it["tag"].as_str() == Some("@zotero:imported")));
 
     // clear requires --clear (empty args alone is a usage error)
     agentero()

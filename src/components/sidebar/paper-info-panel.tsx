@@ -41,7 +41,7 @@ import { arxivUrls } from "@/lib/paper/arxiv";
 import { setEditMetaDraft } from "@/lib/paper/library-store";
 import {
 	coercePaperTags,
-	isConnectorTagName,
+	isVisiblePaperTag,
 	normalizePaperTags,
 	type PaperTag,
 	visiblePaperTags,
@@ -230,7 +230,7 @@ function TagsEditor({
 	const list = visiblePaperTags(allTags);
 
 	const commit = async (next: PaperTag[]) => {
-		const hidden = allTags.filter((tag) => isConnectorTagName(tag.name));
+		const hidden = allTags.filter((tag) => !isVisiblePaperTag(tag));
 		const normalized = normalizePaperTags([...hidden, ...next]);
 		setBusy(true);
 		try {
