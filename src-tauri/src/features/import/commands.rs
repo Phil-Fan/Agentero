@@ -276,6 +276,25 @@ pub async fn paper_resolve_identifier(
         .unwrap_or_else(|| super::DEFAULT_TRANSLATOR_BASE_URL.to_string());
     match super::pdf_recognize::resolve_identifier_full(&args.text, &base, None).await {
         Ok((mut meta, _used_translator)) => {
+            // Best-effort venue fallback: Translator sometimes returns metadata
+            // without a publication title. Ask title search for a venue before
+            // giving up.
+            if meta
+                .publication
+                .as_deref()
+                .map(|s| s.trim().is_empty())
+                .unwrap_or(true)
+            {
+                if let Ok(candidates) = super::title_search::search_papers(&args.text, 1).await {
+                    if let Some(candidate) = candidates.first() {
+                        if let Some(venue) =
+                            candidate.venue.clone().filter(|s| !s.trim().is_empty())
+                        {
+                            meta.publication = Some(venue);
+                        }
+                    }
+                }
+            }
             super::enrich_remote_urls(&mut meta);
             op.finish_ok();
             ApiResult::ok(meta)
