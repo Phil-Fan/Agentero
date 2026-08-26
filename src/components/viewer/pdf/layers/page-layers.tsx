@@ -42,7 +42,10 @@ import type { PageAnnotationComment } from "@/components/viewer/pdf/types";
 import { cn } from "@/lib/core/utils";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
-import type { HighlightColor } from "@/lib/pdf/highlight/palette";
+import {
+	type HighlightColor,
+	highlightHoverOverlayColor,
+} from "@/lib/pdf/highlight/palette";
 import {
 	isLayoutRegionActivation,
 	LAYOUT_HINT_MIN_REGION_H_PX,
@@ -642,12 +645,13 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 					return hovered.rects.map((rect) => (
 						<div
 							key={`comment-hover-${hovered.id}-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
-							className="pointer-events-none absolute z-[4] rounded-[1px] bg-primary/20 transition-opacity duration-200 dark:bg-primary/30"
+							className="pointer-events-none absolute z-[4] rounded-[1px] transition-opacity duration-200"
 							style={{
 								left: `${rect.x * 100}%`,
 								top: `${rect.y * 100}%`,
 								width: `${rect.w * 100}%`,
 								height: `${rect.h * 100}%`,
+								backgroundColor: highlightHoverOverlayColor(hovered.color),
 							}}
 							aria-hidden="true"
 						/>

@@ -78,3 +78,8 @@ export function swatchColorClass(color: HighlightColor): string {
 export function swatchBorderClass(color: HighlightColor): string {
 	return BORDER[color];
 }
+
+/** Hover emphasis overlay color matching a highlight color (30% alpha). */
+export function highlightHoverOverlayColor(color: HighlightColor): string {
+	return `${HIGHLIGHT_HEX[color]}4D`;
+}
