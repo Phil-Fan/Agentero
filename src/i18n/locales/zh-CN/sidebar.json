@@ -115,7 +115,6 @@
 		"colAuthors": "作者",
 		"colYear": "年份",
 		"colTags": "标签",
-		"colType": "类型",
 		"colId": "标识符",
 		"colPublication": "出版物",
 		"heatmapTooltip": "{{total}} 次 · 高亮 {{highlights}} · 对话 {{asks}} · 翻译 {{translates}}",

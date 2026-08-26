@@ -115,7 +115,6 @@
 		"colAuthors": "Authors",
 		"colYear": "Year",
 		"colTags": "Tags",
-		"colType": "Type",
 		"colId": "ID",
 		"colPublication": "Publication",
 		"heatmapTooltip": "{{total}} events · {{highlights}} highlights · {{asks}} asks · {{translates}} translations",

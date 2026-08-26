@@ -177,7 +177,7 @@ function buildPaperRow(p: PaperMetadata): PaperRow {
 			title: (p.title ?? "").toLocaleLowerCase(),
 			authors: (p.authors?.[0] ?? "").toLocaleLowerCase(),
 			year: p.year ?? Number.NEGATIVE_INFINITY,
-			type: (p.type ?? "").toLocaleLowerCase(),
+			publication: (p.publication ?? "").toLocaleLowerCase(),
 			id: id.toLocaleLowerCase(),
 			tags: tags
 				.map((t) => t.name)
@@ -372,18 +372,6 @@ const COLUMN_META = {
 						</span>
 					</ReadingTitleHeat>
 				</CopyCellButton>
-				{p.publication ? (
-					<CopyCellButton
-						copyText={p.publication}
-						labelKey="papersLibrary.colPublication"
-						ctx={ctx}
-						className="mt-0.5 block w-full text-left text-muted-foreground text-xs"
-					>
-						<span className="line-clamp-1" title={p.publication}>
-							{p.publication}
-						</span>
-					</CopyCellButton>
-				) : null}
 			</td>
 		),
 	},
@@ -429,6 +417,24 @@ const COLUMN_META = {
 			</CopyTd>
 		),
 	},
+	publication: {
+		labelKey: "papersLibrary.colPublication",
+		widthWeight: 14,
+		headerClassName: "min-w-[120px]",
+		render: (p, ctx) => (
+			<CopyTd
+				tdClassName="min-w-0 max-w-0 overflow-hidden px-3 py-2.5 text-muted-foreground text-xs"
+				copyText={p.publication || null}
+				labelKey="papersLibrary.colPublication"
+				ctx={ctx}
+				buttonClassName="block w-full text-left"
+			>
+				<span className="line-clamp-1" title={p.publication ?? undefined}>
+					{p.publication || "—"}
+				</span>
+			</CopyTd>
+		),
+	},
 	tags: {
 		labelKey: "papersLibrary.colTags",
 		widthWeight: 18,
@@ -458,22 +464,6 @@ const COLUMN_META = {
 				</td>
 			);
 		},
-	},
-	type: {
-		labelKey: "papersLibrary.colType",
-		widthWeight: 10,
-		headerClassName: "min-w-24",
-		render: (p, ctx) => (
-			<CopyTd
-				tdClassName="whitespace-nowrap px-3 py-2.5 text-muted-foreground text-xs capitalize"
-				copyText={p.type || null}
-				labelKey="papersLibrary.colType"
-				ctx={ctx}
-				buttonClassName="px-0.5"
-			>
-				{p.type || "—"}
-			</CopyTd>
-		),
 	},
 	id: {
 		labelKey: "papersLibrary.colId",
