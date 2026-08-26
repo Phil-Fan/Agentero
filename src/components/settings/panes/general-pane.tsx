@@ -24,10 +24,17 @@ import {
 } from "@/components/ui/tooltip";
 import { useTauriEvent } from "@/hooks/use-tauri-event";
 import { clearUsage } from "@/lib/activity";
+import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { errorText } from "@/lib/core/error";
 import { invokeApi } from "@/lib/core/ipc";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
+import {
+	type McpStatus,
+	mcpGetStatus,
+	mcpSetEnabled,
+	mcpSetPort,
+} from "@/lib/mcp/status";
 import {
 	PAPER_TREE_LABEL_MODES,
 	PAPER_TREE_SORT_MODES,
@@ -274,6 +281,11 @@ export function GeneralPane({
 				/>
 			</SettingsGroup>
 			<ConnectorSettingsBlock settings={settings} patch={patch} />
+			<McpSettingsBlock
+				settings={settings}
+				patch={patch}
+				disabled={hostContext.kind === "remote"}
+			/>
 			<ExportSettingsBlock settings={settings} patch={patch} />
 			<PrivacySettingsBlock settings={settings} patch={patch} />
 		</>
@@ -464,6 +476,137 @@ function ConnectorSettingsBlock({
 					onBlur={(e) => void onPortBlur(e.currentTarget.value)}
 					disabled={busy}
 				/>
+			</SettingsRow>
+		</SettingsGroup>
+	);
+}
+
+function McpSettingsBlock({
+	settings,
+	patch,
+	disabled,
+}: {
+	settings: AppSettings;
+	patch: (p: Partial<AppSettings>) => void;
+	disabled: boolean;
+}) {
+	const { t } = useTranslation(["settings", "common"]);
+	const [status, setStatus] = useState<McpStatus | null>(null);
+	const [busy, setBusy] = useState(false);
+	const [copied, setCopied] = useState(false);
+
+	const refresh = useCallback(async () => {
+		if (!isTauri()) return;
+		try {
+			setStatus(await mcpGetStatus());
+		} catch {
+			// ignore probe failures in settings
+		}
+	}, []);
+
+	useEffect(() => {
+		void refresh();
+	}, [refresh]);
+
+	useTauriEvent<McpStatus>("mcp:status", (payload) => {
+		setStatus(payload);
+	});
+
+	const onToggle = async (enabled: boolean) => {
+		patch({ mcpEnabled: enabled });
+		if (!isTauri()) return;
+		setBusy(true);
+		try {
+			const next = await mcpSetEnabled(enabled);
+			setStatus(next);
+			if (enabled && next.lastError) {
+				notifyError(next.lastError);
+			}
+		} catch (e) {
+			notifyError(errorText(e));
+			patch({ mcpEnabled: false });
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const onPortBlur = async (value: string) => {
+		const port = Number.parseInt(value, 10);
+		if (!Number.isInteger(port) || port < 1 || port > 65535) {
+			notifyError(t("general.mcp.invalidPort"));
+			return;
+		}
+		patch({ mcpPort: port });
+		if (!isTauri()) return;
+		try {
+			setStatus(await mcpSetPort(port));
+		} catch (e) {
+			notifyError(errorText(e));
+		}
+	};
+
+	const url = status?.url ?? null;
+
+	return (
+		<SettingsGroup>
+			<SettingsRow label={t("general.mcp.label")} htmlFor="mcp-enabled">
+				<Switch
+					id="mcp-enabled"
+					checked={settings.mcpEnabled}
+					disabled={busy || disabled}
+					onCheckedChange={(v) => void onToggle(v)}
+				/>
+			</SettingsRow>
+			<SettingsRow
+				label={
+					<>
+						{t("general.mcp.portLabel")}
+						{status?.listening ? (
+							<span
+								role="img"
+								aria-label={t("common:listening")}
+								className="ml-1.5 inline-block size-2 rounded-full bg-emerald-500 align-middle"
+							/>
+						) : null}
+					</>
+				}
+				htmlFor="mcp-port"
+			>
+				<div className="flex items-center gap-2">
+					<Input
+						id="mcp-port"
+						type="number"
+						min={1}
+						max={65535}
+						className="h-8 w-28"
+						defaultValue={settings.mcpPort}
+						onBlur={(e) => void onPortBlur(e.currentTarget.value)}
+						disabled={busy || disabled}
+					/>
+					{url ? (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									className="h-8 max-w-[14rem] truncate px-2 font-mono text-xs"
+									aria-label={t("general.mcp.copyUrl")}
+									onClick={() => {
+										void copyTextToClipboard(url).then((ok) => {
+											if (!ok) return;
+											setCopied(true);
+											window.setTimeout(() => setCopied(false), 1500);
+										});
+									}}
+								>
+									{copied ? t("general.mcp.copied") : url}
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent>{t("general.mcp.copyUrl")}</TooltipContent>
+						</Tooltip>
+					) : null}
+				</div>
 			</SettingsRow>
 		</SettingsGroup>
 	);

@@ -8,6 +8,8 @@ use crate::features::agent::{AgentRegistry, AgentRunController};
 #[cfg(not(target_os = "ios"))]
 use crate::features::connector::ConnectorController;
 #[cfg(not(target_os = "ios"))]
+use crate::features::mcp::McpController;
+#[cfg(not(target_os = "ios"))]
 use crate::features::remote::RemoteRegistry;
 use crate::features::rename::ExternalRenameRepairStore;
 use crate::features::settings::AppSettingsStore;
@@ -106,6 +108,7 @@ pub fn run() {
         builder = builder
             .manage(FsWatchController::new())
             .manage(Arc::new(ConnectorController::new()))
+            .manage(Arc::new(McpController::new()))
             .manage(Arc::new(RemoteRegistry::new()));
     }
 
@@ -197,6 +200,21 @@ pub fn run() {
                     });
                 });
             }
+            #[cfg(not(target_os = "ios"))]
+            {
+                let handle = app.handle().clone();
+                settings_store.subscribe(move |s| {
+                    let ctrl = Arc::clone(handle.state::<Arc<McpController>>().inner());
+                    let port = s.mcp_port;
+                    let translator = s.translator_base_url.clone();
+                    let note_mode = s.paper_note_mode.clone();
+                    ctrl.set_translator_url(Some(translator));
+                    ctrl.set_paper_note_mode(note_mode);
+                    tauri::async_runtime::spawn(async move {
+                        let _ = ctrl.set_port(port).await;
+                    });
+                });
+            }
             {
                 let handle = app.handle().clone();
                 settings_store.subscribe(move |s| {
@@ -243,6 +261,13 @@ pub fn run() {
             connector.set_app_handle(app.handle().clone());
             let remote = app.state::<Arc<RemoteRegistry>>();
             connector.set_remote_registry(Arc::clone(&remote));
+        }
+        #[cfg(not(target_os = "ios"))]
+        {
+            let mcp = app.state::<Arc<McpController>>();
+            mcp.set_app_handle(app.handle().clone());
+            mcp.set_translator_url(Some(settings.translator_base_url.clone()));
+            mcp.set_paper_note_mode(settings.paper_note_mode.clone());
         }
         log::info!(
             target: "agentero::op",

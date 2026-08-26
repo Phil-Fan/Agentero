@@ -40,6 +40,8 @@ desktop = [
   "dep:tauri-specta",
   "dep:specta-typescript",
   "dep:posthog-rs",
+  "dep:rmcp",
+  "dep:schemars",
 ]
 
 [build-dependencies]
@@ -63,6 +65,14 @@ tauri-plugin-deep-link = { version = "2.4.9", optional = true }
 agent-client-protocol = { version = "1.2.0", features = ["unstable_elicitation"], optional = true }
 tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "macros", "time", "process", "io-util", "net"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"], optional = true }
+# Streamable HTTP MCP server (Settings toggle; loopback only).
+rmcp = { version = "3.1", optional = true, default-features = false, features = [
+  "server",
+  "macros",
+  "schemars",
+  "transport-streamable-http-server",
+] }
+schemars = { version = "1", optional = true }
 uuid = { version = "1", features = ["v4", "serde"] }
 dirs = "6"
 thiserror = "2"
@@ -118,6 +128,7 @@ liteparse = "2.13"
 # `features/pdf_locate` uses the text engine directly for quote → page rects,
 # bypassing liteparse's layout pass.
 liteparse-pdfium = "1.7"
+
 
 [target.'cfg(target_os = "ios")'.dependencies]
 security-framework = "3.7"

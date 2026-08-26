@@ -32,6 +32,7 @@ import { useUiStore, useVaultStore } from "@/hooks/use-app-stores";
 import { useConnectorSync } from "@/hooks/use-connector-sync";
 import { useExternalFileDrop } from "@/hooks/use-external-file-drop";
 import { useLayoutModelPrefetch } from "@/hooks/use-layout-model-prefetch";
+import { useMcpSync } from "@/hooks/use-mcp-sync";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
 import { useAnyOverlayOpen } from "@/hooks/use-overlay-registration";
 import { SIDEBAR_DEFAULT_PX, useShellLayout } from "@/hooks/use-shell-layout";
@@ -184,6 +185,7 @@ export default function App() {
 	const { t } = useTranslation(["app"]);
 	useAppBootstrap();
 	useConnectorSync();
+	useMcpSync();
 	useLayoutModelPrefetch();
 	// Cancel WebView navigation on any OS file drop (PDF import is tree-only).
 	useExternalFileDrop();

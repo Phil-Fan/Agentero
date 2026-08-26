@@ -24,6 +24,8 @@ pub const DEFAULT_NETWORK_PROXY_URL: &str = "http://127.0.0.1:7890";
 /// Owned here because the persisted `connectorPort` default must exist at
 /// deserialize time; `features::connector` re-exports it.
 pub const DEFAULT_CONNECTOR_PORT: u16 = 23119;
+/// Default loopback port for the optional MCP HTTP server.
+pub const DEFAULT_MCP_PORT: u16 = 8765;
 
 /// True when `key` is a UI mask of only `*` (length mirrors the real secret).
 /// Real secrets stay in the Host process / settings file; `settings_set` treats
@@ -68,6 +70,11 @@ pub struct AppSettings {
     pub connector_enabled: bool,
     #[serde(default = "default_connector_port")]
     pub connector_port: u16,
+    /// Loopback Streamable HTTP MCP server. Default off.
+    #[serde(default)]
+    pub mcp_enabled: bool,
+    #[serde(default = "default_mcp_port")]
+    pub mcp_port: u16,
     #[serde(default = "default_batch_import_concurrency")]
     pub batch_import_concurrency: u32,
     #[serde(default = "default_theme")]
@@ -254,6 +261,8 @@ impl Default for AppSettings {
             library_columns: default_library_columns(),
             connector_enabled: false,
             connector_port: default_connector_port(),
+            mcp_enabled: false,
+            mcp_port: default_mcp_port(),
             batch_import_concurrency: default_batch_import_concurrency(),
             theme: default_theme(),
             ui_theme: default_ui_theme(),
@@ -353,6 +362,9 @@ fn default_translate_provider() -> String {
 }
 fn default_connector_port() -> u16 {
     DEFAULT_CONNECTOR_PORT
+}
+fn default_mcp_port() -> u16 {
+    DEFAULT_MCP_PORT
 }
 fn default_batch_import_concurrency() -> u32 {
     5
@@ -678,6 +690,9 @@ fn merge_translate_secrets(incoming: &mut AppSettings, previous: &AppSettings) {
 fn normalize(s: &mut AppSettings) {
     if s.connector_port == 0 {
         s.connector_port = default_connector_port();
+    }
+    if s.mcp_port == 0 {
+        s.mcp_port = default_mcp_port();
     }
     if s.batch_import_concurrency < 1 || s.batch_import_concurrency > 10 {
         s.batch_import_concurrency = default_batch_import_concurrency();

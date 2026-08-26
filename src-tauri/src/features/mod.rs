@@ -29,6 +29,8 @@ pub mod layout_model;
 pub mod layout_remote;
 pub mod lifecycle;
 #[cfg(feature = "desktop")]
+pub mod mcp;
+#[cfg(feature = "desktop")]
 pub mod modelscope_proxy;
 pub mod open_request;
 #[cfg(not(any(target_os = "ios", target_os = "android")))]

@@ -22,6 +22,7 @@ settings 只提供读/写/持久化/广播能力，**不 import 任何域 featur
   - agent：`set_proxy`（网络代理同步）
   - import：`refresh_parser_config`（正文解析引擎凭据快照，桌面端）
   - connector：`set_port`（端口变更重绑监听）
+  - mcp：`set_port` + translator / note-mode 快照（端口变更重绑监听）
   - jobs：`apply_layout_backend` + `drain_and_spawn`（layout 并发上限）
 - 反序列化期需要的域默认值（如 `DEFAULT_CONNECTOR_PORT`）定义在 settings，由属主域 re-export（方向 `connector → settings`，不成环）。
 

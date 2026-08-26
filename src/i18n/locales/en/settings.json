@@ -104,6 +104,13 @@
 			"portLabel": "Connector port",
 			"invalidPort": "Port must be between 1 and 65535."
 		},
+		"mcp": {
+			"label": "MCP server",
+			"portLabel": "MCP port",
+			"invalidPort": "Port must be between 1 and 65535.",
+			"copyUrl": "Copy MCP URL",
+			"copied": "Copied"
+		},
 		"export": {
 			"section": "Note export",
 			"watermark": {

@@ -9,6 +9,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。
 - [导入和管理论文](usage/import-papers.md)
 - [阅读、标注与整理](usage/read-and-organize.md)
 - [接入 Agent](usage/agents.md)
+- [用 MCP 连接外部 Agent](usage/mcp.md)
 - [使用 Zotero Connector](usage/zotero.md)
 
 ## 按模块阅读

@@ -24,7 +24,7 @@ src-tauri/src/
   core/          # error、fs、paths、log_util
   features/      # 与前端 lib 域对齐
     vault/ catalog/ import/ wiki/ doctor/ agent/
-    connector/ remote/ search/ settings/
+    connector/ mcp/ remote/ search/ settings/
     translate/ trash/ watcher/ terminal/ window/
     bridge/ layout_model/ refs/ arxiv_proxy/
     jobs/       # JobCenter 纯调度器：lanes/去重/并发上限；runner 由业务域启动时注册
@@ -61,6 +61,7 @@ src-tauri/src/
 | `agent-client-protocol` | ACP Client stdio JSON-RPC |
 | `reqwest` + `tokio` | HTTP（Translator、arXiv、翻译等） |
 | `rusqlite`（bundled） | catalog.sqlite |
+| `rmcp` | 设置开关启停的 loopback Streamable HTTP MCP |
 | `notify` | Vault 文件监听 |
 | `liteparse` | 无 TeX 时 PDF → `PAPER.md` |
 | `walkdir` / `regex` / `thiserror` | 遍历、解析、错误 |

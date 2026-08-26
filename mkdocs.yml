@@ -32,6 +32,7 @@ nav:
       - 导入和管理论文: usage/import-papers.md
       - 阅读、标注与整理: usage/read-and-organize.md
       - 接入 Agent: usage/agents.md
+      - 用 MCP 连接外部 Agent: usage/mcp.md
       - 移动端: usage/mobile.md
       - 使用 Zotero Connector: usage/zotero.md
       - 打开远程 Vault: usage/remote-vault.md
@@ -65,6 +66,7 @@ nav:
       - 参考文献解析: backend/citation-parsing.md
       - Skill 导入: backend/skill-import.md
       - Zotero Connector: backend/connector.md
+      - MCP Server: backend/mcp.md
       - 双链索引: backend/wiki.md
       - Agent Host: backend/agent.md
       - 远程 Vault: backend/remote.md

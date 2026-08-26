@@ -45,6 +45,7 @@ Agentero 基于 Tauri 2 + React 19，本地优先，Vault 文件与 Catalog SQLi
 - **补下载**：paper 行缺 PDF 或既无 TeX 也无 `PAPER.md` 时显示 Download（hover 说明原因）；Library 行可批量补下。
 - **Rescan**：`paper_rescan` 从 `papers/` 目录（以 `NOTES.md` 为标记）补齐盘上有、catalog 无的条目。
 - **Zotero Connector**：Host 在 `127.0.0.1:23119` 收浏览器扩展 `saveItems` + `saveAttachment`。详见 [backend/connector.md](backend/connector.md)。
+- **MCP Server**：设置开关打开后 Host 在 `127.0.0.1:8765/mcp` 提供 Streamable HTTP MCP（论文 metadata / 入库 / NOTES）。详见 [backend/mcp.md](backend/mcp.md)。
 
 ### 论文库
 

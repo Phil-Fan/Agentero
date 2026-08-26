@@ -143,6 +143,12 @@ export type AppSettings = {
 	connectorEnabled: boolean;
 	connectorPort: number;
 	/**
+	 * Host loopback Streamable HTTP MCP server (`http://127.0.0.1:{port}/mcp`).
+	 * Default **off**. Local vault only.
+	 */
+	mcpEnabled: boolean;
+	mcpPort: number;
+	/**
 	 * Zotero data directory (contains `zotero.sqlite` + `storage/`) used by
 	 * bidirectional sync. Empty = auto-detect `~/Zotero` or pick in the dialog.
 	 */

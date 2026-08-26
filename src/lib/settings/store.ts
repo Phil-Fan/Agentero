@@ -339,6 +339,16 @@ function normalizePartial(
 	if (typeof parsed.connectorEnabled !== "boolean") {
 		merged.connectorEnabled = DEFAULT_SETTINGS.connectorEnabled;
 	}
+	if (typeof parsed.mcpEnabled !== "boolean") {
+		merged.mcpEnabled = DEFAULT_SETTINGS.mcpEnabled;
+	}
+	if (
+		!Number.isInteger(merged.mcpPort) ||
+		merged.mcpPort < 1 ||
+		merged.mcpPort > 65535
+	) {
+		merged.mcpPort = DEFAULT_SETTINGS.mcpPort;
+	}
 	if (typeof parsed.exportWatermarkEnabled !== "boolean") {
 		merged.exportWatermarkEnabled = DEFAULT_SETTINGS.exportWatermarkEnabled;
 	}

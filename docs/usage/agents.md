@@ -13,6 +13,8 @@ Agentero 使用 **BYOA**（Bring Your Own Agent）：Agent 由你安装和登录
 
 请先按对应 Agent 的官方说明完成安装和登录。
 
+若要把当前 Vault 接到 ChatGPT 或其它 MCP 客户端（不走应用内 ACP 面板），见 [用 MCP 连接外部 Agent](mcp.md)。
+
 ## 添加 Agent
 
 1. 打开 **Settings**（`⌘,`）。
