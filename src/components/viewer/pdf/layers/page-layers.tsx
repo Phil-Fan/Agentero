@@ -650,7 +650,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 								className={cn(
 									"pointer-events-none absolute z-[4] rounded-[1px]",
 									emphasizedComment.kind === "visual"
-										? "border border-primary/40"
+										? "border-2 border-primary/50"
 										: "mix-blend-multiply",
 								)}
 								style={{
