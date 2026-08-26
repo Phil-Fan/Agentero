@@ -107,6 +107,7 @@ src-tauri/src/
 | Vault FS | [vault.md](vault.md) |
 | 论文入库 | [paper-import.md](paper-import.md) |
 | Identifier Lookup / 魔棒入库 | [identifier-lookup.md](identifier-lookup.md) |
+| 学术搜索 API | [academic-search-apis.md](academic-search-apis.md) |
 | Zotero Connector | [connector.md](connector.md) |
 | 双链索引 | [wiki.md](wiki.md) |
 | Vault Doctor | [doctor.md](doctor.md) |
