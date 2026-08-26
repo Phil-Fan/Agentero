@@ -2,6 +2,7 @@
 
 use crate::core::error::AppError;
 use crate::features::catalog::papers::hide_arxiv_category_tag;
+use crate::features::import::title_search::fetch_s2_venue_by_arxiv;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -352,7 +353,7 @@ fn acl_anthology_pdf_url(url: &str) -> Option<String> {
     Some(format!("{}.pdf", trimmed))
 }
 
-pub fn map_arxiv_atom(xml: &str, bare_id: &str) -> Result<PaperMeta, AppError> {
+pub async fn map_arxiv_atom(xml: &str, bare_id: &str) -> Result<PaperMeta, AppError> {
     let titles: Vec<String> = xml
         .split("<title>")
         .skip(1)
@@ -396,6 +397,19 @@ pub fn map_arxiv_atom(xml: &str, bare_id: &str) -> Result<PaperMeta, AppError> {
         .as_ref()
         .and_then(|p| p.get(0..4)?.parse::<i32>().ok());
 
+    // arXiv Atom carries the final journal/venue in <arxiv:journal_ref>.
+    // If the preprint has not been published, fall back to Semantic Scholar.
+    let journal_ref = xml
+        .split("<arxiv:journal_ref>")
+        .nth(1)
+        .and_then(|c| c.split("</arxiv:journal_ref>").next())
+        .map(collapse_ws)
+        .filter(|s| !s.is_empty());
+    let publication = match journal_ref {
+        Some(jr) => Some(jr),
+        None => fetch_s2_venue_by_arxiv(bare_id).await,
+    };
+
     let now = chrono_lite_now();
     Ok(PaperMeta {
         id: bare_id.to_string(),
@@ -412,7 +426,7 @@ pub fn map_arxiv_atom(xml: &str, bare_id: &str) -> Result<PaperMeta, AppError> {
         isbn: None,
         issn: None,
         pmid: None,
-        publication: Some("arXiv".into()),
+        publication: publication.or_else(|| Some("arXiv".into())),
         volume: None,
         issue: None,
         pages: None,
@@ -532,6 +546,26 @@ pub fn map_crossref_work(message: &Value, doi: &str) -> Result<PaperMeta, AppErr
         added_at: now.clone(),
         updated_at: now,
     })
+}
+
+/// Build metadata from a title-search candidate when no identifier resolved.
+/// Used by Edit Metadata refresh to backfill publication/venue from a title.
+pub fn meta_from_search_candidate(
+    candidate: &crate::features::import::title_search::PaperSearchCandidate,
+) -> PaperMeta {
+    let id = candidate
+        .arxiv_id
+        .clone()
+        .or_else(|| candidate.doi.clone().map(|d| doi_slug(&d)))
+        .unwrap_or_else(|| crate::features::import::slug_from_stem(&candidate.title));
+    let mut meta = local_pdf_meta(id, candidate.title.clone());
+    meta.authors = candidate.authors.clone();
+    meta.year = candidate.year;
+    meta.publication = candidate.venue.clone();
+    meta.doi = candidate.doi.clone();
+    meta.arxiv_id = candidate.arxiv_id.clone();
+    meta.meta_source = Some("title-search".into());
+    meta
 }
 
 /// Minimal metadata for a locally-imported PDF (no Translator lookup).
@@ -811,5 +845,61 @@ mod tests {
             meta.pdf_url.as_deref(),
             Some("https://aclanthology.org/2026.acl-long.1248.pdf")
         );
+    }
+
+    #[tokio::test]
+    async fn map_arxiv_atom_uses_journal_ref() {
+        let xml = r#"<feed>
+            <entry>
+                <id>http://arxiv.org/abs/1706.03762</id>
+                <published>2017-06-12T17:57:34Z</published>
+                <title>Attention Is All You Need</title>
+                <author><name>Ashish Vaswani</name></author>
+                <arxiv:journal_ref>Advances in Neural Information Processing Systems 30 (NeurIPS 2017)</arxiv:journal_ref>
+            </entry>
+        </feed>"#;
+        let meta = map_arxiv_atom(xml, "1706.03762").await.expect("map");
+        assert_eq!(
+            meta.publication.as_deref(),
+            Some("Advances in Neural Information Processing Systems 30 (NeurIPS 2017)")
+        );
+    }
+
+    #[tokio::test]
+    async fn map_arxiv_atom_falls_back_without_journal_ref() {
+        let xml = r#"<feed>
+            <entry>
+                <id>http://arxiv.org/abs/2501.12345</id>
+                <published>2025-01-15T00:00:00Z</published>
+                <title>A Recent Preprint</title>
+                <author><name>Jane Doe</name></author>
+            </entry>
+        </feed>"#;
+        let meta = map_arxiv_atom(xml, "2501.12345").await.expect("map");
+        // Without network the S2 lookup fails silently; publication falls back to "arXiv".
+        assert_eq!(meta.publication.as_deref(), Some("arXiv"));
+    }
+
+    #[test]
+    fn meta_from_search_candidate_preserves_venue() {
+        use crate::features::import::title_search::PaperSearchCandidate;
+        let candidate = PaperSearchCandidate {
+            title: "Attention Is All You Need".into(),
+            authors: vec!["Ashish Vaswani".into()],
+            year: Some(2017),
+            venue: Some("NeurIPS".into()),
+            doi: Some("10.48550/arXiv.1706.03762".into()),
+            arxiv_id: Some("1706.03762".into()),
+            citation_count: Some(42),
+            url: None,
+            identifier: "1706.03762".into(),
+            source: "s2",
+        };
+        let meta = meta_from_search_candidate(&candidate);
+        assert_eq!(meta.title, "Attention Is All You Need");
+        assert_eq!(meta.publication.as_deref(), Some("NeurIPS"));
+        assert_eq!(meta.arxiv_id.as_deref(), Some("1706.03762"));
+        assert_eq!(meta.doi.as_deref(), Some("10.48550/arXiv.1706.03762"));
+        assert_eq!(meta.meta_source.as_deref(), Some("title-search"));
     }
 }

@@ -136,6 +136,25 @@ async fn get_json(url: &str) -> Result<Value, String> {
     serde_json::from_str(&text).map_err(|e| format!("json: {e}"))
 }
 
+/// Fetch the published venue for an arXiv paper from Semantic Scholar.
+/// S2 exposes `paper/ARXIV:{id}` with a `venue` field even without an API key.
+pub async fn fetch_s2_venue_by_arxiv(arxiv_id: &str) -> Option<String> {
+    let url = format!(
+        "https://api.semanticscholar.org/graph/v1/paper/ARXIV:{}?fields=venue",
+        urlencoding::encode(arxiv_id)
+    );
+    match get_json(&url).await {
+        Ok(value) => str_field(&value, "venue"),
+        Err(e) => {
+            log::debug!(
+                target: "agentero::lookup",
+                "s2 venue lookup for arXiv {arxiv_id} failed: {e}"
+            );
+            None
+        }
+    }
+}
+
 /// `GET /graph/v1/paper/search?query=…` — relevance-ordered, keeps API order.
 async fn s2_search(query: &str, limit: usize) -> Result<Vec<PaperSearchCandidate>, String> {
     let url = format!(

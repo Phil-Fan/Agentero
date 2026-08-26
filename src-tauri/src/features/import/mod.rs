@@ -1259,7 +1259,7 @@ pub(crate) async fn fetch_arxiv_metadata(
         .map_err(|e| AppError::message(format!("arXiv body: {e}")))?;
     check_task_not_cancelled(task_id)?;
 
-    map::map_arxiv_atom(&xml, &bare)
+    map::map_arxiv_atom(&xml, &bare).await
 }
 
 fn urlencoding_encode(s: &str) -> String {
