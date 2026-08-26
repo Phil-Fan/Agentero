@@ -65,7 +65,7 @@ fn strip_internal_tags(row: &mut PaperRecord) {
     row.tags.retain(|t| !papers::is_internal_tag_name(&t.name));
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PaperListItem {
     pub id: String,
@@ -143,8 +143,65 @@ pub fn list_papers(
     Ok(rows.iter().map(PaperListItem::from_record).collect())
 }
 
-pub fn get_paper(vault: &Path, ref_: &str) -> Result<PaperRecord, AppError> {
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperListOut {
+    pub items: Vec<PaperListItem>,
+}
+
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperGetOut {
+    pub id: String,
+    pub path: String,
+    pub title: String,
+    pub authors: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub year: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    pub tags: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doi: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arxiv_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub publication: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "abstract")]
+    pub abstract_text: Option<String>,
+    pub status: String,
+    pub is_read: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bibtex_key: Option<String>,
+    pub added_at: String,
+    pub updated_at: String,
+}
+
+impl PaperGetOut {
+    pub fn from_record(row: &PaperRecord) -> Self {
+        Self {
+            id: row.id.clone(),
+            path: row.path.clone(),
+            title: row.title.clone(),
+            authors: row.authors.clone(),
+            year: row.year,
+            date: row.date.clone(),
+            tags: row.tags.iter().map(|t| t.name.clone()).collect(),
+            doi: row.doi.clone(),
+            arxiv_id: row.arxiv_id.clone(),
+            publication: row.publication.clone(),
+            abstract_text: row.abstract_text.clone(),
+            status: row.status.clone(),
+            is_read: row.is_read,
+            bibtex_key: row.bibtex_key.clone(),
+            added_at: row.added_at.clone(),
+            updated_at: row.updated_at.clone(),
+        }
+    }
+}
+
+pub fn get_paper(vault: &Path, ref_: &str) -> Result<PaperGetOut, AppError> {
     let mut paper = resolve_paper(vault, ref_)?;
     strip_internal_tags(&mut paper);
-    Ok(paper)
+    Ok(PaperGetOut::from_record(&paper))
 }

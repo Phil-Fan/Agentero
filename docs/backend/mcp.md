@@ -17,6 +17,8 @@
 
 Host commands：`mcp_get_status` / `mcp_set_enabled` / `mcp_set_port` / `mcp_set_vault` / `mcp_set_parent_dir`。状态事件 `mcp:status`。
 
+`initialize.serverInfo` 带 `title`、`websiteUrl` 和 `icons`（应用 PNG 的 data URI）。客户端可以忽略不画。
+
 无鉴权。不要把端口绑到非 loopback。
 
 ## ChatGPT Secure MCP Tunnel
@@ -41,8 +43,10 @@ Vault 概况不是 tool，是文档：
 
 | Tool | 作用 |
 |---|---|
-| `paper_list` | 列表 metadata：`id/path/title/authors/year/tags/doi/arxivId/publication/status/isRead`。`query?`、`tag[]?`、`unread?`、`limit?`（默认 50，封顶 200）。abstract 只在 `paper_get`。 |
-| `paper_get` | 单篇完整 catalog 行 |
+| `paper_list` | 列表 metadata：`{ items: [{ id, path, title, authors, year, tags, doi, arxivId, publication, status, isRead }] }`。`query?`、`tag[]?`、`unread?`、`limit?`（默认 50，封顶 200）。abstract 只在 `paper_get`。 |
+| `paper_get` | 单篇 metadata（含 abstract） |
+
+每个 tool 都声明 `outputSchema`，成功时走 MCP `structuredContent`（ChatGPT 需要这份才能理解结果）。
 | `import_id` | 魔棒入库（arxiv / DOI / URL）。`parent?` 默认当前 Library 作用域或 `papers` |
 | `paper_notes_get` | 读 `{paper}/NOTES.md`（文件不存在则空字符串） |
 | `paper_notes_write` | 写 `NOTES.md`。`mode`: `replace`（默认）或 `append` |

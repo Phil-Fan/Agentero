@@ -270,56 +270,48 @@ pub async fn paper_resolve_identifier(
 ) -> ApiResult<super::PaperMeta> {
     let text = trunc(args.text.trim(), 60);
     let op = OpTimer::start_with("paper_resolve_identifier", format!("text={text}"));
+
+    // Primary: S2 / arXiv title search gives the most reliable venue/publication.
+    match super::title_search::search_papers(&args.text, 1).await {
+        Ok(candidates) if !candidates.is_empty() => {
+            let candidate = &candidates[0];
+            if candidate
+                .venue
+                .as_deref()
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false)
+            {
+                let mut meta = super::map::meta_from_search_candidate(candidate);
+                super::enrich_remote_urls(&mut meta);
+                op.finish_ok();
+                return ApiResult::ok(meta);
+            }
+        }
+        Ok(_) => {
+            log::warn!("title search returned no candidates for {text}");
+        }
+        Err(e) => {
+            log::warn!("title search failed for {text}: {e}");
+        }
+    }
+
+    // Fallback: Translator Runtime for richer metadata when title search misses.
     let base = args
         .translator_base_url
         .clone()
         .unwrap_or_else(|| super::DEFAULT_TRANSLATOR_BASE_URL.to_string());
     match super::pdf_recognize::resolve_identifier_full(&args.text, &base, None).await {
         Ok((mut meta, _used_translator)) => {
-            // Best-effort venue fallback: Translator sometimes returns metadata
-            // without a publication title. Ask title search for a venue before
-            // giving up.
-            if meta
-                .publication
-                .as_deref()
-                .map(|s| s.trim().is_empty())
-                .unwrap_or(true)
-            {
-                if let Ok(candidates) = super::title_search::search_papers(&args.text, 1).await {
-                    if let Some(candidate) = candidates.first() {
-                        if let Some(venue) =
-                            candidate.venue.clone().filter(|s| !s.trim().is_empty())
-                        {
-                            meta.publication = Some(venue);
-                        }
-                    }
-                }
-            }
             super::enrich_remote_urls(&mut meta);
             op.finish_ok();
             ApiResult::ok(meta)
         }
-        Err(identifier_err) => {
-            // Last resort: treat the text as a title and search by it.
-            match super::title_search::search_papers(&args.text, 1).await {
-                Ok(candidates) if !candidates.is_empty() => {
-                    let mut meta = super::map::meta_from_search_candidate(&candidates[0]);
-                    super::enrich_remote_urls(&mut meta);
-                    op.finish_ok();
-                    ApiResult::ok(meta)
-                }
-                Ok(_) => {
-                    let e = AppError::message(format!(
-                        "{identifier_err}; title search returned no candidates"
-                    ));
-                    op.finish_err(&e);
-                    crate::core::error::map_err(e)
-                }
-                Err(e) => {
-                    op.finish_err(&e);
-                    crate::core::error::map_err(e)
-                }
-            }
+        Err(e) => {
+            let err = AppError::message(format!(
+                "title search returned no usable venue and translator failed: {e}"
+            ));
+            op.finish_err(&err);
+            crate::core::error::map_err(err)
         }
     }
 }
