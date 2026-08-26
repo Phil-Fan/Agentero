@@ -76,7 +76,10 @@ import { usePdfLayoutRun } from "@/components/viewer/pdf/hooks/use-pdf-layout-ru
 import { usePdfLayoutTranslate } from "@/components/viewer/pdf/hooks/use-pdf-layout-translate";
 import { usePdfMarksIo } from "@/components/viewer/pdf/hooks/use-pdf-marks-io";
 import { usePdfNavigation } from "@/components/viewer/pdf/hooks/use-pdf-navigation";
-import { usePdfNoteEditor } from "@/components/viewer/pdf/hooks/use-pdf-note-editor";
+import {
+	railEditFromComment,
+	usePdfNoteEditor,
+} from "@/components/viewer/pdf/hooks/use-pdf-note-editor";
 import { usePdfOutline } from "@/components/viewer/pdf/hooks/use-pdf-outline";
 import { usePdfPageText } from "@/components/viewer/pdf/hooks/use-pdf-page-text";
 import { usePdfRegionFraming } from "@/components/viewer/pdf/hooks/use-pdf-region-framing";
@@ -800,7 +803,7 @@ function PdfViewerInner({
 	 * placement walks the page's whole text-rect list, so doing it inside
 	 * renderPage cost that walk for every mounted page on every scroll frame.
 	 */
-	const { pinsByPage, commentsByPage } = useMemo(() => {
+	const { pinsByPage, commentsByPage: commentsByPageBase } = useMemo(() => {
 		const pins = new Map<number, SelectionPin[]>();
 		const comments = new Map<number, PageAnnotationComment[]>();
 		const add = (page: number, pin: SelectionPin) => {
@@ -818,10 +821,12 @@ function PdfViewerInner({
 			if (commentRailEnabled) {
 				const entry: PageAnnotationComment = {
 					id: highlight.id,
+					pageIndex: highlight.page - 1,
 					anchorY: anchor.y,
 					quote: highlight.quote,
 					comment,
 					color: normalizeHighlightColor(highlight.color),
+					kind: "highlight",
 					linkAlias:
 						annotationWikilinkAlias(
 							paperTitle,
@@ -874,6 +879,30 @@ function PdfViewerInner({
 			});
 		}
 		for (const trace of visualTraces) {
+			const hasAgent = Boolean(trace.agent);
+			const note = trace.comment.trim();
+			// Note-only visual marks (and visual marks that already have a
+			// comment) live in the rail when the host is wide enough.
+			if (commentRailEnabled && (!hasAgent || note)) {
+				const entry: PageAnnotationComment = {
+					id: trace.id,
+					pageIndex: trace.page - 1,
+					anchorY: trace.rects[0]?.y ?? 0,
+					quote: "",
+					comment: trace.comment,
+					color: DEFAULT_HIGHLIGHT_COLOR,
+					kind: "visual",
+					linkAlias:
+						annotationWikilinkAlias(
+							paperTitle,
+							annotationSnippet({ comment: trace.comment }),
+						) ?? null,
+				};
+				const list = comments.get(trace.page);
+				if (list) list.push(entry);
+				else comments.set(trace.page, [entry]);
+				if (!hasAgent) continue;
+			}
 			const pageText = pageTextMap.get(trace.page - 1);
 			const pin = pinFromRects(trace.rects, pageText);
 			add(trace.page, {
@@ -1075,6 +1104,7 @@ function PdfViewerInner({
 		handleVisualAddToChat,
 		handleVisualSendNow,
 		handleVisualSaveComment,
+		updateVisualComment,
 		handleVisualAddToChatFromMark,
 		handleVisualContinue,
 		handleDeleteVisualTrace,
@@ -1096,27 +1126,74 @@ function PdfViewerInner({
 		resolvePdfAskAgent,
 		visualDraftEditor,
 		closeVisualDraftEditor,
+		commentRailEnabled,
 	});
 	resetVisualCardChromeRef.current = resetVisualCardChrome;
 
+	const anchorYForHighlight = useCallback(
+		(id: string) => highlightAnchors.get(id)?.y ?? 0,
+		[highlightAnchors],
+	);
+
 	const {
 		editor,
+		railEdit,
 		setEditor,
+		beginRailEdit,
 		openEditorForAnnotation,
 		closeEditor,
+		closeRailEdit,
 		saveEditor,
+		saveRailEdit,
 		deleteEditorAnnotation,
+		deleteRailComment,
 	} = usePdfNoteEditor({
 		docId,
 		annotationCap,
 		hostRef,
 		zoomRef,
+		commentRailEnabled,
+		anchorYForHighlight,
 		cancelHoverHide,
 		cardHoverSurfaceRef,
 		updateHighlightComment,
 		deleteHighlightAnnotation,
+		updateVisualComment,
+		deleteVisualTraceById,
 	});
-	closeEditorRef.current = closeEditor;
+	closeEditorRef.current = () => {
+		closeEditor();
+		closeRailEdit();
+	};
+
+	const commentsByPage = useMemo(() => {
+		if (!railEdit || !commentRailEnabled) return commentsByPageBase;
+		const page = railEdit.pageIndex + 1;
+		const existing = commentsByPageBase.get(page);
+		if (existing?.some((c) => c.id === railEdit.id)) return commentsByPageBase;
+		const next = new Map(commentsByPageBase);
+		next.set(page, [
+			...(existing ?? []),
+			{
+				id: railEdit.id,
+				pageIndex: railEdit.pageIndex,
+				anchorY: railEdit.anchorY,
+				quote: railEdit.quote,
+				comment: railEdit.comment,
+				color: railEdit.color,
+				kind: railEdit.kind,
+				linkAlias: null,
+			},
+		]);
+		return next;
+	}, [commentsByPageBase, railEdit, commentRailEnabled]);
+
+	const focusedVisualRegion = useMemo(() => {
+		if (railEdit?.kind !== "visual") return null;
+		const tr = visualTraces.find((item) => item.id === railEdit.id);
+		if (!tr) return null;
+		return { page: tr.page, rects: tr.rects };
+	}, [railEdit, visualTraces]);
 
 	const handleOpenPin = useCallback(
 		(pin: SelectionPin) => {
@@ -1175,16 +1252,27 @@ function PdfViewerInner({
 		const first = created[0];
 		setSelectionMenu(null);
 		selectionCap?.clear(docId);
-		if (first && anchorPage) {
-			const pageEl = pageElByIndex(hostRef.current, anchorPage.pageIndex);
-			if (pageEl) {
-				setEditor({
-					screen: rectRightScreen(pageEl, anchorPage.rect, zoomRef.current),
-					pageIndex: first.pageIndex,
-					id: first.id,
-					comment: "",
-				});
-			}
+		if (!first || !anchorPage) return;
+		if (commentRailEnabled) {
+			beginRailEdit({
+				id: first.id,
+				pageIndex: first.pageIndex,
+				kind: "highlight",
+				comment: "",
+				quote,
+				color: DEFAULT_HIGHLIGHT_COLOR,
+				anchorY: selectionMenu.anchor.rects[0]?.y ?? 0,
+			});
+			return;
+		}
+		const pageEl = pageElByIndex(hostRef.current, anchorPage.pageIndex);
+		if (pageEl) {
+			setEditor({
+				screen: rectRightScreen(pageEl, anchorPage.rect, zoomRef.current),
+				pageIndex: first.pageIndex,
+				id: first.id,
+				comment: "",
+			});
 		}
 	}, [
 		selectionMenu,
@@ -1193,6 +1281,8 @@ function PdfViewerInner({
 		docId,
 		setSelectionMenu,
 		setEditor,
+		beginRailEdit,
+		commentRailEnabled,
 		zoomRef,
 	]);
 
@@ -1339,6 +1429,8 @@ function PdfViewerInner({
 			focusedLayoutRegion,
 			pinsByPage,
 			commentsByPage,
+			editingCommentId: railEdit?.id ?? null,
+			focusedVisualRegion,
 			commentWikiTarget,
 			citationLinks,
 			activeCardId: activeCard?.id ?? null,
@@ -1352,6 +1444,8 @@ function PdfViewerInner({
 			focusedLayoutRegion,
 			pinsByPage,
 			commentsByPage,
+			railEdit?.id,
+			focusedVisualRegion,
 			commentWikiTarget,
 			citationLinks,
 			activeCard?.id,
@@ -1435,8 +1529,10 @@ function PdfViewerInner({
 			onDeleteHighlightAnnotation: handleDeleteHighlightAnnotation,
 			onEditHighlightAnnotation: handleEditHighlightAnnotation,
 			onChangeHighlightColor: handleChangeHighlightColor,
-			onOpenComment: handleEditHighlightAnnotation,
-			onDeleteComment: handleDeleteHighlightAnnotation,
+			onOpenComment: (comment) => beginRailEdit(railEditFromComment(comment)),
+			onSaveComment: saveRailEdit,
+			onCancelComment: closeRailEdit,
+			onDeleteComment: deleteRailComment,
 			onCopyCommentLink: handleCopyCommentLink,
 			onCopyCommentEmbed: handleCopyCommentEmbed,
 		}),
@@ -1452,6 +1548,10 @@ function PdfViewerInner({
 			handleDeleteHighlightAnnotation,
 			handleEditHighlightAnnotation,
 			handleChangeHighlightColor,
+			beginRailEdit,
+			saveRailEdit,
+			closeRailEdit,
+			deleteRailComment,
 			handleCopyCommentLink,
 			handleCopyCommentEmbed,
 		],

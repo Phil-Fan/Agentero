@@ -85,6 +85,16 @@ export type PdfPageMarksSlice = {
 	pinsByPage: ReadonlyMap<number, SelectionPin[]>;
 	/** Annotated highlights per page for the right-edge comment rail. */
 	commentsByPage: ReadonlyMap<number, PageAnnotationComment[]>;
+	/** Comment currently being edited in the rail; null when idle. */
+	editingCommentId: string | null;
+	/**
+	 * Visual-note crop to outline while its rail card is being edited
+	 * (Notion-style: related region lights up).
+	 */
+	focusedVisualRegion: {
+		page: number;
+		rects: readonly PdfAskNormalizedRect[];
+	} | null;
 	/** Resolvable wiki target for comment copy-link/copy-embed; null hides them. */
 	commentWikiTarget: string | null;
 	citationLinks: ReadonlyMap<number, PdfLinkAnnoObject[]>;
@@ -133,10 +143,14 @@ export type PdfPageHandlers = {
 		id: string,
 		color: HighlightColor,
 	) => void;
-	/** Open the note editor for a comment-rail card. */
-	onOpenComment: (id: string) => void;
-	/** Delete a highlight annotation from its comment-rail card. */
-	onDeleteComment: (pageIndex: number, id: string) => void;
+	/** Start in-place edit on a comment-rail card. */
+	onOpenComment: (comment: PageAnnotationComment) => void;
+	/** Commit in-place edit on a comment-rail card. */
+	onSaveComment: (comment: PageAnnotationComment, text: string) => void;
+	/** Discard in-place edit (Escape). */
+	onCancelComment: () => void;
+	/** Delete a highlight / visual note from its comment-rail card. */
+	onDeleteComment: (comment: PageAnnotationComment) => void;
 	/** Copy the comment card's `[[target@id]]` wikilink. */
 	onCopyCommentLink: (comment: PageAnnotationComment) => void;
 	/** Copy the comment card's `![[target@id]]` embed. */
@@ -591,6 +605,23 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 							/>
 						))
 					: null}
+				{/* Rail-edit focus: same crop outline when the visual note is
+				    being edited in place and no pin card is already open. */}
+				{!activeVisualOnPage && marks.focusedVisualRegion?.page === pageNumber
+					? marks.focusedVisualRegion.rects.map((rect) => (
+							<div
+								key={`comment-focus-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
+								className="pointer-events-none absolute z-[2] rounded-none border border-primary/40 bg-primary/5 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+								style={{
+									left: `${rect.x * 100}%`,
+									top: `${rect.y * 100}%`,
+									width: `${rect.w * 100}%`,
+									height: `${rect.h * 100}%`,
+								}}
+								aria-hidden="true"
+							/>
+						))
+					: null}
 				<SelectionGutter
 					items={pins}
 					activeId={marks.activeCardId}
@@ -601,9 +632,11 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 				<CommentCardsLayer
 					items={comments}
 					pageHeightPx={height}
-					pageIndex={pageIndex}
+					editingId={marks.editingCommentId}
 					wikiTarget={marks.commentWikiTarget}
 					onOpen={handlers.onOpenComment}
+					onSave={handlers.onSaveComment}
+					onCancel={handlers.onCancelComment}
 					onDelete={handlers.onDeleteComment}
 					onCopyLink={handlers.onCopyCommentLink}
 					onCopyEmbed={handlers.onCopyCommentEmbed}

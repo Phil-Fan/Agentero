@@ -113,14 +113,34 @@ export type VisualDraftEditorState = {
 	image: PromptImage;
 };
 
-/** Persistent comment-rail card for one annotated highlight (per page). */
+/** Discriminator for a right-rail comment card. */
+export type CommentRailKind = "highlight" | "visual";
+
+/** Persistent comment-rail card for one annotated highlight or visual note. */
 export type PageAnnotationComment = {
 	id: string;
+	/** 0-based EmbedPDF page index (save / delete). */
+	pageIndex: number;
 	/** Normalized Y anchor on the page (0-1) used for initial placement. */
 	anchorY: number;
 	quote: string;
 	comment: string;
 	color: HighlightColor;
+	kind: CommentRailKind;
 	/** Pre-computed `[[alias|target]]` or null if no wiki target. */
 	linkAlias: string | null;
+};
+
+/**
+ * In-place comment-rail edit (Notion-style). Used instead of the floating
+ * AnnotationEditor when the host is wide enough for the rail.
+ */
+export type RailEditState = {
+	id: string;
+	pageIndex: number;
+	kind: CommentRailKind;
+	comment: string;
+	quote: string;
+	color: HighlightColor;
+	anchorY: number;
 };

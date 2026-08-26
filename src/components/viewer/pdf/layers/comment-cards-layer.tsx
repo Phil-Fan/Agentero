@@ -1,12 +1,15 @@
 /**
- * Feishu-style comment rail: one persistent card per annotated highlight,
+ * Comment rail: one persistent card per annotated highlight / visual note,
  * pinned just outside the page's right edge (`left: 100%` inside the
  * overflow-visible page container, same trick as PageTranslateTab). Cards
  * stack vertically with collision avoidance and clamp into the page height.
+ *
+ * Click a card to edit the note in place (Notion-style): the body becomes a
+ * textarea, ⌘/Ctrl+Enter or blur saves, Escape cancels. No floating editor.
  */
 
-import { Link2, Trash2 } from "lucide-react";
-import { memo } from "react";
+import { Crop, Link2, Trash2 } from "lucide-react";
+import { memo, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +19,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { PageAnnotationComment } from "@/components/viewer/pdf/types";
+import { useImeGuard } from "@/hooks/use-ime-guard";
 import { cn } from "@/lib/core/utils";
 import {
 	swatchBorderClass,
@@ -39,17 +43,26 @@ const CARD_LINE_HEIGHT_PX = 20;
 const CARD_CHARS_PER_LINE = 15;
 /** Padding + color-dot row + blockquote/comment margins. */
 const CARD_BASE_HEIGHT_PX = 54;
+/** View-mode clamp for the note body. */
+const VIEW_COMMENT_LINES = 3;
+/** In-place editor: min rows so an empty new note has room to type. */
+const EDIT_MIN_COMMENT_LINES = 3;
+/** In-place editor: layout estimate cap; textarea scrolls past this. */
+const EDIT_MAX_COMMENT_LINES = 12;
 
 type CommentCardsLayerProps = {
 	/** Comments for this page only. */
 	items: PageAnnotationComment[];
 	/** Rendered page height in px (zoom-aware). */
 	pageHeightPx: number;
-	pageIndex: number;
+	/** Id of the card currently being edited in place; null when idle. */
+	editingId: string | null;
 	/** Resolvable wiki target; copy buttons only render when set. */
 	wikiTarget: string | null;
-	onOpen: (id: string) => void;
-	onDelete: (pageIndex: number, id: string) => void;
+	onOpen: (comment: PageAnnotationComment) => void;
+	onSave: (comment: PageAnnotationComment, text: string) => void;
+	onCancel: () => void;
+	onDelete: (comment: PageAnnotationComment) => void;
 	onCopyLink: (comment: PageAnnotationComment) => void;
 	onCopyEmbed: (comment: PageAnnotationComment) => void;
 };
@@ -60,7 +73,7 @@ export type CommentCardPlacement = {
 	heightPx: number;
 };
 
-/** Visual line count after clamping (quote: 2, comment: 3). */
+/** Visual line count after clamping (quote: 2, comment: view 3 / edit 12). */
 function clampedLines(text: string, max: number): number {
 	let lines = 0;
 	for (const raw of text.split("\n")) {
@@ -71,9 +84,17 @@ function clampedLines(text: string, max: number): number {
 }
 
 /** Conservative card height estimate from clamped quote/comment lines. */
-function estimateCommentCardHeight(item: PageAnnotationComment): number {
+export function estimateCommentCardHeight(
+	item: PageAnnotationComment,
+	editing = false,
+): number {
 	const quoteLines = item.quote.trim() ? clampedLines(item.quote, 2) : 0;
-	const commentLines = clampedLines(item.comment, 3);
+	const commentLines = editing
+		? Math.max(
+				EDIT_MIN_COMMENT_LINES,
+				clampedLines(item.comment, EDIT_MAX_COMMENT_LINES),
+			)
+		: clampedLines(item.comment, VIEW_COMMENT_LINES);
 	return (
 		CARD_BASE_HEIGHT_PX + (quoteLines + commentLines) * CARD_LINE_HEIGHT_PX
 	);
@@ -86,6 +107,7 @@ function estimateCommentCardHeight(item: PageAnnotationComment): number {
 export function layoutCommentCards(
 	items: PageAnnotationComment[],
 	pageHeightPx: number,
+	editingId?: string | null,
 ): CommentCardPlacement[] {
 	const sorted = [...items].sort(
 		(a, b) => a.anchorY - b.anchorY || a.id.localeCompare(b.id),
@@ -93,7 +115,7 @@ export function layoutCommentCards(
 	const laid: CommentCardPlacement[] = [];
 
 	for (const item of sorted) {
-		const heightPx = estimateCommentCardHeight(item);
+		const heightPx = estimateCommentCardHeight(item, item.id === editingId);
 		const anchorTop = item.anchorY * pageHeightPx;
 		const prev = laid[laid.length - 1];
 		const topPx = Math.max(
@@ -117,20 +139,307 @@ export function layoutCommentCards(
 	return laid;
 }
 
+function autosizeTextarea(el: HTMLTextAreaElement | null) {
+	if (!el) return;
+	el.style.height = "0px";
+	el.style.height = `${Math.max(el.scrollHeight, CARD_LINE_HEIGHT_PX * EDIT_MIN_COMMENT_LINES)}px`;
+}
+
+type CommentCardProps = {
+	item: PageAnnotationComment;
+	topPx: number;
+	heightPx: number;
+	editing: boolean;
+	wikiTarget: string | null;
+	onOpen: (comment: PageAnnotationComment) => void;
+	onSave: (comment: PageAnnotationComment, text: string) => void;
+	onCancel: () => void;
+	onDelete: (comment: PageAnnotationComment) => void;
+	onCopyLink: (comment: PageAnnotationComment) => void;
+	onCopyEmbed: (comment: PageAnnotationComment) => void;
+};
+
+const CommentCard = memo(function CommentCard({
+	item,
+	topPx,
+	heightPx,
+	editing,
+	wikiTarget,
+	onOpen,
+	onSave,
+	onCancel,
+	onDelete,
+	onCopyLink,
+	onCopyEmbed,
+}: CommentCardProps) {
+	const { t } = useTranslation("viewer");
+	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	const cancelledRef = useRef(false);
+	const itemRef = useRef(item);
+	itemRef.current = item;
+	const onSaveRef = useRef(onSave);
+	onSaveRef.current = onSave;
+	const draftRef = useRef(item.comment);
+	const commentSeedRef = useRef(item.comment);
+	commentSeedRef.current = item.comment;
+	const { isBlockedByIme, compositionProps } = useImeGuard();
+
+	useEffect(() => {
+		if (!editing) return;
+		cancelledRef.current = false;
+		draftRef.current = commentSeedRef.current;
+		const el = textareaRef.current;
+		if (!el) return;
+		el.focus();
+		const len = el.value.length;
+		el.setSelectionRange(len, len);
+		autosizeTextarea(el);
+	}, [editing]);
+
+	// Page virtualization unmounts the card if the user scrolls away — treat
+	// dirty drafts like blur and commit. Skip no-op saves so React StrictMode's
+	// fake unmount doesn't close a freshly opened editor.
+	useEffect(() => {
+		if (!editing) return;
+		return () => {
+			if (cancelledRef.current) return;
+			if (draftRef.current === commentSeedRef.current) return;
+			onSaveRef.current(itemRef.current, draftRef.current);
+		};
+	}, [editing]);
+
+	const commit = (text: string) => {
+		cancelledRef.current = true;
+		draftRef.current = text;
+		onSave(item, text);
+	};
+
+	const cancel = () => {
+		cancelledRef.current = true;
+		onCancel();
+	};
+
+	return (
+		<fieldset
+			className={cn(
+				"group pointer-events-auto absolute m-0 min-w-0 rounded-lg border-0 bg-background/95 px-2.5 py-2 shadow-sm ring-1 backdrop-blur-sm",
+				editing
+					? "z-[6] overflow-visible ring-2 ring-ring/50"
+					: "overflow-hidden ring-border/60",
+			)}
+			style={{
+				left: `calc(100% + ${COMMENT_CARD_GAP_PX}px)`,
+				top: topPx,
+				width: COMMENT_CARD_WIDTH_PX,
+				height: editing ? undefined : heightPx,
+				minHeight: heightPx,
+			}}
+			onPointerDown={(e) => e.stopPropagation()}
+			onBlur={
+				editing
+					? (e) => {
+							if (e.currentTarget.contains(e.relatedTarget as Node | null)) {
+								return;
+							}
+							if (cancelledRef.current) return;
+							commit(textareaRef.current?.value ?? "");
+						}
+					: undefined
+			}
+		>
+			{editing ? (
+				<div className="block w-full text-left">
+					{item.kind === "visual" ? (
+						<Crop className="size-2.5 text-muted-foreground" aria-hidden />
+					) : (
+						<span
+							className={cn(
+								"block size-2 rounded-full",
+								swatchColorClass(item.color),
+							)}
+							aria-hidden
+						/>
+					)}
+					{item.quote.trim() ? (
+						<blockquote
+							className={cn(
+								"mt-1.5 line-clamp-2 border-l-2 pl-2 text-muted-foreground/90 text-xs leading-relaxed",
+								swatchBorderClass(item.color),
+							)}
+						>
+							{item.quote}
+						</blockquote>
+					) : null}
+					<textarea
+						ref={textareaRef}
+						className="mt-1 max-h-60 w-full resize-none bg-transparent p-0 text-[13px] text-foreground/80 leading-relaxed outline-none placeholder:text-muted-foreground/70"
+						placeholder={t("annotations.placeholder")}
+						aria-label={t("annotations.editorLabel")}
+						defaultValue={item.comment}
+						rows={EDIT_MIN_COMMENT_LINES}
+						{...compositionProps}
+						onChange={(e) => {
+							draftRef.current = e.currentTarget.value;
+							autosizeTextarea(e.currentTarget);
+						}}
+						onClick={(e) => e.stopPropagation()}
+						onKeyDown={(e) => {
+							e.stopPropagation();
+							if (e.key === "Escape") {
+								e.preventDefault();
+								cancel();
+								return;
+							}
+							if (
+								e.key === "Enter" &&
+								(e.metaKey || e.ctrlKey) &&
+								!isBlockedByIme(e)
+							) {
+								e.preventDefault();
+								commit(e.currentTarget.value);
+							}
+						}}
+					/>
+				</div>
+			) : (
+				// biome-ignore lint/a11y/useSemanticElements: a native <button> cannot wrap the blockquote/p flow content
+				<div
+					role="button"
+					tabIndex={0}
+					className="block h-full w-full cursor-text overflow-hidden rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+					onClick={(e) => {
+						e.stopPropagation();
+						onOpen(item);
+					}}
+					onKeyDown={(e) => {
+						if (e.key === "Enter" || e.key === " ") {
+							e.preventDefault();
+							onOpen(item);
+						}
+					}}
+				>
+					{item.kind === "visual" ? (
+						<Crop className="size-2.5 text-muted-foreground" aria-hidden />
+					) : (
+						<span
+							className={cn(
+								"block size-2 rounded-full",
+								swatchColorClass(item.color),
+							)}
+							aria-hidden
+						/>
+					)}
+					{item.quote.trim() ? (
+						<blockquote
+							className={cn(
+								"mt-1.5 line-clamp-2 border-l-2 pl-2 text-muted-foreground/90 text-xs leading-relaxed",
+								swatchBorderClass(item.color),
+							)}
+						>
+							{item.quote}
+						</blockquote>
+					) : null}
+					<p
+						className={cn(
+							"mt-1 line-clamp-3 whitespace-pre-wrap break-words text-[13px] leading-relaxed",
+							item.comment.trim()
+								? "text-foreground/80"
+								: "text-muted-foreground/70",
+						)}
+					>
+						{item.comment.trim() || t("annotations.placeholder")}
+					</p>
+				</div>
+			)}
+			<div
+				className={cn(
+					"absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-lg bg-background/80 p-0.5 shadow-sm ring-1 ring-border/60 backdrop-blur-sm transition-opacity duration-150",
+					editing
+						? "opacity-0 group-hover:opacity-100"
+						: "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+				)}
+			>
+				{wikiTarget ? (
+					<>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									className="size-6 text-muted-foreground hover:text-foreground"
+									aria-label={t("annotations.copyLink")}
+									onClick={(e) => {
+										e.stopPropagation();
+										onCopyLink(item);
+									}}
+								>
+									<Link2 className="size-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent>{t("annotations.copyLink")}</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									className="size-6 text-muted-foreground hover:text-foreground"
+									aria-label={t("annotations.copyEmbed")}
+									onClick={(e) => {
+										e.stopPropagation();
+										onCopyEmbed(item);
+									}}
+								>
+									<span className="font-mono text-[10px] leading-none">
+										![[
+									</span>
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent>{t("annotations.copyEmbed")}</TooltipContent>
+						</Tooltip>
+					</>
+				) : null}
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-xs"
+							className="size-6 text-muted-foreground hover:text-destructive"
+							aria-label={t("annotations.delete")}
+							onClick={(e) => {
+								e.stopPropagation();
+								cancelledRef.current = true;
+								onDelete(item);
+							}}
+						>
+							<Trash2 className="size-3.5" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent>{t("annotations.delete")}</TooltipContent>
+				</Tooltip>
+			</div>
+		</fieldset>
+	);
+});
+
 export const CommentCardsLayer = memo(function CommentCardsLayer({
 	items,
 	pageHeightPx,
-	pageIndex,
+	editingId,
 	wikiTarget,
 	onOpen,
+	onSave,
+	onCancel,
 	onDelete,
 	onCopyLink,
 	onCopyEmbed,
 }: CommentCardsLayerProps) {
-	const { t } = useTranslation("viewer");
 	if (!items.length) return null;
 
-	const laid = layoutCommentCards(items, pageHeightPx);
+	const laid = layoutCommentCards(items, pageHeightPx, editingId);
 	const byId = new Map(items.map((item) => [item.id, item]));
 
 	return (
@@ -140,120 +449,20 @@ export const CommentCardsLayer = memo(function CommentCardsLayer({
 					const item = byId.get(pos.id);
 					if (!item) return null;
 					return (
-						<div
+						<CommentCard
 							key={item.id}
-							className="group pointer-events-auto absolute overflow-hidden rounded-lg bg-background/95 px-2.5 py-2 shadow-sm ring-1 ring-border/60 backdrop-blur-sm"
-							style={{
-								left: `calc(100% + ${COMMENT_CARD_GAP_PX}px)`,
-								top: pos.topPx,
-								width: COMMENT_CARD_WIDTH_PX,
-								height: pos.heightPx,
-							}}
-						>
-							{/* biome-ignore lint/a11y/useSemanticElements: a native <button> cannot wrap the blockquote/p flow content */}
-							<div
-								role="button"
-								tabIndex={0}
-								className="block w-full cursor-pointer rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-								onClick={(e) => {
-									e.stopPropagation();
-									onOpen(item.id);
-								}}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" || e.key === " ") {
-										e.preventDefault();
-										onOpen(item.id);
-									}
-								}}
-							>
-								<span
-									className={cn(
-										"block size-2 rounded-full",
-										swatchColorClass(item.color),
-									)}
-									aria-hidden
-								/>
-								{item.quote.trim() ? (
-									<blockquote
-										className={cn(
-											"mt-1.5 line-clamp-2 border-l-2 pl-2 text-muted-foreground/90 text-xs leading-relaxed",
-											swatchBorderClass(item.color),
-										)}
-									>
-										{item.quote}
-									</blockquote>
-								) : null}
-								<p className="mt-1 line-clamp-3 whitespace-pre-wrap break-words text-[13px] text-foreground/80 leading-relaxed">
-									{item.comment}
-								</p>
-							</div>
-							<div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-lg bg-background/80 p-0.5 opacity-0 shadow-sm ring-1 ring-border/60 backdrop-blur-sm transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-								{wikiTarget ? (
-									<>
-										<Tooltip>
-											<TooltipTrigger asChild>
-												<Button
-													type="button"
-													variant="ghost"
-													size="icon-xs"
-													className="size-6 text-muted-foreground hover:text-foreground"
-													aria-label={t("annotations.copyLink")}
-													onClick={(e) => {
-														e.stopPropagation();
-														onCopyLink(item);
-													}}
-												>
-													<Link2 className="size-3.5" />
-												</Button>
-											</TooltipTrigger>
-											<TooltipContent>
-												{t("annotations.copyLink")}
-											</TooltipContent>
-										</Tooltip>
-										<Tooltip>
-											<TooltipTrigger asChild>
-												<Button
-													type="button"
-													variant="ghost"
-													size="icon-xs"
-													className="size-6 text-muted-foreground hover:text-foreground"
-													aria-label={t("annotations.copyEmbed")}
-													onClick={(e) => {
-														e.stopPropagation();
-														onCopyEmbed(item);
-													}}
-												>
-													<span className="font-mono text-[10px] leading-none">
-														![[
-													</span>
-												</Button>
-											</TooltipTrigger>
-											<TooltipContent>
-												{t("annotations.copyEmbed")}
-											</TooltipContent>
-										</Tooltip>
-									</>
-								) : null}
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon-xs"
-											className="size-6 text-muted-foreground hover:text-destructive"
-											aria-label={t("annotations.delete")}
-											onClick={(e) => {
-												e.stopPropagation();
-												onDelete(pageIndex, item.id);
-											}}
-										>
-											<Trash2 className="size-3.5" />
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent>{t("annotations.delete")}</TooltipContent>
-								</Tooltip>
-							</div>
-						</div>
+							item={item}
+							topPx={pos.topPx}
+							heightPx={pos.heightPx}
+							editing={item.id === editingId}
+							wikiTarget={wikiTarget}
+							onOpen={onOpen}
+							onSave={onSave}
+							onCancel={onCancel}
+							onDelete={onDelete}
+							onCopyLink={onCopyLink}
+							onCopyEmbed={onCopyEmbed}
+						/>
 					);
 				})}
 			</TooltipProvider>

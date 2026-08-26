@@ -88,6 +88,11 @@ export type UsePdfVisualMarksOptions = {
 	 */
 	visualDraftEditor: VisualDraftEditorState | null;
 	closeVisualDraftEditor: () => void;
+	/**
+	 * Wide host: persist the note into the comment rail instead of opening
+	 * the floating visual-trace card after a draft save.
+	 */
+	commentRailEnabled: boolean;
 };
 
 export type PdfVisualMarks = {
@@ -102,6 +107,8 @@ export type PdfVisualMarks = {
 	handleVisualSendNow: (comment: string) => void;
 	/** Pin note mode: persist a comment edit on an existing mark. */
 	handleVisualSaveComment: (comment: string) => void;
+	/** Persist a comment by mark id (comment-rail in-place edit). */
+	updateVisualComment: (id: string, comment: string) => void;
 	/** Pin header「加入侧边栏对话」on an existing mark. */
 	handleVisualAddToChatFromMark: () => void;
 	/** Pin chat composer: continue the mark's conversation. */
@@ -131,6 +138,7 @@ export function usePdfVisualMarks({
 	resolvePdfAskAgent,
 	visualDraftEditor,
 	closeVisualDraftEditor,
+	commentRailEnabled,
 }: UsePdfVisualMarksOptions): PdfVisualMarks {
 	const { t } = useTranslation("viewer");
 	const [visualError, setVisualError] = useState<string | null>(null);
@@ -174,6 +182,7 @@ export function usePdfVisualMarks({
 					notifyError(errorText(error));
 				});
 			}
+			if (commentRailEnabled) return;
 			setVisualCardExpanded(false);
 			cardScreenRef.current = draft.screen;
 			setCardScreen(draft.screen);
@@ -188,6 +197,7 @@ export function usePdfVisualMarks({
 			openCard,
 			cardScreenRef,
 			setCardScreen,
+			commentRailEnabled,
 		],
 	);
 
@@ -356,13 +366,10 @@ export function usePdfVisualMarks({
 		],
 	);
 
-	/** Persist comment edits from the pin note mode. */
-	const handleVisualSaveComment = useCallback(
-		(comment: string) => {
-			const card = activeCardRef.current;
-			const traceId = isVisualMarkKind(card?.kind) ? card.id : null;
-			if (!traceId) return;
-			const latest = visualTracesRef.current.find((tr) => tr.id === traceId);
+	/** Persist a comment by mark id (rail in-place edit or pin note mode). */
+	const updateVisualComment = useCallback(
+		(id: string, comment: string) => {
+			const latest = visualTracesRef.current.find((tr) => tr.id === id);
 			if (!latest) return;
 			const next: PdfVisualSessionTrace = {
 				...latest,
@@ -386,7 +393,18 @@ export function usePdfVisualMarks({
 				});
 			}
 		},
-		[paperAbsPath, upsertVisualTrace, activeCardRef, visualTracesRef],
+		[paperAbsPath, upsertVisualTrace, visualTracesRef],
+	);
+
+	/** Persist comment edits from the pin note mode. */
+	const handleVisualSaveComment = useCallback(
+		(comment: string) => {
+			const card = activeCardRef.current;
+			const traceId = isVisualMarkKind(card?.kind) ? card.id : null;
+			if (!traceId) return;
+			updateVisualComment(traceId, comment);
+		},
+		[activeCardRef, updateVisualComment],
 	);
 
 	/** Header「加入侧边栏对话」from an existing visual mark pin. */
@@ -649,6 +667,7 @@ export function usePdfVisualMarks({
 		handleVisualAddToChat,
 		handleVisualSendNow,
 		handleVisualSaveComment,
+		updateVisualComment,
 		handleVisualAddToChatFromMark,
 		handleVisualContinue,
 		handleDeleteVisualTrace,

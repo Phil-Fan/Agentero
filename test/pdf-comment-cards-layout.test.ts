@@ -7,13 +7,16 @@ function comment(
 	id: string,
 	anchorY: number,
 	text = "note",
+	kind: PageAnnotationComment["kind"] = "highlight",
 ): PageAnnotationComment {
 	return {
 		id,
+		pageIndex: 0,
 		anchorY,
-		quote: "quoted text",
+		quote: kind === "visual" ? "" : "quoted text",
 		comment: text,
 		color: "yellow",
+		kind,
 		linkAlias: null,
 	};
 }
@@ -100,5 +103,23 @@ describe("layoutCommentCards", () => {
 			800,
 		);
 		expect(tenLines[0].heightPx).toBe(threeLines[0].heightPx);
+	});
+
+	it("grows the editing card so the in-place editor has room", () => {
+		const item = comment("a", 0.2, "short");
+		const viewing = layoutCommentCards([item], 800);
+		const editing = layoutCommentCards([item], 800, "a");
+		expect(editing[0].heightPx).toBeGreaterThan(viewing[0].heightPx);
+	});
+
+	it("lays out visual notes with no quote", () => {
+		const laid = layoutCommentCards(
+			[comment("v", 0.4, "region note", "visual")],
+			800,
+		);
+		expect(laid).toHaveLength(1);
+		expect(laid[0].id).toBe("v");
+		expect(laid[0].topPx).toBeCloseTo(320);
+		expect(laid[0].heightPx).toBeGreaterThan(0);
 	});
 });

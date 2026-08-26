@@ -40,11 +40,11 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | 动作 | 落盘 | UI |
 |---|---|---|
 | 高亮 | `marks/annotations.json` | 颜色 |
-| 批注 | 高亮 + `comment` | 页右缘外侧常驻评论列（飞书式：色点 + quote + 评论卡，相邻卡片纵向避让；点击卡片开编辑器，hover 出复制链接/嵌入/删除）；视口窄于 640px 时回退为页边针 |
+| 批注 | 高亮 + `comment` | 页右缘外侧常驻评论列（色点 + quote + 评论卡，相邻卡片纵向避让；点击卡片就地编辑，Notion 式：卡片内 textarea，Enter 换行，⌘/Ctrl+Enter 或失焦保存，Esc 取消；hover 出复制链接/嵌入/删除）；视口窄于 640px 时回退为页边针 |
 | 提问 | `marks/<id>.json`（kind ask） | 迷你问答；页边针；**hover / 打开卡片时高亮**锚定选区原文；打开时停在用户问题处，不自动滚到回复底部；卡片右上角 ChatGPT / Claude 图标可把 论文标题 + 页码 + 划选文本 发送到对应外部 AI |
 | 加入对话 | 发送该轮后写 `marks/<id>.json`（kind `ask`） | 选区固定为 Agent composer 文本 chip；**发送**后在选区旁插入**对话卡片**页边针（与「提问」同一 ask 卡 / 非视觉批注）；hover / 打开同样高亮原文，见 [agent.md](agent.md) |
 | 翻译 | `marks/<id>.json`（kind translate） | 浮层结果卡：贴合选区随滚轮重定位；未悬停卡片 / 原文高亮 / 页边针时自动收起（流式中除外）。见 [translate.md](translate.md) |
-| 视觉批注 | `marks/<id>.json`（kind `visual` v2）：区域 + 用户批注 + 可选嵌套 `agent`；裁剪图 `marks/assets/<id>.png`。默认形态为纯批注（与文字「批注备注」同壳）；有 Agent 会话时可切到对话视图。旧版 `agent-trace` v1 仍可读，Doctor 可一键升 v2 | 框选后：**批注备注** 输入 + 取消/保存；右上角「加入侧边栏对话」。已落盘 pin：纯批注模式可改备注；有对话时右上角切换「编辑备注 / 查看对话」。续聊走 ACP 同一 session；`marks/annotations.json` 读写会按 annotation id 去重，避免重复导入脏数据 |
+| 视觉批注 | `marks/<id>.json`（kind `visual` v2）：区域 + 用户批注 + 可选嵌套 `agent`；裁剪图 `marks/assets/<id>.png`。默认形态为纯批注（与文字「批注备注」同壳）；有 Agent 会话时可切到对话视图。旧版 `agent-trace` v1 仍可读，Doctor 可一键升 v2 | 框选后：**批注备注** 输入 + 取消/保存；右上角「加入侧边栏对话」。纯批注落盘后进入页右缘评论列就地编辑（与文字批注同一列；编辑时页上描出裁剪框）；有 Agent 会话时另保留页边针打开对话卡。视口窄于 640px 时纯批注回退为页边针。续聊走 ACP 同一 session；`marks/annotations.json` 读写会按 annotation id 去重，避免重复导入脏数据 |
 
 - 不改 PDF 二进制；不自动写入 `NOTES.md`。
 - 提问 Agent 可与面板默认 Agent 分开配置。
@@ -88,7 +88,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/pdf/host-dom.ts` | 宿主 DOM 判定：可编辑目标、原生选区归属、文档关闭竞态错误 |
 | `src/components/viewer/pdf/region-crop.ts` | PDF 区域裁剪与 Agent 图片编码 |
 | `src/components/viewer/pdf/engine-provider.tsx` | PDFium engine 宿主：worker 优先 + 就绪探针 + 主线程回退 |
-| `src/components/viewer/pdf/layers/` | 页内绘制层：`page-layers`（memo 单页栈）/ `citation-links` / `layout-translate-overlay` / `region-select-layer` / `selection-gutter` / `comment-cards-layer`（批注评论列：页右缘常驻卡片 + `layoutCommentCards` 纵向避让） |
+| `src/components/viewer/pdf/layers/` | 页内绘制层：`page-layers`（memo 单页栈）/ `citation-links` / `layout-translate-overlay` / `region-select-layer` / `selection-gutter` / `comment-cards-layer`（批注评论列：页右缘常驻卡片 + `layoutCommentCards` 纵向避让；点击就地编辑） |
 | `src/components/viewer/pdf/chrome/` | 纯展示 chrome：`pdf-toolbar` / `pdf-find-bar` / `pdf-outline-panel`（+`outline-tree`）/ `pdf-references-panel` / `pdf-figures-panel` / `pdf-bottom-bar` / `pdf-card-stack`（portal 卡片栈） |
 | `src/components/viewer/pdf/cards/` | 划词与 mark 卡片：`selection-menu` / `selection-card`（共用壳）/ `ask-popover` / `translate-card` / `visual-trace-card` / `visual-annotation-editor` / `annotation-editor` / `formula-annotation-card` / `citation-preview` |
 | `src/components/viewer/pdf/viewport/` | 宿主接线：`dockview-viewport`（resize 门控 + 滚动指标按帧提交；`rightGutter` 为评论列预留页外空间，并向 EmbedPDF 报告缩减后的 width/clientWidth 使 fitWidth 页面让出该空间）/ `wheel-zoom-handler` / `active-card-scroll-sync` |
@@ -109,7 +109,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/pdf/hooks/use-pdf-navigation.ts` | 页码输入、跳页与阅读位置恢复/持久化 |
 | `src/components/viewer/pdf/hooks/use-pdf-zoom-controls.ts` | 缩放百分比输入（focus 期不被观测值覆盖） |
 | `src/components/viewer/pdf/hooks/use-pdf-color-scheme.ts` | 页面明暗状态与跨窗同步 |
-| `src/components/viewer/pdf/hooks/use-pdf-note-editor.ts` | 文字批注编辑器（按标注 id 打开，占用 hover surface） |
+| `src/components/viewer/pdf/hooks/use-pdf-note-editor.ts` | 文字 / 视觉批注编辑：宽宿主走评论列就地编辑，窄宿主走浮动 `AnnotationEditor` |
 | `src/components/viewer/pdf/hooks/use-pdf-find.ts` | `⌘F` 查找 |
 | `src/components/viewer/pdf/hooks/use-pdf-outline.ts` | 书签大纲加载 |
 | `src/components/viewer/pdf/hooks/use-pdf-viewer-handle.ts` | 注册命令式 handle（跨簇，唯一入口） |
