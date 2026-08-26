@@ -13,9 +13,11 @@ use crate::features::catalog::{probe_paper_caps, CapsCache};
 use crate::features::import::{
     fetch_arxiv_metadata, pdf_recognize::fetch_crossref_metadata, title_search::search_papers,
 };
+use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use tauri::State;
 
 #[derive(Debug, Deserialize)]
@@ -555,50 +557,72 @@ pub async fn paper_backfill_publication(
         }
     };
 
-    let mut updated = 0usize;
-    let mut failed = 0usize;
-    let mut errors = Vec::new();
+    const CONCURRENCY: usize = 10;
 
-    for row in rows {
-        let publication = resolve_publication_for_backfill(
-            row.doi.as_deref(),
-            row.arxiv_id.as_deref(),
-            &row.title,
-        )
-        .await;
+    let updated = Arc::new(Mutex::new(0usize));
+    let failed = Arc::new(Mutex::new(0usize));
+    let errors = Arc::new(Mutex::new(Vec::new()));
 
-        match publication {
-            Some(pub_value) => {
-                let patch = papers::PaperMetaPatch {
-                    publication: Some(pub_value),
-                    ..Default::default()
-                };
-                let path = row.path.clone();
-                let vault2 = vault.clone();
-                match run_blocking(move || match papers::update_meta(&vault2, &path, &patch) {
-                    Ok(_) => ApiResult::ok(()),
-                    Err(e) => map_err(e),
-                })
-                .await
-                {
-                    ApiResult { ok: true, .. } => updated += 1,
-                    ApiResult {
-                        error: Some(err), ..
-                    } => {
-                        failed += 1;
-                        errors.push(format!("{}: {}", row.path, err.message));
-                    }
-                    _ => {
-                        failed += 1;
-                        errors.push(format!("{}: update failed", row.path));
+    stream::iter(rows.into_iter().map(|row| {
+        let vault = vault.clone();
+        let updated = updated.clone();
+        let failed = failed.clone();
+        let errors = errors.clone();
+        async move {
+            let publication = resolve_publication_for_backfill(
+                row.doi.as_deref(),
+                row.arxiv_id.as_deref(),
+                &row.title,
+            )
+            .await;
+
+            match publication {
+                Some(pub_value) => {
+                    let patch = papers::PaperMetaPatch {
+                        publication: Some(pub_value),
+                        ..Default::default()
+                    };
+                    let path = row.path.clone();
+                    match run_blocking(move || match papers::update_meta(&vault, &path, &patch) {
+                        Ok(_) => ApiResult::ok(()),
+                        Err(e) => map_err(e),
+                    })
+                    .await
+                    {
+                        ApiResult { ok: true, .. } => {
+                            *updated.lock().unwrap() += 1;
+                        }
+                        ApiResult {
+                            error: Some(err), ..
+                        } => {
+                            *failed.lock().unwrap() += 1;
+                            errors
+                                .lock()
+                                .unwrap()
+                                .push(format!("{}: {}", row.path, err.message));
+                        }
+                        _ => {
+                            *failed.lock().unwrap() += 1;
+                            errors
+                                .lock()
+                                .unwrap()
+                                .push(format!("{}: update failed", row.path));
+                        }
                     }
                 }
-            }
-            None => {
-                failed += 1;
+                None => {
+                    *failed.lock().unwrap() += 1;
+                }
             }
         }
-    }
+    }))
+    .buffer_unordered(CONCURRENCY)
+    .collect::<()>()
+    .await;
+
+    let updated = Arc::try_unwrap(updated).unwrap().into_inner().unwrap();
+    let failed = Arc::try_unwrap(failed).unwrap().into_inner().unwrap();
+    let errors = Arc::try_unwrap(errors).unwrap().into_inner().unwrap();
 
     Ok(ApiResult::ok(PaperBackfillPublicationResult {
         total: updated + failed,
