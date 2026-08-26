@@ -226,7 +226,7 @@ const CommentCard = memo(function CommentCard({
 	return (
 		<div
 			className={cn(
-				"group pointer-events-auto absolute rounded-lg bg-background/95 shadow-sm ring-1 backdrop-blur-sm transition-all duration-200 ease-out hover:z-[7] hover:scale-[1.02] hover:shadow-md",
+				"group pointer-events-auto absolute select-none rounded-lg bg-background/95 shadow-sm ring-1 backdrop-blur-sm transition-all duration-200 ease-out hover:z-[7] hover:scale-[1.02] hover:shadow-md",
 				editing
 					? "z-[6] ring-2 ring-ring/50"
 					: hovered
@@ -277,7 +277,7 @@ const CommentCard = memo(function CommentCard({
 						)}
 						<textarea
 							ref={textareaRef}
-							className="mt-1 max-h-60 w-full resize-none bg-transparent p-0 text-[13px] text-foreground/80 leading-relaxed outline-none placeholder:text-muted-foreground/70"
+							className="mt-1 max-h-60 w-full resize-none bg-transparent p-0 text-[13px] text-foreground/80 leading-relaxed outline-none placeholder:text-muted-foreground/70 select-text"
 							placeholder={t("annotations.placeholder")}
 							aria-label={t("annotations.editorLabel")}
 							defaultValue={item.comment}
