@@ -458,11 +458,15 @@ function isTranslateTargetLang(v: unknown): v is TranslateTargetLang {
  * Reconcile stored column prefs against the canonical set:
  * drop unknown/duplicate keys, append missing columns (visible), and keep
  * `title` visible so rows stay identifiable.
+ *
+ * Migration: if the saved order matches the old canonical layout (before the
+ * standalone publication column was added), adopt the new canonical order so
+ * publication lands right after year. Custom user orders are preserved.
  */
 function normalizeLibraryColumns(raw: unknown): LibraryColumnPref[] {
 	const known = new Set<string>(LIBRARY_COLUMN_KEYS);
 	const seen = new Set<LibraryColumnKey>();
-	const out: LibraryColumnPref[] = [];
+	const saved: LibraryColumnPref[] = [];
 	if (Array.isArray(raw)) {
 		for (const item of raw) {
 			if (!item || typeof item !== "object") continue;
@@ -472,15 +476,39 @@ function normalizeLibraryColumns(raw: unknown): LibraryColumnPref[] {
 			if (seen.has(k)) continue;
 			seen.add(k);
 			const visible = (item as { visible?: unknown }).visible;
-			out.push({
+			saved.push({
 				key: k,
 				visible: typeof visible === "boolean" ? visible : true,
 			});
 		}
 	}
-	for (const key of LIBRARY_COLUMN_KEYS) {
-		if (!seen.has(key)) out.push({ key, visible: true });
+
+	const oldCanonicalKeys: LibraryColumnKey[] = [
+		"title",
+		"authors",
+		"year",
+		"tags",
+		"id",
+	];
+	const matchesOldLayout =
+		saved.length >= oldCanonicalKeys.length &&
+		oldCanonicalKeys.every((k, i) => saved[i]?.key === k);
+
+	const out: LibraryColumnPref[] = [];
+	if (matchesOldLayout) {
+		for (const key of LIBRARY_COLUMN_KEYS) {
+			const pref = saved.find((c) => c.key === key);
+			out.push({ key, visible: pref?.visible ?? true });
+		}
+	} else {
+		for (const key of LIBRARY_COLUMN_KEYS) {
+			if (!seen.has(key)) out.push({ key, visible: true });
+		}
+		for (const c of saved) {
+			if (seen.has(c.key)) out.push({ ...c });
+		}
 	}
+
 	for (const c of out) {
 		if (c.key === "title") c.visible = true;
 	}
