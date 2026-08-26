@@ -21,14 +21,7 @@ Host commands：`mcp_get_status` / `mcp_set_enabled` / `mcp_set_port` / `mcp_set
 
 ## ChatGPT Secure MCP Tunnel
 
-App 开着且开关打开后：
-
-```bash
-tunnel-client init --profile agentero \
-  --tunnel-id tunnel_… \
-  --mcp-server-url http://127.0.0.1:8765/mcp
-tunnel-client run --profile agentero
-```
+App 开着且开关打开后，用 OpenAI `tunnel-client` 把 `http://127.0.0.1:{port}/mcp` 接到 ChatGPT。安装、建隧道、Key、ChatGPT Connection 的逐步教程见 [用 MCP 连接外部 Agent](../usage/mcp.md)。
 
 Codex / Inspector 也可直接打该 URL。stdio 子进程不是这条通路。
 
