@@ -148,8 +148,8 @@
 		"refreshPublicationFailed": "刷新期刊/会议失败",
 		"refreshPublicationNoTargets": "没有可刷新的论文（需要 DOI、arXiv 编号或标题）",
 		"refreshPublicationTaskTitle": "刷新期刊/会议",
-		"refreshPublicationTaskDetail": "{{current}} / {{total}} 篇期刊/会议",
-		"refreshPublicationPartial": "已更新 {{updated}} 篇，失败 {{failed}} 篇"
+		"refreshPublicationTaskDetail": "{{current}} / {{total}} · 已更新 {{updated}} · 失败 {{failed}} · 未找到 {{empty}}",
+		"refreshPublicationPartial": "已更新 {{updated}} 篇，失败 {{failed}} 篇，未找到 {{empty}} 篇"
 	},
 	"plaza": {
 		"plaza": "广场",

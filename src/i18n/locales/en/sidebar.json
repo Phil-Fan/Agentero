@@ -148,8 +148,8 @@
 		"refreshPublicationFailed": "Failed to refresh venue",
 		"refreshPublicationNoTargets": "No papers with DOI, arXiv ID, or title to refresh",
 		"refreshPublicationTaskTitle": "Refresh venues",
-		"refreshPublicationTaskDetail": "{{current}} / {{total}} venues",
-		"refreshPublicationPartial": "{{updated}} updated, {{failed}} failed"
+		"refreshPublicationTaskDetail": "{{current}} / {{total}} · {{updated}} updated · {{failed}} failed · {{empty}} not found",
+		"refreshPublicationPartial": "{{updated}} updated, {{failed}} failed, {{empty}} not found"
 	},
 	"plaza": {
 		"plaza": "Plaza",

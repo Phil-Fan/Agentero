@@ -684,7 +684,20 @@ export function PapersLibrary({
 				},
 				async ({ signal, setProgress, setDetail }) => {
 					const stats = { updated: 0, empty: 0, failed: 0, processed: 0 };
-					await mapLimit(papers, 5, async (paper) => {
+					setProgress(0);
+					const updateStats = () => {
+						setProgress(Math.round((stats.processed / papers.length) * 100));
+						setDetail(
+							t("papersLibrary.refreshPublicationTaskDetail", {
+								current: stats.processed,
+								total: papers.length,
+								updated: stats.updated,
+								failed: stats.failed,
+								empty: stats.empty,
+							}),
+						);
+					};
+					await mapLimit(papers, 3, async (paper) => {
 						if (signal.aborted) return;
 						const text =
 							paper.doi?.trim() ||
@@ -710,21 +723,16 @@ export function PapersLibrary({
 							});
 						} finally {
 							stats.processed++;
-							setProgress(Math.round((stats.processed / papers.length) * 100));
-							setDetail(
-								t("papersLibrary.refreshPublicationTaskDetail", {
-									current: stats.processed,
-									total: papers.length,
-								}),
-							);
+							updateStats();
 						}
 					});
 					await refreshLibrary();
-					if (stats.failed > 0 || stats.empty > 0) {
+					if (stats.failed > 0) {
 						throw new Error(
 							t("papersLibrary.refreshPublicationPartial", {
 								updated: stats.updated,
-								failed: stats.failed + stats.empty,
+								failed: stats.failed,
+								empty: stats.empty,
 							}),
 						);
 					}
