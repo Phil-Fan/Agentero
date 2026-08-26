@@ -412,14 +412,12 @@
 				"openaiCompatible": "OpenAI-compatible"
 			},
 			"confirm": "Confirm",
-			"openDocs": "Open provider website",
 			"openDocsLabel": "Get an API key",
-			"notConfigured": "Not configured",
 			"apiKey": {
 				"label": "API key",
 				"placeholder": {
-					"paddle": "Enter your Paddle access token",
-					"mineru": "Enter your MinerU API token",
+					"paddle": "Enter your Paddle API key",
+					"mineru": "Enter your MinerU API key",
 					"openaiCompatible": "Enter your API key (e.g. SiliconFlow)"
 				}
 			},

@@ -2199,7 +2199,7 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 - `model` 供正文解析引擎使用：openaiCompatible 预设 `PaddlePaddle/PaddleOCR-VL-1.5` / `deepseek-ai/DeepSeek-OCR`（空 → 前者）；paddle 正文预设 `PaddleOCR-VL-1.6` / `PaddleOCR-VL-1.5`（空 → 前者；版面分析固定用 `PP-StructureV3`，不读该字段）。
 - `prompt` 仅 openaiCompatible 使用：OCR 提示词覆盖，空 → 按 model id 自动选择。注意 `PaddleOCR-VL` 只接受固定任务提示词，自定义提示词请配指令型 VLM（详见 [paper-import.md](paper-import.md) § 正文解析引擎）。
 - `parserBackend` 与版面 `backend` 独立选择，但共用 `providerConfigs` 凭据池；正文引擎详见 [paper-import.md](paper-import.md) § 正文解析引擎。
-- 设置 UI：Settings →「版面解析 / Layout」（版面后端由前端 `LAYOUT_PROVIDERS`、正文引擎由 `PARSER_PROVIDERS` 注册表驱动；两者指向同一 provider 时 `mergeProviderCards` 合并为一张卡片，按 `requiresApiKey` / `supportsBaseUrl` / `supportsModel` / `supportsPrompt` 显隐 API Key / Base URL / Model / Prompt 输入 + 连通性测试）。
+- 设置 UI：Settings →「版面解析 / Layout」（版面后端由前端 `LAYOUT_PROVIDERS`、正文引擎由 `PARSER_PROVIDERS` 注册表驱动；所有远程 provider 平铺为配置卡，`mergeProviderCards` 按 provider 合并、按 `requiresApiKey` / `supportsBaseUrl` / `supportsModel` / `supportsPrompt` 显隐 API Key / Base URL / Model / Prompt 输入 + 连通性测试；Model / Base URL 空值时预填引擎默认值。两个 backend 下拉只提供本地 + 已配置（apiKey 非空）的 provider）。
 
 #### `layout_remote_analyze_pdf`（已实现）
 

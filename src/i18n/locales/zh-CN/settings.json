@@ -412,14 +412,12 @@
 				"openaiCompatible": "OpenAI 兼容"
 			},
 			"confirm": "确定",
-			"openDocs": "打开服务商网站",
 			"openDocsLabel": "获取 API Key",
-			"notConfigured": "未配置",
 			"apiKey": {
 				"label": "API Key",
 				"placeholder": {
-					"paddle": "填写 Paddle 访问令牌",
-					"mineru": "填写 MinerU API Token",
+					"paddle": "填写 Paddle API Key",
+					"mineru": "填写 MinerU API Key",
 					"openaiCompatible": "填写 API Key（如硅基流动）"
 				}
 			},

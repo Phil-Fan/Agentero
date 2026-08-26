@@ -91,16 +91,6 @@ export const PARSER_PROVIDERS: Record<
 	},
 };
 
-export function parserProviderFor(
-	backend: string,
-): ProviderCardDescriptor | null {
-	return (
-		(PARSER_PROVIDERS as Record<string, ProviderCardDescriptor | null>)[
-			backend
-		] ?? null
-	);
-}
-
 /** A layout backend rendered as a credential card (no model / prompt). */
 export function layoutProviderCard(
 	descriptor: LayoutProviderDescriptor,
