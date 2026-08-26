@@ -82,8 +82,11 @@ export function sortFileTreeNodes(
 		// Files always by name
 		if (a.kind === "file") return cmpName(a.name, b.name);
 
-		// Default: mixed org + paper by **display** name (matches tree labels)
+		// Default: org folders first, then papers by **display** name (matches tree labels)
 		if (mode === "folder") {
+			const aPaper = isPaperDirectory(a.path, a.children);
+			const bPaper = isPaperDirectory(b.path, b.children);
+			if (aPaper !== bPaper) return aPaper ? 1 : -1;
 			const c = cmpName(displayKey(a), displayKey(b));
 			return c !== 0 ? c : cmpName(a.name, b.name);
 		}

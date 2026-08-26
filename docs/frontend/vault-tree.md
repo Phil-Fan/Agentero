@@ -35,7 +35,7 @@
 | 展示 | 说明 |
 |---|---|
 | 标签 | 默认「标题 · 作者」；`paperTreeLabelMode` 可改（展示用，不改磁盘名） |
-| 排序 | `paperTreeSortMode`（标题/作者/年份/添加时间等） |
+| 排序 | `paperTreeSortMode`：默认 `folder` 模式下组织文件夹始终排在论文文件夹之前，再按显示标签 A–Z；其他模式按标题/作者/年份/添加时间排序 |
 | Chevron | 仅当 `{paper}/attachments/` 非空时出现。点三角展开/收起附件；点行仍打开论文 |
 | Download | 缺 PDF，或既无 TeX 也无 `PAPER.md`（`source/` 为懒壳时按其 `hasTex` 标记判定） |
 | Zap | 资源齐且 `is_read === false` → paper-reader |

@@ -312,6 +312,7 @@ describe("sortFileTreeNodes", () => {
 
 	it("folder mode sorts by display label (labelMode) not disk folder name", () => {
 		// title-author labels: Attention, BERT, beta-org, Zebra (not disk alpha/mid/zeta)
+		// org folders are always surfaced before papers.
 		const names = sortFileTreeNodes(
 			siblings,
 			"folder",
@@ -320,9 +321,9 @@ describe("sortFileTreeNodes", () => {
 			"title-author",
 		).map((n) => n.name);
 		expect(names).toEqual([
+			"beta-org",
 			"alpha-paper", // Attention · Vaswani
 			"mid-paper", // BERT · Devlin
-			"beta-org",
 			"zeta-paper", // Zebra Methods · Zulu
 		]);
 	});
@@ -336,8 +337,8 @@ describe("sortFileTreeNodes", () => {
 			"folder",
 		).map((n) => n.name);
 		expect(names).toEqual([
-			"alpha-paper",
 			"beta-org",
+			"alpha-paper",
 			"mid-paper",
 			"zeta-paper",
 		]);

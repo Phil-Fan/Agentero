@@ -33,7 +33,8 @@ export function isPaperTreeLabelMode(v: unknown): v is PaperTreeLabelMode {
  * - `year-desc` / `year-asc`: publication year; missing year last
  * - `added-desc`: catalog `added_at` newest first; missing last
  *
- * Directories before files. `folder` mode mixes org folders and papers by name.
+ * Directories before files. Org folders (non-paper directories) before paper folders.
+ * `folder` mode: org folders first by name, then papers by display label.
  * Other modes: org folders first (by name), then papers by the chosen key.
  */
 export type PaperTreeSortMode =
