@@ -2,8 +2,9 @@
 //! export/import through the Translator Runtime.
 
 use super::{
-    export_catalog, import_catalog, migrate_zotero, scan_zotero, MigrateProgress, PaperExportArgs,
-    PaperExportResult, ZoteroMigrateArgs, ZoteroMigrateResult, ZoteroScan, ZoteroScanArgs,
+    export_catalog, import_catalog_with_mode, migrate_zotero, scan_zotero, MigrateProgress,
+    PaperExportArgs, PaperExportResult, ZoteroMigrateArgs, ZoteroMigrateResult, ZoteroScan,
+    ZoteroScanArgs,
 };
 use crate::core::blocking::run_blocking;
 use crate::core::error::ApiResult;
@@ -49,9 +50,11 @@ pub async fn zotero_migrate(
             phase: phase.to_string(),
         });
     };
-    op.finish_result_ok_extra(migrate_zotero(args, report, Some(&app)).await, |r| {
-        format!("imported={} skipped={}", r.imported, r.skipped)
-    })
+    let note_mode = crate::features::import::note_mode_from_app(&app);
+    op.finish_result_ok_extra(
+        migrate_zotero(args, report, Some(&app), note_mode).await,
+        |r| format!("imported={} skipped={}", r.imported, r.skipped),
+    )
 }
 
 /// Export catalog papers via Translator `POST /export` (Zotero JSON array → BibTeX/RIS/…).
@@ -74,6 +77,7 @@ pub async fn paper_import(
     use crate::core::log_util::OpTimer;
 
     let op = OpTimer::start("paper_import");
+    let note_mode = crate::features::import::note_mode_from_app(&app);
     if let Some(session_id) = parse_remote_handle(&args.vault_path) {
         let session = match registry.get(session_id).await {
             Ok(s) => s,
@@ -83,13 +87,12 @@ pub async fn paper_import(
             }
         };
         return Ok(op.finish_result_ok_extra(
-            import_bridge::import_catalog_remote(session, args).await,
+            import_bridge::import_catalog_remote(session, args, note_mode).await,
             |r| format!("imported={} skipped={}", r.imported, r.skipped),
         ));
     }
-    Ok(
-        op.finish_result_ok_extra(import_catalog(args, Some(&app)).await, |r| {
-            format!("imported={} skipped={}", r.imported, r.skipped)
-        }),
-    )
+    Ok(op.finish_result_ok_extra(
+        import_catalog_with_mode(args, Some(&app), note_mode).await,
+        |r| format!("imported={} skipped={}", r.imported, r.skipped),
+    ))
 }

@@ -68,6 +68,7 @@ pub async fn paper_coolpapers_import(
             app: Some(&app),
             task_id: args.task_id.as_deref(),
         },
+        note_mode: crate::features::import::note_mode_from_app(&app),
     })
     .await;
     Ok(op.finish_result(result))

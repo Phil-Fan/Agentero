@@ -7,7 +7,8 @@ use super::session::RemoteSession;
 use crate::core::error::AppError;
 use crate::features::catalog::papers;
 use crate::features::import::{
-    ensure_paper_assets, paper_record_from_meta, write_paper_shell, AssetDownloadResult, PaperMeta,
+    ensure_paper_assets, paper_record_from_meta, write_paper_shell, AssetDownloadResult,
+    NoteShellMode, PaperMeta,
 };
 
 pub(crate) enum RemoteAssetsPolicy<'a> {
@@ -20,6 +21,9 @@ pub(crate) struct RemotePaperCommitOptions<'a> {
     pub task_id: Option<&'a str>,
     pub assets: RemoteAssetsPolicy<'a>,
     pub push_catalog: bool,
+    /// NOTES.md shell generation mode (settings `paperNoteMode`), resolved by
+    /// the constructing bridge from the local settings store.
+    pub note_mode: NoteShellMode,
 }
 
 pub(crate) struct RemotePaperCommitResult {
@@ -55,7 +59,7 @@ pub(crate) async fn remote_paper_commit(
             .map_err(|e| AppError::message(format!("copy PDF failed: {e}")))?;
     }
 
-    write_paper_shell(&staging, &meta).await?;
+    write_paper_shell(&staging, &session.work_root, &meta, opts.note_mode).await?;
 
     let assets = match opts.assets {
         RemoteAssetsPolicy::SyncDownload => ensure_paper_assets(

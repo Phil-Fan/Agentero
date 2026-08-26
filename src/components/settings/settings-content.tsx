@@ -335,6 +335,7 @@ export function SettingsContent({
 									settings={settings}
 									patch={patch}
 									hostContext={hostContext}
+									vaultPath={vaultPath}
 								/>
 							</Suspense>
 						</div>

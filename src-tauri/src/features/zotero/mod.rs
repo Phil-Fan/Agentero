@@ -23,7 +23,9 @@ pub use db::{
     migrate_zotero, scan_zotero, MigrateProgress, ZoteroMigrateArgs, ZoteroMigrateResult,
     ZoteroScan, ZoteroScanArgs,
 };
-pub use io::{export_catalog, import_catalog, PaperExportArgs, PaperExportResult};
+pub use io::{
+    export_catalog, import_catalog, import_catalog_with_mode, PaperExportArgs, PaperExportResult,
+};
 
 /// Prefix for Zotero tags that are not user-created or are otherwise internal.
 pub const ZOTERO_INTERNAL_TAG_PREFIX: &str = "@zotero:";

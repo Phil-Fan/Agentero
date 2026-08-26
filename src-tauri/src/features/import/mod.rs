@@ -310,13 +310,15 @@ pub struct LookupImportBatchResult {
 }
 
 pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImportResult, AppError> {
-    import_by_identifier_with_progress(args, None, None).await
+    // Headless entry (CLI): no settings store wiring, keep the default shell.
+    import_by_identifier_with_progress(args, None, None, NoteShellMode::Standard).await
 }
 
 pub async fn import_by_identifier_with_progress(
     args: LookupImportArgs,
     app: Option<&AppHandle>,
     cache: Option<&CapsCache>,
+    note_mode: NoteShellMode,
 ) -> Result<LookupImportResult, AppError> {
     use crate::features::import::paper_import::{
         paper_commit, AssetsPolicy, DedupePolicy, PaperCommitOptions,
@@ -358,6 +360,7 @@ pub async fn import_by_identifier_with_progress(
                 },
             },
             translate_abstract: true,
+            note_mode,
             fresh_timestamps: false,
             cache,
             app,
@@ -387,6 +390,7 @@ pub async fn import_by_identifier_batch(
     args: LookupImportBatchArgs,
     app: Option<&AppHandle>,
     cache: Option<&CapsCache>,
+    note_mode: NoteShellMode,
 ) -> Result<LookupImportBatchResult, AppError> {
     let vault = crate::core::fs::resolve_vault(&args.vault_path)?;
 
@@ -450,7 +454,7 @@ pub async fn import_by_identifier_batch(
         let counter = counter.clone();
         let task_id = args.task_id.clone();
         async move {
-            let result = import_by_identifier_with_progress(single, app, cache).await;
+            let result = import_by_identifier_with_progress(single, app, cache, note_mode).await;
             let done = counter.fetch_add(1, Ordering::SeqCst) + 1;
             emit_batch_progress(app, task_id.as_deref(), done, total);
             match result {
@@ -696,6 +700,7 @@ pub async fn import_local_pdfs(
     args: ImportLocalPdfArgs,
     app: Option<&AppHandle>,
     cache: Option<&CapsCache>,
+    note_mode: NoteShellMode,
 ) -> Result<ImportLocalPdfResult, AppError> {
     let vault = crate::core::fs::resolve_vault(&args.vault_path)?;
     let parent_rel = normalize_parent_dir(&args.parent_dir)?;
@@ -736,6 +741,7 @@ pub async fn import_local_pdfs(
                 task_id: task_id.as_deref(),
                 app,
                 cache,
+                note_mode,
             },
         )
         .await
@@ -782,6 +788,7 @@ struct ImportLocalPdfContext<'a> {
     task_id: Option<&'a str>,
     app: Option<&'a AppHandle>,
     cache: Option<&'a CapsCache>,
+    note_mode: NoteShellMode,
 }
 
 async fn import_one_local_pdf(
@@ -960,6 +967,7 @@ async fn import_one_local_pdf(
                 progress,
             },
             translate_abstract: true,
+            note_mode: ctx.note_mode,
             fresh_timestamps: false,
             cache: ctx.cache,
             app: ctx.app,
@@ -1308,6 +1316,89 @@ pub(crate) fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecor
     }
 }
 
+/// How the `NOTES.md` shell is generated on paper import (settings
+/// `paperNoteMode`). Unknown values fall back to [`NoteShellMode::Standard`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoteShellMode {
+    /// aliases frontmatter + `# title` + abstract blockquote (optional zh-CN MT).
+    Standard,
+    /// aliases frontmatter + `# title`, no abstract.
+    TitleOnly,
+    /// aliases frontmatter only; empty body.
+    Blank,
+    /// Render the vault template `.agentero/templates/NOTES.md`.
+    Custom,
+}
+
+impl NoteShellMode {
+    /// Parse the persisted settings value; unknown values → [`Self::Standard`].
+    pub fn parse(raw: &str) -> Self {
+        match raw.trim() {
+            "title-only" => Self::TitleOnly,
+            "blank" => Self::Blank,
+            "custom" => Self::Custom,
+            _ => Self::Standard,
+        }
+    }
+}
+
+/// Resolve the configured NOTES shell mode from the managed settings store.
+#[cfg(feature = "desktop")]
+pub fn note_mode_from_app(app: &tauri::AppHandle) -> NoteShellMode {
+    use tauri::Manager;
+    app.state::<crate::features::settings::AppSettingsStore>()
+        .get()
+        .map(|r| NoteShellMode::parse(&r.settings.paper_note_mode))
+        .unwrap_or(NoteShellMode::Standard)
+}
+
+/// Starting template written by `notes_template_seed` (never overwrites).
+pub const NOTES_TEMPLATE_SEED: &str = "---\n\
+aliases:\n\
+  - \"{{title}}\"\n\
+---\n\
+# {{title}}\n\
+\n\
+> {{abstract}}\n\
+\n\
+## Problem\n\
+\n\
+\n\
+## Method\n\
+\n\
+\n\
+## Results\n\
+\n";
+
+/// Seed `{vault}/.agentero/templates/NOTES.md` with [`NOTES_TEMPLATE_SEED`].
+/// Returns `true` only when the file was created; an existing template is
+/// never touched.
+pub fn seed_notes_template(vault_root: &Path) -> Result<bool, AppError> {
+    let path = vault_root
+        .join(".agentero")
+        .join("templates")
+        .join("NOTES.md");
+    if path.is_file() {
+        return Ok(false);
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&path, NOTES_TEMPLATE_SEED)?;
+    Ok(true)
+}
+
+/// Title + deterministic short alias for the NOTES frontmatter.
+fn paper_shell_aliases(meta: &PaperMeta) -> Vec<String> {
+    let mut aliases = vec![meta.title.clone()];
+    if let Some(short) =
+        crate::features::doctor::suggest_short_alias(&meta.title, &meta.authors, meta.year)
+    {
+        aliases.push(short);
+    }
+    aliases
+}
+
 /// Write `{paper}/NOTES.md` shell (title + optional abstract blockquote).
 /// Abstract is shown in **Chinese** when free-MT race succeeds; when every engine
 /// fails the blockquote is omitted (no English stand-in as "translation").
@@ -1315,8 +1406,13 @@ pub(crate) fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecor
 ///
 /// Annotations live in `{paper}/marks/*.json` at runtime (not part of the shell).
 #[cfg_attr(not(feature = "desktop"), allow(dead_code))]
-pub(crate) async fn write_paper_shell(paper_dir: &Path, meta: &PaperMeta) -> Result<(), AppError> {
-    write_paper_shell_opts(paper_dir, meta, true).await
+pub(crate) async fn write_paper_shell(
+    paper_dir: &Path,
+    vault_root: &Path,
+    meta: &PaperMeta,
+    mode: NoteShellMode,
+) -> Result<(), AppError> {
+    write_paper_shell_opts(paper_dir, vault_root, meta, mode, true).await
 }
 
 /// Same as [`write_paper_shell`], with optional abstract MT.
@@ -1324,9 +1420,43 @@ pub(crate) async fn write_paper_shell(paper_dir: &Path, meta: &PaperMeta) -> Res
 /// pass `translate_abstract = false` and fetch assets asynchronously.
 pub(crate) async fn write_paper_shell_opts(
     paper_dir: &Path,
+    vault_root: &Path,
     meta: &PaperMeta,
+    mode: NoteShellMode,
     translate_abstract: bool,
 ) -> Result<(), AppError> {
+    let aliases = paper_shell_aliases(meta);
+    let notes = match mode {
+        NoteShellMode::Blank => {
+            crate::features::wiki::frontmatter::prepend_new_aliases("", &aliases)
+                .map_err(AppError::message)?
+        }
+        NoteShellMode::TitleOnly => {
+            let body = format!("# {}\n", meta.title);
+            crate::features::wiki::frontmatter::prepend_new_aliases(&body, &aliases)
+                .map_err(AppError::message)?
+        }
+        NoteShellMode::Custom => match custom_note_shell(vault_root, meta, &aliases).await {
+            Some(notes) => notes,
+            // Template missing/blank → fall through to the Standard shell.
+            None => {
+                let body = standard_note_body(meta, translate_abstract).await;
+                crate::features::wiki::frontmatter::prepend_new_aliases(&body, &aliases)
+                    .map_err(AppError::message)?
+            }
+        },
+        NoteShellMode::Standard => {
+            let body = standard_note_body(meta, translate_abstract).await;
+            crate::features::wiki::frontmatter::prepend_new_aliases(&body, &aliases)
+                .map_err(AppError::message)?
+        }
+    };
+    fs::write(paper_dir.join("NOTES.md"), notes)?;
+    Ok(())
+}
+
+/// Standard shell body: `# title` + optional abstract blockquote.
+async fn standard_note_body(meta: &PaperMeta, translate_abstract: bool) -> String {
     let abstract_block = match meta
         .abstract_text
         .as_deref()
@@ -1347,17 +1477,126 @@ pub(crate) async fn write_paper_shell_opts(
         }
         None => String::new(),
     };
-    let body = format!("# {}\n\n{abstract_block}", meta.title);
-    let mut aliases = vec![meta.title.clone()];
-    if let Some(short) =
-        crate::features::doctor::suggest_short_alias(&meta.title, &meta.authors, meta.year)
-    {
-        aliases.push(short);
+    format!("# {}\n\n{abstract_block}", meta.title)
+}
+
+/// Render the vault template `.agentero/templates/NOTES.md` for one paper.
+/// `None` when the template file is missing or blank (caller falls back to
+/// the Standard shell). The rendered document then gets the aliases
+/// guarantee (a template without aliases gets title + short alias merged in).
+async fn custom_note_shell(
+    vault_root: &Path,
+    meta: &PaperMeta,
+    aliases: &[String],
+) -> Option<String> {
+    let path = vault_root
+        .join(".agentero")
+        .join("templates")
+        .join("NOTES.md");
+    let template = match fs::read_to_string(&path) {
+        Ok(raw) if !raw.trim().is_empty() => raw,
+        _ => {
+            log::warn!(
+                target: "agentero::import",
+                "NOTES template missing or empty ({}); falling back to standard shell",
+                path.display()
+            );
+            return None;
+        }
+    };
+    Some(ensure_note_aliases(
+        &render_note_template(&template, meta),
+        aliases,
+    ))
+}
+
+/// Substitute the known `{{var}}` placeholders; unknown ones stay verbatim.
+/// Missing optional metadata renders as an empty string. `{{url}}` prefers
+/// html_url, then source_url, then pdf_url. `{{abstract}}` is the original
+/// text (no machine translation).
+fn render_note_template(template: &str, meta: &PaperMeta) -> String {
+    let authors = meta.authors.join(", ");
+    let year = meta.year.map(|y| y.to_string()).unwrap_or_default();
+    let url = meta
+        .html_url
+        .as_deref()
+        .or(meta.source_url.as_deref())
+        .or(meta.pdf_url.as_deref())
+        .unwrap_or_default();
+    template
+        .replace("{{title}}", &meta.title)
+        .replace("{{authors}}", &authors)
+        .replace("{{year}}", &year)
+        .replace("{{date}}", meta.date.as_deref().unwrap_or_default())
+        .replace(
+            "{{abstract}}",
+            meta.abstract_text.as_deref().unwrap_or_default(),
+        )
+        .replace("{{arxiv_id}}", meta.arxiv_id.as_deref().unwrap_or_default())
+        .replace("{{doi}}", meta.doi.as_deref().unwrap_or_default())
+        .replace("{{url}}", url)
+        .replace("{{id}}", &meta.id)
+}
+
+/// Aliases guarantee for a rendered (Custom) shell: when the frontmatter has
+/// no aliases, merge in the title + short alias following the same logic as
+/// `catalog::papers::append_title_alias_best_effort`.
+fn ensure_note_aliases(notes: &str, aliases: &[String]) -> String {
+    use crate::features::wiki::frontmatter::{self as fm, AliasEdit};
+    let inspection = fm::inspect_aliases(notes);
+    if !inspection.aliases.is_empty() {
+        return notes.to_string();
     }
-    let notes = crate::features::wiki::frontmatter::prepend_new_aliases(&body, &aliases)
-        .map_err(AppError::message)?;
-    fs::write(paper_dir.join("NOTES.md"), notes)?;
-    Ok(())
+    if matches!(inspection.edit, AliasEdit::Unsupported { .. }) {
+        // Intentional exception: the frontmatter cannot be edited safely
+        // (e.g. a missing closing fence), so the rendered note is kept
+        // verbatim. Doctor diagnoses and repairs such notes; rewriting the
+        // YAML here could corrupt user-authored templates.
+        return notes.to_string();
+    }
+    let merged: Vec<String> = aliases
+        .iter()
+        .filter(|a| !a.trim().is_empty())
+        .cloned()
+        .collect();
+    if merged.is_empty() {
+        return notes.to_string();
+    }
+    let next = if merged.len() >= 2 {
+        fm::patch_aliases(notes, &merged)
+    } else if inspection.frontmatter_end == 0 {
+        fm::prepend_new_aliases(notes, &merged)
+    } else if let AliasEdit::Insert { offset } = inspection.edit {
+        // Frontmatter exists but only the title alias is available and
+        // `patch_aliases` requires two — insert the single alias directly
+        // before the closing fence, mirroring the leniency of
+        // `prepend_new_aliases` for freshly generated notes.
+        insert_single_alias(notes, offset, &merged[0])
+    } else {
+        // An existing (empty) aliases property could not be replaced with a
+        // single entry — leave the note for Doctor to surface.
+        return notes.to_string();
+    };
+    next.unwrap_or_else(|_| notes.to_string())
+}
+
+/// Insert one `aliases` entry before the frontmatter closing fence, mirroring
+/// the `AliasEdit::Insert` rendering of [`crate::features::wiki::frontmatter::patch_aliases`]
+/// but without its two-alias minimum.
+fn insert_single_alias(markdown: &str, offset: usize, alias: &str) -> Result<String, String> {
+    let newline = if markdown.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let quoted = serde_json::to_string(alias.trim()).map_err(|error| error.to_string())?;
+    let mut insert = format!("aliases:{newline}  - {quoted}{newline}");
+    if offset > 0 && !markdown[..offset].ends_with(['\n', '\r']) {
+        insert.insert_str(0, newline);
+    }
+    let mut out = markdown.to_string();
+    out.insert_str(offset, &insert);
+    Ok(out)
 }
 
 /// Prefer zh-CN translation of the abstract for NOTES.md display.
@@ -1484,5 +1723,263 @@ mod tests {
                 "input: {input}"
             );
         }
+    }
+
+    fn note_shell_test_meta() -> PaperMeta {
+        let mut meta = local_pdf_meta("1706.03762".into(), "Attention Is All You Need".into());
+        meta.authors = vec!["Ashish Vaswani".into(), "Noam Shazeer".into()];
+        meta.year = Some(2017);
+        meta.date = Some("2017-06-12".into());
+        meta.abstract_text = Some("The dominant sequence transduction models.".into());
+        meta.arxiv_id = Some("1706.03762".into());
+        meta.doi = Some("10.48550/arXiv.1706.03762".into());
+        meta.html_url = Some("https://arxiv.org/abs/1706.03762".into());
+        meta
+    }
+
+    fn note_shell_tmp_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "agentero-notes-{tag}-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn note_shell_mode_parse() {
+        assert_eq!(NoteShellMode::parse("standard"), NoteShellMode::Standard);
+        assert_eq!(NoteShellMode::parse("title-only"), NoteShellMode::TitleOnly);
+        assert_eq!(NoteShellMode::parse("blank"), NoteShellMode::Blank);
+        assert_eq!(NoteShellMode::parse("custom"), NoteShellMode::Custom);
+        assert_eq!(NoteShellMode::parse("bogus"), NoteShellMode::Standard);
+        assert_eq!(NoteShellMode::parse(""), NoteShellMode::Standard);
+    }
+
+    #[tokio::test]
+    async fn note_shell_standard_and_title_only() {
+        let vault = note_shell_tmp_dir("std");
+        let meta = note_shell_test_meta();
+
+        let paper = vault.join("papers").join("standard");
+        fs::create_dir_all(&paper).unwrap();
+        write_paper_shell_opts(&paper, &vault, &meta, NoteShellMode::Standard, false)
+            .await
+            .unwrap();
+        let content = fs::read_to_string(paper.join("NOTES.md")).unwrap();
+        assert!(content.starts_with("---\naliases:\n"));
+        assert!(content.contains("- \"Attention Is All You Need\""));
+        assert!(content.contains("# Attention Is All You Need"));
+        assert!(content.contains("> The dominant sequence transduction models."));
+
+        let paper = vault.join("papers").join("title-only");
+        fs::create_dir_all(&paper).unwrap();
+        write_paper_shell_opts(&paper, &vault, &meta, NoteShellMode::TitleOnly, false)
+            .await
+            .unwrap();
+        let content = fs::read_to_string(paper.join("NOTES.md")).unwrap();
+        assert!(content.starts_with("---\naliases:\n"));
+        assert!(content.contains("# Attention Is All You Need"));
+        // Title-only must not carry the abstract blockquote.
+        assert!(!content.contains("dominant sequence"));
+
+        let _ = fs::remove_dir_all(&vault);
+    }
+
+    #[tokio::test]
+    async fn note_shell_blank_is_frontmatter_only() {
+        let vault = note_shell_tmp_dir("blank");
+        let meta = note_shell_test_meta();
+        let paper = vault.join("papers").join("blank");
+        fs::create_dir_all(&paper).unwrap();
+
+        write_paper_shell_opts(&paper, &vault, &meta, NoteShellMode::Blank, false)
+            .await
+            .unwrap();
+        let content = fs::read_to_string(paper.join("NOTES.md")).unwrap();
+        assert!(content.starts_with("---\naliases:\n"));
+        assert!(content.ends_with("---\n"));
+        // No body at all: no heading, no abstract.
+        assert!(!content.contains("# "));
+        assert!(!content.contains("dominant sequence"));
+        let (_, aliases) = crate::features::wiki::frontmatter::parse_frontmatter_aliases(&content);
+        assert!(aliases.contains(&"Attention Is All You Need".to_string()));
+
+        let _ = fs::remove_dir_all(&vault);
+    }
+
+    #[tokio::test]
+    async fn note_shell_custom_renders_variables() {
+        let vault = note_shell_tmp_dir("custom-vars");
+        let meta = note_shell_test_meta();
+        let templates = vault.join(".agentero").join("templates");
+        fs::create_dir_all(&templates).unwrap();
+        fs::write(
+            templates.join("NOTES.md"),
+            "---\naliases:\n  - \"{{title}}\"\n---\n\
+             # {{title}}\n\n\
+             {{authors}} ({{year}}-{{date}}) {{id}}\n\
+             arXiv {{arxiv_id}} doi {{doi}} url {{url}}\n\
+             > {{abstract}}\n\n{{nope}} stays\n",
+        )
+        .unwrap();
+
+        let paper = vault.join("papers").join("custom");
+        fs::create_dir_all(&paper).unwrap();
+        write_paper_shell_opts(&paper, &vault, &meta, NoteShellMode::Custom, false)
+            .await
+            .unwrap();
+        let content = fs::read_to_string(paper.join("NOTES.md")).unwrap();
+        assert!(content.contains("# Attention Is All You Need"));
+        assert!(content.contains("Ashish Vaswani, Noam Shazeer (2017-2017-06-12) 1706.03762"));
+        assert!(content.contains(
+            "arXiv 1706.03762 doi 10.48550/arXiv.1706.03762 url https://arxiv.org/abs/1706.03762"
+        ));
+        // {{abstract}} renders the original text (no MT).
+        assert!(content.contains("> The dominant sequence transduction models."));
+        // Unknown placeholders stay verbatim.
+        assert!(content.contains("{{nope}} stays"));
+        // Template aliases are preserved (no duplicate frontmatter).
+        let (_, aliases) = crate::features::wiki::frontmatter::parse_frontmatter_aliases(&content);
+        assert_eq!(aliases, vec!["Attention Is All You Need".to_string()]);
+
+        let _ = fs::remove_dir_all(&vault);
+    }
+
+    #[tokio::test]
+    async fn note_shell_custom_adds_missing_aliases() {
+        let vault = note_shell_tmp_dir("custom-aliases");
+        let meta = note_shell_test_meta();
+        let templates = vault.join(".agentero").join("templates");
+        fs::create_dir_all(&templates).unwrap();
+        fs::write(templates.join("NOTES.md"), "# {{title}}\n\nBody\n").unwrap();
+
+        let paper = vault.join("papers").join("custom");
+        fs::create_dir_all(&paper).unwrap();
+        write_paper_shell_opts(&paper, &vault, &meta, NoteShellMode::Custom, false)
+            .await
+            .unwrap();
+        let content = fs::read_to_string(paper.join("NOTES.md")).unwrap();
+        // Frontmatter with title + short alias prepended ahead of the body.
+        assert!(content.starts_with("---\naliases:\n"));
+        let (_, aliases) = crate::features::wiki::frontmatter::parse_frontmatter_aliases(&content);
+        assert!(aliases.contains(&"Attention Is All You Need".to_string()));
+        assert!(aliases.len() >= 2, "short alias expected: {aliases:?}");
+        assert!(content.contains("# Attention Is All You Need"));
+
+        let _ = fs::remove_dir_all(&vault);
+    }
+
+    #[tokio::test]
+    async fn note_shell_custom_missing_template_falls_back_standard() {
+        let vault = note_shell_tmp_dir("custom-missing");
+        let meta = note_shell_test_meta();
+        let paper = vault.join("papers").join("custom");
+        fs::create_dir_all(&paper).unwrap();
+
+        write_paper_shell_opts(&paper, &vault, &meta, NoteShellMode::Custom, false)
+            .await
+            .unwrap();
+        let content = fs::read_to_string(paper.join("NOTES.md")).unwrap();
+        // Standard shell shape: aliases + title + abstract blockquote.
+        assert!(content.starts_with("---\naliases:\n"));
+        assert!(content.contains("# Attention Is All You Need"));
+        assert!(content.contains("> The dominant sequence transduction models."));
+
+        let _ = fs::remove_dir_all(&vault);
+    }
+
+    #[tokio::test]
+    async fn note_shell_custom_inserts_single_alias_into_existing_frontmatter() {
+        let vault = note_shell_tmp_dir("custom-insert");
+        // No authors/year → suggest_short_alias returns None → title alias only.
+        let meta = local_pdf_meta("2501.00001".into(), "Deep".into());
+        let templates = vault.join(".agentero").join("templates");
+        fs::create_dir_all(&templates).unwrap();
+        // Frontmatter without aliases: the single title alias must be inserted
+        // before the closing fence even though patch_aliases needs two.
+        fs::write(
+            templates.join("NOTES.md"),
+            "---\ntags: [paper]\n---\n# {{title}}\n\nBody\n",
+        )
+        .unwrap();
+
+        let paper = vault.join("papers").join("custom");
+        fs::create_dir_all(&paper).unwrap();
+        write_paper_shell_opts(&paper, &vault, &meta, NoteShellMode::Custom, false)
+            .await
+            .unwrap();
+        let content = fs::read_to_string(paper.join("NOTES.md")).unwrap();
+        assert_eq!(
+            content,
+            "---\ntags: [paper]\naliases:\n  - \"Deep\"\n---\n# Deep\n\nBody\n"
+        );
+        let (_, aliases) = crate::features::wiki::frontmatter::parse_frontmatter_aliases(&content);
+        assert_eq!(aliases, vec!["Deep".to_string()]);
+
+        let _ = fs::remove_dir_all(&vault);
+    }
+
+    #[tokio::test]
+    async fn note_shell_custom_keeps_unsupported_frontmatter_verbatim() {
+        let vault = note_shell_tmp_dir("custom-unsupported");
+        let meta = note_shell_test_meta();
+        let templates = vault.join(".agentero").join("templates");
+        fs::create_dir_all(&templates).unwrap();
+        // Unterminated frontmatter fence → AliasEdit::Unsupported: the
+        // rendered note must be kept verbatim (Doctor surfaces it later).
+        fs::write(
+            templates.join("NOTES.md"),
+            "---\naliases:\n  - Old\n# {{title}}\n",
+        )
+        .unwrap();
+
+        let paper = vault.join("papers").join("custom");
+        fs::create_dir_all(&paper).unwrap();
+        write_paper_shell_opts(&paper, &vault, &meta, NoteShellMode::Custom, false)
+            .await
+            .unwrap();
+        let content = fs::read_to_string(paper.join("NOTES.md")).unwrap();
+        assert_eq!(
+            content,
+            "---\naliases:\n  - Old\n# Attention Is All You Need\n"
+        );
+
+        let _ = fs::remove_dir_all(&vault);
+    }
+
+    #[tokio::test]
+    async fn note_shell_blank_single_title_alias_without_short() {
+        let vault = note_shell_tmp_dir("blank-single");
+        // No authors/year → suggest_short_alias returns None.
+        let meta = local_pdf_meta("2501.00001".into(), "Deep".into());
+        let paper = vault.join("papers").join("blank");
+        fs::create_dir_all(&paper).unwrap();
+
+        write_paper_shell_opts(&paper, &vault, &meta, NoteShellMode::Blank, false)
+            .await
+            .unwrap();
+        let content = fs::read_to_string(paper.join("NOTES.md")).unwrap();
+        assert_eq!(content, "---\naliases:\n  - \"Deep\"\n---\n");
+
+        let _ = fs::remove_dir_all(&vault);
+    }
+
+    #[test]
+    fn seed_notes_template_creates_once() {
+        let vault = note_shell_tmp_dir("seed");
+        let created = seed_notes_template(&vault).unwrap();
+        assert!(created);
+        let path = vault.join(".agentero").join("templates").join("NOTES.md");
+        assert!(path.is_file());
+        assert!(fs::read_to_string(&path).unwrap().contains("{{title}}"));
+
+        // Existing template is never overwritten.
+        fs::write(&path, "user template").unwrap();
+        assert!(!seed_notes_template(&vault).unwrap());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "user template");
+
+        let _ = fs::remove_dir_all(&vault);
     }
 }

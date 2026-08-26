@@ -82,6 +82,28 @@ export const AUTO_UPDATE_INTERNAL_LINKS: AutoUpdateInternalLinks[] = [
 	"always",
 ];
 
+/**
+ * How NOTES.md is initialized when a paper is imported.
+ * - `standard`: built-in structured skeleton
+ * - `title-only`: title heading only
+ * - `blank`: empty file
+ * - `custom`: copy the vault template `.agentero/templates/NOTES.md`
+ */
+export type PaperNoteMode = "standard" | "title-only" | "blank" | "custom";
+
+export const PAPER_NOTE_MODES: readonly PaperNoteMode[] = [
+	"standard",
+	"title-only",
+	"blank",
+	"custom",
+] as const;
+
+export function isPaperNoteMode(v: unknown): v is PaperNoteMode {
+	return (
+		typeof v === "string" && (PAPER_NOTE_MODES as readonly string[]).includes(v)
+	);
+}
+
 export type AppSettings = {
 	// General
 	/**
@@ -104,6 +126,11 @@ export type AppSettings = {
 	paperTreeSortMode: PaperTreeSortMode;
 	/** Default `ask`: external local renames are previewed before Markdown writes. */
 	autoUpdateInternalLinks: AutoUpdateInternalLinks;
+	/**
+	 * How NOTES.md is initialized on paper import. `custom` copies the vault
+	 * template `.agentero/templates/NOTES.md`. Default: built-in skeleton.
+	 */
+	paperNoteMode: PaperNoteMode;
 	/**
 	 * Papers Library table columns: order (array position) + visibility.
 	 * Reconciled against {@link LIBRARY_COLUMN_KEYS}; `title` is always visible.

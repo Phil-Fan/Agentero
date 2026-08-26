@@ -17,6 +17,11 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useTauriEvent } from "@/hooks/use-tauri-event";
 import { clearUsage } from "@/lib/activity";
 import { errorText } from "@/lib/core/error";
@@ -39,23 +44,52 @@ import {
 	type AppSettings,
 	AUTO_UPDATE_INTERNAL_LINKS,
 	type AutoUpdateInternalLinks,
+	PAPER_NOTE_MODES,
+	type PaperNoteMode,
 } from "@/lib/settings";
 import { DEFAULT_NETWORK_PROXY_URL } from "@/lib/settings/defaults";
+import { notesTemplateSeed } from "@/lib/vault/note-template";
 
 export function GeneralPane({
 	settings,
 	patch,
 	hostContext,
+	vaultPath = null,
 }: {
 	settings: AppSettings;
 	patch: (p: Partial<AppSettings>) => void;
 	hostContext: SettingsHostContext;
+	vaultPath?: string | null;
 }) {
 	const { t } = useTranslation("settings");
 	const [proxyUrlDraft, setProxyUrlDraft] = useState(settings.networkProxyUrl);
 	// OS system proxy detected by the Host (Windows "Internet Settings"); used
 	// automatically while the app proxy is off — surface it for transparency.
 	const [systemProxy, setSystemProxy] = useState<string | null>(null);
+	const [seedingTemplate, setSeedingTemplate] = useState(false);
+
+	// Custom note mode seeds `.agentero/templates/NOTES.md` in the active vault;
+	// remote vaults have no local template file to create.
+	const canSeedTemplate = Boolean(vaultPath) && hostContext.kind === "local";
+
+	const seedTemplate = async () => {
+		if (!vaultPath || !canSeedTemplate) return;
+		setSeedingTemplate(true);
+		try {
+			const res = await notesTemplateSeed(vaultPath);
+			notifySuccess(
+				t(
+					res.created
+						? "general.paperNoteMode.seedCreated"
+						: "general.paperNoteMode.seedExists",
+				),
+			);
+		} catch (e) {
+			notifyError(errorText(e));
+		} finally {
+			setSeedingTemplate(false);
+		}
+	};
 
 	useEffect(() => {
 		setProxyUrlDraft(settings.networkProxyUrl);
@@ -124,6 +158,48 @@ export function GeneralPane({
 						</SelectContent>
 					</Select>
 				</SettingsRow>
+				<SettingsRow label={t("general.paperNoteMode.label")}>
+					<Select
+						value={settings.paperNoteMode}
+						onValueChange={(v) => patch({ paperNoteMode: v as PaperNoteMode })}
+					>
+						<SelectTrigger size="sm" className="min-w-[180px] max-w-[240px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{PAPER_NOTE_MODES.map((mode) => (
+								<SelectItem key={mode} value={mode}>
+									{t(`general.paperNoteMode.${mode}`)}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</SettingsRow>
+				{settings.paperNoteMode === "custom" ? (
+					<SettingsRow
+						label={
+							<code className="font-mono text-muted-foreground text-xs">
+								.agentero/templates/NOTES.md
+							</code>
+						}
+					>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									disabled={seedingTemplate || !canSeedTemplate}
+									aria-label={t("general.paperNoteMode.seed")}
+									onClick={() => void seedTemplate()}
+								>
+									{t("general.paperNoteMode.seed")}
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent>{t("general.paperNoteMode.seed")}</TooltipContent>
+						</Tooltip>
+					</SettingsRow>
+				) : null}
 				<SettingsRow label={t("general.autoUpdateInternalLinks.label")}>
 					<Select
 						value={settings.autoUpdateInternalLinks}

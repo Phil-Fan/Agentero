@@ -12,7 +12,7 @@ use crate::features::import::AppHandle;
 use crate::features::import::{
     allocate_paper_path, ensure_paper_assets_with_progress, normalize_parent_dir,
     paper_record_from_meta, write_paper_shell_opts, AssetDownloadResult, AssetProgressContext,
-    PaperMeta,
+    NoteShellMode, PaperMeta,
 };
 use serde::Serialize;
 use std::fs;
@@ -68,6 +68,8 @@ pub struct PaperCommitOptions<'a> {
     pub assets: AssetsPolicy<'a>,
     /// zh-CN abstract MT in the NOTES shell (Connector passes `false`).
     pub translate_abstract: bool,
+    /// NOTES.md shell generation mode (settings `paperNoteMode`).
+    pub note_mode: NoteShellMode,
     /// Stamp `added_at` / `updated_at` with now (Connector semantics).
     pub fresh_timestamps: bool,
     /// Optional in-memory caps cache; avoids repeated directory walks.
@@ -170,7 +172,14 @@ pub async fn paper_commit(
                 .map_err(|e| AppError::message(format!("copy PDF failed: {e}")))?;
         }
 
-        write_paper_shell_opts(&paper_dir, &meta, opts.translate_abstract).await?;
+        write_paper_shell_opts(
+            &paper_dir,
+            vault,
+            &meta,
+            opts.note_mode,
+            opts.translate_abstract,
+        )
+        .await?;
 
         // Catalog SQLite is authoritative; metadata.json is a projection.
         let record = paper_record_from_meta(&path_rel, &meta);

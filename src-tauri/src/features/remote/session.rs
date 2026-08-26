@@ -806,6 +806,7 @@ mod tests {
                 translator_base_url: None,
                 task_id: None,
             },
+            crate::features::import::NoteShellMode::Standard,
         )
         .await;
 
@@ -898,6 +899,7 @@ mod tests {
                 task_id: None,
                 translator_base_url: None,
             },
+            crate::features::import::NoteShellMode::Standard,
         )
         .await
         {
@@ -935,6 +937,7 @@ mod tests {
                     translator_base_url: None,
                     task_id: None,
                 },
+                crate::features::import::NoteShellMode::Standard,
             )
             .await
             {
@@ -972,6 +975,7 @@ mod tests {
                     content: bib.into(),
                     translator_base_url: None,
                 },
+                crate::features::import::NoteShellMode::Standard,
             )
             .await
             {
@@ -1093,6 +1097,7 @@ mod tests {
                 translator_base_url: None,
                 task_id: None,
             },
+            crate::features::import::NoteShellMode::Standard,
         )
         .await
         .expect("import");

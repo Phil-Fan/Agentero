@@ -25,6 +25,7 @@ import {
 	type AppSettings,
 	DEFAULT_LIBRARY_COLUMNS,
 	type EmbeddingSettings,
+	isPaperNoteMode,
 	LIBRARY_COLUMN_KEYS,
 	type LibraryColumnKey,
 	type LibraryColumnPref,
@@ -315,6 +316,9 @@ function normalizePartial(
 	}
 	if (!isPaperTreeSortMode(merged.paperTreeSortMode)) {
 		merged.paperTreeSortMode = DEFAULT_SETTINGS.paperTreeSortMode;
+	}
+	if (!isPaperNoteMode(merged.paperNoteMode)) {
+		merged.paperNoteMode = DEFAULT_SETTINGS.paperNoteMode;
 	}
 	if (
 		merged.autoUpdateInternalLinks !== "ask" &&

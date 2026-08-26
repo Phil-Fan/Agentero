@@ -26,6 +26,7 @@ pub async fn lookup_import_batch(
 ) -> Result<ApiResult<LookupImportBatchResult>, String> {
     let n = args.texts.len();
     let op = OpTimer::start_with("lookup_import_batch", format!("count={n}"));
+    let note_mode = crate::features::import::note_mode_from_app(&app);
     if let Some(session_id) = parse_remote_handle(&args.vault_path) {
         let session = match registry.get(session_id).await {
             Ok(s) => s,
@@ -35,7 +36,8 @@ pub async fn lookup_import_batch(
             }
         };
         let vault_id = std::path::PathBuf::from(&args.vault_path);
-        let result = import_bridge::import_by_identifier_batch_remote(session, args).await;
+        let result =
+            import_bridge::import_by_identifier_batch_remote(session, args, note_mode).await;
         if let Ok(r) = &result {
             for paper in &r.imported {
                 crate::features::lifecycle::emit_paper_imported(Some(&app), &vault_id, &paper.id);
@@ -44,7 +46,7 @@ pub async fn lookup_import_batch(
         return Ok(op.finish_result(result));
     }
     let task_id = args.task_id.clone();
-    let result = super::import_by_identifier_batch(args, Some(&app), Some(&cache)).await;
+    let result = super::import_by_identifier_batch(args, Some(&app), Some(&cache), note_mode).await;
     if let Some(task_id) = task_id.as_deref() {
         crate::core::background_tasks::finish(task_id);
     }
@@ -126,6 +128,7 @@ pub async fn paper_import_local_pdf(
 ) -> Result<ApiResult<ImportLocalPdfResult>, String> {
     let n = args.file_paths.len();
     let op = OpTimer::start_with("paper_import_local_pdf", format!("count={n}"));
+    let note_mode = crate::features::import::note_mode_from_app(&app);
     let task_id = args.task_id.clone();
     let result = if let Some(session_id) = parse_remote_handle(&args.vault_path) {
         let session = match registry.get(session_id).await {
@@ -139,7 +142,7 @@ pub async fn paper_import_local_pdf(
             }
         };
         let vault_id = std::path::PathBuf::from(&args.vault_path);
-        let result = import_bridge::import_local_pdfs_remote(session, args).await;
+        let result = import_bridge::import_local_pdfs_remote(session, args, note_mode).await;
         if let Ok(r) = &result {
             for paper in &r.papers {
                 crate::features::lifecycle::emit_paper_imported(Some(&app), &vault_id, &paper.id);
@@ -147,7 +150,7 @@ pub async fn paper_import_local_pdf(
         }
         result
     } else {
-        super::import_local_pdfs(args, Some(&app), Some(&cache)).await
+        super::import_local_pdfs(args, Some(&app), Some(&cache), note_mode).await
     };
     if let Some(task_id) = task_id.as_deref() {
         crate::core::background_tasks::finish(task_id);
@@ -281,4 +284,24 @@ pub async fn paper_resolve_identifier(
             crate::core::error::map_err(e)
         }
     }
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotesTemplateSeedResult {
+    pub created: bool,
+}
+
+/// Seed `{vault}/.agentero/templates/NOTES.md` with a starting template for
+/// the `custom` paper-note mode. Never overwrites an existing template.
+#[tauri::command]
+pub fn notes_template_seed(vault_path: String) -> ApiResult<NotesTemplateSeedResult> {
+    let op = OpTimer::start_with(
+        "notes_template_seed",
+        format!("vault={}", trunc(&vault_path, 120)),
+    );
+    let result = crate::core::fs::resolve_vault(&vault_path)
+        .and_then(|vault| super::seed_notes_template(&vault))
+        .map(|created| NotesTemplateSeedResult { created });
+    op.finish_result(result)
 }

@@ -52,6 +52,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	paperTreeLabelMode: "title-author",
 	paperTreeSortMode: "folder",
 	autoUpdateInternalLinks: "ask",
+	paperNoteMode: "standard",
 	libraryColumns: DEFAULT_LIBRARY_COLUMNS.map((c) => ({ ...c })),
 	connectorEnabled: false,
 	connectorPort: 23119,

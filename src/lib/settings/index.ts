@@ -42,6 +42,7 @@ export type {
 	LibraryColumnKey,
 	LibraryColumnPref,
 	LocalePreference,
+	PaperNoteMode,
 	ThemePreference,
 	TranslateProviderConfig,
 	TranslateProviderId,
@@ -50,4 +51,5 @@ export type {
 export {
 	AUTO_UPDATE_INTERNAL_LINKS,
 	DEFAULT_LIBRARY_COLUMNS,
+	PAPER_NOTE_MODES,
 } from "@/lib/settings/types";

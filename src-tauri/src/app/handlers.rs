@@ -81,6 +81,7 @@ macro_rules! common_commands {
             crate::features::import::commands::paper_parse_body,
             crate::features::import::commands::paper_resolve_identifier,
             crate::features::import::commands::paper_stage_import_file,
+            crate::features::import::commands::notes_template_seed,
             crate::features::zotero::commands::paper_export,
             crate::features::zotero::commands::paper_import,
             crate::features::refs::commands::paper_refs_parse,

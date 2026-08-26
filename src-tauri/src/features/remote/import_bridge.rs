@@ -10,8 +10,8 @@ use crate::features::import::{
     normalize_parent_dir, preflight_identifier_batch, resolve_metadata, slug_from_stem,
     title_from_stem, translator_import_items, AssetDownloadResult, ImportLocalPdfArgs,
     ImportLocalPdfResult, LocalPdfImportEntry, LookupImportArgs, LookupImportBatchArgs,
-    LookupImportBatchResult, LookupImportResult, PaperDownloadAssetsArgs, PaperImportArgs,
-    PaperImportResult, SkillBatchMode, DEFAULT_TRANSLATOR_BASE_URL,
+    LookupImportBatchResult, LookupImportResult, NoteShellMode, PaperDownloadAssetsArgs,
+    PaperImportArgs, PaperImportResult, SkillBatchMode, DEFAULT_TRANSLATOR_BASE_URL,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,6 +22,7 @@ use walkdir::WalkDir;
 pub async fn import_by_identifier_remote(
     session: Arc<RemoteSession>,
     args: LookupImportArgs,
+    note_mode: NoteShellMode,
 ) -> Result<LookupImportResult, AppError> {
     let parent_rel = normalize_parent_dir(&args.parent_dir)?;
     let base = args
@@ -52,6 +53,7 @@ pub async fn import_by_identifier_remote(
             task_id: args.task_id.as_deref(),
             assets: RemoteAssetsPolicy::SyncDownload,
             push_catalog: true,
+            note_mode,
         },
     )
     .await?;
@@ -75,6 +77,7 @@ pub async fn import_by_identifier_remote(
 pub async fn import_by_identifier_batch_remote(
     session: Arc<RemoteSession>,
     args: LookupImportBatchArgs,
+    note_mode: NoteShellMode,
 ) -> Result<LookupImportBatchResult, AppError> {
     let mut imported: Vec<LookupImportResult> = Vec::new();
     let preflight = preflight_identifier_batch(
@@ -96,7 +99,7 @@ pub async fn import_by_identifier_batch_remote(
             translator_base_url: args.translator_base_url.clone(),
             task_id: args.task_id.clone(),
         };
-        match import_by_identifier_remote(session.clone(), single).await {
+        match import_by_identifier_remote(session.clone(), single, note_mode).await {
             Ok(r) => imported.push(r),
             Err(e) => errors.push(format!("{}: {e}", pending.raw)),
         }
@@ -168,6 +171,7 @@ pub async fn download_paper_assets_remote(
 pub async fn import_local_pdfs_remote(
     session: Arc<RemoteSession>,
     args: ImportLocalPdfArgs,
+    note_mode: NoteShellMode,
 ) -> Result<ImportLocalPdfResult, AppError> {
     let parent_rel = normalize_parent_dir(&args.parent_dir)?;
     let entries: Vec<LocalPdfImportEntry> = if !args.entries.is_empty() {
@@ -195,6 +199,7 @@ pub async fn import_local_pdfs_remote(
             &parent_rel,
             entry,
             args.task_id.as_deref(),
+            note_mode,
         )
         .await
         {
@@ -226,6 +231,7 @@ async fn import_one_local_pdf_remote(
     parent_rel: &str,
     entry: &LocalPdfImportEntry,
     task_id: Option<&str>,
+    note_mode: NoteShellMode,
 ) -> Result<LookupImportResult, AppError> {
     let src = PathBuf::from(entry.file_path.trim());
     if !src.is_file() {
@@ -284,6 +290,7 @@ async fn import_one_local_pdf_remote(
             task_id,
             assets: RemoteAssetsPolicy::CopyPdf { src: &src },
             push_catalog: false,
+            note_mode,
         },
     )
     .await?;
@@ -306,6 +313,7 @@ async fn import_one_local_pdf_remote(
 pub async fn import_catalog_remote(
     session: Arc<RemoteSession>,
     args: PaperImportArgs,
+    note_mode: NoteShellMode,
 ) -> Result<PaperImportResult, AppError> {
     let content = args.content.trim();
     if content.is_empty() {
@@ -321,7 +329,7 @@ pub async fn import_catalog_remote(
     let mut errors = Vec::new();
 
     for item in items {
-        match import_one_zotero_item_remote(session.clone(), &parent_rel, &item).await {
+        match import_one_zotero_item_remote(session.clone(), &parent_rel, &item, note_mode).await {
             Ok(Some((path, title))) => {
                 imported += 1;
                 paths.push(path);
@@ -350,6 +358,7 @@ async fn import_one_zotero_item_remote(
     session: Arc<RemoteSession>,
     parent_rel: &str,
     item: &serde_json::Value,
+    note_mode: NoteShellMode,
 ) -> Result<Option<(String, String)>, AppError> {
     let mut meta = map_zotero_item(item)?;
     enrich_remote_urls(&mut meta);
@@ -378,6 +387,7 @@ async fn import_one_zotero_item_remote(
             task_id: None,
             assets: RemoteAssetsPolicy::SyncDownload,
             push_catalog: false,
+            note_mode,
         },
     )
     .await?;

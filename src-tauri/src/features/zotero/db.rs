@@ -11,7 +11,7 @@ use crate::core::error::AppError;
 use crate::features::catalog::papers;
 use crate::features::import::{
     allocate_paper_path, enrich_remote_urls, map_zotero_item, normalize_parent_dir,
-    paper_record_from_meta, write_paper_shell, PaperMeta,
+    paper_record_from_meta, write_paper_shell, NoteShellMode, PaperMeta,
 };
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -200,6 +200,7 @@ pub async fn migrate_zotero(
     args: ZoteroMigrateArgs,
     progress: impl Fn(usize, usize, &str),
     app: Option<&tauri::AppHandle>,
+    note_mode: NoteShellMode,
 ) -> Result<ZoteroMigrateResult, AppError> {
     let vault = crate::core::fs::resolve_vault(&args.vault_path)?;
     let zotero_dir = PathBuf::from(args.zotero_dir.trim());
@@ -304,7 +305,17 @@ pub async fn migrate_zotero(
         } else {
             item.collection_path.clone()
         };
-        match migrate_one(&vault, &parent_rel, &item, &coll_path, flags, &mut dedup).await {
+        match migrate_one(
+            &vault,
+            &parent_rel,
+            &item,
+            &coll_path,
+            flags,
+            &mut dedup,
+            note_mode,
+        )
+        .await
+        {
             Ok((MigrateOutcome::Imported { path, copied_pdf }, dup)) => {
                 out.imported += 1;
                 if dup {
@@ -374,6 +385,7 @@ async fn migrate_one(
     coll_path: &[String],
     flags: MigrateFlags,
     dedup: &mut Dedup,
+    note_mode: NoteShellMode,
 ) -> Result<(MigrateOutcome, bool), AppError> {
     let mut meta = map_zotero_item(&item.json)?; // errors when the item has no title
     enrich_remote_urls(&mut meta);
@@ -458,7 +470,7 @@ async fn migrate_one(
     let (folder_id, path_rel, paper_dir) = allocate_paper_path(vault, &base_parent, &id);
     meta.id = folder_id;
     fs::create_dir_all(&paper_dir)?;
-    write_paper_shell(&paper_dir, &meta).await?;
+    write_paper_shell(&paper_dir, vault, &meta, note_mode).await?;
     if !blocks.is_empty() {
         append_markdown_blocks(&paper_dir.join("NOTES.md"), &blocks);
     }
@@ -1482,6 +1494,7 @@ mod tests {
             },
             |_c, _t, _p| {},
             None,
+            NoteShellMode::Standard,
         )
         .await
         .unwrap();
@@ -1553,6 +1566,7 @@ mod tests {
             },
             |_c, _t, _p| {},
             None,
+            NoteShellMode::Standard,
         )
         .await
         .unwrap();

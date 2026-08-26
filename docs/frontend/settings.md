@@ -63,6 +63,12 @@
   - `editorFontSize`：12–20 px。
   - `editorLineHeight`：1.4–2.0（步长 0.1，默认 1.6）。
 - `batchImportConcurrency`：魔棒批量导入及后续资源下载的并发上限，范围 1–10，默认 5。
+- `paperNoteMode`：新导入论文 NOTES.md 壳的初始化方式，四档：
+  - `standard`（默认）：aliases + `# 标题` + 摘要引用块（zh-CN 机翻，失败省略）。
+  - `title-only`：aliases + `# 标题`，不写摘要。
+  - `blank`：仅 aliases frontmatter。
+  - `custom`：渲染 vault 内 `.agentero/templates/NOTES.md`（变量 `{{title}} {{authors}} {{year}} {{date}} {{abstract}} {{arxiv_id}} {{doi}} {{url}} {{id}}`，`{{abstract}}` 为原文不翻译，未知变量原样保留；模板缺失回退 standard）。选中该项时显示模板路径与「生成起始模板」按钮（`notes_template_seed`，仅当模板不存在时写入）。
+  - 所有模式产物都保证含 aliases frontmatter；只影响新导入，不改存量笔记。
 
 ## i18n
 

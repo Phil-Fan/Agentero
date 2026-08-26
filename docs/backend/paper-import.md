@@ -61,6 +61,7 @@ Skill 不写入 catalog、不创建 `papers/` 条目、不执行 `scripts/`。�
   `connector:item-saved` 交给现有 open/reconcile 解析流程。
 - 错误：全局 Toast；重复不破坏用户 NOTES。
 - 新建壳会写论文全称 alias，并在元数据足够时写确定性短 alias；历史笔记由 [Doctor](doctor.md) 诊断和确认迁移。`created` 不属于入库壳或 Doctor 的职责。
+- 壳内容由设置 `paper_note_mode` 决定（`standard` / `title-only` / `blank` / `custom`，默认 `standard`，见 [settings.md](../frontend/settings.md)）；`custom` 模板位于 `{vault}/.agentero/templates/NOTES.md`，缺失或不可读时回退 standard 并 warn。任何模式的产物都会补齐 aliases frontmatter（模板 frontmatter 不可安全改写时留给 Doctor）。Connector 的后台摘要机翻仅对 standard 壳生效，避免改写 custom 模板渲染的原文摘要。
 
 ## 可读正文
 

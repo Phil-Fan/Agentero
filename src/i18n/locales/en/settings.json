@@ -72,6 +72,16 @@
 			"year-asc": "Year (oldest first)",
 			"added-desc": "Date added (newest first)"
 		},
+		"paperNoteMode": {
+			"label": "Paper note initialization",
+			"standard": "Standard",
+			"title-only": "Title only",
+			"blank": "Blank",
+			"custom": "Custom template",
+			"seed": "Create starter template",
+			"seedCreated": "Starter template created",
+			"seedExists": "Template already exists"
+		},
 		"autoUpdateInternalLinks": {
 			"label": "Update internal links after external renames",
 			"ask": "Ask",

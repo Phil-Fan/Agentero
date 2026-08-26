@@ -72,6 +72,16 @@
 			"year-asc": "年份（旧 → 新）",
 			"added-desc": "添加时间（新 → 旧）"
 		},
+		"paperNoteMode": {
+			"label": "论文笔记初始化",
+			"standard": "标准",
+			"title-only": "仅标题",
+			"blank": "空白",
+			"custom": "自定义模板",
+			"seed": "生成起始模板",
+			"seedCreated": "已生成起始模板",
+			"seedExists": "模板已存在"
+		},
 		"autoUpdateInternalLinks": {
 			"label": "外部改名后更新双链",
 			"ask": "询问",

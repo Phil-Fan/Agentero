@@ -7,7 +7,7 @@ use crate::features::catalog::papers;
 use crate::features::connector::ConnectorController;
 use crate::features::import::{
     enrich_remote_urls, ensure_paper_assets_with_cookies, map_zotero_item, normalize_parent_dir,
-    paper_record_from_meta, write_paper_shell_opts, PaperMeta,
+    paper_record_from_meta, write_paper_shell_opts, NoteShellMode, PaperMeta,
 };
 use crate::features::remote::import_bridge::{unique_remote_paper_path, upload_tree};
 use crate::features::remote::{parse_remote_handle, RemoteSession};
@@ -27,6 +27,15 @@ pub struct ConnectorImportResult {
     pub deduped: bool,
     pub connector_item_id: Value,
     pub item_type: String,
+}
+
+/// Resolve the configured NOTES shell mode from the controller's AppHandle
+/// (settings `paperNoteMode`). Standard when no handle is attached yet.
+fn note_mode_from_ctrl(ctrl: &ConnectorController) -> NoteShellMode {
+    match ctrl.app_handle() {
+        Some(app) => crate::features::import::note_mode_from_app(&app),
+        None => NoteShellMode::Standard,
+    }
 }
 
 pub async fn import_connector_item_with_cookies(
@@ -55,6 +64,7 @@ pub async fn import_connector_item_with_cookies(
     // No abstract MT and no awaited downloads — the browser extension's HTTP
     // request must finish within ~15s, so assets stay Deferred.
     let app = ctrl.app_handle();
+    let note_mode = note_mode_from_ctrl(&ctrl);
     let commit = paper_commit(
         meta,
         PaperCommitOptions {
@@ -63,6 +73,7 @@ pub async fn import_connector_item_with_cookies(
             dedupe: DedupePolicy::ByCatalogId,
             assets: AssetsPolicy::Deferred,
             translate_abstract: false,
+            note_mode,
             fresh_timestamps: true,
             cache: None,
             app: app.as_ref(),
@@ -85,17 +96,22 @@ pub async fn import_connector_item_with_cookies(
 
     // Translate the abstract to Chinese in the background (the synchronous shell
     // write above skips MT to stay within the Connector's 15s timeout). Guarded
-    // by NOTES.md mtime so a user edit is never overwritten.
-    let created_at = fs::metadata(paper_dir.join("NOTES.md"))
-        .and_then(|m| m.modified())
-        .ok();
-    if let Some(abstract_text) = abstract_text {
-        let abs = abstract_text.trim().to_string();
-        if !abs.is_empty() && !looks_mostly_cjk(&abs) {
-            let notes_path = paper_dir.join("NOTES.md");
-            tauri::async_runtime::spawn(async move {
-                translate_notes_abstract(notes_path, abs, created_at).await;
-            });
+    // by NOTES.md mtime so a user edit is never overwritten. Only the Standard
+    // shell carries the machine-translatable `> {abstract}` blockquote; Custom
+    // templates render the original abstract by contract, so never rewrite them
+    // (title-only/blank shells have no abstract line at all).
+    if note_mode == NoteShellMode::Standard {
+        let created_at = fs::metadata(paper_dir.join("NOTES.md"))
+            .and_then(|m| m.modified())
+            .ok();
+        if let Some(abstract_text) = abstract_text {
+            let abs = abstract_text.trim().to_string();
+            if !abs.is_empty() && !looks_mostly_cjk(&abs) {
+                let notes_path = paper_dir.join("NOTES.md");
+                tauri::async_runtime::spawn(async move {
+                    translate_notes_abstract(notes_path, abs, created_at).await;
+                });
+            }
         }
     }
 
@@ -111,7 +127,7 @@ pub async fn import_connector_item_with_cookies(
 
 /// Remote vault variant: stage the shell, upload it, and push the catalog.
 pub async fn import_connector_item_remote_with_cookies(
-    _ctrl: Arc<ConnectorController>,
+    ctrl: Arc<ConnectorController>,
     _session_id: &str,
     session: Arc<RemoteSession>,
     parent_dir: &str,
@@ -119,6 +135,7 @@ pub async fn import_connector_item_remote_with_cookies(
     page_uri: Option<&str>,
     _cookies: Option<&str>,
 ) -> Result<ConnectorImportResult, AppError> {
+    let note_mode = note_mode_from_ctrl(&ctrl);
     let parent_rel = normalize_parent_dir(parent_dir)?;
     let connector_item_id = item.get("id").cloned().unwrap_or(Value::Null);
     let item_type = item
@@ -157,7 +174,7 @@ pub async fn import_connector_item_remote_with_cookies(
         let _ = fs::remove_dir_all(&staging);
     }
     fs::create_dir_all(&staging)?;
-    write_paper_shell_opts(&staging, &meta, false).await?;
+    write_paper_shell_opts(&staging, &session.work_root, &meta, note_mode, false).await?;
     let record = paper_record_from_meta(&path_rel, &meta);
     papers::upsert_paper(&session.work_root, &record)?;
 
@@ -534,7 +551,14 @@ pub async fn import_standalone_attachment(
             .remote_registry()
             .ok_or_else(|| AppError::message("remote registry unavailable"))?;
         let session = reg.get(sid).await?;
-        import_standalone_remote(session, &parent_dir, meta, bytes).await?
+        import_standalone_remote(
+            session,
+            &parent_dir,
+            meta,
+            bytes,
+            note_mode_from_ctrl(&ctrl),
+        )
+        .await?
     } else {
         import_standalone_local(
             Path::new(&vault_handle),
@@ -542,6 +566,7 @@ pub async fn import_standalone_attachment(
             meta,
             bytes,
             ctrl.app_handle().as_ref(),
+            note_mode_from_ctrl(&ctrl),
         )
         .await?
     };
@@ -578,6 +603,7 @@ async fn import_standalone_local(
     meta: PaperMeta,
     bytes: &[u8],
     app: Option<&tauri::AppHandle>,
+    note_mode: NoteShellMode,
 ) -> Result<ConnectorImportResult, AppError> {
     use crate::features::import::paper_import::{
         paper_commit, AssetsPolicy, CommitStatus, DedupePolicy, PaperCommitOptions,
@@ -593,6 +619,7 @@ async fn import_standalone_local(
             dedupe: DedupePolicy::None,
             assets: AssetsPolicy::Deferred,
             translate_abstract: false,
+            note_mode,
             fresh_timestamps: true,
             cache: None,
             app,
@@ -628,6 +655,7 @@ async fn import_standalone_remote(
     parent_dir: &str,
     mut meta: PaperMeta,
     bytes: &[u8],
+    note_mode: NoteShellMode,
 ) -> Result<ConnectorImportResult, AppError> {
     let parent_rel = normalize_parent_dir(parent_dir)?;
     let id = meta.id.clone();
@@ -659,7 +687,7 @@ async fn import_standalone_remote(
     }
     fs::create_dir_all(&staging)?;
     fs::write(staging.join(format!("{folder_id}.pdf")), bytes)?;
-    write_paper_shell_opts(&staging, &meta, false).await?;
+    write_paper_shell_opts(&staging, &session.work_root, &meta, note_mode, false).await?;
     let record = paper_record_from_meta(&path_rel, &meta);
     papers::upsert_paper(&session.work_root, &record)?;
     upload_tree(session.fs.as_ref(), &staging, &path_rel).await?;

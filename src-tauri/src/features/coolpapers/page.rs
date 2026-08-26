@@ -18,7 +18,7 @@ use crate::features::import::{
     paper_import::{
         paper_commit, AssetsPolicy, DedupePolicy, PaperCommitOptions, PaperCommitResult,
     },
-    AssetProgressContext,
+    AssetProgressContext, NoteShellMode,
 };
 use std::path::Path;
 
@@ -104,6 +104,8 @@ pub struct ImportPageArgs<'a> {
     /// Row id, e.g. `36962@AAAI`. Becomes the catalog id and folder name.
     pub id: &'a str,
     pub progress: AssetProgressContext<'a>,
+    /// NOTES.md shell generation mode (settings `paperNoteMode`).
+    pub note_mode: NoteShellMode,
 }
 
 /// Fetch the papers.cool page for one row and commit it as a paper unit.
@@ -169,6 +171,7 @@ pub async fn import_page(args: ImportPageArgs<'_>) -> Result<PaperCommitResult, 
                 progress: args.progress,
             },
             translate_abstract: true,
+            note_mode: args.note_mode,
             fresh_timestamps: false,
             cache: None,
             app: args.progress.app,

@@ -108,6 +108,17 @@ pub async fn import_catalog(
     args: PaperImportArgs,
     app: Option<&AppHandle>,
 ) -> Result<PaperImportResult, AppError> {
+    // Headless entry (CLI): no settings store wiring, keep the default shell.
+    import_catalog_with_mode(args, app, crate::features::import::NoteShellMode::Standard).await
+}
+
+/// Same as [`import_catalog`] with an explicit NOTES shell mode (desktop
+/// commands resolve it from settings `paperNoteMode`).
+pub async fn import_catalog_with_mode(
+    args: PaperImportArgs,
+    app: Option<&AppHandle>,
+    note_mode: crate::features::import::NoteShellMode,
+) -> Result<PaperImportResult, AppError> {
     let vault = crate::core::fs::resolve_vault(&args.vault_path)?;
     let content = args.content.trim();
     if content.is_empty() {
@@ -123,7 +134,7 @@ pub async fn import_catalog(
     let mut errors = Vec::new();
 
     for item in items {
-        match import_one_item(&vault, &parent_rel, &item, app).await {
+        match import_one_item(&vault, &parent_rel, &item, app, note_mode).await {
             Ok(Some((path, title))) => {
                 imported += 1;
                 paths.push(path);
@@ -148,6 +159,7 @@ async fn import_one_item(
     parent_rel: &str,
     item: &Value,
     app: Option<&AppHandle>,
+    note_mode: crate::features::import::NoteShellMode,
 ) -> Result<Option<(String, String)>, AppError> {
     use crate::features::import::paper_import::{
         paper_commit, AssetsPolicy, CommitStatus, DedupePolicy, PaperCommitOptions,
@@ -171,6 +183,7 @@ async fn import_one_item(
                 },
             },
             translate_abstract: true,
+            note_mode,
             fresh_timestamps: false,
             cache: None,
             app,
