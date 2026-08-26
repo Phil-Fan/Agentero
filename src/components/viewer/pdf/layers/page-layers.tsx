@@ -303,6 +303,10 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 	const emphasizedComment = emphasizedCommentId
 		? (comments.find((c) => c.id === emphasizedCommentId) ?? null)
 		: null;
+	const isHoveredComment =
+		!!emphasizedComment && emphasizedComment.id === marks.hoveredCommentId;
+	const isEditingComment =
+		!!emphasizedComment && emphasizedComment.id === marks.editingCommentId;
 	// Page shell: paper-white in light mode; near-black when PDF dark mode is on
 	// so loading gaps match inverted page rasters.
 	return (
@@ -650,7 +654,14 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 								className={cn(
 									"pointer-events-none absolute z-[4] rounded-[1px]",
 									emphasizedComment.kind === "visual"
-										? "border-2 border-primary/50"
+										? cn(
+												"box-border",
+												isHoveredComment
+													? "border-4 border-primary/80"
+													: isEditingComment
+														? "border-2 border-primary/60"
+														: "border-2 border-primary/60",
+											)
 										: "mix-blend-multiply",
 								)}
 								style={{
