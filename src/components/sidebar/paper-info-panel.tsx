@@ -3,6 +3,7 @@ import {
 	Calendar,
 	ChevronRight,
 	ExternalLink,
+	Library,
 	Pencil,
 	Tag,
 	Users,
@@ -623,6 +624,16 @@ export function PaperInfoPanel({
 							{meta.year ? (
 								<MetaRow icon={Calendar} label={t("paperInfo.year")}>
 									{meta.year}
+								</MetaRow>
+							) : null}
+							{meta.publication ? (
+								<MetaRow icon={Library} label={t("paperInfo.publication")}>
+									<CopyValue
+										text={meta.publication}
+										label={t("paperInfo.publication")}
+										onCopy={copyField}
+										className="line-clamp-2"
+									/>
 								</MetaRow>
 							) : null}
 							<MetaRow icon={Tag} label={t("paperInfo.tags")}>
