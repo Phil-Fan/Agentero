@@ -10,11 +10,13 @@ import { PlateElement } from "platejs/react";
  * Without that named container (export surface, embeds) the base size applies.
  */
 const headingVariants = cva(
-	"relative mb-1 transition-colors duration-300 data-[nav-target=true]:rounded-md data-[nav-target=true]:bg-highlight/20",
+	// first:mt-0: notes almost always start with `# Title`; don't stack the
+	// section gap on top of the editor's pt-4.
+	"relative mb-1 first:mt-0 transition-colors duration-300 data-[nav-target=true]:rounded-md data-[nav-target=true]:bg-highlight/20",
 	{
 		variants: {
 			variant: {
-				h1: "mt-[1.6em] pb-1 font-bold font-heading text-4xl @max-sm/editor:text-3xl @max-2xs/editor:text-2xl",
+				h1: "mt-[1em] pb-1 font-bold font-heading text-4xl @max-sm/editor:text-3xl @max-2xs/editor:text-2xl",
 				h2: "mt-[1.4em] pb-px font-heading font-semibold text-2xl tracking-tight @max-2xs/editor:text-xl",
 				h3: "mt-[1em] pb-px font-heading font-semibold text-xl tracking-tight @max-2xs/editor:text-lg",
 				h4: "mt-[0.75em] font-heading font-semibold text-lg tracking-tight",

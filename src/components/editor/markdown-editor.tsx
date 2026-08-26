@@ -677,7 +677,7 @@ export function MarkdownEditor({
 												// `pr-16` reserves a right gutter for the collapsed
 												// TOC strip (`right-2 w-12`) so it never covers text.
 												// Narrow panes hide that strip, so the gutter goes too.
-												className="min-h-full pl-6 pr-16 pt-4 pb-48 @max-2xs/editor:pr-6"
+												className="min-h-full pl-6 pr-16 pt-4 pb-48 @max-2xs/editor:pr-6 [&>*:first-child]:mt-0"
 												style={editorTypographyStyle}
 											/>
 											{!readOnly ? (
