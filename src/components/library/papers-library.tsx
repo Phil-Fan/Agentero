@@ -64,7 +64,7 @@ import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { logger } from "@/lib/core/logger";
 import { notifyError } from "@/lib/core/notify";
-import { cn } from "@/lib/core/utils";
+import { cn, mapLimit } from "@/lib/core/utils";
 import { formatAuthorsShort, type PaperMetadata } from "@/lib/paper";
 import {
 	filterPapersByScope,
@@ -74,7 +74,11 @@ import {
 	updatePaperMeta,
 } from "@/lib/paper/api";
 import { downloadLibraryPaper } from "@/lib/paper/library-actions";
-import { refreshLibrary, setEditMetaDraft } from "@/lib/paper/library-store";
+import {
+	refreshLibrary,
+	scheduleLibraryRefresh,
+	setEditMetaDraft,
+} from "@/lib/paper/library-store";
 import {
 	aggregateReadingHeatmap,
 	heatmapCacheKey,
@@ -679,12 +683,9 @@ export function PapersLibrary({
 					}),
 				},
 				async ({ signal, setProgress, setDetail }) => {
-					let updated = 0;
-					let empty = 0;
-					let failed = 0;
-					for (let i = 0; i < papers.length; i++) {
-						if (signal.aborted) break;
-						const paper = papers[i];
+					const stats = { updated: 0, empty: 0, failed: 0, processed: 0 };
+					await mapLimit(papers, 5, async (paper) => {
+						if (signal.aborted) return;
 						const text =
 							paper.doi?.trim() ||
 							paper.arxiv_id?.trim() ||
@@ -696,37 +697,38 @@ export function PapersLibrary({
 								await updatePaperMeta(vaultPath, paper.path, {
 									publication,
 								});
-								updated++;
+								stats.updated++;
+								scheduleLibraryRefresh();
 							} else {
-								empty++;
+								stats.empty++;
 							}
 						} catch (e) {
-							failed++;
+							stats.failed++;
 							logger.error("refresh publication failed", {
 								path: paper.path,
 								error: String(e),
 							});
 						} finally {
-							setProgress(Math.round(((i + 1) / papers.length) * 100));
+							stats.processed++;
+							setProgress(Math.round((stats.processed / papers.length) * 100));
 							setDetail(
 								t("papersLibrary.refreshPublicationTaskDetail", {
-									current: i + 1,
+									current: stats.processed,
 									total: papers.length,
 								}),
 							);
 						}
-					}
+					});
 					await refreshLibrary();
-					if (failed > 0 || empty > 0) {
+					if (stats.failed > 0 || stats.empty > 0) {
 						throw new Error(
 							t("papersLibrary.refreshPublicationPartial", {
-								updated,
-								failed: failed + empty,
+								updated: stats.updated,
+								failed: stats.failed + stats.empty,
 							}),
 						);
 					}
 				},
-				{ concurrency: 1 },
 			);
 		},
 		[vaultPath, t],
