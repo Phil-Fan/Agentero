@@ -59,6 +59,7 @@ import { PdfBottomBar } from "@/components/viewer/pdf/chrome/pdf-bottom-bar";
 import { PdfCardStack } from "@/components/viewer/pdf/chrome/pdf-card-stack";
 import { PdfFiguresPanel } from "@/components/viewer/pdf/chrome/pdf-figures-panel";
 import { PdfFindBar } from "@/components/viewer/pdf/chrome/pdf-find-bar";
+import { PdfLeftToolbar } from "@/components/viewer/pdf/chrome/pdf-left-toolbar";
 import { PdfOutlinePanel } from "@/components/viewer/pdf/chrome/pdf-outline-panel";
 import { PdfReferencesPanel } from "@/components/viewer/pdf/chrome/pdf-references-panel";
 import { PdfToolbar } from "@/components/viewer/pdf/chrome/pdf-toolbar";
@@ -1590,22 +1591,29 @@ function PdfViewerInner({
 
 	return (
 		<div ref={hostRef} className="relative flex h-full min-h-0 w-full flex-col">
-			<PdfOutlinePanel
+			<PdfLeftToolbar
 				outline={outline}
 				showOutline={showOutline}
 				onToggleOutline={handleToggleOutline}
+				paperPath={paperRelPath}
+				showReferences={showReferences}
+				onToggleReferences={handleToggleReferences}
+				showFigures={showFigures}
+				onToggleFigures={handleToggleFigures}
+			/>
+			<PdfOutlinePanel
+				outline={outline}
+				showOutline={showOutline}
 				onGoToPage={goToPage}
 			/>
 			<PdfReferencesPanel
 				vaultPath={vaultPath}
 				paperPath={paperRelPath}
 				showReferences={showReferences}
-				onToggleReferences={handleToggleReferences}
 			/>
 			<PdfFiguresPanel
 				documentId={docId}
 				showFigures={showFigures}
-				onToggleFigures={handleToggleFigures}
 				onAnalyze={handleAnalyzeLayout}
 				onJump={handleJumpToLayoutRegion}
 				onRenderThumb={handleRenderLayoutThumb}

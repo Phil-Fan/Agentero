@@ -396,10 +396,7 @@ export function FiguresPanel({
 
 	return (
 		<section
-			className={cn(
-				"flex h-full min-h-0 flex-col overflow-hidden bg-background",
-				className,
-			)}
+			className={cn("flex h-full min-h-0 flex-col overflow-hidden", className)}
 			aria-label={t("figures.panelAria")}
 		>
 			{compact ? null : (
@@ -537,7 +534,7 @@ export function FiguresPanel({
 					{t("figures.emptyFiltered")}
 				</p>
 			) : (
-				<div className="agentero-scroll min-h-0 flex-1 space-y-4 overflow-y-auto p-2">
+				<div className="agentero-scroll min-h-0 flex-1 space-y-4 overflow-y-auto p-2 [scrollbar-gutter:stable]">
 					<Section title={t("figures.sectionFigures")} count={figures.length}>
 						{figures.map((region, i) => (
 							<FigureCard

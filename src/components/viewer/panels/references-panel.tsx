@@ -198,10 +198,7 @@ export function ReferencesPanel({
 
 	return (
 		<section
-			className={cn(
-				"flex h-full min-h-0 flex-col overflow-hidden bg-background",
-				className,
-			)}
+			className={cn("flex h-full min-h-0 flex-col overflow-hidden", className)}
 			aria-label={t("references.panelAria")}
 		>
 			{compact ? null : (
