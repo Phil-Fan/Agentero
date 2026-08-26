@@ -139,6 +139,9 @@
 		"importPdfDone": "Imported {{count}} PDFs",
 		"importFailed": "Import failed",
 		"exportFailed": "Export failed",
+		"backfillPublication": "Backfill venues",
+		"backfillPublicationDone": "Updated {{updated}} of {{total}} venues",
+		"backfillPublicationFailed": "Failed to backfill venues",
 		"desktopOnly": "Import/export requires the desktop app."
 	},
 	"plaza": {

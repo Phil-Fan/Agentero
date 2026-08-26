@@ -522,6 +522,34 @@ export async function resolveIdentifierMetadata(
 	);
 }
 
+export type PaperBackfillPublicationResult = {
+	total: number;
+	updated: number;
+	failed: number;
+	errors: string[];
+};
+
+export async function backfillPublication(
+	vaultPath: string,
+	settings?: AppSettings,
+): Promise<PaperBackfillPublicationResult> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:papersLibrary.desktopOnly"));
+	}
+	return invokeApi<PaperBackfillPublicationResult>(
+		"paper_backfill_publication",
+		{
+			args: {
+				vaultPath,
+				translatorBaseUrl: translatorBase(settings),
+			},
+		},
+		{
+			fallback: i18n.t("sidebar:papersLibrary.backfillPublicationFailed"),
+		},
+	);
+}
+
 export type PaperImportResult = {
 	imported: number;
 	skipped: number;

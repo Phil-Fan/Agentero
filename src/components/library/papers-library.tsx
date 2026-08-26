@@ -20,6 +20,7 @@ import {
 	Pencil,
 	RefreshCw,
 	Search,
+	Sparkles,
 	Trash2,
 	X,
 } from "lucide-react";
@@ -62,10 +63,11 @@ import { useDebouncedCallback } from "@/hooks/use-debounce";
 import { broadcastAgentAttachContext } from "@/lib/agent/context-attach";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { logger } from "@/lib/core/logger";
-import { notifyError } from "@/lib/core/notify";
+import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
 import { formatAuthorsShort, type PaperMetadata } from "@/lib/paper";
 import {
+	backfillPublication,
 	filterPapersByScope,
 	listPaperPageCounts,
 	savePaperPageCounts,
@@ -519,6 +521,7 @@ export function PapersLibrary({
 	/** Selected tag names for header filter (OR: paper matches if it has any). */
 	const [tagFilter, setTagFilter] = useState<string[]>([]);
 	const [tagFilterOpen, setTagFilterOpen] = useState(false);
+	const [backfilling, setBackfilling] = useState(false);
 	const [heatmaps, setHeatmaps] = useState<Map<string, ReadingHeatmap>>(
 		() => new Map(),
 	);
@@ -664,6 +667,25 @@ export function PapersLibrary({
 		},
 		[columns, dragKey, onColumnsChange],
 	);
+
+	const handleBackfillPublication = useCallback(async () => {
+		if (!vaultPath || isRemoteVaultHandle(vaultPath)) return;
+		setBackfilling(true);
+		try {
+			const result = await backfillPublication(vaultPath);
+			notifySuccess(
+				t("papersLibrary.backfillPublicationDone", {
+					updated: result.updated,
+					total: result.total,
+				}),
+			);
+		} catch (e) {
+			notifyError(t("papersLibrary.backfillPublicationFailed"));
+			logger.error("backfill publication failed", { error: String(e) });
+		} finally {
+			setBackfilling(false);
+		}
+	}, [vaultPath, t]);
 
 	/** Folder scope first (cheap path-prefix filter on in-memory catalog). */
 	const scopedPapers = useMemo(
@@ -985,6 +1007,37 @@ export function PapersLibrary({
 													onKeyDown={(e) => e.stopPropagation()}
 												/>
 											</div>
+										) : null}
+										{isTitle && vaultPath && !isRemoteVaultHandle(vaultPath) ? (
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<button
+														type="button"
+														data-library-header-action
+														disabled={backfilling}
+														className={cn(
+															"ml-1 flex size-6 shrink-0 items-center justify-center rounded-sm",
+															"hover:bg-muted/60 hover:text-foreground",
+															"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+															backfilling && "opacity-50",
+														)}
+														aria-label={t("papersLibrary.backfillPublication")}
+														onClick={(e) => {
+															e.stopPropagation();
+															void handleBackfillPublication();
+														}}
+														onMouseDown={(e) => e.stopPropagation()}
+													>
+														<Sparkles
+															className={`size-3.5 ${backfilling ? "animate-pulse" : ""}`}
+															aria-hidden
+														/>
+													</button>
+												</TooltipTrigger>
+												<TooltipContent side="bottom">
+													{t("papersLibrary.backfillPublication")}
+												</TooltipContent>
+											</Tooltip>
 										) : null}
 										{isTags ? (
 											<Popover

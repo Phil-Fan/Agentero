@@ -156,10 +156,10 @@ export function EditPaperMetaDialog({
 		}
 	};
 
-	/** Fill the form from DOI/arXiv identifier metadata (user reviews, then saves). */
+	/** Fill the form from DOI/arXiv identifier metadata, or by title search. */
 	const handleRefreshFromIdentifier = async () => {
 		if (!draft) return;
-		const text = draft.doi.trim() || draft.arxivId.trim();
+		const text = draft.doi.trim() || draft.arxivId.trim() || draft.title.trim();
 		if (!text) return;
 		setRefreshing(true);
 		setRefreshError(false);
@@ -268,7 +268,11 @@ export function EditPaperMetaDialog({
 							disabled={
 								saving ||
 								refreshing ||
-								!(draft.doi.trim() || draft.arxivId.trim())
+								!(
+									draft.doi.trim() ||
+									draft.arxivId.trim() ||
+									draft.title.trim()
+								)
 							}
 							onClick={() => void handleRefreshFromIdentifier()}
 						>

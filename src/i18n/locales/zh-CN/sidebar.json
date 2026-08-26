@@ -139,6 +139,9 @@
 		"importPdfDone": "已导入 {{count}} 个 PDF",
 		"importFailed": "导入失败",
 		"exportFailed": "导出失败",
+		"backfillPublication": "补全期刊/会议",
+		"backfillPublicationDone": "已补全 {{updated}} / {{total}} 篇期刊/会议",
+		"backfillPublicationFailed": "补全期刊/会议失败",
 		"desktopOnly": "导入/导出需要桌面应用。"
 	},
 	"plaza": {
