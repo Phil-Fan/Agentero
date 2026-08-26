@@ -299,6 +299,10 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 	const pageTranslateState = layout.layoutTranslatePageStateByPage.get(
 		pageIndex,
 	) ?? { active: false, running: false };
+	const emphasizedCommentId = marks.hoveredCommentId ?? marks.editingCommentId;
+	const emphasizedComment = emphasizedCommentId
+		? (comments.find((c) => c.id === emphasizedCommentId) ?? null)
+		: null;
 	// Page shell: paper-white in light mode; near-black when PDF dark mode is on
 	// so loading gaps match inverted page rasters.
 	return (
@@ -638,25 +642,31 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 					onEnter={handlers.onCardHoverEnter}
 					onLeave={handlers.onCardHoverLeave}
 				/>
-				{/* Hover emphasis overlay for the comment-rail card under the cursor. */}
-				{(() => {
-					const hovered = comments.find((c) => c.id === marks.hoveredCommentId);
-					if (!hovered) return null;
-					return hovered.rects.map((rect) => (
-						<div
-							key={`comment-hover-${hovered.id}-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
-							className="pointer-events-none absolute z-[4] rounded-[1px] transition-opacity duration-200"
-							style={{
-								left: `${rect.x * 100}%`,
-								top: `${rect.y * 100}%`,
-								width: `${rect.w * 100}%`,
-								height: `${rect.h * 100}%`,
-								backgroundColor: highlightHoverOverlayColor(hovered.color),
-							}}
-							aria-hidden="true"
-						/>
-					));
-				})()}
+				{/* Emphasis overlay for the hovered or edited comment-rail card. */}
+				{emphasizedComment
+					? emphasizedComment.rects.map((rect) => (
+							<div
+								key={`comment-hover-${emphasizedComment.id}-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
+								className={cn(
+									"pointer-events-none absolute z-[4] rounded-[1px]",
+									emphasizedComment.kind === "visual"
+										? "border border-primary/40"
+										: "mix-blend-multiply",
+								)}
+								style={{
+									left: `${rect.x * 100}%`,
+									top: `${rect.y * 100}%`,
+									width: `${rect.w * 100}%`,
+									height: `${rect.h * 100}%`,
+									backgroundColor:
+										emphasizedComment.kind === "visual"
+											? "transparent"
+											: highlightHoverOverlayColor(emphasizedComment.color),
+								}}
+								aria-hidden="true"
+							/>
+						))
+					: null}
 				<CommentCardsLayer
 					items={comments}
 					pageHeightPx={height}
