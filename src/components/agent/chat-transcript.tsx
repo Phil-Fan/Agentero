@@ -19,20 +19,6 @@ import {
 	ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import {
-	InlineCitation,
-	InlineCitationCard,
-	InlineCitationCardBody,
-	InlineCitationCardTrigger,
-	InlineCitationCarousel,
-	InlineCitationCarouselContent,
-	InlineCitationCarouselHeader,
-	InlineCitationCarouselIndex,
-	InlineCitationCarouselItem,
-	InlineCitationCarouselNext,
-	InlineCitationCarouselPrev,
-	InlineCitationSource,
-} from "@/components/ai-elements/inline-citation";
-import {
 	Message,
 	MessageAction,
 	MessageActions,
@@ -294,13 +280,6 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 		const rowKey = `${activeTabId}:${line.id}`;
 		const parts = line.parts;
 		const lastIndex = parts.length - 1;
-		let lastTextIndex = -1;
-		for (let i = lastIndex; i >= 0; i--) {
-			if (parts[i].type === "text") {
-				lastTextIndex = i;
-				break;
-			}
-		}
 		const agentText = agentTextFromParts(parts);
 		const showThinking = Boolean(line.streaming) && parts.length === 0;
 		return (
@@ -422,58 +401,11 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 								Boolean(line.streaming) &&
 								index === lastIndex &&
 								part.text.length > 0;
-							const showCitation =
-								!line.streaming &&
-								index === lastTextIndex &&
-								Boolean(line.sources && line.sources.length > 0);
 							return (
 								<div key={partKey} className="min-w-0">
 									<MessageResponse isAnimating={isAnimating}>
 										{part.text}
 									</MessageResponse>
-									{showCitation && line.sources ? (
-										<span className="mt-1 inline-flex items-center">
-											<InlineCitation>
-												<InlineCitationCard>
-													<InlineCitationCardTrigger
-														sources={line.sources.map(normalizeAgentSourcePath)}
-													/>
-													<InlineCitationCardBody>
-														<InlineCitationCarousel>
-															<InlineCitationCarouselHeader>
-																<InlineCitationCarouselPrev />
-																<InlineCitationCarouselNext />
-																<InlineCitationCarouselIndex />
-															</InlineCitationCarouselHeader>
-															<InlineCitationCarouselContent>
-																{line.sources.map((raw) => {
-																	const s = normalizeAgentSourcePath(raw);
-																	return (
-																		<InlineCitationCarouselItem key={s}>
-																			<InlineCitationSource
-																				title={s.split(/[/\\]/).pop() || s}
-																				url={s}
-																				description={
-																					/^https?:\/\//i.test(s)
-																						? undefined
-																						: t("citation.vaultPath")
-																				}
-																				onOpen={
-																					onOpenSource
-																						? () => onOpenSource(s)
-																						: undefined
-																				}
-																			/>
-																		</InlineCitationCarouselItem>
-																	);
-																})}
-															</InlineCitationCarouselContent>
-														</InlineCitationCarousel>
-													</InlineCitationCardBody>
-												</InlineCitationCard>
-											</InlineCitation>
-										</span>
-									) : null}
 								</div>
 							);
 						})}
