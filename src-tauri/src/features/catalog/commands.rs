@@ -10,6 +10,9 @@ use crate::core::fs::{ensure_vault_dir, resolve_paper_dir, resolve_vault};
 use crate::features::catalog::papers::{self, PaperRecord};
 use crate::features::catalog::reading_activity;
 use crate::features::catalog::{probe_paper_caps, CapsCache};
+use crate::features::import::{
+    fetch_arxiv_metadata, pdf_recognize::fetch_crossref_metadata, title_search::search_papers,
+};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -496,4 +499,144 @@ pub async fn paper_set_page_counts(args: PaperSetPageCountsArgs) -> ApiResult<()
         }
     })
     .await
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperBackfillPublicationArgs {
+    pub vault_path: String,
+    /// Optional Translator base URL; left empty for direct Crossref/arXiv/S2.
+    #[serde(default)]
+    pub translator_base_url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperBackfillPublicationResult {
+    pub total: usize,
+    pub updated: usize,
+    pub failed: usize,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub errors: Vec<String>,
+}
+
+/// Resolve and fill missing `publication` values for papers in the catalog.
+/// Uses DOI → Crossref, arXiv → arXiv Atom, then title → Semantic Scholar.
+#[tauri::command]
+pub async fn paper_backfill_publication(
+    args: PaperBackfillPublicationArgs,
+) -> Result<ApiResult<PaperBackfillPublicationResult>, String> {
+    let vault = match resolve_vault(&args.vault_path) {
+        Ok(vault) => vault,
+        Err(e) => return Ok(map_err(e)),
+    };
+
+    let vault_for_list = vault.clone();
+    let rows = match run_blocking(
+        move || match papers::list_missing_publication(&vault_for_list) {
+            Ok(rows) => ApiResult::ok(rows),
+            Err(e) => map_err(e),
+        },
+    )
+    .await
+    {
+        ApiResult {
+            ok: true,
+            data: Some(rows),
+            ..
+        } => rows,
+        ApiResult {
+            error: Some(err), ..
+        } => return Ok(map_err(AppError::message(err.message))),
+        _ => {
+            return Ok(map_err(AppError::message(
+                "failed to list papers missing publication",
+            )))
+        }
+    };
+
+    let mut updated = 0usize;
+    let mut failed = 0usize;
+    let mut errors = Vec::new();
+
+    for row in rows {
+        let publication = resolve_publication_for_backfill(
+            row.doi.as_deref(),
+            row.arxiv_id.as_deref(),
+            &row.title,
+        )
+        .await;
+
+        match publication {
+            Some(pub_value) => {
+                let patch = papers::PaperMetaPatch {
+                    publication: Some(pub_value),
+                    ..Default::default()
+                };
+                let path = row.path.clone();
+                let vault2 = vault.clone();
+                match run_blocking(move || match papers::update_meta(&vault2, &path, &patch) {
+                    Ok(_) => ApiResult::ok(()),
+                    Err(e) => map_err(e),
+                })
+                .await
+                {
+                    ApiResult { ok: true, .. } => updated += 1,
+                    ApiResult {
+                        error: Some(err), ..
+                    } => {
+                        failed += 1;
+                        errors.push(format!("{}: {}", row.path, err.message));
+                    }
+                    _ => {
+                        failed += 1;
+                        errors.push(format!("{}: update failed", row.path));
+                    }
+                }
+            }
+            None => {
+                failed += 1;
+            }
+        }
+    }
+
+    Ok(ApiResult::ok(PaperBackfillPublicationResult {
+        total: updated + failed,
+        updated,
+        failed,
+        errors,
+    }))
+}
+
+async fn resolve_publication_for_backfill(
+    doi: Option<&str>,
+    arxiv_id: Option<&str>,
+    title: &str,
+) -> Option<String> {
+    // 1. DOI → Crossref (most reliable for published papers).
+    if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
+        if let Ok(meta) = fetch_crossref_metadata(doi).await {
+            if let Some(pub_value) = meta.publication.filter(|p| !p.is_empty()) {
+                return Some(pub_value);
+            }
+        }
+    }
+
+    // 2. arXiv → Atom (now parses journal_ref and falls back to S2).
+    if let Some(arxiv) = arxiv_id.map(str::trim).filter(|s| !s.is_empty()) {
+        if let Ok(meta) = fetch_arxiv_metadata(arxiv, None).await {
+            if let Some(pub_value) = meta.publication.filter(|p| !p.is_empty() && p != "arXiv") {
+                return Some(pub_value);
+            }
+        }
+    }
+
+    // 3. Title → Semantic Scholar (last resort).
+    if let Ok(candidates) = search_papers(title, 1).await {
+        if let Some(venue) = candidates.into_iter().next().and_then(|c| c.venue) {
+            return Some(venue);
+        }
+    }
+
+    None
 }

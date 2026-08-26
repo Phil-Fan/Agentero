@@ -1,6 +1,6 @@
 //! Magic-wand / identifier import commands.
 
-use crate::core::error::ApiResult;
+use crate::core::error::{ApiResult, AppError};
 use crate::core::fs::WriteOpts;
 use crate::core::log_util::{trunc, OpTimer};
 use crate::features::catalog::CapsCache;
@@ -255,14 +255,15 @@ pub async fn paper_stage_import_file(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaperResolveIdentifierArgs {
-    /// DOI / arXiv id / URL text.
+    /// DOI / arXiv id / URL / title text.
     pub text: String,
     #[serde(default)]
     pub translator_base_url: Option<String>,
 }
 
 /// Resolve an identifier (DOI/arXiv) to metadata without importing — backs
-/// Edit Metadata's identifier refresh.
+/// Edit Metadata's identifier refresh. Falls back to title search when the
+/// input is not a recognized identifier.
 #[tauri::command]
 pub async fn paper_resolve_identifier(
     args: PaperResolveIdentifierArgs,
@@ -279,9 +280,27 @@ pub async fn paper_resolve_identifier(
             op.finish_ok();
             ApiResult::ok(meta)
         }
-        Err(e) => {
-            op.finish_err(&e);
-            crate::core::error::map_err(e)
+        Err(identifier_err) => {
+            // Last resort: treat the text as a title and search by it.
+            match super::title_search::search_papers(&args.text, 1).await {
+                Ok(candidates) if !candidates.is_empty() => {
+                    let mut meta = super::map::meta_from_search_candidate(&candidates[0]);
+                    super::enrich_remote_urls(&mut meta);
+                    op.finish_ok();
+                    ApiResult::ok(meta)
+                }
+                Ok(_) => {
+                    let e = AppError::message(format!(
+                        "{identifier_err}; title search returned no candidates"
+                    ));
+                    op.finish_err(&e);
+                    crate::core::error::map_err(e)
+                }
+                Err(e) => {
+                    op.finish_err(&e);
+                    crate::core::error::map_err(e)
+                }
+            }
         }
     }
 }

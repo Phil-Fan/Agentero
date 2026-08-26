@@ -453,7 +453,7 @@ pub(crate) async fn resolve_identifier_full(
 }
 
 /// `GET https://api.crossref.org/works/{doi}` → `PaperMeta`.
-async fn fetch_crossref_metadata(doi: &str) -> Result<PaperMeta, AppError> {
+pub(crate) async fn fetch_crossref_metadata(doi: &str) -> Result<PaperMeta, AppError> {
     let url = format!(
         "https://api.crossref.org/works/{}",
         urlencoding::encode(doi.trim())
