@@ -141,7 +141,15 @@
 		"backfillPublication": "Backfill venues",
 		"backfillPublicationDone": "Updated {{updated}} of {{total}} venues",
 		"backfillPublicationFailed": "Failed to backfill venues",
-		"desktopOnly": "Import/export requires the desktop app."
+		"desktopOnly": "Import/export requires the desktop app.",
+		"refreshPublication": "Refresh venues",
+		"refreshPublicationDone": "Venue refreshed",
+		"refreshPublicationEmpty": "No venue found",
+		"refreshPublicationFailed": "Failed to refresh venue",
+		"refreshPublicationNoTargets": "No papers with DOI, arXiv ID, or title to refresh",
+		"refreshPublicationTaskTitle": "Refresh venues",
+		"refreshPublicationTaskDetail": "{{current}} / {{total}} venues",
+		"refreshPublicationPartial": "{{updated}} updated, {{failed}} failed"
 	},
 	"plaza": {
 		"plaza": "Plaza",

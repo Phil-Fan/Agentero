@@ -141,7 +141,15 @@
 		"backfillPublication": "补全期刊/会议",
 		"backfillPublicationDone": "已补全 {{updated}} / {{total}} 篇期刊/会议",
 		"backfillPublicationFailed": "补全期刊/会议失败",
-		"desktopOnly": "导入/导出需要桌面应用。"
+		"desktopOnly": "导入/导出需要桌面应用。",
+		"refreshPublication": "刷新期刊/会议",
+		"refreshPublicationDone": "期刊/会议已刷新",
+		"refreshPublicationEmpty": "未找到期刊/会议",
+		"refreshPublicationFailed": "刷新期刊/会议失败",
+		"refreshPublicationNoTargets": "没有可刷新的论文（需要 DOI、arXiv 编号或标题）",
+		"refreshPublicationTaskTitle": "刷新期刊/会议",
+		"refreshPublicationTaskDetail": "{{current}} / {{total}} 篇期刊/会议",
+		"refreshPublicationPartial": "已更新 {{updated}} 篇，失败 {{failed}} 篇"
 	},
 	"plaza": {
 		"plaza": "广场",

@@ -61,6 +61,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useDebouncedCallback } from "@/hooks/use-debounce";
 import { broadcastAgentAttachContext } from "@/lib/agent/context-attach";
+import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { logger } from "@/lib/core/logger";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
@@ -70,10 +71,12 @@ import {
 	backfillPublication,
 	filterPapersByScope,
 	listPaperPageCounts,
+	resolveIdentifierMetadata,
 	savePaperPageCounts,
+	updatePaperMeta,
 } from "@/lib/paper/api";
 import { downloadLibraryPaper } from "@/lib/paper/library-actions";
-import { setEditMetaDraft } from "@/lib/paper/library-store";
+import { refreshLibrary, setEditMetaDraft } from "@/lib/paper/library-store";
 import {
 	aggregateReadingHeatmap,
 	heatmapCacheKey,
@@ -677,6 +680,80 @@ export function PapersLibrary({
 		}
 	}, [vaultPath, t]);
 
+	const handleRefreshPublications = useCallback(
+		async (targets: PaperMetadata[]) => {
+			if (!vaultPath || isRemoteVaultHandle(vaultPath)) return;
+			const papers = targets.filter(
+				(p) =>
+					p.path && (p.doi?.trim() || p.arxiv_id?.trim() || p.title?.trim()),
+			);
+			if (papers.length === 0) {
+				notifyError(t("papersLibrary.refreshPublicationNoTargets"));
+				return;
+			}
+			await enqueueBackgroundTask(
+				{
+					kind: "other",
+					title: t("papersLibrary.refreshPublicationTaskTitle"),
+					detail: t("papersLibrary.refreshPublicationTaskDetail", {
+						current: 0,
+						total: papers.length,
+					}),
+				},
+				async ({ signal, setProgress, setDetail }) => {
+					let updated = 0;
+					let empty = 0;
+					let failed = 0;
+					for (let i = 0; i < papers.length; i++) {
+						if (signal.aborted) break;
+						const paper = papers[i];
+						const text =
+							paper.doi?.trim() ||
+							paper.arxiv_id?.trim() ||
+							paper.title?.trim();
+						try {
+							const meta = await resolveIdentifierMetadata(text ?? "");
+							const publication = meta.publication?.trim();
+							if (publication && paper.path) {
+								await updatePaperMeta(vaultPath, paper.path, {
+									publication,
+								});
+								updated++;
+							} else {
+								empty++;
+							}
+						} catch (e) {
+							failed++;
+							logger.error("refresh publication failed", {
+								path: paper.path,
+								error: String(e),
+							});
+						} finally {
+							setProgress(Math.round(((i + 1) / papers.length) * 100));
+							setDetail(
+								t("papersLibrary.refreshPublicationTaskDetail", {
+									current: i + 1,
+									total: papers.length,
+								}),
+							);
+						}
+					}
+					await refreshLibrary();
+					if (failed > 0 || empty > 0) {
+						throw new Error(
+							t("papersLibrary.refreshPublicationPartial", {
+								updated,
+								failed: failed + empty,
+							}),
+						);
+					}
+				},
+				{ concurrency: 1 },
+			);
+		},
+		[vaultPath, t],
+	);
+
 	/** Folder scope first (cheap path-prefix filter on in-memory catalog). */
 	const scopedPapers = useMemo(
 		() => filterPapersByScope(papers, scopePath),
@@ -919,6 +996,7 @@ export function PapersLibrary({
 							const isDragOver = dragOverKey === col.key && dragKey !== col.key;
 							const isTitle = col.key === "title";
 							const isTags = col.key === "tags";
+							const isPublication = col.key === "publication";
 							return (
 								<th
 									key={col.key}
@@ -1026,6 +1104,34 @@ export function PapersLibrary({
 												</TooltipTrigger>
 												<TooltipContent side="bottom">
 													{t("papersLibrary.backfillPublication")}
+												</TooltipContent>
+											</Tooltip>
+										) : null}
+										{isPublication &&
+										vaultPath &&
+										!isRemoteVaultHandle(vaultPath) ? (
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<button
+														type="button"
+														data-library-header-action
+														className={cn(
+															"ml-1 flex size-6 shrink-0 items-center justify-center rounded-sm",
+															"hover:bg-muted/60 hover:text-foreground",
+															"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+														)}
+														aria-label={t("papersLibrary.refreshPublication")}
+														onClick={(e) => {
+															e.stopPropagation();
+															void handleRefreshPublications(scopedPapers);
+														}}
+														onMouseDown={(e) => e.stopPropagation()}
+													>
+														<RefreshCw className="size-3.5" aria-hidden />
+													</button>
+												</TooltipTrigger>
+												<TooltipContent side="bottom">
+													{t("papersLibrary.refreshPublication")}
 												</TooltipContent>
 											</Tooltip>
 										) : null}
