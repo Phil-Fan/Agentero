@@ -626,16 +626,18 @@ export function PaperInfoPanel({
 									{meta.year}
 								</MetaRow>
 							) : null}
-							{meta.publication ? (
-								<MetaRow icon={Library} label={t("paperInfo.publication")}>
+							<MetaRow icon={Library} label={t("paperInfo.publication")}>
+								{meta.publication ? (
 									<CopyValue
 										text={meta.publication}
 										label={t("paperInfo.publication")}
 										onCopy={copyField}
 										className="line-clamp-2"
 									/>
-								</MetaRow>
-							) : null}
+								) : (
+									<span className="text-muted-foreground">-</span>
+								)}
+							</MetaRow>
 							<MetaRow icon={Tag} label={t("paperInfo.tags")}>
 								<TagsEditor
 									tags={meta.tags ?? []}
