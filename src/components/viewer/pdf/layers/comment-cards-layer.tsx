@@ -151,8 +151,6 @@ type CommentCardProps = {
 	item: PageAnnotationComment;
 	topPx: number;
 	heightPx: number;
-	/** Higher cards sit above later ones so rounded corners aren't covered. */
-	stackIndex: number;
 	editing: boolean;
 	wikiTarget: string | null;
 	onOpen: (comment: PageAnnotationComment) => void;
@@ -167,7 +165,6 @@ const CommentCard = memo(function CommentCard({
 	item,
 	topPx,
 	heightPx,
-	stackIndex,
 	editing,
 	wikiTarget,
 	onOpen,
@@ -227,8 +224,8 @@ const CommentCard = memo(function CommentCard({
 	return (
 		<div
 			className={cn(
-				"group pointer-events-auto absolute isolate rounded-lg bg-background/95 shadow-sm ring-1 backdrop-blur-sm",
-				editing ? "ring-2 ring-ring/50" : "ring-border/60",
+				"group pointer-events-auto absolute rounded-lg bg-background/95 shadow-sm ring-1 backdrop-blur-sm",
+				editing ? "z-[6] ring-2 ring-ring/50" : "ring-border/60",
 			)}
 			style={{
 				left: `calc(100% + ${COMMENT_CARD_GAP_PX}px)`,
@@ -236,7 +233,6 @@ const CommentCard = memo(function CommentCard({
 				width: COMMENT_CARD_WIDTH_PX,
 				height: editing ? undefined : heightPx,
 				minHeight: heightPx,
-				zIndex: editing ? 6 : stackIndex,
 			}}
 		>
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: blur/pointer isolation for the in-place editor */}
@@ -455,9 +451,9 @@ export const CommentCardsLayer = memo(function CommentCardsLayer({
 	const byId = new Map(items.map((item) => [item.id, item]));
 
 	return (
-		<div className="pointer-events-none absolute inset-0 z-[5]">
+		<div className="pointer-events-none absolute inset-0 z-[5] overflow-visible">
 			<TooltipProvider delayDuration={200}>
-				{laid.map((pos, index) => {
+				{laid.map((pos) => {
 					const item = byId.get(pos.id);
 					if (!item) return null;
 					return (
@@ -466,7 +462,6 @@ export const CommentCardsLayer = memo(function CommentCardsLayer({
 							item={item}
 							topPx={pos.topPx}
 							heightPx={pos.heightPx}
-							stackIndex={laid.length - index}
 							editing={item.id === editingId}
 							wikiTarget={wikiTarget}
 							onOpen={onOpen}
