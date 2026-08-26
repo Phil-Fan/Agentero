@@ -58,15 +58,15 @@ pub const LIFECYCLE_TEMPLATES: &[&str] = &[
 /// dsh ACP demo + plugin stack, published together on npm. Pinning the full set
 /// to one verified version keeps cordis.yml plugin loading in sync.
 pub const DSH_ACP_PACKAGES: &[&str] = &[
-    "@deepseek-ai/dsh-acp-demo@0.1.0-rc.6",
-    "@deepseek-ai/dsh-llm-deepseek@0.1.0-rc.6",
-    "@deepseek-ai/dsh-sandbox-local@0.1.0-rc.6",
-    "@deepseek-ai/dsh-sandbox-policy@0.1.0-rc.6",
-    "@deepseek-ai/dsh-subprocess-local@0.1.0-rc.6",
-    "@deepseek-ai/dsh-bash-sandbox@0.1.0-rc.6",
-    "@deepseek-ai/dsh-user-approval@0.1.0-rc.6",
-    "@deepseek-ai/dsh-fs-sandbox@0.1.0-rc.6",
-    "@deepseek-ai/dsh-tool-fs@0.1.0-rc.6",
+    "@deepseek-ai/dsh-acp-demo@0.1.1-rc.2",
+    "@deepseek-ai/dsh-llm-deepseek@0.1.1-rc.2",
+    "@deepseek-ai/dsh-sandbox-local@0.1.1-rc.2",
+    "@deepseek-ai/dsh-sandbox-policy@0.1.1-rc.2",
+    "@deepseek-ai/dsh-subprocess-local@0.1.1-rc.2",
+    "@deepseek-ai/dsh-bash-sandbox@0.1.1-rc.2",
+    "@deepseek-ai/dsh-user-approval@0.1.1-rc.2",
+    "@deepseek-ai/dsh-fs-sandbox@0.1.1-rc.2",
+    "@deepseek-ai/dsh-tool-fs@0.1.1-rc.2",
 ];
 
 /// Default dsh composition written into the launcher dir on first install
@@ -138,7 +138,7 @@ pub fn dsh_npm_install_command() -> String {
 const DSH_ACP_PACKAGE_JSON: &str = r#"{
   "name": "agentero-dsh-acp",
   "private": true,
-  "version": "0.1.0-rc.6"
+  "version": "0.1.1-rc.2"
 }
 "#;
 

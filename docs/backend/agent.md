@@ -8,7 +8,7 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
 - 会话 `cwd` = 当前 Vault 根（远程则为远端 Vault 根）。
 - 统一接口：OpenCode、OpenClaw、Hermes、Gemini、Claude ACP、Codex ACP、Qoder、Grok、Pi、Dsh（DeepSeek Harness）、Kimi Code、自定义 `command`/`args`/`env`。
 - Dsh：ACP 服务端是 `@deepseek-ai/dsh-acp-demo`（npm 包），与依赖插件一起固定
-  `0.1.0-rc.6`。安装/启动三处入口，检测按序回退：
+  `0.1.1-rc.2`。安装/启动三处入口，检测按序回退：
   1. App 管理目录 `~/.agentero/dsh-acp/node_modules/.bin/dsh-acp-demo`（设置页「安装」按钮，
      Rust 写入默认 `cordis.yml` + 最小 `package.json` 后执行 `npm i`；`package.json`
      防止 npm 沿目录树向上找到用户 `~/package.json` 把包装进 `~/node_modules`）；
