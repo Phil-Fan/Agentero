@@ -26,6 +26,13 @@ const USER_AGENT: &str = "agentero/0.6 (+https://github.com/poco-ai/agentero)";
 const NAV_BRIDGE: &str = r##"<style>
 /* The panel is a paper feed, not a browser: the global nav only offers ways out. */
 header.antd5-layout-header { display: none !important; }
+/* ModelScope shows an onboarding tour that locks body scrolling and dims the feed.
+   The panel is for browsing papers; suppress the tour entirely. */
+.antd5-tour,
+.antd5-tour-mask,
+.antd5-tour-target-placeholder { display: none !important; }
+/* The tour injects `html body { overflow-y: hidden }` via a runtime style tag. */
+html body { overflow-y: visible !important; }
 .agentero-import {
   cursor: pointer;
   user-select: none;
@@ -414,6 +421,16 @@ mod tests {
     #[test]
     fn hides_the_site_header() {
         assert!(NAV_BRIDGE.contains("header.antd5-layout-header { display: none !important; }"));
+    }
+
+    /// The onboarding tour dims the page and injects `body { overflow-y: hidden }`,
+    /// which locks the paper feed. Hide the tour and keep the body scrollable.
+    #[test]
+    fn suppresses_onboarding_tour_and_keeps_body_scrollable() {
+        assert!(NAV_BRIDGE.contains(".antd5-tour"));
+        assert!(NAV_BRIDGE.contains(".antd5-tour-mask"));
+        assert!(NAV_BRIDGE.contains("display: none !important"));
+        assert!(NAV_BRIDGE.contains("html body { overflow-y: visible !important; }"));
     }
 
     /// A card click is a pushState route, not a navigation: without these the
