@@ -30,9 +30,11 @@ import {
 export const COMMENT_CARD_WIDTH_PX = 224;
 /** Horizontal gap between the page edge and the rail. */
 export const COMMENT_CARD_GAP_PX = 8;
+/** Extra px so ring + shadow aren't clipped by the viewport overflow. */
+const COMMENT_RAIL_BLEED_PX = 4;
 /** Viewport right padding that keeps the rail clear of horizontal scroll. */
 export const COMMENT_RAIL_WIDTH_PX =
-	COMMENT_CARD_WIDTH_PX + COMMENT_CARD_GAP_PX;
+	COMMENT_CARD_WIDTH_PX + COMMENT_CARD_GAP_PX + COMMENT_RAIL_BLEED_PX;
 /** Hosts narrower than this fall back to the in-page annotate gutter pins. */
 export const COMMENT_RAIL_MIN_HOST_WIDTH = 640;
 
@@ -149,6 +151,8 @@ type CommentCardProps = {
 	item: PageAnnotationComment;
 	topPx: number;
 	heightPx: number;
+	/** Higher cards sit above later ones so rounded corners aren't covered. */
+	stackIndex: number;
 	editing: boolean;
 	wikiTarget: string | null;
 	onOpen: (comment: PageAnnotationComment) => void;
@@ -163,6 +167,7 @@ const CommentCard = memo(function CommentCard({
 	item,
 	topPx,
 	heightPx,
+	stackIndex,
 	editing,
 	wikiTarget,
 	onOpen,
@@ -220,12 +225,10 @@ const CommentCard = memo(function CommentCard({
 	};
 
 	return (
-		<fieldset
+		<div
 			className={cn(
-				"group pointer-events-auto absolute m-0 min-w-0 rounded-lg border-0 bg-background/95 px-2.5 py-2 shadow-sm ring-1 backdrop-blur-sm",
-				editing
-					? "z-[6] overflow-visible ring-2 ring-ring/50"
-					: "overflow-hidden ring-border/60",
+				"group pointer-events-auto absolute isolate rounded-lg bg-background/95 shadow-sm ring-1 backdrop-blur-sm",
+				editing ? "ring-2 ring-ring/50" : "ring-border/60",
 			)}
 			style={{
 				left: `calc(100% + ${COMMENT_CARD_GAP_PX}px)`,
@@ -233,195 +236,204 @@ const CommentCard = memo(function CommentCard({
 				width: COMMENT_CARD_WIDTH_PX,
 				height: editing ? undefined : heightPx,
 				minHeight: heightPx,
+				zIndex: editing ? 6 : stackIndex,
 			}}
-			onPointerDown={(e) => e.stopPropagation()}
-			onBlur={
-				editing
-					? (e) => {
-							if (e.currentTarget.contains(e.relatedTarget as Node | null)) {
-								return;
-							}
-							if (cancelledRef.current) return;
-							commit(textareaRef.current?.value ?? "");
-						}
-					: undefined
-			}
 		>
-			{editing ? (
-				<div className="block w-full text-left">
-					{item.kind === "visual" ? (
-						<Crop className="size-2.5 text-muted-foreground" aria-hidden />
-					) : (
-						<span
-							className={cn(
-								"block size-2 rounded-full",
-								swatchColorClass(item.color),
-							)}
-							aria-hidden
-						/>
-					)}
-					{item.quote.trim() ? (
-						<blockquote
-							className={cn(
-								"mt-1.5 line-clamp-2 border-l-2 pl-2 text-muted-foreground/90 text-xs leading-relaxed",
-								swatchBorderClass(item.color),
-							)}
-						>
-							{item.quote}
-						</blockquote>
-					) : null}
-					<textarea
-						ref={textareaRef}
-						className="mt-1 max-h-60 w-full resize-none bg-transparent p-0 text-[13px] text-foreground/80 leading-relaxed outline-none placeholder:text-muted-foreground/70"
-						placeholder={t("annotations.placeholder")}
-						aria-label={t("annotations.editorLabel")}
-						defaultValue={item.comment}
-						rows={EDIT_MIN_COMMENT_LINES}
-						{...compositionProps}
-						onChange={(e) => {
-							draftRef.current = e.currentTarget.value;
-							autosizeTextarea(e.currentTarget);
-						}}
-						onClick={(e) => e.stopPropagation()}
-						onKeyDown={(e) => {
-							e.stopPropagation();
-							if (e.key === "Escape") {
-								e.preventDefault();
-								cancel();
-								return;
-							}
-							if (
-								e.key === "Enter" &&
-								(e.metaKey || e.ctrlKey) &&
-								!isBlockedByIme(e)
-							) {
-								e.preventDefault();
-								commit(e.currentTarget.value);
-							}
-						}}
-					/>
-				</div>
-			) : (
-				// biome-ignore lint/a11y/useSemanticElements: a native <button> cannot wrap the blockquote/p flow content
-				<div
-					role="button"
-					tabIndex={0}
-					className="block h-full w-full cursor-text overflow-hidden rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-					onClick={(e) => {
-						e.stopPropagation();
-						onOpen(item);
-					}}
-					onKeyDown={(e) => {
-						if (e.key === "Enter" || e.key === " ") {
-							e.preventDefault();
-							onOpen(item);
-						}
-					}}
-				>
-					{item.kind === "visual" ? (
-						<Crop className="size-2.5 text-muted-foreground" aria-hidden />
-					) : (
-						<span
-							className={cn(
-								"block size-2 rounded-full",
-								swatchColorClass(item.color),
-							)}
-							aria-hidden
-						/>
-					)}
-					{item.quote.trim() ? (
-						<blockquote
-							className={cn(
-								"mt-1.5 line-clamp-2 border-l-2 pl-2 text-muted-foreground/90 text-xs leading-relaxed",
-								swatchBorderClass(item.color),
-							)}
-						>
-							{item.quote}
-						</blockquote>
-					) : null}
-					<p
-						className={cn(
-							"mt-1 line-clamp-3 whitespace-pre-wrap break-words text-[13px] leading-relaxed",
-							item.comment.trim()
-								? "text-foreground/80"
-								: "text-muted-foreground/70",
-						)}
-					>
-						{item.comment.trim() || t("annotations.placeholder")}
-					</p>
-				</div>
-			)}
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: blur/pointer isolation for the in-place editor */}
 			<div
 				className={cn(
-					"absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-lg bg-background/80 p-0.5 shadow-sm ring-1 ring-border/60 backdrop-blur-sm transition-opacity duration-150",
-					editing
-						? "opacity-0 group-hover:opacity-100"
-						: "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+					"h-full rounded-[inherit] px-2.5 py-2",
+					editing ? "overflow-visible" : "overflow-hidden",
 				)}
+				onPointerDown={(e) => e.stopPropagation()}
+				onBlur={
+					editing
+						? (e) => {
+								if (e.currentTarget.contains(e.relatedTarget as Node | null)) {
+									return;
+								}
+								if (cancelledRef.current) return;
+								commit(textareaRef.current?.value ?? "");
+							}
+						: undefined
+				}
 			>
-				{wikiTarget ? (
-					<>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon-xs"
-									className="size-6 text-muted-foreground hover:text-foreground"
-									aria-label={t("annotations.copyLink")}
-									onClick={(e) => {
-										e.stopPropagation();
-										onCopyLink(item);
-									}}
-								>
-									<Link2 className="size-3.5" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent>{t("annotations.copyLink")}</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon-xs"
-									className="size-6 text-muted-foreground hover:text-foreground"
-									aria-label={t("annotations.copyEmbed")}
-									onClick={(e) => {
-										e.stopPropagation();
-										onCopyEmbed(item);
-									}}
-								>
-									<span className="font-mono text-[10px] leading-none">
-										![[
-									</span>
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent>{t("annotations.copyEmbed")}</TooltipContent>
-						</Tooltip>
-					</>
-				) : null}
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-xs"
-							className="size-6 text-muted-foreground hover:text-destructive"
-							aria-label={t("annotations.delete")}
-							onClick={(e) => {
-								e.stopPropagation();
-								cancelledRef.current = true;
-								onDelete(item);
+				{editing ? (
+					<div className="block w-full text-left">
+						{item.kind === "visual" ? (
+							<Crop className="size-2.5 text-muted-foreground" aria-hidden />
+						) : (
+							<span
+								className={cn(
+									"block size-2 rounded-full",
+									swatchColorClass(item.color),
+								)}
+								aria-hidden
+							/>
+						)}
+						{item.quote.trim() ? (
+							<blockquote
+								className={cn(
+									"mt-1.5 line-clamp-2 border-l-2 pl-2 text-muted-foreground/90 text-xs leading-relaxed",
+									swatchBorderClass(item.color),
+								)}
+							>
+								{item.quote}
+							</blockquote>
+						) : null}
+						<textarea
+							ref={textareaRef}
+							className="mt-1 max-h-60 w-full resize-none bg-transparent p-0 text-[13px] text-foreground/80 leading-relaxed outline-none placeholder:text-muted-foreground/70"
+							placeholder={t("annotations.placeholder")}
+							aria-label={t("annotations.editorLabel")}
+							defaultValue={item.comment}
+							rows={EDIT_MIN_COMMENT_LINES}
+							{...compositionProps}
+							onChange={(e) => {
+								draftRef.current = e.currentTarget.value;
+								autosizeTextarea(e.currentTarget);
 							}}
+							onClick={(e) => e.stopPropagation()}
+							onKeyDown={(e) => {
+								e.stopPropagation();
+								if (e.key === "Escape") {
+									e.preventDefault();
+									cancel();
+									return;
+								}
+								if (
+									e.key === "Enter" &&
+									(e.metaKey || e.ctrlKey) &&
+									!isBlockedByIme(e)
+								) {
+									e.preventDefault();
+									commit(e.currentTarget.value);
+								}
+							}}
+						/>
+					</div>
+				) : (
+					// biome-ignore lint/a11y/useSemanticElements: a native <button> cannot wrap the blockquote/p flow content
+					<div
+						role="button"
+						tabIndex={0}
+						className="block w-full cursor-text text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+						onClick={(e) => {
+							e.stopPropagation();
+							onOpen(item);
+						}}
+						onKeyDown={(e) => {
+							if (e.key === "Enter" || e.key === " ") {
+								e.preventDefault();
+								onOpen(item);
+							}
+						}}
+					>
+						{item.kind === "visual" ? (
+							<Crop className="size-2.5 text-muted-foreground" aria-hidden />
+						) : (
+							<span
+								className={cn(
+									"block size-2 rounded-full",
+									swatchColorClass(item.color),
+								)}
+								aria-hidden
+							/>
+						)}
+						{item.quote.trim() ? (
+							<blockquote
+								className={cn(
+									"mt-1.5 line-clamp-2 border-l-2 pl-2 text-muted-foreground/90 text-xs leading-relaxed",
+									swatchBorderClass(item.color),
+								)}
+							>
+								{item.quote}
+							</blockquote>
+						) : null}
+						<p
+							className={cn(
+								"mt-1 line-clamp-3 whitespace-pre-wrap break-words text-[13px] leading-relaxed",
+								item.comment.trim()
+									? "text-foreground/80"
+									: "text-muted-foreground/70",
+							)}
 						>
-							<Trash2 className="size-3.5" />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent>{t("annotations.delete")}</TooltipContent>
-				</Tooltip>
+							{item.comment.trim() || t("annotations.placeholder")}
+						</p>
+					</div>
+				)}
+				<div
+					className={cn(
+						"absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-lg bg-background/80 p-0.5 shadow-sm ring-1 ring-border/60 backdrop-blur-sm transition-opacity duration-150",
+						editing
+							? "opacity-0 group-hover:opacity-100"
+							: "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+					)}
+				>
+					{wikiTarget ? (
+						<>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-xs"
+										className="size-6 text-muted-foreground hover:text-foreground"
+										aria-label={t("annotations.copyLink")}
+										onClick={(e) => {
+											e.stopPropagation();
+											onCopyLink(item);
+										}}
+									>
+										<Link2 className="size-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>{t("annotations.copyLink")}</TooltipContent>
+							</Tooltip>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-xs"
+										className="size-6 text-muted-foreground hover:text-foreground"
+										aria-label={t("annotations.copyEmbed")}
+										onClick={(e) => {
+											e.stopPropagation();
+											onCopyEmbed(item);
+										}}
+									>
+										<span className="font-mono text-[10px] leading-none">
+											![[
+										</span>
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>{t("annotations.copyEmbed")}</TooltipContent>
+							</Tooltip>
+						</>
+					) : null}
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								className="size-6 text-muted-foreground hover:text-destructive"
+								aria-label={t("annotations.delete")}
+								onClick={(e) => {
+									e.stopPropagation();
+									cancelledRef.current = true;
+									onDelete(item);
+								}}
+							>
+								<Trash2 className="size-3.5" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>{t("annotations.delete")}</TooltipContent>
+					</Tooltip>
+				</div>
 			</div>
-		</fieldset>
+		</div>
 	);
 });
 
@@ -445,7 +457,7 @@ export const CommentCardsLayer = memo(function CommentCardsLayer({
 	return (
 		<div className="pointer-events-none absolute inset-0 z-[5]">
 			<TooltipProvider delayDuration={200}>
-				{laid.map((pos) => {
+				{laid.map((pos, index) => {
 					const item = byId.get(pos.id);
 					if (!item) return null;
 					return (
@@ -454,6 +466,7 @@ export const CommentCardsLayer = memo(function CommentCardsLayer({
 							item={item}
 							topPx={pos.topPx}
 							heightPx={pos.heightPx}
+							stackIndex={laid.length - index}
 							editing={item.id === editingId}
 							wikiTarget={wikiTarget}
 							onOpen={onOpen}
