@@ -22,14 +22,15 @@
   <a href="https://github.com/poco-ai/agentero/stargazers"><img src="https://github.com/user-attachments/assets/1d49b049-89ae-4992-a92d-d2411c8053b6" alt="Give me a star" width="480" /></a>
 </p>
 
+**Context is everything**。
 
-传统文献管理器对 Agent 并不友好：
+如果说今天的模型是 $f$，越来越聪明，也越来越像。同一个 $f$，决定输出 $y$ 的，是输入 $x$，也就是 context。
 
-- 阅读高亮和笔记被锁在单篇文件里，Agent 很难跨论文复用。
-- 每次对话都要重新提供上下文，缺少稳定的本地知识地图。
-- PDF 对人友好，但对 Agent 来讲不是最舒服的阅读材料。
+但科研的 context 今天是碎裂的：PDF 和高亮批注可能在 Zotero 里，笔记在 Obsidian 里，你和 AI 的讨论、提问、方案留在对话框里。三者互不相通，再聪明的 Agent 也只能读到碎片。
 
-**Agentero** 旨在构建 Agent 友好、Agent 原生的文献管理方式，探索人与 Agent 在文献管理中的协作方式。
+所以我们做了 Agentero，旨在构建 Agent 友好、Agent 原生的文献管理方式，探索人与 Agent 在文献管理中的协作方式。
+
+Agentero 是一个 Agent 时代的本地优先科研工作台，让输入、处理、输出三个环节都有 AI 参与。它不锁定具体 Agent 或模型——通过 ACP 接上你自己的本地 Agent（BYOA），工作上下文留在本地 Vault。
 
 ## 功能
 
