@@ -162,7 +162,14 @@ export function pickCrossrefRegionByLabel(
 		if (match) return match;
 	}
 
-	// Multiple candidates and no title match: fall back to the largest one.
+	// Multiple candidates and no title match. Equations rarely carry caption
+	// titles, so order them top-to-bottom by normalized y and pick the N-th one.
+	if (label.kind === "equation" && candidates.length >= label.number) {
+		const ordered = [...candidates].sort((a, b) => a.bbox.y - b.bbox.y);
+		return ordered[label.number - 1] ?? null;
+	}
+
+	// Otherwise fall back to the largest candidate.
 	return candidates.reduce((best, region) =>
 		bboxArea(region.bbox) > bboxArea(best.bbox) ? region : best,
 	);
