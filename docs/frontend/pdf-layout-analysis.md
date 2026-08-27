@@ -109,9 +109,9 @@ LayoutAnalysisPluginPackage: {
 |---|---|---|
 | 本地推理（默认） | `local` | 浏览器内 ONNX PP-DocLayoutV3，完全离线 |
 | Paddle API | `paddle` | AI Studio 托管 PP-StructureV3 **异步任务** API，**整份 PDF 会上传到云端**；端点固定（`supportsBaseUrl: false`） |
-| MinerU（云端 API） | `mineru` | mineru.net 批量解析 API，**整份 PDF 会上传到云端**；支持 Base URL 覆盖（https-only，loopback 例外） |
+| MinerU（云端 API） | `mineru` | mineru.net 批量解析 API，**整份 PDF 会上传到云端**；支持 Base URL 覆盖（https-only，loopback 例外）、语言（默认 `ch` 中英文，可选纯英文）与强制 OCR 选项（`supportsLanguage` / `supportsOcr`） |
 
-每个 provider 描述符带 `kind` / `requiresApiKey` / `supportsBaseUrl` / `sidecarMode`：设置面板与 Onboarding 据此显隐 API Key / Base URL 输入（保存 / 掩码 / 连通性测试逻辑共用 `provider-config.ts`）；`run-analysis.ts` 用 `layoutProviderFor(backend)` + `isRemoteLayoutProvider` 判定走远程分支（`startRemoteLayoutAnalysis`，按 `provider.id` 分发到 Host engine 注册表）。
+每个 provider 描述符带 `kind` / `requiresApiKey` / `supportsBaseUrl` / `sidecarMode`（MinerU 另有 `supportsLanguage` / `supportsOcr`）：设置面板与 Onboarding 据此显隐 API Key / Base URL / 语言 / 强制 OCR 输入（保存 / 掩码 / 连通性测试逻辑共用 `provider-config.ts`）；`run-analysis.ts` 用 `layoutProviderFor(backend)` + `isRemoteLayoutProvider` 判定走远程分支（`startRemoteLayoutAnalysis`，按 `provider.id` 分发到 Host engine 注册表）。
 
 远程 provider 共用流程（`src/lib/pdf/layout/paddle.ts` IPC 封装 + `run-analysis.ts`）：
 

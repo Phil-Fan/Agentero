@@ -15,6 +15,10 @@ export type LayoutProviderDescriptor = {
 	kind: "local" | "remote";
 	requiresApiKey: boolean;
 	supportsBaseUrl: boolean;
+	/** Document language is user-selectable (MinerU only). */
+	supportsLanguage?: boolean;
+	/** Force-OCR toggle is available (MinerU only). */
+	supportsOcr?: boolean;
 	/** `source.mode` written to the layout sidecar for this provider's runs. */
 	sidecarMode: LayoutSidecarMode;
 };
@@ -33,6 +37,10 @@ export type ProviderCardDescriptor = {
 	supportsModel?: boolean;
 	/** OCR prompt is user-overridable (VLM engines only). */
 	supportsPrompt?: boolean;
+	/** Document language is user-selectable (MinerU only). */
+	supportsLanguage?: boolean;
+	/** Force-OCR toggle is available (MinerU only). */
+	supportsOcr?: boolean;
 };
 
 export const LAYOUT_PROVIDERS: Record<LayoutBackend, LayoutProviderDescriptor> =
@@ -56,6 +64,8 @@ export const LAYOUT_PROVIDERS: Record<LayoutBackend, LayoutProviderDescriptor> =
 			kind: "remote",
 			requiresApiKey: true,
 			supportsBaseUrl: true,
+			supportsLanguage: true,
+			supportsOcr: true,
 			sidecarMode: "mineru-layout",
 		},
 	};
@@ -81,7 +91,13 @@ export const PARSER_PROVIDERS: Record<
 		supportsBaseUrl: false,
 		supportsModel: true,
 	},
-	mineru: { id: "mineru", requiresApiKey: true, supportsBaseUrl: true },
+	mineru: {
+		id: "mineru",
+		requiresApiKey: true,
+		supportsBaseUrl: true,
+		supportsLanguage: true,
+		supportsOcr: true,
+	},
 	openaiCompatible: {
 		id: "openaiCompatible",
 		requiresApiKey: true,
@@ -100,6 +116,8 @@ export function layoutProviderCard(
 		id: descriptor.id,
 		requiresApiKey: descriptor.requiresApiKey,
 		supportsBaseUrl: descriptor.supportsBaseUrl,
+		supportsLanguage: descriptor.supportsLanguage,
+		supportsOcr: descriptor.supportsOcr,
 	};
 }
 
@@ -124,6 +142,9 @@ export function mergeProviderCards(
 						supportsBaseUrl: previous.supportsBaseUrl || card.supportsBaseUrl,
 						supportsModel: previous.supportsModel || card.supportsModel,
 						supportsPrompt: previous.supportsPrompt || card.supportsPrompt,
+						supportsLanguage:
+							previous.supportsLanguage || card.supportsLanguage,
+						supportsOcr: previous.supportsOcr || card.supportsOcr,
 					}
 				: card,
 		);

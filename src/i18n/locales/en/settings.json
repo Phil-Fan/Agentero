@@ -414,6 +414,7 @@
 			},
 			"confirm": "Confirm",
 			"openDocsLabel": "Get an API key",
+			"advanced": "Advanced",
 			"apiKey": {
 				"label": "API key",
 				"placeholder": {
@@ -431,6 +432,18 @@
 			"prompt": {
 				"label": "Prompt",
 				"placeholder": "Auto, based on the model"
+			},
+			"language": {
+				"label": "Language",
+				"help": "Specify the document language",
+				"options": {
+					"ch": "Chinese–English",
+					"en": "Pure English"
+				}
+			},
+			"forceOcr": {
+				"label": "Force OCR",
+				"help": "Enable OCR for all pages."
 			},
 			"probeIdle": "Not checked yet",
 			"probeOk": "Available",

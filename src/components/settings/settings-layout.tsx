@@ -1,5 +1,31 @@
+import { CircleHelp } from "lucide-react";
 import type { ReactNode } from "react";
 import { Label } from "@/components/ui/label";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+/** Label with a small "?" icon; the hint lives in a tooltip, not a row. */
+export function HelpLabel({ label, help }: { label: ReactNode; help: string }) {
+	return (
+		<span className="inline-flex items-center gap-1">
+			{label}
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<span className="cursor-help">
+						<CircleHelp
+							className="size-3 text-muted-foreground"
+							aria-label={help}
+						/>
+					</span>
+				</TooltipTrigger>
+				<TooltipContent className="max-w-64">{help}</TooltipContent>
+			</Tooltip>
+		</span>
+	);
+}
 
 export function PageTitle({
 	title,

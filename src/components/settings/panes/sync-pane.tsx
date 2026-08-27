@@ -1,16 +1,11 @@
-import {
-	ChevronRight,
-	CircleHelp,
-	CloudUpload,
-	LoaderCircle,
-	Unplug,
-} from "lucide-react";
+import { ChevronRight, CloudUpload, LoaderCircle, Unplug } from "lucide-react";
 import type { ComponentType } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FaAws } from "react-icons/fa6";
 import { SiAlibabacloud, SiBaidu, SiCloudflare, SiMinio } from "react-icons/si";
 import {
+	HelpLabel,
 	PageTitle,
 	SettingsGroup,
 	SettingsRow,
@@ -58,26 +53,6 @@ import {
 	syncScopeSizes,
 } from "@/lib/sync/api";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
-
-/** Label with a small "?" icon; the hint lives in a tooltip, not a row. */
-function helpLabel(label: string, help: string) {
-	return (
-		<span className="inline-flex items-center gap-1">
-			{label}
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<span className="cursor-help">
-						<CircleHelp
-							className="size-3 text-muted-foreground"
-							aria-label={help}
-						/>
-					</span>
-				</TooltipTrigger>
-				<TooltipContent className="max-w-64">{help}</TooltipContent>
-			</Tooltip>
-		</span>
-	);
-}
 
 type SyncProviderLink = {
 	id: string;
@@ -458,7 +433,7 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 			</SettingsGroup>
 
 			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
-				{helpLabel(t("sync.scope"), t("sync.scopeHint"))}
+				<HelpLabel label={t("sync.scope")} help={t("sync.scopeHint")} />
 			</p>
 			<SettingsGroup>
 				<SettingsRow label={t("sync.scopePdf")} htmlFor="sync-scope-pdf">
@@ -530,13 +505,23 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 							{field("region")}
 						</SettingsRow>
 						<SettingsRow
-							label={helpLabel(t("sync.prefix"), t("sync.prefixHint"))}
+							label={
+								<HelpLabel
+									label={t("sync.prefix")}
+									help={t("sync.prefixHint")}
+								/>
+							}
 							htmlFor="sync-prefix"
 						>
 							{field("prefix")}
 						</SettingsRow>
 						<SettingsRow
-							label={helpLabel(t("sync.pathStyle"), t("sync.pathStyleHint"))}
+							label={
+								<HelpLabel
+									label={t("sync.pathStyle")}
+									help={t("sync.pathStyleHint")}
+								/>
+							}
 							htmlFor="sync-pathStyle"
 						>
 							<Switch

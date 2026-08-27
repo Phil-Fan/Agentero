@@ -25,6 +25,10 @@ const MINERU_BASE_URL: &str = "https://mineru.net";
 const MINERU_POLL_INTERVAL: Duration = Duration::from_secs(3);
 const MINERU_JOB_DEADLINE: Duration = Duration::from_secs(600);
 const MINERU_REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+/// Document language sent when the user has not picked one. `ch` is also
+/// MinerU's own default and covers Chinese (Simplified / Traditional) plus
+/// English, which fits mixed-language papers.
+const MINERU_DEFAULT_LANGUAGE: &str = "ch";
 /// Per-request payload cap for the whole-PDF upload (base64 chars).
 const MAX_PDF_BASE64_CHARS: usize = 96 * 1024 * 1024;
 /// Untrusted result zip: cap the download and each decompressed JSON entry
@@ -343,14 +347,19 @@ fn parse_result_zip(bytes: &[u8]) -> Result<LayoutRemoteAnalyzePdfResult, AppErr
 }
 
 /// Request one presigned upload URL; returns `(batch_id, upload_url)`.
+/// `language` selects the OCR language pack; `is_ocr` forces OCR even when
+/// the PDF carries a text layer (scanned-document option).
 async fn request_upload_url(
     client: &reqwest::Client,
     base: &str,
     auth: &str,
     file_name: &str,
+    language: &str,
+    is_ocr: bool,
 ) -> Result<(String, String), AppError> {
     let body = json!({
-        "files": [{ "name": file_name, "is_ocr": false }],
+        "files": [{ "name": file_name, "is_ocr": is_ocr }],
+        "language": language,
         "model_version": "vlm",
         "enable_formula": true,
         "enable_table": true,
@@ -453,7 +462,21 @@ pub(crate) async fn run_mineru_extract(
     // 1) Request the presigned upload URL, then PUT the raw PDF bytes
     //    (no Content-Type — the presigned signature does not cover one).
     progress("uploading", None, None);
-    let (batch_id, upload_url) = request_upload_url(&client, &base, &auth, file_name).await?;
+    let language = credentials
+        .language
+        .as_deref()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .unwrap_or(MINERU_DEFAULT_LANGUAGE);
+    let (batch_id, upload_url) = request_upload_url(
+        &client,
+        &base,
+        &auth,
+        file_name,
+        language,
+        credentials.is_ocr,
+    )
+    .await?;
     let upload = client
         .put(&upload_url)
         .body(pdf_bytes)

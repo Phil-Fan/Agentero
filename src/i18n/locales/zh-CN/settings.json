@@ -414,6 +414,7 @@
 			},
 			"confirm": "确定",
 			"openDocsLabel": "获取 API Key",
+			"advanced": "高级",
 			"apiKey": {
 				"label": "API Key",
 				"placeholder": {
@@ -431,6 +432,18 @@
 			"prompt": {
 				"label": "提示词",
 				"placeholder": "留空则按模型自动选择"
+			},
+			"language": {
+				"label": "语言",
+				"help": "指定文档语言",
+				"options": {
+					"ch": "中英文",
+					"en": "纯英文"
+				}
+			},
+			"forceOcr": {
+				"label": "强制 OCR",
+				"help": "是否启动 OCR 功能"
 			},
 			"probeIdle": "尚未检测",
 			"probeOk": "可用",

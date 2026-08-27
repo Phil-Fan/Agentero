@@ -252,6 +252,13 @@ pub struct LayoutProviderConfig {
     /// OCR prompt override; empty → the engine derives one from the model id.
     #[serde(default)]
     pub prompt: String,
+    /// MinerU document language (OCR language pack); normalize() enforces the
+    /// MinerU vocabulary and falls back to `ch`.
+    #[serde(default)]
+    pub language: String,
+    /// MinerU force-OCR: run OCR on every page regardless of the PDF text layer.
+    #[serde(default)]
+    pub is_ocr: bool,
 }
 
 impl Default for AppSettings {
@@ -574,6 +581,35 @@ impl AppSettingsStore {
         }
     }
 
+    /// Resolve a layout-provider document language (empty → None; the MinerU
+    /// engine falls back to `ch`).
+    pub fn layout_language(&self, provider: &str) -> Option<String> {
+        let key = layout_provider_settings_key(provider)?;
+        let guard = self.inner.lock().ok()?;
+        let cfg = guard.layout.provider_configs.get(key)?;
+        let language = cfg.language.trim();
+        if language.is_empty() {
+            None
+        } else {
+            Some(language.to_string())
+        }
+    }
+
+    /// Resolve a layout-provider force-OCR flag (default false).
+    pub fn layout_is_ocr(&self, provider: &str) -> bool {
+        layout_provider_settings_key(provider)
+            .and_then(|key| {
+                self.inner.lock().ok().map(|guard| {
+                    guard
+                        .layout
+                        .provider_configs
+                        .get(key)
+                        .is_some_and(|cfg| cfg.is_ocr)
+                })
+            })
+            .unwrap_or(false)
+    }
+
     /// Resolve the configured embedding endpoint (base URL, API key, model).
     /// Returns None unless base URL and model are both set.
     pub fn embedding_config(&self) -> Option<(String, Option<String>, String)> {
@@ -857,6 +893,26 @@ fn normalize(s: &mut AppSettings) {
 
 fn normalize_layout_provider_configs(configs: &mut HashMap<String, LayoutProviderConfig>) {
     const PROVIDERS: &[&str] = &["paddle", "mineru", "openaiCompatible"];
+    // MinerU `language` vocabulary (API v4); anything else resets to the
+    // Chinese-English default so the request never carries an unknown pack id.
+    const MINERU_LANGUAGES: &[&str] = &[
+        "ch",
+        "ch_server",
+        "en",
+        "japan",
+        "korean",
+        "chinese_cht",
+        "ta",
+        "te",
+        "ka",
+        "el",
+        "th",
+        "latin",
+        "arabic",
+        "cyrillic",
+        "east_slavic",
+        "devanagari",
+    ];
     configs.retain(|k, _| PROVIDERS.contains(&k.as_str()));
     for cfg in configs.values_mut() {
         cfg.api_key = cfg.api_key.trim().to_string();
@@ -865,6 +921,10 @@ fn normalize_layout_provider_configs(configs: &mut HashMap<String, LayoutProvide
         cfg.base_url = cfg.base_url.trim().to_string();
         cfg.model = cfg.model.trim().to_string();
         cfg.prompt = cfg.prompt.trim().to_string();
+        cfg.language = cfg.language.trim().to_string();
+        if !MINERU_LANGUAGES.contains(&cfg.language.as_str()) {
+            cfg.language = "ch".to_string();
+        }
     }
 }
 
@@ -1035,6 +1095,7 @@ mod tests {
                 base_url: " https://api.siliconflow.cn/v1 ".into(),
                 model: "  deepseek-ai/DeepSeek-OCR  ".into(),
                 prompt: "  Convert to markdown.  ".into(),
+                ..Default::default()
             },
         );
         s.layout
@@ -1060,6 +1121,38 @@ mod tests {
         assert_eq!(
             layout_provider_settings_key("OPENAICOMPATIBLE"),
             Some("openaiCompatible")
+        );
+    }
+
+    #[test]
+    fn normalize_layout_language_whitelist() {
+        let mut s = AppSettings::default();
+        s.layout.provider_configs.insert(
+            "mineru".into(),
+            LayoutProviderConfig {
+                language: " japan ".into(),
+                ..Default::default()
+            },
+        );
+        normalize(&mut s);
+        assert_eq!(
+            s.layout.provider_configs.get("mineru").unwrap().language,
+            "japan"
+        );
+
+        // Unknown / legacy value resets to the Chinese-English default.
+        let mut s = AppSettings::default();
+        s.layout.provider_configs.insert(
+            "mineru".into(),
+            LayoutProviderConfig {
+                language: "auto".into(),
+                ..Default::default()
+            },
+        );
+        normalize(&mut s);
+        assert_eq!(
+            s.layout.provider_configs.get("mineru").unwrap().language,
+            "ch"
         );
     }
 

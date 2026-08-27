@@ -38,6 +38,10 @@ pub struct EngineCredentials {
     pub model: Option<String>,
     /// OCR prompt override; `None` → the engine derives one from the model id.
     pub prompt: Option<String>,
+    /// MinerU document language; `None` → the engine's default (`ch`).
+    pub language: Option<String>,
+    /// MinerU force-OCR: OCR every page regardless of the PDF text layer.
+    pub is_ocr: bool,
 }
 
 pub struct BodyParseCtx<'a> {
@@ -115,6 +119,8 @@ pub fn refresh_parser_config(store: &AppSettingsStore) {
                 base_url: store.layout_base_url(provider),
                 model: store.layout_model(provider),
                 prompt: store.layout_prompt(provider),
+                language: store.layout_language(provider),
+                is_ocr: store.layout_is_ocr(provider),
             },
         );
     }

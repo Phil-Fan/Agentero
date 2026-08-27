@@ -88,6 +88,7 @@ mod tests {
         let credentials = ProviderCredentials {
             api_key: Some(api_key),
             base_url: (!base_url.is_empty()).then_some(base_url),
+            ..Default::default()
         };
         let args = LayoutRemoteProbeArgs {
             provider: Some("openaiCompatible".to_string()),
@@ -103,6 +104,7 @@ mod tests {
         let bad = ProviderCredentials {
             api_key: Some("sk-definitely-invalid".to_string()),
             base_url: credentials.base_url.clone(),
+            ..Default::default()
         };
         let err = OpenAiCompatibleEngine
             .probe(

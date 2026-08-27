@@ -28,6 +28,7 @@ import {
 	LAYOUT_PROVIDERS,
 } from "@/lib/pdf/layout/providers";
 import {
+	DEFAULT_MINERU_LANGUAGE,
 	LAYOUT_PROVIDER_DEFAULT_BASE_URLS,
 	LAYOUT_PROVIDER_DOCS_URLS,
 	type LayoutProviderId,
@@ -130,6 +131,8 @@ export function LayoutStep({
 				baseUrl,
 				model: stored?.model ?? "",
 				prompt: stored?.prompt ?? "",
+				language: stored?.language ?? DEFAULT_MINERU_LANGUAGE,
+				isOcr: stored?.isOcr ?? false,
 			},
 			backend: provider.id,
 		});

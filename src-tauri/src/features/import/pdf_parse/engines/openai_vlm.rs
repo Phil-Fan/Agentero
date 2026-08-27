@@ -366,6 +366,7 @@ mod tests {
                 base_url: (!base_url.is_empty()).then_some(base_url),
                 model: (!model.is_empty()).then_some(model),
                 prompt: (!prompt.is_empty()).then_some(prompt),
+                ..Default::default()
             },
         };
         let target = resolve_target(&ctx).expect("resolve target");

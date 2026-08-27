@@ -1,12 +1,18 @@
-import { ExternalLink } from "lucide-react";
+import { ChevronRight, ExternalLink } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+	HelpLabel,
 	PageTitle,
 	SettingsGroup,
 	SettingsRow,
 } from "@/components/settings/settings-layout";
 import { Button } from "@/components/ui/button";
+import {
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -16,6 +22,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
 	Tooltip,
 	TooltipContent,
@@ -36,12 +43,14 @@ import {
 	type ProviderCardDescriptor,
 } from "@/lib/pdf/layout/providers";
 import {
+	DEFAULT_MINERU_LANGUAGE,
 	isLayoutBackend,
 	isParserBackend,
 	LAYOUT_PROVIDER_DEFAULT_BASE_URLS,
 	LAYOUT_PROVIDER_DOCS_URLS,
 	type LayoutProviderConfig,
 	type LayoutProviderId,
+	MINERU_LANGUAGES,
 	PARSER_BACKENDS,
 	PROVIDER_MODEL_PRESETS,
 } from "@/lib/pdf/layout/settings";
@@ -60,6 +69,8 @@ const EMPTY_PROVIDER_CONFIG: LayoutProviderConfig = {
 	baseUrl: "",
 	model: "",
 	prompt: "",
+	language: DEFAULT_MINERU_LANGUAGE,
+	isOcr: false,
 };
 
 type ProbeStatus = "idle" | "probing" | "ok" | "fail";
@@ -218,6 +229,7 @@ function ProviderConfigCard({
 	const stored = layout.providerConfigs[provider.id] ?? EMPTY_PROVIDER_CONFIG;
 	const [draft, setDraft] = useState<Partial<LayoutProviderConfig>>({});
 	const [status, setStatus] = useState<ProbeStatus>("idle");
+	const [advancedOpen, setAdvancedOpen] = useState(false);
 	const probeAbortRef = useRef<AbortController | null>(null);
 
 	const modelPresets = PROVIDER_MODEL_PRESETS[provider.id] ?? [];
@@ -235,6 +247,11 @@ function ProviderConfigCard({
 		draft.model !== undefined ? draft.model : stored.model || defaultModel;
 	const displayPrompt =
 		draft.prompt !== undefined ? draft.prompt : stored.prompt;
+	const displayLanguage =
+		draft.language !== undefined
+			? draft.language
+			: stored.language || DEFAULT_MINERU_LANGUAGE;
+	const displayIsOcr = draft.isOcr !== undefined ? draft.isOcr : stored.isOcr;
 	const configured = displayApiKey.trim().length > 0;
 
 	const runProbe = useCallback(
@@ -266,10 +283,12 @@ function ProviderConfigCard({
 		const baseUrl = provider.supportsBaseUrl ? displayBaseUrl.trim() : "";
 		const model = provider.supportsModel ? displayModel.trim() : "";
 		const prompt = provider.supportsPrompt ? displayPrompt.trim() : "";
+		const language = provider.supportsLanguage ? displayLanguage : "";
+		const isOcr = provider.supportsOcr ? displayIsOcr : false;
 		const { displayLayout } = await persistLayoutProviderConfig({
 			settings,
 			provider: provider.id,
-			config: { apiKey, baseUrl, model, prompt },
+			config: { apiKey, baseUrl, model, prompt, language, isOcr },
 		});
 		patch({ layout: displayLayout });
 		setDraft({});
@@ -279,6 +298,8 @@ function ProviderConfigCard({
 		displayBaseUrl,
 		displayModel,
 		displayPrompt,
+		displayLanguage,
+		displayIsOcr,
 		patch,
 		provider,
 		runProbe,
@@ -444,6 +465,87 @@ function ProviderConfigCard({
 							}
 						/>
 					</div>
+				) : null}
+				{provider.supportsLanguage || provider.supportsOcr ? (
+					<Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+						<CollapsibleTrigger asChild>
+							<button
+								type="button"
+								className="flex items-center gap-1 text-muted-foreground text-xs outline-none transition-colors hover:text-foreground"
+								aria-label={t("layout.providerConfig.advanced")}
+							>
+								<ChevronRight
+									className={cn(
+										"size-3.5 transition-transform",
+										advancedOpen && "rotate-90",
+									)}
+								/>
+								{t("layout.providerConfig.advanced")}
+							</button>
+						</CollapsibleTrigger>
+						<CollapsibleContent className="space-y-2 pt-2">
+							{provider.supportsLanguage ? (
+								<div className="flex items-center gap-2">
+									<Label
+										htmlFor={`layout-provider-${provider.id}-language`}
+										className="w-20 shrink-0 font-normal text-muted-foreground text-xs"
+									>
+										<HelpLabel
+											label={t("layout.providerConfig.language.label")}
+											help={t("layout.providerConfig.language.help")}
+										/>
+									</Label>
+									<Select
+										value={displayLanguage}
+										onValueChange={(value) =>
+											setDraft((prev) => ({ ...prev, language: value }))
+										}
+									>
+										<SelectTrigger
+											id={`layout-provider-${provider.id}-language`}
+											size="sm"
+											className="h-8 min-w-32 max-w-44 text-xs"
+										>
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent className="max-h-72">
+											{MINERU_LANGUAGES.map((language) => (
+												<SelectItem key={language} value={language}>
+													{t(
+														`layout.providerConfig.language.options.${language}` as "layout.providerConfig.language.options.en",
+													)}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+							) : null}
+							{provider.supportsOcr ? (
+								<div className="flex items-center gap-2">
+									<Label
+										htmlFor={`layout-provider-${provider.id}-force-ocr`}
+										className="w-20 shrink-0 font-normal text-muted-foreground text-xs"
+									>
+										<HelpLabel
+											label={t("layout.providerConfig.forceOcr.label")}
+											help={t("layout.providerConfig.forceOcr.help")}
+										/>
+									</Label>
+									<Switch
+										id={`layout-provider-${provider.id}-force-ocr`}
+										size="sm"
+										checked={displayIsOcr}
+										onCheckedChange={(checked) =>
+											setDraft((prev) => ({
+												...prev,
+												isOcr: checked === true,
+											}))
+										}
+									/>
+								</div>
+							) : null}
+						</CollapsibleContent>
+					</Collapsible>
 				) : null}
 			</div>
 		</div>

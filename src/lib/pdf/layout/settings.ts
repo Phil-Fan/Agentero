@@ -41,7 +41,46 @@ export type LayoutProviderConfig = {
 	model: string;
 	/** OCR prompt override; empty → derived from the model id. */
 	prompt: string;
+	/** MinerU document language (OCR language pack); one of MINERU_LANGUAGES. */
+	language: string;
+	/** MinerU force-OCR: OCR every page regardless of the PDF text layer. */
+	isOcr: boolean;
 };
+
+/**
+ * MinerU API `language` options offered in the UI, default first.
+ * `ch` covers Chinese (Simplified / Traditional) and English; `en` is
+ * pure English. The Host whitelist (`settings/mod.rs`) keeps the full
+ * MinerU vocabulary (16 packs incl. `ch_server`) valid when stored.
+ */
+export const MINERU_LANGUAGES = ["ch", "en"] as const;
+export type MineruLanguage = (typeof MINERU_LANGUAGES)[number];
+
+/** Document language used when a provider config has none stored. */
+export const DEFAULT_MINERU_LANGUAGE = "ch";
+
+/** Full Host-side whitelist (`settings/mod.rs`); the UI only offers `ch` / `en`. */
+const MINERU_LANGUAGE_WHITELIST: readonly string[] = [
+	...MINERU_LANGUAGES,
+	"ch_server",
+	"japan",
+	"korean",
+	"chinese_cht",
+	"ta",
+	"te",
+	"ka",
+	"el",
+	"th",
+	"latin",
+	"arabic",
+	"cyrillic",
+	"east_slavic",
+	"devanagari",
+];
+
+export function isMineruLanguage(value: string): boolean {
+	return MINERU_LANGUAGE_WHITELIST.includes(value);
+}
 
 export type LayoutSettings = {
 	backend: LayoutBackend;

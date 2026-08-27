@@ -39,6 +39,8 @@ fn inject_provider_credentials(
     ProviderCredentials {
         api_key: api_key.take(),
         base_url: store.layout_base_url(provider),
+        language: store.layout_language(provider),
+        is_ocr: store.layout_is_ocr(provider),
     }
 }
 

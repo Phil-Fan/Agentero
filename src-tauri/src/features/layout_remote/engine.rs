@@ -23,6 +23,10 @@ use crate::features::layout_remote::{
 pub struct ProviderCredentials {
     pub api_key: Option<String>,
     pub base_url: Option<String>,
+    /// MinerU document language (OCR language pack); `None` → engine default.
+    pub language: Option<String>,
+    /// MinerU force-OCR: OCR every page regardless of the PDF text layer.
+    pub is_ocr: bool,
 }
 
 /// Everything one whole-document analyze run needs: the base64 PDF (in
