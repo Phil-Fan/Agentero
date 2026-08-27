@@ -136,6 +136,8 @@
 		"exporting": "导出中…",
 		"importDone": "已导入 {{count}} 篇",
 		"importPdfDone": "已导入 {{count}} 个 PDF",
+		"importPdfMerged": "已将 PDF 合入已有条目：「{{title}}」",
+		"importPdfMergedMany": "已将 {{count}} 个 PDF 合入已有条目",
 		"importFailed": "导入失败",
 		"exportFailed": "导出失败",
 		"backfillPublication": "补全期刊/会议",

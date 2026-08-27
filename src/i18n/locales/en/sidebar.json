@@ -136,6 +136,8 @@
 		"exporting": "Exporting…",
 		"importDone": "Imported {{count}} papers",
 		"importPdfDone": "Imported {{count}} PDFs",
+		"importPdfMerged": "Merged PDF into existing entry: “{{title}}”",
+		"importPdfMergedMany": "Merged {{count}} PDFs into existing entries",
 		"importFailed": "Import failed",
 		"exportFailed": "Export failed",
 		"backfillPublication": "Backfill venues",

@@ -35,6 +35,10 @@ pub enum CommitStatus {
 pub enum DedupePolicy {
     /// Catalog has a row with the same `id` → `Deduped` (single-item entries).
     ByCatalogId,
+    /// Catalog row shares `id` or any identifier (arXiv ID, DOI, PMID, ISBN)
+    /// → `Deduped`. With `CopyPdf`, the local PDF is merged into the existing
+    /// folder instead of being discarded (Fix #406).
+    ByIdentifiers,
     /// `{parent}/{id}` exists with NOTES.md, or catalog has that path →
     /// `Skipped` (batch Bib/RIS compatibility).
     ByPathOrNotes,
@@ -115,6 +119,24 @@ pub async fn paper_commit(
     match opts.dedupe {
         DedupePolicy::ByCatalogId => {
             if let Ok(Some(existing)) = papers::get_by_id(vault, &meta.id) {
+                let dir = vault.join(&existing.path);
+                return Ok(existing_result(
+                    CommitStatus::Deduped,
+                    existing,
+                    vault,
+                    &dir,
+                    opts.cache,
+                ));
+            }
+        }
+        DedupePolicy::ByIdentifiers => {
+            if let Some(existing) = find_existing_by_identifiers(vault, &meta)? {
+                if let AssetsPolicy::CopyPdf { src, .. } = &opts.assets {
+                    return merge_pdf_into_existing(
+                        vault, existing, src, &meta, opts.cache, opts.app,
+                    )
+                    .await;
+                }
                 let dir = vault.join(&existing.path);
                 return Ok(existing_result(
                     CommitStatus::Deduped,
@@ -293,5 +315,279 @@ fn existing_result(
         title: existing.title,
         asset_messages: Vec::new(),
         assets_pending: false,
+    }
+}
+
+/// First catalog row matching `id` or any shared identifier of `meta`
+/// (arXiv ID, DOI, PMID, ISBN) — the cross-identifier lookup behind
+/// [`DedupePolicy::ByIdentifiers`].
+fn find_existing_by_identifiers(
+    vault: &Path,
+    meta: &PaperMeta,
+) -> Result<Option<papers::PaperRecord>, AppError> {
+    if let Some(existing) = papers::get_by_id(vault, &meta.id)? {
+        return Ok(Some(existing));
+    }
+    let lookups: [(&str, Option<&str>); 4] = [
+        ("arxiv_id", meta.arxiv_id.as_deref()),
+        ("doi", meta.doi.as_deref()),
+        ("pmid", meta.pmid.as_deref()),
+        ("isbn", meta.isbn.as_deref()),
+    ];
+    for (column, value) in lookups {
+        let Some(value) = value.map(str::trim).filter(|v| !v.is_empty()) else {
+            continue;
+        };
+        if let Some(existing) = papers::find_by_identifier(vault, column, value)? {
+            return Ok(Some(existing));
+        }
+    }
+    Ok(None)
+}
+
+/// Merge a freshly imported PDF into an existing catalog entry instead of
+/// creating a duplicate folder: it becomes the main `{id}.pdf` when the entry
+/// has none yet (e.g. PMID imports whose full text is not downloadable),
+/// otherwise it lands in `attachments/`. Identifier columns the existing row
+/// lacks are backfilled from `meta`.
+async fn merge_pdf_into_existing(
+    vault: &Path,
+    mut existing: papers::PaperRecord,
+    src: &Path,
+    meta: &PaperMeta,
+    cache: Option<&CapsCache>,
+    app: Option<&AppHandle>,
+) -> Result<PaperCommitResult, AppError> {
+    let dir = vault.join(&existing.path);
+    let main_pdf = dir.join(format!("{}.pdf", existing.id));
+    let became_main = !main_pdf.is_file();
+    let dest = if became_main {
+        main_pdf
+    } else {
+        let attachments = dir.join("attachments");
+        fs::create_dir_all(&attachments)?;
+        unique_attachment_path(&attachments, src)
+    };
+    fs::copy(src, &dest)
+        .map_err(|e| AppError::message(format!("copy PDF into existing entry failed: {e}")))?;
+
+    let mut backfilled = false;
+    for (slot, incoming) in [
+        (&mut existing.arxiv_id, &meta.arxiv_id),
+        (&mut existing.doi, &meta.doi),
+        (&mut existing.pmid, &meta.pmid),
+        (&mut existing.isbn, &meta.isbn),
+        (&mut existing.issn, &meta.issn),
+    ] {
+        if slot.is_none() {
+            if let Some(v) = incoming.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+                *slot = Some(v.to_string());
+                backfilled = true;
+            }
+        }
+    }
+    if backfilled || became_main {
+        existing.updated_at = crate::core::time::now_rfc3339_millis();
+        papers::upsert_paper(vault, &existing)?;
+    }
+
+    if let Some(c) = cache {
+        c.invalidate(vault, &existing.path);
+    }
+    crate::features::lifecycle::emit_paper_imported(app, vault, &existing.id);
+    crate::features::lifecycle::emit_paper_assets_ready(app, vault, &existing.id);
+
+    let caps = cache
+        .map(|c| c.caps_for(vault, &existing.path))
+        .unwrap_or_else(|| probe_paper_caps(&dir));
+
+    let message = if became_main {
+        "merged PDF into existing entry as main PDF".to_string()
+    } else {
+        format!(
+            "added PDF to attachments of existing entry ({})",
+            dest.file_name().and_then(|s| s.to_str()).unwrap_or("")
+        )
+    };
+    log::info!(target: "agentero::import", "{}: {}", message, existing.path);
+
+    if became_main && caps.has_pdf() && !caps.has_tex && !caps.has_paper_md {
+        #[cfg(feature = "desktop")]
+        crate::features::jobs::spawn_parse_body_after_assets(app, vault, &existing.path, false);
+        crate::features::refs::spawn_parse_after_import(app, vault, &existing.path);
+    }
+
+    Ok(PaperCommitResult {
+        status: CommitStatus::Deduped,
+        pdf: caps.has_pdf(),
+        tex: caps.has_tex,
+        paper_md: caps.has_paper_md,
+        paper_dir: dir.to_string_lossy().to_string(),
+        path: existing.path,
+        id: existing.id,
+        title: existing.title,
+        asset_messages: vec![message],
+        assets_pending: false,
+    })
+}
+
+/// Free `attachments/{name}` path, suffixing `-2`, `-3`, … on collision.
+fn unique_attachment_path(dir: &Path, src: &Path) -> std::path::PathBuf {
+    let name = src
+        .file_name()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("attachment.pdf");
+    let candidate = dir.join(name);
+    if !candidate.exists() {
+        return candidate;
+    }
+    let src_path = Path::new(name);
+    let stem = src_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("attachment");
+    let ext = src_path
+        .extension()
+        .map(|e| format!(".{}", e.to_string_lossy()))
+        .unwrap_or_default();
+    for n in 2u32.. {
+        let candidate = dir.join(format!("{stem}-{n}{ext}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    unreachable!("attachment name space exhausted")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::features::import::{local_pdf_meta, paper_record_from_meta};
+
+    fn tmp_vault(tag: &str) -> std::path::PathBuf {
+        let vault = std::env::temp_dir().join(format!(
+            "agentero-commit-{tag}-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        fs::create_dir_all(vault.join("papers")).unwrap();
+        vault
+    }
+
+    /// Catalog row + folder for a paper imported by PMID without fulltext.
+    fn seed_existing_without_pdf(vault: &Path) {
+        let mut meta = local_pdf_meta(
+            "pmid-12345".into(),
+            "A Biomedical Paper Without Fulltext".into(),
+        );
+        meta.pmid = Some("12345".into());
+        let record = paper_record_from_meta("papers/pmid-12345", &meta);
+        papers::upsert_paper(vault, &record).unwrap();
+        fs::create_dir_all(vault.join("papers/pmid-12345")).unwrap();
+        fs::write(vault.join("papers/pmid-12345/NOTES.md"), "# Notes\n").unwrap();
+    }
+
+    async fn commit_pdf(vault: &Path, src: &Path, doi: &str) -> PaperCommitResult {
+        let mut meta = local_pdf_meta("fulltext-slug".into(), "Fulltext PDF".into());
+        meta.doi = Some(doi.into());
+        meta.pmid = Some("12345".into());
+        paper_commit(
+            meta,
+            PaperCommitOptions {
+                vault,
+                parent_dir: "papers",
+                dedupe: DedupePolicy::ByIdentifiers,
+                assets: AssetsPolicy::CopyPdf {
+                    src,
+                    progress: AssetProgressContext {
+                        app: None,
+                        task_id: None,
+                    },
+                },
+                translate_abstract: false,
+                note_mode: NoteShellMode::Standard,
+                fresh_timestamps: false,
+                cache: None,
+                app: None,
+            },
+        )
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn by_identifiers_merges_pdf_into_existing_entry() {
+        let vault = tmp_vault("merge");
+        seed_existing_without_pdf(&vault);
+        let src = vault.join("incoming.pdf");
+        fs::write(&src, b"%PDF-1.4 merged").unwrap();
+
+        // Matched by shared PMID despite different id/DOI → becomes main PDF.
+        let res = commit_pdf(&vault, &src, "10.1000/journal.123").await;
+        assert_eq!(res.status, CommitStatus::Deduped);
+        assert_eq!(res.path, "papers/pmid-12345");
+        assert!(vault.join("papers/pmid-12345/pmid-12345.pdf").is_file());
+        assert!(!vault.join("papers/fulltext-slug").exists());
+        let row = papers::get_by_path(&vault, "papers/pmid-12345")
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.doi.as_deref(), Some("10.1000/journal.123"));
+        assert_eq!(row.pmid.as_deref(), Some("12345"));
+
+        // A second PDF for the same paper lands in attachments/.
+        let src2 = vault.join("supplement.pdf");
+        fs::write(&src2, b"%PDF-1.4 supplement").unwrap();
+        let res2 = commit_pdf(&vault, &src2, "10.1000/journal.123").await;
+        assert_eq!(res2.status, CommitStatus::Deduped);
+        assert!(vault
+            .join("papers/pmid-12345/attachments/supplement.pdf")
+            .is_file());
+        // Same filename again → suffixed, never overwritten.
+        let res3 = commit_pdf(&vault, &src2, "10.1000/journal.123").await;
+        assert_eq!(res3.status, CommitStatus::Deduped);
+        assert!(vault
+            .join("papers/pmid-12345/attachments/supplement-2.pdf")
+            .is_file());
+
+        let _ = fs::remove_dir_all(&vault);
+    }
+
+    #[tokio::test]
+    async fn by_identifiers_creates_when_no_identifier_matches() {
+        let vault = tmp_vault("no-match");
+        seed_existing_without_pdf(&vault);
+        let src = vault.join("other.pdf");
+        fs::write(&src, b"%PDF-1.4 other").unwrap();
+
+        let mut meta = local_pdf_meta("unrelated".into(), "Unrelated Paper".into());
+        meta.doi = Some("10.9999/unrelated".into());
+        let res = paper_commit(
+            meta,
+            PaperCommitOptions {
+                vault: &vault,
+                parent_dir: "papers",
+                dedupe: DedupePolicy::ByIdentifiers,
+                assets: AssetsPolicy::CopyPdf {
+                    src: &src,
+                    progress: AssetProgressContext {
+                        app: None,
+                        task_id: None,
+                    },
+                },
+                translate_abstract: false,
+                note_mode: NoteShellMode::Standard,
+                fresh_timestamps: false,
+                cache: None,
+                app: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(res.status, CommitStatus::Created);
+        assert_eq!(res.path, "papers/unrelated");
+        assert!(vault.join("papers/unrelated/unrelated.pdf").is_file());
+
+        let _ = fs::remove_dir_all(&vault);
     }
 }

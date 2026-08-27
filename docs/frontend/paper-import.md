@@ -8,6 +8,7 @@
 - 粘贴一个或多个论文标识符、Skill 来源，或直接输入论文标题（按逗号/分号/换行分隔；空格不再分隔，留给标题与 `npx skills add …`）；去重后顺序处理。
 - 目标：`papers/` 或当前选中的 Papers 子文件夹。
 - 弹层内 **FileUp**：多选本地 PDF。
+- 本地 PDF 命中已有条目（按识别出的标识符去重）时不新建论文：PDF 合入原条目（缺主 PDF 时成为主 PDF，否则进 `attachments/`），Toast 提示「已将 PDF 合入已有条目」（#406）。
 - 成功后：局部刷新 `papers/` 子树、Wiki、Library；**不**自动打开论文（并行入库时抢焦点会让文件树反复跳转），批量也**不**自动连跑精读。
 - 同一条 identifier lookup 管线可由其它入口复用（References 面板、Plaza 入库、Zotero 迁移）。
 - Host：`lookup_import_batch` 等。

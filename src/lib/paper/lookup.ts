@@ -23,6 +23,8 @@ export type LookupAddResult = {
 	tex?: boolean;
 	paperMd?: boolean;
 	assetMessages?: string[];
+	/** `deduped` = paper already existed (a local PDF was merged into it). */
+	status?: "created" | "deduped" | "skipped";
 };
 
 export type SkillImportResult = {
@@ -85,6 +87,7 @@ type HostLookupResult = {
 	tex?: boolean;
 	paperMd?: boolean;
 	assetMessages?: string[];
+	status?: "created" | "deduped" | "skipped";
 };
 
 function resolveTranslatorBaseUrl(
@@ -110,6 +113,7 @@ function toLookupAddResult(d: HostLookupResult): LookupAddResult {
 		tex: d.tex,
 		paperMd: d.paperMd,
 		assetMessages: d.assetMessages,
+		status: d.status,
 	};
 }
 

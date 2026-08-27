@@ -61,6 +61,7 @@ Skill 不写入 catalog、不创建 `papers/` 条目、不执行 `scripts/`。�
   fallback；附件成功或失败的 finalizer 先将 paper 移到 latest target，再通过稳定路径的
   `connector:item-saved` 交给现有 open/reconcile 解析流程。
 - 错误：全局 Toast；重复不破坏用户 NOTES。
+- 标识符去重（#406）：批量预检之外，commit 阶段再按 `id` / `arxiv_id` / `doi` / `pmid` / `isbn` 查 catalog（`DedupePolicy::ByIdentifiers`），任一命中即 `Deduped`，不新建文件夹。
 - 新建壳会写论文全称 alias，并在元数据足够时写确定性短 alias；历史笔记由 [Doctor](doctor.md) 诊断和确认迁移。`created` 不属于入库壳或 Doctor 的职责。
 - 壳内容由设置 `paper_note_mode` 决定（`standard` / `title-only` / `blank` / `custom`，默认 `standard`，见 [settings.md](../frontend/settings.md)）；`custom` 模板位于 `{vault}/.agentero/templates/NOTES.md`，缺失或不可读时回退 standard 并 warn。任何模式的产物都会补齐 aliases frontmatter（模板 frontmatter 不可安全改写时留给 Doctor）。Connector 的后台摘要机翻仅对 standard 壳生效，避免改写 custom 模板渲染的原文摘要。
 
@@ -130,6 +131,7 @@ liteparse 在**运行时 `dlopen`** PDFium，而 `liteparse-pdfium-sys` 的 buil
 
 - 魔棒多选或拖到 `papers/` 组织夹 → 直接后台导入（无确认对话框）：复制 PDF + catalog + 通常生成 `PAPER.md`，识别链路在导入任务内自动补全元数据，识别有误由用户在 Edit Metadata 中修正。
 - 窗口其它区域拖入不入库（防 WebView 导航）。
+- 标识符去重与合并（#406）：导入前按识别/对话框给出的 `id` / DOI / arXiv / PMID / ISBN 查 catalog；命中已有条目时不新建文件夹——原条目缺主 PDF `{id}.pdf` 时，本 PDF 直接成为主 PDF（常见于 PMID 入库后手动补全文）；否则放入 `{paper}/attachments/`（同名自动 `-2` 后缀），并回填 catalog 缺失的标识符列；前端返回 `status: "deduped"` 并 Toast 提示。
 
 ### PDF 元数据识别（recognize 链路）
 

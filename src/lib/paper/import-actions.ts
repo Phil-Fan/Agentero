@@ -346,10 +346,18 @@ export async function importLocalPdf(opts?: {
 					settings: getSettings(),
 				});
 				if (!r) return null;
+				const merged = r.papers.filter((p) => p.status === "deduped");
+				const created = r.papers.length - merged.length;
 				setDetail(
-					i18n.t("sidebar:papersLibrary.importPdfDone", {
-						count: r.papers.length,
-					}),
+					created > 0
+						? i18n.t("sidebar:papersLibrary.importPdfDone", { count: created })
+						: merged.length === 1
+							? i18n.t("sidebar:papersLibrary.importPdfMerged", {
+									title: merged[0].title,
+								})
+							: i18n.t("sidebar:papersLibrary.importPdfMergedMany", {
+									count: merged.length,
+								}),
 				);
 				// Tree / wiki / library refresh runs via the paper:imported handler.
 				return r;
@@ -364,10 +372,27 @@ export async function importLocalPdf(opts?: {
 					});
 				}
 			}
-			if (result.errors.length) {
-				notifyWarning(
-					`${i18n.t("sidebar:papersLibrary.importPdfDone", { count: result.papers.length })}; ${result.errors.slice(0, 2).join("; ")}`,
+			const merged = result.papers.filter((p) => p.status === "deduped");
+			if (merged.length === 1) {
+				notifySuccess(
+					i18n.t("sidebar:papersLibrary.importPdfMerged", {
+						title: merged[0].title,
+					}),
 				);
+			} else if (merged.length > 1) {
+				notifySuccess(
+					i18n.t("sidebar:papersLibrary.importPdfMergedMany", {
+						count: merged.length,
+					}),
+				);
+			}
+			if (result.errors.length) {
+				const created = result.papers.length - merged.length;
+				const doneText =
+					created > 0
+						? `${i18n.t("sidebar:papersLibrary.importPdfDone", { count: created })}; `
+						: "";
+				notifyWarning(`${doneText}${result.errors.slice(0, 2).join("; ")}`);
 			}
 		}
 	} catch (e) {

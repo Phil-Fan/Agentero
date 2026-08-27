@@ -266,6 +266,10 @@ pub struct LookupImportResult {
     /// Download / parse messages (for UI warnings).
     #[serde(default)]
     pub asset_messages: Vec<String>,
+    /// `Deduped` when the paper already existed and (for local PDFs) the PDF
+    /// was merged into the existing entry instead of creating a duplicate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<paper_import::CommitStatus>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -351,7 +355,7 @@ pub async fn import_by_identifier_with_progress(
         PaperCommitOptions {
             vault: &vault,
             parent_dir: &args.parent_dir,
-            dedupe: DedupePolicy::ByCatalogId,
+            dedupe: DedupePolicy::ByIdentifiers,
             assets: AssetsPolicy::SyncDownload {
                 cookies: None,
                 progress: AssetProgressContext {
@@ -380,6 +384,7 @@ pub async fn import_by_identifier_with_progress(
         tex: commit.tex,
         paper_md: commit.paper_md,
         asset_messages: commit.asset_messages,
+        status: Some(commit.status),
     })
 }
 
@@ -961,7 +966,7 @@ async fn import_one_local_pdf(
         PaperCommitOptions {
             vault,
             parent_dir: parent_rel,
-            dedupe: DedupePolicy::None,
+            dedupe: DedupePolicy::ByIdentifiers,
             assets: AssetsPolicy::CopyPdf {
                 src: &src,
                 progress,
@@ -986,6 +991,7 @@ async fn import_one_local_pdf(
         tex: commit.tex,
         paper_md: commit.paper_md,
         asset_messages: commit.asset_messages,
+        status: Some(commit.status),
     })
 }
 
