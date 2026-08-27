@@ -11,7 +11,9 @@ use crate::features::catalog::papers::{self, PaperRecord};
 use crate::features::catalog::reading_activity;
 use crate::features::catalog::{probe_paper_caps, CapsCache};
 use crate::features::import::{
-    fetch_arxiv_metadata, pdf_recognize::fetch_crossref_metadata, title_search::search_papers,
+    fetch_arxiv_metadata,
+    pdf_recognize::fetch_crossref_metadata,
+    title_search::{fetch_s2_venue_by_doi, is_usable_publication, search_papers},
 };
 use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -523,7 +525,9 @@ pub struct PaperBackfillPublicationResult {
 }
 
 /// Resolve and fill missing `publication` values for papers in the catalog.
-/// Uses DOI → Crossref, arXiv → arXiv Atom, then title → Semantic Scholar.
+/// Uses arXiv journal_ref / S2 `publicationVenue`, then DOI → S2 then Crossref,
+/// then title → Semantic Scholar. Crossref is last among identifier sources
+/// because its `container-title` truncates many conference proceedings.
 #[tauri::command]
 pub async fn paper_backfill_publication(
     args: PaperBackfillPublicationArgs,
@@ -637,27 +641,38 @@ async fn resolve_publication_for_backfill(
     arxiv_id: Option<&str>,
     title: &str,
 ) -> Option<String> {
-    // 1. DOI → Crossref (most reliable for published papers).
-    if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
-        if let Ok(meta) = fetch_crossref_metadata(doi).await {
-            if let Some(pub_value) = meta.publication.filter(|p| !p.is_empty()) {
-                return Some(pub_value);
-            }
-        }
-    }
-
-    // 2. arXiv → Atom (now parses journal_ref and falls back to S2).
+    // 1. arXiv Atom journal_ref (most complete when present), then S2
+    //    publicationVenue via map_arxiv_atom. Skip generic "arXiv".
     if let Some(arxiv) = arxiv_id.map(str::trim).filter(|s| !s.is_empty()) {
         if let Ok(meta) = fetch_arxiv_metadata(arxiv, None).await {
-            if let Some(pub_value) = meta.publication.filter(|p| !p.is_empty() && p != "arXiv") {
+            if let Some(pub_value) = meta.publication.filter(|p| is_usable_publication(p)) {
                 return Some(pub_value);
             }
         }
     }
 
-    // 3. Title → Semantic Scholar (last resort).
+    // 2. DOI → S2 publicationVenue.name (complete conference + journal names).
+    //    Crossref container-title is a fallback only: ACL/NAACL titles come
+    //    back clipped ("Proceedings of the 2019 Conference of the North").
+    if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(venue) = fetch_s2_venue_by_doi(doi).await {
+            return Some(venue);
+        }
+        if let Ok(meta) = fetch_crossref_metadata(doi).await {
+            if let Some(pub_value) = meta.publication.filter(|p| is_usable_publication(p)) {
+                return Some(pub_value);
+            }
+        }
+    }
+
+    // 3. Title → Semantic Scholar (last resort; also uses publicationVenue).
     if let Ok(candidates) = search_papers(title, 1).await {
-        if let Some(venue) = candidates.into_iter().next().and_then(|c| c.venue) {
+        if let Some(venue) = candidates
+            .into_iter()
+            .next()
+            .and_then(|c| c.venue)
+            .filter(|p| is_usable_publication(p))
+        {
             return Some(venue);
         }
     }

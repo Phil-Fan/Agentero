@@ -262,8 +262,9 @@ pub struct PaperResolveIdentifierArgs {
 }
 
 /// Resolve an identifier (DOI/arXiv) to metadata without importing — backs
-/// Edit Metadata's identifier refresh. Falls back to title search when the
-/// input is not a recognized identifier.
+/// Edit Metadata's identifier refresh. Identifier lookup first (so a DOI /
+/// arXiv id is not sent to title search); S2 `publicationVenue` enriches
+/// truncated Crossref / empty Translator venues. Title search is fallback.
 #[tauri::command]
 pub async fn paper_resolve_identifier(
     args: PaperResolveIdentifierArgs,
@@ -271,21 +272,35 @@ pub async fn paper_resolve_identifier(
     let text = trunc(args.text.trim(), 60);
     let op = OpTimer::start_with("paper_resolve_identifier", format!("text={text}"));
 
-    // Primary: S2 / arXiv title search gives the most reliable venue/publication.
-    match super::title_search::search_papers(&args.text, 1).await {
-        Ok(candidates) if !candidates.is_empty() => {
-            let candidate = &candidates[0];
-            if candidate
-                .venue
-                .as_deref()
-                .map(|s| !s.trim().is_empty())
-                .unwrap_or(false)
-            {
-                let mut meta = super::map::meta_from_search_candidate(candidate);
+    let ident = super::parse::extract_primary_identifier(&args.text);
+    let try_identifier = ident
+        .as_ref()
+        .is_some_and(|(kind, _)| *kind != super::parse::IdentifierKind::Skill);
+
+    if try_identifier {
+        let base = args
+            .translator_base_url
+            .clone()
+            .unwrap_or_else(|| super::DEFAULT_TRANSLATOR_BASE_URL.to_string());
+        match super::pdf_recognize::resolve_identifier_full(&args.text, &base, None).await {
+            Ok((mut meta, _used_translator)) => {
+                enrich_publication_from_s2(&mut meta).await;
                 super::enrich_remote_urls(&mut meta);
                 op.finish_ok();
                 return ApiResult::ok(meta);
             }
+            Err(e) => {
+                log::warn!("identifier resolve failed for {text}: {e}");
+            }
+        }
+    }
+
+    match super::title_search::search_papers(&args.text, 1).await {
+        Ok(candidates) if !candidates.is_empty() => {
+            let mut meta = super::map::meta_from_search_candidate(&candidates[0]);
+            super::enrich_remote_urls(&mut meta);
+            op.finish_ok();
+            return ApiResult::ok(meta);
         }
         Ok(_) => {
             log::warn!("title search returned no candidates for {text}");
@@ -295,24 +310,21 @@ pub async fn paper_resolve_identifier(
         }
     }
 
-    // Fallback: Translator Runtime for richer metadata when title search misses.
-    let base = args
-        .translator_base_url
-        .clone()
-        .unwrap_or_else(|| super::DEFAULT_TRANSLATOR_BASE_URL.to_string());
-    match super::pdf_recognize::resolve_identifier_full(&args.text, &base, None).await {
-        Ok((mut meta, _used_translator)) => {
-            super::enrich_remote_urls(&mut meta);
-            op.finish_ok();
-            ApiResult::ok(meta)
-        }
-        Err(e) => {
-            let err = AppError::message(format!(
-                "title search returned no usable venue and translator failed: {e}"
-            ));
-            op.finish_err(&err);
-            crate::core::error::map_err(err)
-        }
+    let err = AppError::message(format!("could not resolve a usable venue for {text}"));
+    op.finish_err(&err);
+    crate::core::error::map_err(err)
+}
+
+/// Fill / replace `publication` from S2 when the current value is empty,
+/// generic (`arXiv`), or a likely-truncated Crossref proceedings title.
+async fn enrich_publication_from_s2(meta: &mut super::PaperMeta) {
+    use super::title_search::{better_publication, fetch_s2_venue, needs_s2_venue_enrichment};
+    if !needs_s2_venue_enrichment(meta.publication.as_deref()) {
+        return;
+    }
+    let s2 = fetch_s2_venue(meta.arxiv_id.as_deref(), meta.doi.as_deref()).await;
+    if let Some(best) = better_publication(meta.publication.as_deref(), s2.as_deref()) {
+        meta.publication = Some(best);
     }
 }
 

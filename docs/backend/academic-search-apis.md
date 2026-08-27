@@ -10,7 +10,7 @@ Agentero Host 端（`src-tauri/src/features/`）在论文识别、入库、引�
 |---|---|---|---|
 | **Semantic Scholar Graph API** | `GET /graph/v1/paper/search` | 标题/关键词搜索 | `features/import/title_search.rs` |
 | **Semantic Scholar Graph API** | `GET /graph/v1/paper/{id}/references` | 在线参考文献补全 | `features/refs/online.rs` |
-| **Semantic Scholar Graph API** | `GET /graph/v1/paper/ARXIV:{id}` | arXiv 论文 venue 回填 | `features/import/title_search.rs` |
+| **Semantic Scholar Graph API** | `GET /graph/v1/paper/ARXIV:{id}` / `DOI:{doi}` | venue 回填（`publicationVenue.name`） | `features/import/title_search.rs` |
 | **Semantic Scholar Graph API** | `GET /graph/v1/paper/{id}/citations` | "谁引用了我" 候选发现 | `features/refs/citing.rs` |
 | **arXiv Atom API** | `GET https://export.arxiv.org/api/query` | 按 ID 取元数据 / 按标题搜索 | `features/import/mod.rs`, `features/import/title_search.rs` |
 | **arXiv 二进制端点** | `https://arxiv.org/pdf/{id}` / `https://arxiv.org/e-print/{id}` / `https://arxiv.org/src/{id}` | PDF / TeX 源码下载 | `features/import/assets.rs` |
@@ -30,7 +30,7 @@ Agentero Host 端（`src-tauri/src/features/`）在论文识别、入库、引�
 当前主路径按以下顺序尝试：
 
 1. **标题/关键词搜索**（`features/import/title_search.rs::search_papers`）
-   - 先请求 Semantic Scholar `GET /graph/v1/paper/search?query=...&fields=title,authors,year,venue,externalIds,citationCount,url`。
+   - 先请求 Semantic Scholar `GET /graph/v1/paper/search?query=...&fields=title,authors,year,venue,publicationVenue,journal,externalIds,citationCount,url`。venue 取 `publicationVenue.name`（跳过 `type=repository`），其次 `journal.name`，再次 `venue`。
    - S2 失败或空结果时，fallback 到 arXiv Atom `GET export.arxiv.org/api/query?search_query=ti:"..."`。
    - 仅保留带 DOI 或 arXiv id 的候选；返回结果会按精确标题匹配重新排序。
 2. **Translator Runtime**（`features/import/mod.rs::resolve_metadata`）
@@ -73,22 +73,38 @@ Agentero Host 端（`src-tauri/src/features/`）在论文识别、入库、引�
 
 入口：`features/catalog/commands.rs::paper_backfill_publication`。
 
-用于 Library 的 publication 列批量补全，顺序：
+用于 Library 的 publication 列批量补全。实测各源准确度：
 
-1. DOI → Crossref `api.crossref.org/works/{doi}`，取 `container-title`。
-2. arXiv id → arXiv Atom `export.arxiv.org/api/query?id_list={id}`，取 `<arxiv:journal_ref>`；若不存在则 fallback `fetch_s2_venue_by_arxiv`。
-3. 仅 title → Semantic Scholar `search_papers(title, 1)`，取 `venue`。
+| 源 | 适合 | 缺陷 |
+|---|---|---|
+| arXiv `<arxiv:journal_ref>` | 作者已回填的发表信息，最完整（含年/卷） | 大量已发表论文仍为空（如 Attention Is All You Need） |
+| S2 `publicationVenue.name` | 会议 + 期刊的规范化全名 | 免费端点限流；`venue` 字段常为空或缩写 |
+| Crossref `container-title` | 期刊（Nature 等）准确 | ACL/NAACL 等会议名会被截断（`Proceedings of the 2019 Conference of the North`） |
+| OpenAlex / DBLP | — | OpenAlex 对 CS arXiv 常无 venue；DBLP 只有缩写（`NIPS` / `NAACL-HLT`） |
 
-UI 上单行刷新按钮最终也会走到类似链路（`paper_resolve_identifier` 优先走 title search）。
+因此顺序是：
 
-### 2.6 arXiv Venue 回填
+1. arXiv id → arXiv Atom `export.arxiv.org/api/query?id_list={id}`，取 `<arxiv:journal_ref>`；缺失则 `GET /graph/v1/paper/ARXIV:{id}?fields=venue,publicationVenue,journal`（`s2_venue_from_paper`）。丢弃 `arXiv` / `CoRR` 等仓储名。
+2. DOI → 同样的 S2 paper 端点 `DOI:{doi}`（跳过 `10.48550/arXiv.…`）；S2 未命中再 Crossref `container-title`。
+3. 仅 title → Semantic Scholar `search_papers(title, 1)`，同样走 `publicationVenue`。
 
-入口：`features/import/title_search.rs::fetch_s2_venue_by_arxiv`。
+UI 刷新（`paper_resolve_identifier`）对 DOI/arXiv/URL **先走标识符解析**，再用 S2 补全空缺或 Crossref 截断的 proceedings 标题；自由文本才走 title search。
 
-请求 `GET /graph/v1/paper/ARXIV:{id}?fields=venue`，用于：
+### 2.6 arXiv / DOI Venue 回填
+
+入口：`features/import/title_search.rs::fetch_s2_venue_by_arxiv` / `fetch_s2_venue_by_doi`。
+
+请求 `GET /graph/v1/paper/{ARXIV:id\|DOI:doi}?fields=venue,publicationVenue,journal`。取值顺序：
+
+1. `publicationVenue.name`（`type=repository` 跳过）
+2. `journal.name`
+3. 遗留 `venue` 字符串
+
+用于：
 
 - `map_arxiv_atom` 中当 `<arxiv:journal_ref>` 缺失时补 venue。
-- 旧版 title search 候选的 venue 字段。
+- 批量 publication 回填与 Edit Metadata 刷新。
+- title search 候选的 venue 字段。
 
 ### 2.7 推荐与订阅
 
@@ -160,7 +176,7 @@ Translator Runtime 约定端点：
 | PDF 识别出 arXiv | arXiv Atom | - | 本地 title fallback |
 | 在线参考文献 | S2 references | Crossref `reference[]` | 本地 TeX/`.bbl` |
 | 反向引用 | S2 citations | 无 | 无 |
-| 补全 publication | Crossref (DOI) | arXiv Atom → S2 venue | S2 title search |
+| 补全 publication | arXiv journal_ref / S2 `publicationVenue` | S2 `DOI:{doi}` → Crossref `container-title` | S2 title search |
 | 下载 PDF | arXiv 直连 | arXiv export / Unpaywall / Crossref link | 无 PDF |
 | 下载 TeX | arXiv e-print | - | PDF only |
 

@@ -1,9 +1,10 @@
 //! Title/keyword search for the magic wand: Semantic Scholar Graph API first,
 //! arXiv title search as fallback.
 //!
-//! Search only maps free text → candidate identifiers. The chosen candidate is
-//! fed back into the identifier import pipeline, so Translator stays the single
-//! source of truth for metadata.
+//! Search maps free text → candidate identifiers. Venue/publication is taken
+//! from S2 `publicationVenue.name` (normalized, not truncated) rather than the
+//! abbreviated `venue` string or Crossref `container-title` (which clips many
+//! conference proceedings). Repository names (`arXiv`, `CoRR`) are discarded.
 
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -137,28 +138,131 @@ async fn get_json(url: &str) -> Result<Value, String> {
 }
 
 /// Fetch the published venue for an arXiv paper from Semantic Scholar.
-/// S2 exposes `paper/ARXIV:{id}` with a `venue` field even without an API key.
+/// Prefers `publicationVenue.name` over the abbreviated `venue` string.
 pub async fn fetch_s2_venue_by_arxiv(arxiv_id: &str) -> Option<String> {
-    let url = format!(
-        "https://api.semanticscholar.org/graph/v1/paper/ARXIV:{}?fields=venue",
-        urlencoding::encode(arxiv_id)
-    );
+    let bare = latex::strip_arxiv_version(arxiv_id);
+    fetch_s2_paper_venue(&format!("ARXIV:{bare}")).await
+}
+
+/// Fetch venue via `paper/DOI:{doi}`. Skips arXiv-issued DOIs (`10.48550/arXiv.…`)
+/// — those should go through `ARXIV:{id}` instead.
+pub async fn fetch_s2_venue_by_doi(doi: &str) -> Option<String> {
+    let doi = doi.trim();
+    if doi.is_empty() || is_arxiv_doi(doi) {
+        return None;
+    }
+    fetch_s2_paper_venue(&format!("DOI:{doi}")).await
+}
+
+/// Identifier-first S2 venue lookup: arXiv paper endpoint, then DOI.
+pub async fn fetch_s2_venue(arxiv_id: Option<&str>, doi: Option<&str>) -> Option<String> {
+    if let Some(id) = arxiv_id.map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(venue) = fetch_s2_venue_by_arxiv(id).await {
+            return Some(venue);
+        }
+    }
+    if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
+        return fetch_s2_venue_by_doi(doi).await;
+    }
+    None
+}
+
+async fn fetch_s2_paper_venue(paper_id: &str) -> Option<String> {
+    // Keep the `ARXIV:` / `DOI:` prefix unencoded; encode the rest (slashes in DOIs).
+    let (prefix, rest) = paper_id.split_once(':').unwrap_or(("", paper_id));
+    let url = if prefix.is_empty() {
+        format!(
+            "https://api.semanticscholar.org/graph/v1/paper/{}?fields=venue,publicationVenue,journal",
+            urlencoding::encode(paper_id)
+        )
+    } else {
+        format!(
+            "https://api.semanticscholar.org/graph/v1/paper/{}:{}?fields=venue,publicationVenue,journal",
+            prefix,
+            urlencoding::encode(rest)
+        )
+    };
     match get_json(&url).await {
-        Ok(value) => str_field(&value, "venue"),
+        Ok(value) => s2_venue_from_paper(&value),
         Err(e) => {
             log::debug!(
                 target: "agentero::lookup",
-                "s2 venue lookup for arXiv {arxiv_id} failed: {e}"
+                "s2 venue lookup for {paper_id} failed: {e}"
             );
             None
         }
     }
 }
 
+/// True for repository / preprint placeholders that should not fill `publication`.
+pub fn is_usable_publication(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() {
+        return false;
+    }
+    let n = t.to_ascii_lowercase();
+    !matches!(
+        n.as_str(),
+        "arxiv" | "arxiv.org" | "corr" | "biorxiv" | "medrxiv" | "preprint" | "preprints"
+    ) && !n.starts_with("arxiv:")
+}
+
+/// Prefer the more complete of two venue strings. Generic placeholders lose.
+/// Equal length keeps `primary` (higher-ranked source).
+pub fn better_publication(primary: Option<&str>, other: Option<&str>) -> Option<String> {
+    let a = primary.map(str::trim).filter(|s| is_usable_publication(s));
+    let b = other.map(str::trim).filter(|s| is_usable_publication(s));
+    match (a, b) {
+        (Some(x), Some(y)) => {
+            // Crossref often clips proceedings titles; keep the longer name.
+            if y.len() > x.len() {
+                Some(y.to_string())
+            } else {
+                Some(x.to_string())
+            }
+        }
+        (Some(x), None) => Some(x.to_string()),
+        (None, Some(y)) => Some(y.to_string()),
+        _ => None,
+    }
+}
+
+/// Crossref `container-title` for ACL/conference papers is frequently clipped
+/// (`Proceedings of the 2019 Conference of the North`). S2 `publicationVenue`
+/// usually has the full name, so those strings still need an S2 pass.
+pub fn needs_s2_venue_enrichment(publication: Option<&str>) -> bool {
+    let p = publication.unwrap_or("").trim();
+    !is_usable_publication(p) || p.to_ascii_lowercase().starts_with("proceedings")
+}
+
+/// S2 venue in priority order: `publicationVenue.name` (skip repositories),
+/// then `journal.name`, then the legacy `venue` string.
+pub fn s2_venue_from_paper(v: &Value) -> Option<String> {
+    if let Some(pv) = v.get("publicationVenue") {
+        let is_repo = pv
+            .get("type")
+            .and_then(|t| t.as_str())
+            .is_some_and(|t| t.eq_ignore_ascii_case("repository"));
+        if !is_repo {
+            if let Some(name) = str_field(pv, "name").filter(|s| is_usable_publication(s)) {
+                return Some(name);
+            }
+        }
+    }
+    if let Some(name) = str_field_at(v, "/journal/name").filter(|s| is_usable_publication(s)) {
+        return Some(name);
+    }
+    str_field(v, "venue").filter(|s| is_usable_publication(s))
+}
+
+fn is_arxiv_doi(doi: &str) -> bool {
+    doi.to_ascii_lowercase().contains("10.48550/arxiv.")
+}
+
 /// `GET /graph/v1/paper/search?query=…` — relevance-ordered, keeps API order.
 async fn s2_search(query: &str, limit: usize) -> Result<Vec<PaperSearchCandidate>, String> {
     let url = format!(
-        "https://api.semanticscholar.org/graph/v1/paper/search?query={}&limit={}&fields=title,authors,year,venue,externalIds,citationCount,url",
+        "https://api.semanticscholar.org/graph/v1/paper/search?query={}&limit={}&fields=title,authors,year,venue,publicationVenue,journal,externalIds,citationCount,url",
         urlencoding::encode(query),
         // Ask for headroom: entries without DOI/arXiv id get dropped below.
         (limit * 4).min(100)
@@ -169,40 +273,43 @@ async fn s2_search(query: &str, limit: usize) -> Result<Vec<PaperSearchCandidate
     };
     let mut out = Vec::new();
     for item in items {
-        let Some(title) = str_field(item, "title") else {
+        let Some(candidate) = s2_candidate_from_item(item) else {
             continue;
         };
-        let doi = str_field_at(item, "/externalIds/DOI");
-        let arxiv_id = str_field_at(item, "/externalIds/ArXiv")
-            .map(|s| latex::strip_arxiv_version(&s).to_string());
-        let Some(identifier) = pick_identifier(arxiv_id.as_deref(), doi.as_deref()) else {
-            continue;
-        };
-        out.push(PaperSearchCandidate {
-            title,
-            authors: item
-                .get("authors")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|a| str_field(a, "name"))
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default(),
-            year: item.get("year").and_then(|v| v.as_i64()).map(|y| y as i32),
-            venue: str_field(item, "venue"),
-            doi,
-            arxiv_id,
-            citation_count: item.get("citationCount").and_then(|v| v.as_i64()),
-            url: str_field(item, "url"),
-            identifier,
-            source: "s2",
-        });
+        out.push(candidate);
         if out.len() >= limit {
             break;
         }
     }
     Ok(out)
+}
+
+fn s2_candidate_from_item(item: &Value) -> Option<PaperSearchCandidate> {
+    let title = str_field(item, "title")?;
+    let doi = str_field_at(item, "/externalIds/DOI");
+    let arxiv_id = str_field_at(item, "/externalIds/ArXiv")
+        .map(|s| latex::strip_arxiv_version(&s).to_string());
+    let identifier = pick_identifier(arxiv_id.as_deref(), doi.as_deref())?;
+    Some(PaperSearchCandidate {
+        title,
+        authors: item
+            .get("authors")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|a| str_field(a, "name"))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
+        year: item.get("year").and_then(|v| v.as_i64()).map(|y| y as i32),
+        venue: s2_venue_from_paper(item),
+        doi,
+        arxiv_id,
+        citation_count: item.get("citationCount").and_then(|v| v.as_i64()),
+        url: str_field(item, "url"),
+        identifier,
+        source: "s2",
+    })
 }
 
 /// `GET https://export.arxiv.org/api/query?search_query=ti:"…"` — Atom feed.
@@ -352,5 +459,138 @@ mod tests {
             tag_text(entry, "id").unwrap().rsplit('/').next().unwrap(),
             "1706.03762v7"
         );
+    }
+
+    #[test]
+    fn s2_venue_prefers_publication_venue_name() {
+        let paper = serde_json::json!({
+            "venue": "NeurIPS",
+            "publicationVenue": {
+                "id": "d9720b90-d60b-48bc-9df8-87a30b9a60dd",
+                "name": "Neural Information Processing Systems",
+                "type": "conference",
+                "alternate_names": ["NeurIPS", "NIPS"]
+            },
+            "journal": { "pages": "5998-6008" }
+        });
+        assert_eq!(
+            s2_venue_from_paper(&paper).as_deref(),
+            Some("Neural Information Processing Systems")
+        );
+    }
+
+    #[test]
+    fn s2_venue_skips_repository_and_uses_journal_name() {
+        let paper = serde_json::json!({
+            "venue": "arXiv.org",
+            "publicationVenue": {
+                "name": "arXiv.org",
+                "type": "repository"
+            },
+            "journal": { "name": "Nature", "volume": "596" }
+        });
+        assert_eq!(s2_venue_from_paper(&paper).as_deref(), Some("Nature"));
+    }
+
+    #[test]
+    fn s2_venue_falls_back_to_legacy_venue_string() {
+        let paper = serde_json::json!({ "venue": "ICML" });
+        assert_eq!(s2_venue_from_paper(&paper).as_deref(), Some("ICML"));
+    }
+
+    #[test]
+    fn s2_venue_rejects_generic_placeholders() {
+        let paper = serde_json::json!({
+            "venue": "arXiv",
+            "publicationVenue": { "name": "CoRR", "type": "journal" },
+            "journal": { "name": "bioRxiv" }
+        });
+        assert_eq!(s2_venue_from_paper(&paper), None);
+    }
+
+    #[test]
+    fn usable_publication_rejects_preprint_labels() {
+        assert!(is_usable_publication("Nature"));
+        assert!(is_usable_publication(
+            "Advances in Neural Information Processing Systems 30 (NeurIPS 2017)"
+        ));
+        assert!(!is_usable_publication("arXiv"));
+        assert!(!is_usable_publication("  ArXiv.org  "));
+        assert!(!is_usable_publication("CoRR"));
+        assert!(!is_usable_publication(""));
+    }
+
+    #[test]
+    fn better_publication_keeps_the_longer_complete_name() {
+        assert_eq!(
+            better_publication(
+                Some("Proceedings of the 2019 Conference of the North"),
+                Some("North American Chapter of the Association for Computational Linguistics"),
+            )
+            .as_deref(),
+            Some("North American Chapter of the Association for Computational Linguistics")
+        );
+        assert_eq!(
+            better_publication(
+                Some("Advances in Neural Information Processing Systems 30 (NeurIPS 2017)"),
+                Some("Neural Information Processing Systems"),
+            )
+            .as_deref(),
+            Some("Advances in Neural Information Processing Systems 30 (NeurIPS 2017)")
+        );
+        assert_eq!(
+            better_publication(Some("arXiv"), Some("Nature")).as_deref(),
+            Some("Nature")
+        );
+        assert_eq!(better_publication(Some("arXiv"), Some("CoRR")), None);
+    }
+
+    #[test]
+    fn proceedings_titles_still_need_s2_enrichment() {
+        assert!(needs_s2_venue_enrichment(None));
+        assert!(needs_s2_venue_enrichment(Some("arXiv")));
+        assert!(needs_s2_venue_enrichment(Some(
+            "Proceedings of the 2019 Conference of the North"
+        )));
+        assert!(!needs_s2_venue_enrichment(Some("Nature")));
+        assert!(!needs_s2_venue_enrichment(Some(
+            "Neural Information Processing Systems"
+        )));
+    }
+
+    #[test]
+    fn s2_search_item_uses_publication_venue_when_venue_is_empty() {
+        let item = serde_json::json!({
+            "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+            "authors": [{ "name": "Jacob Devlin" }],
+            "year": 2019,
+            "venue": "",
+            "publicationVenue": {
+                "name": "North American Chapter of the Association for Computational Linguistics",
+                "type": "conference"
+            },
+            "externalIds": {
+                "DOI": "10.18653/v1/N19-1423",
+                "ArXiv": "1810.04805"
+            },
+            "citationCount": 90000,
+            "url": "https://www.semanticscholar.org/paper/bert"
+        });
+        let candidate = s2_candidate_from_item(&item).expect("candidate");
+        assert_eq!(
+            candidate.venue.as_deref(),
+            Some("North American Chapter of the Association for Computational Linguistics")
+        );
+        assert_eq!(candidate.identifier, "1810.04805");
+        assert_eq!(candidate.doi.as_deref(), Some("10.18653/v1/N19-1423"));
+        assert_eq!(candidate.source, "s2");
+    }
+
+    #[test]
+    fn arxiv_doi_is_detected() {
+        assert!(is_arxiv_doi("10.48550/arXiv.1706.03762"));
+        assert!(is_arxiv_doi("10.48550/ARXIV.1810.04805"));
+        assert!(!is_arxiv_doi("10.1038/s41586-021-03819-2"));
+        assert!(!is_arxiv_doi("10.18653/v1/N19-1423"));
     }
 }

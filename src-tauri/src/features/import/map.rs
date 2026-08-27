@@ -398,7 +398,7 @@ pub async fn map_arxiv_atom(xml: &str, bare_id: &str) -> Result<PaperMeta, AppEr
         .and_then(|p| p.get(0..4)?.parse::<i32>().ok());
 
     // arXiv Atom carries the final journal/venue in <arxiv:journal_ref>.
-    // If the preprint has not been published, fall back to Semantic Scholar.
+    // If the preprint has not been published, fall back to S2 publicationVenue.
     let journal_ref = xml
         .split("<arxiv:journal_ref>")
         .nth(1)

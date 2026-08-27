@@ -1020,7 +1020,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 - **参数**（invoke 字段名 `args`）：`{ text: string; translatorBaseUrl?: string }`
 - **返回**：`{ ok: true; data: PaperMeta }`（snake_case，与 `paper_get` 行同构）。
-- **链路**：Translator 优先；DOI 失败回退 Crossref `works/{doi}` 直连；arXiv 回退 export.arxiv.org Atom。
+- **链路**：输入是 DOI / arXiv / URL 时先走标识符解析（Translator → Crossref / arXiv Atom），再用 Semantic Scholar `publicationVenue.name` 补空缺或截断的会议名；自由文本才走 title search。仓储名（`arXiv` / `CoRR`）不当作有效 publication。详见 [academic-search-apis.md](academic-search-apis.md) §2.5。
 
 #### `paper_parse_body`
 
