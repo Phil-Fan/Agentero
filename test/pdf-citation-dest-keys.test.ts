@@ -11,6 +11,7 @@ import {
 	hyperrefCrossrefParser,
 	xyzCoordResolver,
 } from "@/lib/pdf/citation-dest-keys";
+import { extractCrossrefLabel } from "@/lib/pdf/crossref-resolve";
 
 /**
  * Real-PDF fixtures live outside the repo, so these cases are opt-in: point
@@ -200,11 +201,12 @@ describe("buildPdfDestMaps with mixed conventions", () => {
 			dest("XYZ", [0, 300, 0]),
 			PDFString.of("cite.key2024"),
 			dest("XYZ", [0, 120, 0]),
-			// ACS style
+			// ACS style — fig and tbl share the same /FitR top to exercise conflict
+			// resolution via crossrefKinds.
 			PDFString.of("mk:fig1"),
 			dest("FitR", [0, 350, 500, 400]),
 			PDFString.of("mk:tbl1"),
-			dest("FitR", [0, 200, 500, 250]),
+			dest("FitR", [0, 350, 500, 400]),
 			PDFString.of("mk:ref1"),
 			dest("FitR", [0, 50, 500, 100]),
 		];
@@ -218,10 +220,17 @@ describe("buildPdfDestMaps with mixed conventions", () => {
 		const { bytes } = await buildMixedPdf();
 		const maps = await buildPdfDestMaps(bytes);
 
-		expect(maps.crossrefs.get(citationDestKey(0, 400))).toBe("figure");
+		// Standard hyperref targets are unambiguous.
 		expect(maps.crossrefs.get(citationDestKey(0, 300))).toBe("table");
-		expect(maps.crossrefs.get(citationDestKey(0, 400))).toBe("figure"); // mk:fig1 top=400
-		expect(maps.crossrefs.get(citationDestKey(0, 250))).toBe("table"); // mk:tbl1 top=250
+
+		// ACS mk:fig1, mk:tbl1 and the hyperref figure.1 all share y=400, so the
+		// unambiguous map drops it, but both kinds survive in crossrefKinds.
+		const conflictCoord = citationDestKey(0, 400);
+		expect(maps.crossrefs.get(conflictCoord)).toBeUndefined();
+		expect(maps.crossrefKinds.get(conflictCoord)?.sort()).toEqual([
+			"figure",
+			"table",
+		]);
 
 		expect(maps.cites.get(citationDestKey(0, 120))).toBe("key2024");
 		expect(maps.cites.get(citationDestKey(0, 100))).toBe("mk:ref1");
@@ -241,5 +250,58 @@ describe("buildPdfDestMaps with mixed conventions", () => {
 		// Only the custom parser runs; standard names are ignored.
 		expect(maps.crossrefs.get(citationDestKey(0, 400))).toBeUndefined();
 		expect(maps.cites.size).toBe(0);
+	});
+
+	it("keeps conflicting kinds in crossrefKinds for fallback disambiguation", async () => {
+		const { bytes } = await buildMixedPdf();
+		const maps = await buildPdfDestMaps(bytes);
+
+		// mk:fig1, mk:tbl1 and hyperref figure.1 share the same coordinate on page 1.
+		const conflictCoord = citationDestKey(0, 400);
+		expect(maps.crossrefs.get(conflictCoord)).toBeUndefined();
+		expect(maps.crossrefKinds.get(conflictCoord)?.sort()).toEqual([
+			"figure",
+			"table",
+		]);
+
+		// Unambiguous coordinates still appear in both maps.
+		expect(maps.crossrefs.get(citationDestKey(0, 300))).toBe("table");
+		expect(maps.crossrefKinds.get(citationDestKey(0, 300))).toEqual(["table"]);
+	});
+});
+
+describe("crossref label extraction", () => {
+	it("extracts figure labels", () => {
+		expect(extractCrossrefLabel("see Figure 1 for details")).toEqual({
+			kind: "figure",
+			number: 1,
+		});
+		expect(extractCrossrefLabel("Fig. 2 shows")).toEqual({
+			kind: "figure",
+			number: 2,
+		});
+	});
+
+	it("extracts table labels", () => {
+		expect(extractCrossrefLabel("in Table 3")).toEqual({
+			kind: "table",
+			number: 3,
+		});
+	});
+
+	it("extracts equation labels", () => {
+		expect(extractCrossrefLabel("using Eq. (4)")).toEqual({
+			kind: "equation",
+			number: 4,
+		});
+		expect(extractCrossrefLabel("Equation 5")).toEqual({
+			kind: "equation",
+			number: 5,
+		});
+	});
+
+	it("returns null for non-crossref text", () => {
+		expect(extractCrossrefLabel("see Section 1")).toBeNull();
+		expect(extractCrossrefLabel("hello world")).toBeNull();
 	});
 });
