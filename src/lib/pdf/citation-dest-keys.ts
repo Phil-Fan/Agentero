@@ -9,6 +9,13 @@
  * and index destinations by their coordinates — the same coordinates the viewer
  * gets back from a link target.
  *
+ * Cross-references (`figure.*` / `mk:fig1` / …) follow the same coordinate
+ * index, plus a second index of **Link annotation rects → dest labels**. ACS
+ * `/FitR` destinations point at a whole page, so every float on that page
+ * shares one coordinate; the link annotation still carries `mk:tbl1` /
+ * `mk:fig3`, which is enough to pick the right layout region without scraping
+ * the (often truncated) link text.
+ *
  * Different publishers use different named-destination conventions (standard
  * hyperref `figure.*`/`cite.*` vs. ACS `mk:fig*`/`mk:ref*`) and different
  * destination types (`/XYZ` vs. `/FitR`). The parser layer below isolates those
@@ -16,8 +23,9 @@
  * not changing the core walk.
  *
  * Measured over 31 real papers / 3703 in-text citation links: 95% resolved, 0
- * wrong. Coordinates shared by several keys are dropped rather than guessed, so
- * callers fall back to text matching instead of showing a wrong reference.
+ * wrong. Coordinates shared by several citation keys are dropped rather than
+ * guessed; colliding crossrefs fall back to the link-rect index (then link
+ * text) instead of showing a wrong float.
  */
 
 import {
@@ -36,6 +44,65 @@ export function citationDestKey(pageIndex: number, pdfY: number): string {
 	return `${pageIndex}:${pdfY.toFixed(1)}`;
 }
 
+/**
+ * Exact key for a link annotation rect in PDFium device space (top-left origin).
+ * Used for the fast path; {@link matchCrossrefLinkLabel} falls back to centre
+ * distance when float rounding differs between pdf-lib and PDFium.
+ */
+export function linkRectKey(
+	pageIndex: number,
+	x: number,
+	y: number,
+	w: number,
+	h: number,
+): string {
+	return `${pageIndex}:${x.toFixed(1)}:${y.toFixed(1)}:${w.toFixed(1)}:${h.toFixed(1)}`;
+}
+
+/** Max centre-point distance (pt) when matching a hovered link to a parsed one. */
+const LINK_RECT_MATCH_TOLERANCE_PT = 3;
+
+/**
+ * Find the crossref label for a hovered link annotation. Exact rect key first,
+ * then nearest centre within {@link LINK_RECT_MATCH_TOLERANCE_PT}.
+ */
+export function matchCrossrefLinkLabel(
+	links: CrossrefLinkLabelList | null | undefined,
+	pageIndex: number,
+	rect: {
+		origin: { x: number; y: number };
+		size: { width: number; height: number };
+	},
+): CrossrefDestLabel | null {
+	if (!links || links.length === 0) return null;
+	const exact = linkRectKey(
+		pageIndex,
+		rect.origin.x,
+		rect.origin.y,
+		rect.size.width,
+		rect.size.height,
+	);
+	const cx = rect.origin.x + rect.size.width / 2;
+	const cy = rect.origin.y + rect.size.height / 2;
+	let best: CrossrefLinkLabel | null = null;
+	let bestDist = Number.POSITIVE_INFINITY;
+	for (const link of links) {
+		if (link.pageIndex !== pageIndex) continue;
+		if (linkRectKey(link.pageIndex, link.x, link.y, link.w, link.h) === exact) {
+			return link.label;
+		}
+		const lx = link.x + link.w / 2;
+		const ly = link.y + link.h / 2;
+		const dist = Math.hypot(lx - cx, ly - cy);
+		if (dist < bestDist) {
+			bestDist = dist;
+			best = link;
+		}
+	}
+	if (best && bestDist <= LINK_RECT_MATCH_TOLERANCE_PT) return best.label;
+	return null;
+}
+
 /** `pageIndex:pdfY` → BibTeX key of the bibliography entry at that destination. */
 export type CitationDestKeyMap = ReadonlyMap<string, string>;
 
@@ -47,6 +114,38 @@ export type CrossrefDestMap = ReadonlyMap<string, CrossrefKind>;
 
 /** `pageIndex:pdfY` → all kinds found at that destination (conflicts preserved). */
 export type CrossrefKindMap = ReadonlyMap<string, CrossrefKind[]>;
+
+/** Parsed label from a named destination, e.g. `mk:tbl1` → `{ kind: "table", number: 1 }`. */
+export type CrossrefDestLabel = {
+	kind: CrossrefKind;
+	/** The numeric part of the destination name ("mk:figS1" → 1). */
+	number: number;
+};
+
+/** `pageIndex:pdfY` → parsed labels from destination names at that coordinate. */
+export type CrossrefDestLabelMap = ReadonlyMap<string, CrossrefDestLabel[]>;
+
+/**
+ * One in-text cross-reference link annotation, keyed by its PDFium device-space
+ * (top-left) rect. Used when destination coordinates collide (ACS `/FitR`
+ * whole-page targets): the link's own dest name (`mk:tbl1`) still uniquely
+ * identifies the float even though every float on that page shares the same
+ * `/FitR` rectangle.
+ */
+export type CrossrefLinkLabel = {
+	/** 0-based page index of the *link* (not the destination). */
+	pageIndex: number;
+	/** PDFium device-space top-left x (pt). */
+	x: number;
+	/** PDFium device-space top-left y (pt). */
+	y: number;
+	w: number;
+	h: number;
+	label: CrossrefDestLabel;
+};
+
+/** All cross-reference link annotations found while walking the PDF. */
+export type CrossrefLinkLabelList = readonly CrossrefLinkLabel[];
 
 /** Both destination indexes parsed from one PDF in a single object-tree walk. */
 export type PdfDestMaps = {
@@ -64,6 +163,18 @@ export type PdfDestMaps = {
 	 * (e.g. ACS `/FitR` destinations where figure/table share the same page).
 	 */
 	crossrefKinds: CrossrefKindMap;
+	/**
+	 * Parsed kind + number from each named destination at the coordinate. More
+	 * reliable than link-text extraction for publisher-specific names like
+	 * ACS `mk:fig1` / `mk:tbl1` when `/FitR` targets share a whole page.
+	 */
+	crossrefLabels: CrossrefDestLabelMap;
+	/**
+	 * Link annotation rect → crossref label. Exact for ACS papers where every
+	 * float on a page shares the same `/FitR` destination coordinate — PDFium
+	 * loses the dest name, but the link annotation still carries it.
+	 */
+	crossrefLinks: CrossrefLinkLabelList;
 };
 
 // ---- Pluggable destination-name parsers ----
@@ -71,6 +182,8 @@ export type PdfDestMaps = {
 /** Result of parsing a named destination name into a cross-reference kind. */
 export type CrossrefNameMatch = {
 	kind: CrossrefKind;
+	/** The numeric part, when the name embeds it (e.g. `mk:fig1` → 1). */
+	number?: number;
 };
 
 /**
@@ -96,28 +209,60 @@ export type DestinationCoordResolver = (
 	pageRefs: string[],
 ) => { pageIndex: number; pdfY: number } | null;
 
+/** Parse the first integer from a destination name suffix ("1a" → 1, "E.4" → 4). */
+function parseCrossrefNumber(suffix: string): number | null {
+	const match = /\d+/.exec(suffix);
+	if (!match) return null;
+	const n = Number.parseInt(match[0], 10);
+	return Number.isNaN(n) ? null : n;
+}
+
 /**
  * Standard hyperref cross-reference names. LaTeX packages write `figure.<n>`,
  * `table.<n>`, `equation.<n>` / `subequation.<n>`, and `algorithm.<n>`
  * (algorithm2e uses `algocf.<n>`).
  */
 export const hyperrefCrossrefParser: CrossrefNameParser = (name) => {
-	if (
-		name.startsWith("figure.") ||
-		name.startsWith("subfigure.") ||
-		name.startsWith("figure.caption.")
-	)
-		return { kind: "figure" };
-	if (name.startsWith("table.") || name.startsWith("table.caption."))
-		return { kind: "table" };
-	if (name.startsWith("equation.") || name.startsWith("subequation."))
-		return { kind: "equation" };
-	if (
-		name.startsWith("algorithm.") ||
-		name.startsWith("algocf.") ||
-		name.startsWith("algocf.caption.")
-	)
-		return { kind: "algorithm" };
+	if (name.startsWith("figure.caption.")) {
+		const n = parseCrossrefNumber(name.slice("figure.caption.".length));
+		return n == null ? null : { kind: "figure", number: n };
+	}
+	if (name.startsWith("figure.")) {
+		const n = parseCrossrefNumber(name.slice("figure.".length));
+		return n == null ? null : { kind: "figure", number: n };
+	}
+	if (name.startsWith("subfigure.")) {
+		const n = parseCrossrefNumber(name.slice("subfigure.".length));
+		return n == null ? null : { kind: "figure", number: n };
+	}
+	if (name.startsWith("table.caption.")) {
+		const n = parseCrossrefNumber(name.slice("table.caption.".length));
+		return n == null ? null : { kind: "table", number: n };
+	}
+	if (name.startsWith("table.")) {
+		const n = parseCrossrefNumber(name.slice("table.".length));
+		return n == null ? null : { kind: "table", number: n };
+	}
+	if (name.startsWith("equation.")) {
+		const n = parseCrossrefNumber(name.slice("equation.".length));
+		return n == null ? null : { kind: "equation", number: n };
+	}
+	if (name.startsWith("subequation.")) {
+		const n = parseCrossrefNumber(name.slice("subequation.".length));
+		return n == null ? null : { kind: "equation", number: n };
+	}
+	if (name.startsWith("algorithm.")) {
+		const n = parseCrossrefNumber(name.slice("algorithm.".length));
+		return n == null ? null : { kind: "algorithm", number: n };
+	}
+	if (name.startsWith("algocf.caption.")) {
+		const n = parseCrossrefNumber(name.slice("algocf.caption.".length));
+		return n == null ? null : { kind: "algorithm", number: n };
+	}
+	if (name.startsWith("algocf.")) {
+		const n = parseCrossrefNumber(name.slice("algocf.".length));
+		return n == null ? null : { kind: "algorithm", number: n };
+	}
 	return null;
 };
 
@@ -127,9 +272,20 @@ export const hyperrefCrossrefParser: CrossrefNameParser = (name) => {
  * `mk:fig1`, `mk:tbl1`, `mk:eq1` for floats and `mk:ref*` for references.
  */
 export const acsCrossrefParser: CrossrefNameParser = (name) => {
-	if (name.startsWith("mk:fig")) return { kind: "figure" };
-	if (name.startsWith("mk:tbl")) return { kind: "table" };
-	if (name.startsWith("mk:eq")) return { kind: "equation" };
+	// Footnote markers inside a float (`mk:tbl1fn1`) are not float targets.
+	if (/fn\d+$/i.test(name)) return null;
+	if (name.startsWith("mk:fig")) {
+		const n = parseCrossrefNumber(name.slice("mk:fig".length));
+		return n == null ? null : { kind: "figure", number: n };
+	}
+	if (name.startsWith("mk:tbl")) {
+		const n = parseCrossrefNumber(name.slice("mk:tbl".length));
+		return n == null ? null : { kind: "table", number: n };
+	}
+	if (name.startsWith("mk:eq")) {
+		const n = parseCrossrefNumber(name.slice("mk:eq".length));
+		return n == null ? null : { kind: "equation", number: n };
+	}
 	return null;
 };
 
@@ -309,6 +465,64 @@ export type BuildPdfDestMapsOptions = {
 };
 
 /**
+ * Read a named destination string from a Link annotation's `/A` GoTo action or
+ * direct `/Dest` entry. Returns null for URI links and inline dest arrays.
+ */
+function linkAnnotationDestName(
+	annot: PDFDict,
+	context: PDFContext,
+): string | null {
+	const asName = (value: unknown): string | null => {
+		if (value instanceof PDFString || value instanceof PDFHexString) {
+			return value.asString();
+		}
+		if (value instanceof PDFName) {
+			// asString keeps the leading `/` (PDF name syntax); strip it.
+			const raw = value.asString();
+			return raw.startsWith("/") ? raw.slice(1) : raw;
+		}
+		return null;
+	};
+
+	const action = context.lookup(annot.get(PDFName.of("A")));
+	if (action instanceof PDFDict) {
+		const s = action.get(PDFName.of("S"));
+		if (s?.toString() === "/GoTo") {
+			const named = asName(context.lookup(action.get(PDFName.of("D"))));
+			if (named) return named;
+		}
+	}
+
+	return asName(context.lookup(annot.get(PDFName.of("Dest"))));
+}
+
+/**
+ * Convert a PDF-native annotation Rect `[llx lly urx ury]` (origin bottom-left)
+ * into the PDFium device-space rect EmbedPDF exposes on link annotations
+ * (origin top-left). Matches `convertPageRectToDeviceRect` for rotation 0.
+ */
+function pdfAnnotRectToDevice(
+	llx: number,
+	lly: number,
+	urx: number,
+	ury: number,
+	pageHeight: number,
+	originX = 0,
+	originY = 0,
+): { x: number; y: number; w: number; h: number } {
+	const left = llx;
+	const top = ury;
+	const right = urx;
+	const bottom = lly;
+	return {
+		x: left - originX,
+		y: pageHeight - (top - originY),
+		w: Math.abs(right - left),
+		h: Math.abs(top - bottom),
+	};
+}
+
+/**
  * Build both destination indexes for one PDF in a single object-tree walk.
  * Returns empty maps for PDFs without recognizable named destinations.
  */
@@ -316,7 +530,13 @@ export async function buildPdfDestMaps(
 	bytes: ArrayBuffer | Uint8Array,
 	options: BuildPdfDestMapsOptions = {},
 ): Promise<PdfDestMaps> {
-	const empty: PdfDestMaps = { cites: new Map(), crossrefs: new Map() };
+	const empty: PdfDestMaps = {
+		cites: new Map(),
+		crossrefs: new Map(),
+		crossrefKinds: new Map(),
+		crossrefLabels: new Map(),
+		crossrefLinks: [],
+	};
 	const doc = await PDFDocument.load(bytes, { updateMetadata: false });
 	const context = doc.context;
 
@@ -329,20 +549,23 @@ export async function buildPdfDestMaps(
 	collectNameTree(context, dests, namedDests);
 	if (!namedDests.size) return empty;
 
-	const pageRefs = doc.getPages().map((page) => page.ref.toString());
+	const pages = doc.getPages();
+	const pageRefs = pages.map((page) => page.ref.toString());
 	const citeByCoord = new Map<string, string | null>();
 	const crossByCoord = new Map<string, CrossrefKind | null>();
 	const crossKindsByCoord = new Map<string, CrossrefKind[]>();
+	const crossLabelsByCoord = new Map<string, CrossrefDestLabel[]>();
+	const crossrefLinks: CrossrefLinkLabel[] = [];
 
 	const crossrefParsers = options.crossrefParsers ?? defaultCrossrefNameParsers;
 	const citationParsers = options.citationParsers ?? defaultCitationNameParsers;
 	const coordResolvers =
 		options.coordResolvers ?? defaultDestinationCoordResolvers;
 
-	const parseCrossrefKind = (name: string): CrossrefKind | null => {
+	const parseCrossref = (name: string): CrossrefNameMatch | null => {
 		for (const parser of crossrefParsers) {
 			const match = parser(name);
-			if (match) return match.kind;
+			if (match) return match;
 		}
 		return null;
 	};
@@ -371,6 +594,18 @@ export async function buildPdfDestMaps(
 		if (!list.includes(kind)) list.push(kind);
 	};
 
+	const stashLabel = (coord: string, label: CrossrefDestLabel) => {
+		const list = crossLabelsByCoord.get(coord);
+		if (!list) {
+			crossLabelsByCoord.set(coord, [label]);
+			return;
+		}
+		const exists = list.some(
+			(l) => l.kind === label.kind && l.number === label.number,
+		);
+		if (!exists) list.push(label);
+	};
+
 	for (const [name, dest] of namedDests) {
 		const citationKey = parseCitationKey(name);
 		if (citationKey) {
@@ -379,13 +614,80 @@ export async function buildPdfDestMaps(
 			continue;
 		}
 
-		const kind = parseCrossrefKind(name);
-		if (kind) {
+		const match = parseCrossref(name);
+		if (match) {
 			const coord = destCoordKey(dest, context, pageRefs, coordResolvers);
 			if (coord) {
-				stash(crossByCoord, coord, kind);
-				stashKind(coord, kind);
+				stash(crossByCoord, coord, match.kind);
+				stashKind(coord, match.kind);
+				if (match.number != null)
+					stashLabel(coord, { kind: match.kind, number: match.number });
 			}
+		}
+	}
+
+	// Index Link annotations by their device-space rect so ACS `/FitR`
+	// collisions (every float on a page shares one destination coordinate)
+	// can still be resolved from the link's own dest name (`mk:tbl1`).
+	for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+		const page = pages[pageIndex];
+		if (!page) continue;
+		const pageHeight = page.getHeight();
+		// EmbedPDF uses CropBox origin when present (else MediaBox / 0,0).
+		const cropBox = page.node.CropBox();
+		const mediaBox = page.node.MediaBox();
+		const boxArr = (cropBox ?? mediaBox)?.asArray() ?? [];
+		const boxNum = (index: number): number => {
+			const raw = boxArr[index];
+			if (raw == null) return 0;
+			const looked = context.lookup(raw);
+			if (looked instanceof PDFNumber) return looked.asNumber();
+			return 0;
+		};
+		const boxOriginX = boxNum(0);
+		const boxOriginY = boxNum(1);
+
+		const annotsRef = page.node.get(PDFName.of("Annots"));
+		if (!annotsRef) continue;
+		const annots = context.lookup(annotsRef);
+		if (!(annots instanceof PDFArray)) continue;
+		const annotArray = annots.asArray();
+
+		for (const annotRef of annotArray) {
+			const annot = context.lookup(annotRef);
+			if (!(annot instanceof PDFDict)) continue;
+			if (annot.get(PDFName.of("Subtype"))?.toString() !== "/Link") continue;
+
+			const destName = linkAnnotationDestName(annot, context);
+			if (!destName) continue;
+			const match = parseCrossref(destName);
+			if (!match || match.number == null) continue;
+
+			const rect = context.lookup(annot.get(PDFName.of("Rect")));
+			if (!(rect instanceof PDFArray) || rect.asArray().length < 4) continue;
+			const nums = rect.asArray().map((entry) => {
+				const n = context.lookup(entry);
+				return n instanceof PDFNumber ? n.asNumber() : Number.NaN;
+			});
+			if (nums.some((n) => Number.isNaN(n))) continue;
+			const [llx, lly, urx, ury] = nums as [number, number, number, number];
+			const device = pdfAnnotRectToDevice(
+				llx,
+				lly,
+				urx,
+				ury,
+				pageHeight,
+				boxOriginX,
+				boxOriginY,
+			);
+			crossrefLinks.push({
+				pageIndex,
+				x: device.x,
+				y: device.y,
+				w: device.w,
+				h: device.h,
+				label: { kind: match.kind, number: match.number },
+			});
 		}
 	}
 
@@ -393,6 +695,8 @@ export async function buildPdfDestMaps(
 		cites: resolveUnambiguous(citeByCoord),
 		crossrefs: resolveUnambiguous(crossByCoord),
 		crossrefKinds: crossKindsByCoord,
+		crossrefLabels: crossLabelsByCoord,
+		crossrefLinks,
 	};
 }
 

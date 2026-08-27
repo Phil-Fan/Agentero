@@ -78,6 +78,8 @@ function ensureWorker(): Worker | null {
 				cites: new Map(event.data.cites),
 				crossrefs: new Map(event.data.crossrefs),
 				crossrefKinds: new Map(event.data.crossrefKinds),
+				crossrefLabels: new Map(event.data.crossrefLabels),
+				crossrefLinks: event.data.crossrefLinks,
 			});
 		} else request.reject(new Error(event.data.error));
 	};

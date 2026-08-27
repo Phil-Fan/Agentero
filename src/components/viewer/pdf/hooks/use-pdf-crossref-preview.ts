@@ -3,12 +3,14 @@
  * "Fig. 3" / "Table 1" / "Eq. (2)" link shows a crop of the figure / table /
  * equation it points at.
  *
- * Resolution is exact through the hyperref cross-reference destination map
- * (`figure.*` / `table.*` / `equation.*` / `algorithm.*` — see
- * `lib/pdf/citation-dest-keys`) combined with the document's layout regions:
- * the destination coordinate gives the target page + kind, layout analysis
- * gives the region bbox, and the region is cropped on demand. Links the map or
- * layout cannot resolve show nothing.
+ * Resolution order (see `lib/pdf/citation-dest-keys`):
+ * 1. Unambiguous dest coordinate → kind (standard hyperref `/XYZ`).
+ * 2. Link annotation rect → dest label (`mk:tbl1` / `mk:fig3`) — needed when
+ *    ACS `/FitR` destinations share a whole page across every float.
+ * 3. Single label at the dest coordinate, or link-text extraction + caption
+ *    match as a last resort.
+ * Layout analysis supplies the region bbox; the crop is rendered on demand.
+ * Links the maps or layout cannot resolve show nothing.
  *
  * Its own hook because the preview is a self-contained hover state machine that
  * runs an async crop — kept separate from `usePdfCitations` (citations resolve
@@ -39,9 +41,12 @@ import type { CrossrefPreviewState } from "@/components/viewer/pdf/types";
 import { errorText } from "@/lib/core/error";
 import { logger } from "@/lib/core/logger";
 import {
+	type CrossrefDestLabelMap,
 	type CrossrefDestMap,
 	type CrossrefKindMap,
+	type CrossrefLinkLabelList,
 	citationDestKey,
+	matchCrossrefLinkLabel,
 } from "@/lib/pdf/citation-dest-keys";
 import { loadPdfDestMaps } from "@/lib/pdf/citation-dest-map";
 import {
@@ -71,6 +76,23 @@ function rectsOverlap(a: Rect, b: Rect): boolean {
 }
 
 /**
+ * Expand a rect by a small margin so adjacent text runs (e.g. "Table" and "1,")
+ * are captured even if their bounding boxes only barely touch the link rect.
+ */
+function expandRect(rect: Rect, marginPt: number): Rect {
+	return {
+		origin: {
+			x: rect.origin.x - marginPt,
+			y: rect.origin.y - marginPt,
+		},
+		size: {
+			width: rect.size.width + marginPt * 2,
+			height: rect.size.height + marginPt * 2,
+		},
+	};
+}
+
+/**
  * Read the text covered by a link annotation's rect on a specific page. Used as
  * a fallback when the PDF destination only points at a page (ACS `/FitR`) so we
  * can infer "Figure 1" / "Table 1" from the link text itself.
@@ -82,7 +104,11 @@ async function extractLinkText(
 	linkRect: Rect,
 ): Promise<string> {
 	const rects = await engine.getPageTextRects(document, page).toPromise();
-	const overlapping = rects.filter((r) => rectsOverlap(r.rect, linkRect));
+	// Link rects from some publishers tightly enclose only part of a word or
+	// omit adjacent punctuation/digits. A 2 pt margin catches "Table" + "1,"
+	// without pulling in the surrounding sentence.
+	const hitRect = expandRect(linkRect, 2);
+	const overlapping = rects.filter((r) => rectsOverlap(r.rect, hitRect));
 	// PDF coords: origin bottom-left; sort top-to-bottom for natural reading order.
 	overlapping.sort((a, b) => b.rect.origin.y - a.rect.origin.y);
 	return overlapping.map((r) => r.content).join(" ");
@@ -142,6 +168,18 @@ export function usePdfCrossrefPreview({
 	 * (e.g. ACS `/FitR` destinations pointing at a whole page).
 	 */
 	const crossrefKindsRef = useRef<CrossrefKindMap | null>(null);
+	/**
+	 * Parsed kind + number from each named destination at the coordinate. More
+	 * reliable than link-text extraction for publisher-specific names like ACS
+	 * `mk:fig1` / `mk:tbl1` when `/FitR` targets share a whole page.
+	 */
+	const crossrefLabelsRef = useRef<CrossrefDestLabelMap | null>(null);
+	/**
+	 * Link annotation rect → label. Exact for ACS `/FitR` collisions where the
+	 * destination coordinate is shared by every float on the page — the link's
+	 * own dest name (`mk:tbl1` / `mk:fig3`) still uniquely identifies the float.
+	 */
+	const crossrefLinksRef = useRef<CrossrefLinkLabelList | null>(null);
 	/** Monotonic token so a stale crop never lands over a newer hover. */
 	const renderTokenRef = useRef(0);
 
@@ -151,6 +189,8 @@ export function usePdfCrossrefPreview({
 	useEffect(() => {
 		crossrefMapRef.current = null;
 		crossrefKindsRef.current = null;
+		crossrefLabelsRef.current = null;
+		crossrefLinksRef.current = null;
 		if (!paperAbsPath) return;
 		let cancelled = false;
 		const cancelIdle = scheduleIdle(() => {
@@ -162,6 +202,8 @@ export function usePdfCrossrefPreview({
 					if (!cancelled && maps) {
 						crossrefMapRef.current = maps.crossrefs;
 						crossrefKindsRef.current = maps.crossrefKinds;
+						crossrefLabelsRef.current = maps.crossrefLabels;
+						crossrefLinksRef.current = maps.crossrefLinks;
 					}
 				})
 				.catch((error: unknown) => {
@@ -274,13 +316,51 @@ export function usePdfCrossrefPreview({
 				}
 			}
 
-			// Fallback: ambiguous or page-only destination (e.g. ACS /FitR).
-			// Infer the kind/number from the link text and match layout regions
-			// by caption title.
+			// ACS `/FitR` (and similar): destination coords collide across every
+			// float on the page. Recover the label from the *link annotation's*
+			// dest name (`mk:tbl1` / `mk:fig3`) via its device-space rect — this
+			// does not depend on fragile link-text extraction.
+			const linkLabel = matchCrossrefLinkLabel(
+				crossrefLinksRef.current,
+				link.pageIndex,
+				link.rect,
+			);
+			if (linkLabel) {
+				const region = pickCrossrefRegionByLabel(
+					regions,
+					destination.pageIndex,
+					linkLabel,
+				);
+				if (region) {
+					showPreview(link, region, linkLabel.kind);
+					return;
+				}
+			}
+
+			// Fallback: ambiguous or page-only destination without a link-name
+			// hit. Infer the kind/number from the link text and match layout
+			// regions by caption title.
 			const kinds = crossrefKindsRef.current?.get(coord);
 			if (!kinds || kinds.length === 0) {
 				scheduleCrossrefHide();
 				return;
+			}
+
+			// If the destination name itself embeds an unambiguous label (e.g.
+			// ACS `mk:fig1` / `mk:tbl1`) and it is the only label at this
+			// coordinate, skip text extraction entirely.
+			const labels = crossrefLabelsRef.current?.get(coord);
+			if (labels && labels.length === 1) {
+				const label = labels[0];
+				const region = pickCrossrefRegionByLabel(
+					regions,
+					destination.pageIndex,
+					label,
+				);
+				if (region) {
+					showPreview(link, region, label.kind);
+					return;
+				}
 			}
 
 			const engine = engineRef.current;
