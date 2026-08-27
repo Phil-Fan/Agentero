@@ -63,6 +63,62 @@
 - **多系统兼容**：Mac、Windows、Linux，快捷键与常用软件保持对齐，不改变使用习惯。
 - **多种主题风格**： 支持多种主题风格，满足不同用户需求。
 
+## 界面预览
+
+<p align="center">
+  <img src="docs/assets/coolpaper.png" alt="Cool Papers 浏览与导入" width="90%" />
+  <br/>
+  <sub>在应用内浏览 Cool Papers 并一键导入文献</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/agent.png" alt="Agent 伴读" width="90%" />
+  <br/>
+  <sub>分屏阅读 PDF，右侧 Agent 随时总结、提问与翻译</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/translate.png" alt="翻译与笔记" width="90%" />
+  <br/>
+  <sub>划词翻译、按页翻译，结合 Markdown 笔记整理要点</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/rss.png" alt="RSS 订阅" width="90%" />
+  <br/>
+  <sub>订阅 RSS 源，追踪最新论文与博客动态</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/skill-import.png" alt="Skill 推荐" width="90%" />
+  <br/>
+  <sub>浏览并安装社区 Skill，扩展 Agent 的论文阅读与写作能力</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/agent-setting.png" alt="Agent 设置" width="90%" />
+  <br/>
+  <sub>通过 ACP 连接本机 Agent，安装、升级与切换默认 Agent</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/image.png" alt="MCP 连接" width="90%" />
+  <br/>
+  <sub>内置 MCP，可将 Agentero 能力接入 ChatGPT 等外部客户端</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/s3-sync.png" alt="S3 云同步" width="90%" />
+  <br/>
+  <sub>配置 S3 兼容存储，实现 Vault 云同步</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/theme.png" alt="主题风格" width="90%" />
+  <br/>
+  <sub>多种配色主题，支持跟随系统与界面缩放</sub>
+</p>
+
 ## Quick Start
 
 ### 桌面应用

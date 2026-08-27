@@ -44,11 +44,61 @@ Traditional reference managers are not agent-friendly:
 - **Cross-platform**: Mac, Windows, and Linux, with shortcuts aligned with common software so your habits carry over.
 - **Multiple themes**: several theme styles to match different preferences.
 
-![demo-1](docs/assets/ui-1.png)
-![demo-2](docs/assets/ui-2.png)
-![demo-3](docs/assets/ui-3.png)
-![demo-4](docs/assets/ui-4.png)
-![demo-5](docs/assets/ui-5.png)
+## Screenshots
+
+<p align="center">
+  <img src="docs/assets/coolpaper.png" alt="Cool Papers browser and import" width="90%" />
+  <br/>
+  <sub>Browse Cool Papers inside the app and import papers in one click</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/agent.png" alt="Agent-assisted reading" width="90%" />
+  <br/>
+  <sub>Split-view PDF reading with an Agent panel for summaries, Q&A, and translation</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/translate.png" alt="Translation and notes" width="90%" />
+  <br/>
+  <sub>Selection and page-level translation alongside Markdown notes</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/rss.png" alt="RSS subscriptions" width="90%" />
+  <br/>
+  <sub>Subscribe to RSS feeds to track the latest papers and posts</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/skill-import.png" alt="Skill marketplace" width="90%" />
+  <br/>
+  <sub>Install community Skills to extend reading, writing, and research workflows</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/agent-setting.png" alt="Agent settings" width="90%" />
+  <br/>
+  <sub>Connect local agents via ACP, install, upgrade, and set your default agent</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/image.png" alt="MCP connection" width="90%" />
+  <br/>
+  <sub>Built-in MCP lets you expose Agentero capabilities to ChatGPT and other clients</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/s3-sync.png" alt="S3 cloud sync" width="90%" />
+  <br/>
+  <sub>Configure S3-compatible storage to sync your Vault across devices</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/theme.png" alt="Themes" width="90%" />
+  <br/>
+  <sub>Multiple color themes with system-aware appearance and UI zoom</sub>
+</p>
 
 ## Quick Start
 
