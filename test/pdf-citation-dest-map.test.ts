@@ -7,7 +7,11 @@ import {
 
 /** Build a maps object with just the cite index populated. */
 function citeMaps(entries: [string, string][]): PdfDestMaps {
-	return { cites: new Map(entries), crossrefs: new Map() };
+	return {
+		cites: new Map(entries),
+		crossrefs: new Map(),
+		crossrefKinds: new Map(),
+	};
 }
 
 describe("pdf dest maps cache", () => {
