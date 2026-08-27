@@ -2492,6 +2492,20 @@ fn msg_id_changed(prev: &Option<String>, next: &Option<String>) -> bool {
     matches!((prev, next), (Some(a), Some(b)) if a != b)
 }
 
+/// Claude Code splices synthetic assistant messages into transcripts when a
+/// turn ends without a reply (e.g. an interrupted turn), and adapters like
+/// `claude-agent-acp` replay them verbatim on `session/load`. They are not
+/// real answers, so drop them instead of showing them as the agent's reply
+/// (#411).
+fn is_synthetic_replay_placeholder(text: &str) -> bool {
+    matches!(
+        text.trim(),
+        "No response requested."
+            | "[Request interrupted by user]"
+            | "[Request interrupted by user for tool use]"
+    )
+}
+
 fn chunk_msg_id(chunk: &agent_client_protocol::schema::v1::ContentChunk) -> Option<String> {
     chunk.message_id.as_ref().map(|m| m.0.to_string())
 }
@@ -2612,7 +2626,12 @@ impl ReplayBuilder {
 
     fn finish(self) -> (Vec<AcpHistoryLine>, Option<String>) {
         let mut out = Vec::new();
-        for line in self.lines {
+        for mut line in self.lines {
+            if !line.is_user {
+                line.parts.retain(|part| {
+                    !matches!(part, AcpHistoryPart::Text { text } if is_synthetic_replay_placeholder(text))
+                });
+            }
             let text: String = line
                 .parts
                 .iter()
@@ -3239,5 +3258,44 @@ mod replay_builder_tests {
         assert_eq!(lines.len(), 1);
         assert!(lines[0].text.is_empty());
         assert_eq!(lines[0].parts.len(), 1);
+    }
+
+    #[test]
+    fn drops_synthetic_placeholder_agent_turns() {
+        let mut b = ReplayBuilder::default();
+        b.push_user_chunk("question".into(), id("u1"));
+        b.push_agent_chunk(false, "No response requested.".into(), id("m1"));
+
+        let (lines, _) = b.finish();
+        let shape: Vec<(&str, &str)> = lines
+            .iter()
+            .map(|l| (l.kind.as_str(), l.text.as_str()))
+            .collect();
+        assert_eq!(shape, vec![("user", "question")]);
+    }
+
+    #[test]
+    fn keeps_real_parts_in_turns_mixed_with_a_placeholder() {
+        let mut b = ReplayBuilder::default();
+        b.push_agent_chunk(true, "thinking".into(), id("r1"));
+        b.apply_tool(
+            "t1".into(),
+            Some("Read file".into()),
+            None,
+            None,
+            None,
+            None,
+        );
+        b.push_agent_chunk(false, "No response requested.".into(), id("m1"));
+
+        let (lines, _) = b.finish();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].parts.len(), 2);
+        assert!(matches!(
+            lines[0].parts[0],
+            AcpHistoryPart::Reasoning { .. }
+        ));
+        assert!(matches!(lines[0].parts[1], AcpHistoryPart::Tool { .. }));
+        assert!(lines[0].text.is_empty());
     }
 }

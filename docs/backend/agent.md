@@ -94,6 +94,13 @@ commands / config 仍可在 load 期间转发。
 通知即返回，最长仍封顶 800ms），替代此前的固定 800ms sleep；回放通常在
 response 前/后很快推完，空会话与短会话因此显著更快（#271）。
 
+回放聚合（`ReplayBuilder`）会丢弃 Agent 侧的合成占位文本：Claude Code 在
+turn 未产生回复（如被中断）时会往 transcript 里拼接合成 assistant 消息
+（"No response requested."、"[Request interrupted by user]" 等），
+`claude-agent-acp` 等适配器在 `session/load` 回放时原样转发。这些占位不是
+真实回答，Host 在聚合历史行时按整段精确匹配过滤，避免被当作 Agent 回复渲染
+（#411）。
+
 `agent_list_sessions` 必须**跟随 `nextCursor` 翻页**。codex-acp 按全局时间窗口分
 页、再在每页内部按 `cwd` 过滤，因此属于当前 Vault 的会话会散落在多页里，中间
 夹着大量「空页但仍有 nextCursor」的页。只取第一页会让 Codex 历史只剩少数几条、
