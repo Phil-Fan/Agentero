@@ -26,7 +26,6 @@ import {
 	type CatalogScanResponse,
 	listAgentSkills,
 	listAgents,
-	listenAgentRegistryChanged,
 	loadCollaborationPref,
 	loadModelCatalog,
 	loadModelFavorites,
@@ -47,6 +46,7 @@ import {
 } from "@/lib/agent/chat-state";
 import type { AcpCommand } from "@/lib/agent/slash-commands";
 import { isTauri } from "@/lib/core/tauri";
+import { lifecycle } from "@/lib/lifecycle";
 
 /**
  * Debounce before the Chat-open / agent-switch warm spawns its ACP process.
@@ -278,25 +278,18 @@ export function useAgentConfig({
 	}, [refresh]);
 
 	// Settings probes/installs/removes agents while this panel stays mounted;
-	// refresh on the backend broadcast instead of serving a stale switcher list.
+	// refresh on the lifecycle broadcast instead of serving a stale switcher list.
 	useEffect(() => {
-		if (!isTauri()) return;
-		let unlisten: (() => void) | undefined;
-		let disposed = false;
 		let timer: number | undefined;
-		void listenAgentRegistryChanged(() => {
+		const off = lifecycle.on("agent:registry-changed", () => {
 			window.clearTimeout(timer);
 			timer = window.setTimeout(() => {
 				void refresh();
 			}, 150);
-		}).then((u) => {
-			if (disposed) u();
-			else unlisten = u;
 		});
 		return () => {
-			disposed = true;
 			window.clearTimeout(timer);
-			unlisten?.();
+			off();
 		};
 	}, [refresh]);
 

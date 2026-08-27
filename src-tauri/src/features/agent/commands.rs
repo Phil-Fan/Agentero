@@ -47,7 +47,7 @@ fn list_from_state(state: crate::features::agent::models::AgentRegistryState) ->
 /// registry mutation (probe / install / upsert / remove / default) so they
 /// refresh without a remount.
 fn emit_registry_changed(app: &AppHandle) {
-    let _ = app.emit("agent:registry-changed", serde_json::Value::Null);
+    let _ = app.emit("agent:registry-changed", serde_json::json!({}));
 }
 
 #[tauri::command]

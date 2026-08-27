@@ -19,6 +19,8 @@ export type LifecycleEventMap = {
 		error?: string;
 		timestamp: number;
 	};
+	/** Host-emitted after any agent registry mutation (probe/install/default). */
+	"agent:registry-changed": Record<string, never>;
 };
 
 export type LifecycleEvent = keyof LifecycleEventMap;

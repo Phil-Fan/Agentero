@@ -7,6 +7,7 @@ const WIRE_EVENTS = [
 	"paper:assets-ready",
 	"job:completed",
 	"job:failed",
+	"agent:registry-changed",
 ] as const satisfies readonly LifecycleEvent[];
 
 let bridgePromise: Promise<Array<() => void>> | null = null;
