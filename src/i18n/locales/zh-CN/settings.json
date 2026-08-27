@@ -83,6 +83,9 @@
 			"seedCreated": "已生成起始模板",
 			"seedExists": "模板已存在"
 		},
+		"autoOpenPaperNotes": {
+			"label": "默认打开论文笔记"
+		},
 		"autoUpdateInternalLinks": {
 			"label": "外部改名后更新双链",
 			"ask": "询问",

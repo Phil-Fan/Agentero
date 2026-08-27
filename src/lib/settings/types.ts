@@ -132,6 +132,12 @@ export type AppSettings = {
 	 */
 	paperNoteMode: PaperNoteMode;
 	/**
+	 * Open a paper's NOTES.md in the reading split whenever a paper is opened.
+	 * Default **on**; off opens only the PDF/HTML body — NOTES is still one
+	 * `⌘\` / "Open notes" away.
+	 */
+	autoOpenPaperNotes: boolean;
+	/**
 	 * Papers Library table columns: order (array position) + visibility.
 	 * Reconciled against {@link LIBRARY_COLUMN_KEYS}; `title` is always visible.
 	 */

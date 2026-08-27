@@ -7,7 +7,7 @@
 | 场景 | 行为 |
 |---|---|
 | 打开文档 | 文件树 / Library / 命令面板 → `openTab` → `workspaceRef.openPanel` |
-| 首篇 paper | PDF/HTML 默认组 + `NOTES.md` 右分屏（阅读默认） |
+| 首篇 paper | PDF/HTML 默认组 + `NOTES.md` 右分屏（阅读默认；通用设置 `autoOpenPaperNotes` 关闭时只开 body，NOTES 仍可 `⌘\` / 右键「打开笔记」手动开） |
 | 再开 paper | body 走自由 dock 放置（当前组 / 默认，可再拖分屏）；NOTES 优先叠进已有笔记列；body↔NOTES **焦点仍同步** |
 | 同步关闭 | 关 paper body 时一并关 NOTES；关 NOTES 保留 body |
 | 文件树拖入 | left/right/above/below/within 分屏落点 |

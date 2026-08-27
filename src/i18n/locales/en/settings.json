@@ -83,6 +83,9 @@
 			"seedCreated": "Starter template created",
 			"seedExists": "Template already exists"
 		},
+		"autoOpenPaperNotes": {
+			"label": "Open paper notes by default"
+		},
 		"autoUpdateInternalLinks": {
 			"label": "Update internal links after external renames",
 			"ask": "Ask",

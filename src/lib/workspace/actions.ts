@@ -219,6 +219,8 @@ export function openTab(
 		placement?: OpenPlacement;
 		/** Skip default paper→NOTES companion open. */
 		skipDefaultNotes?: boolean;
+		/** Open the NOTES companion even when autoOpenPaperNotes is off. */
+		forceNotes?: boolean;
 	},
 ): void {
 	const id = tabIdForPath(path);
@@ -298,7 +300,8 @@ export function openTab(
 			!opts?.placement &&
 			res.kind === "paper" &&
 			Boolean(res.notesPath) &&
-			(res.mode === "pdf" || res.mode === "html");
+			(res.mode === "pdf" || res.mode === "html") &&
+			(opts?.forceNotes || loadSettings().autoOpenPaperNotes);
 		if (wantDefaultNotes && res.notesPath) {
 			const notesId = tabIdForPath(res.notesPath);
 			const notesAlreadyOpen = getTabs().some((t) => t.id === notesId);
@@ -611,7 +614,8 @@ export function openPaperNotes(paperDir: string): void {
 		openTabNotes(existing.id);
 		return;
 	}
-	openPaper(abs);
+	setTreeSelectedPath(abs);
+	openTab(abs, { preferMode: "pdf", forceNotes: true });
 }
 
 /** Open a paper folder in a tab: center PDF, right Notes (resolved on load).

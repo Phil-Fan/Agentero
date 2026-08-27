@@ -62,6 +62,10 @@ pub struct AppSettings {
     /// `standard` | `title-only` | `blank` | `custom` (vault template).
     #[serde(default = "default_paper_note_mode")]
     pub paper_note_mode: String,
+    /// Open a paper's NOTES.md in the reading split when a paper is opened.
+    /// Default on; off opens only the PDF/HTML body.
+    #[serde(default = "default_true")]
+    pub auto_open_paper_notes: bool,
     #[serde(default = "default_auto_update_internal_links")]
     pub auto_update_internal_links: String,
     #[serde(default = "default_library_columns")]
@@ -270,6 +274,7 @@ impl Default for AppSettings {
             paper_tree_label_mode: default_paper_tree_label_mode(),
             paper_tree_sort_mode: default_paper_tree_sort_mode(),
             paper_note_mode: default_paper_note_mode(),
+            auto_open_paper_notes: default_true(),
             auto_update_internal_links: default_auto_update_internal_links(),
             library_columns: default_library_columns(),
             connector_enabled: false,

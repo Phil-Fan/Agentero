@@ -207,6 +207,16 @@ export function GeneralPane({
 						</Tooltip>
 					</SettingsRow>
 				) : null}
+				<SettingsRow
+					label={t("general.autoOpenPaperNotes.label")}
+					htmlFor="auto-open-paper-notes"
+				>
+					<Switch
+						id="auto-open-paper-notes"
+						checked={settings.autoOpenPaperNotes}
+						onCheckedChange={(v) => patch({ autoOpenPaperNotes: v })}
+					/>
+				</SettingsRow>
 				<SettingsRow label={t("general.autoUpdateInternalLinks.label")}>
 					<Select
 						value={settings.autoUpdateInternalLinks}

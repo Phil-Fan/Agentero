@@ -322,6 +322,9 @@ function normalizePartial(
 	if (!isPaperNoteMode(merged.paperNoteMode)) {
 		merged.paperNoteMode = DEFAULT_SETTINGS.paperNoteMode;
 	}
+	if (typeof parsed.autoOpenPaperNotes !== "boolean") {
+		merged.autoOpenPaperNotes = DEFAULT_SETTINGS.autoOpenPaperNotes;
+	}
 	if (
 		merged.autoUpdateInternalLinks !== "ask" &&
 		merged.autoUpdateInternalLinks !== "always"
