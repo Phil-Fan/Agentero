@@ -81,6 +81,11 @@
 		"open": "打开",
 		"apply": "应用"
 	},
+	"blockDrag": {
+		"handle": "拖动以移动",
+		"duplicate": "创建副本",
+		"delete": "删除"
+	},
 	"contextMenu": {
 		"cut": "剪切",
 		"copy": "复制",

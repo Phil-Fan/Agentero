@@ -43,7 +43,7 @@ React 19 + TypeScript Webview UI。全局状态为按域 **zustand vanilla store
 
 | 领域 | 选型 |
 |---|---|
-| Markdown | Plate + `@platejs/markdown` + media |
+| Markdown | Plate + `@platejs/markdown` + media + selection/dnd |
 | PDF | EmbedPDF + PDFium |
 | 图谱 | react-force-graph-2d |
 | 状态 | zustand vanilla（按域 store） |

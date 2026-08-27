@@ -13,7 +13,7 @@ import { parseCalloutMarker } from "@/lib/markdown/callout";
 
 export const CalloutPlugin = createPlatePlugin({
 	key: KEYS.callout,
-	node: { isElement: true },
+	node: { isElement: true, isContainer: true },
 })
 	.withComponent(CalloutElement)
 	.overrideEditor(({ editor, tf: { insertBreak } }) => ({

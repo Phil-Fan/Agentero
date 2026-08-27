@@ -214,7 +214,7 @@ export function CalloutElement(props: PlateElementProps) {
 		<PlateElement
 			{...props}
 			className={cn(
-				"my-3 rounded-md border border-l-4 px-4 py-2.5 not-italic",
+				"relative my-3 rounded-md border border-l-4 px-4 py-2.5 not-italic",
 				theme.className,
 			)}
 		>

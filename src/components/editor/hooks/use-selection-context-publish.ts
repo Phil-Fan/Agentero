@@ -8,6 +8,10 @@ import {
 	clearActiveSelection,
 	publishSelection,
 } from "@/lib/agent/selection-store";
+import {
+	hasSelectedBlocks,
+	serializeSelectedBlocksAsMarkdown,
+} from "@/lib/markdown/block-selection";
 
 const PUBLISH_DEBOUNCE_MS = 300;
 
@@ -26,13 +30,24 @@ export function useSelectionContextPublish({
 	filePathRef: RefObject<string | null>;
 }): () => void {
 	const schedule = useDebouncedCallback(() => {
+		const path = filePathRef.current;
+		if (!path) {
+			clearActiveSelection("markdown");
+			return;
+		}
+		if (hasSelectedBlocks(editor)) {
+			publishSelection({
+				text: serializeSelectedBlocksAsMarkdown(editor),
+				sourcePath: path,
+				origin: "markdown",
+			});
+			return;
+		}
 		const selection = editor.selection;
 		if (!selection || RangeApi.isCollapsed(selection)) {
 			clearActiveSelection("markdown");
 			return;
 		}
-		const path = filePathRef.current;
-		if (!path) return;
 		publishSelection({
 			text: editor.api.string(selection),
 			sourcePath: path,

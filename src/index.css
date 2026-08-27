@@ -449,6 +449,17 @@
 	user-select: none;
 }
 
+/*
+ * Block drag uses a pointer backend (not HTML5). Without this, mousemove
+ * over contenteditable paints a native text selection while dragging.
+ * Plate's DndPlugin adds `dragging` on body for the gesture.
+ */
+body.dragging,
+body.dragging * {
+	-webkit-user-select: none;
+	user-select: none;
+}
+
 .agentero-dockview .dv-tabs-and-actions-container {
 	flex-shrink: 0;
 	position: relative;

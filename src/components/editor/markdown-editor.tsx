@@ -2,8 +2,9 @@
 
 import { MarkdownPlugin } from "@platejs/markdown";
 import { ImagePlugin } from "@platejs/media/react";
+import { BlockSelectionPlugin } from "@platejs/selection/react";
 import { TocPlugin } from "@platejs/toc/react";
-import { Plate, usePlateEditor } from "platejs/react";
+import { Plate, usePlateEditor, usePluginOption } from "platejs/react";
 import {
 	type CSSProperties,
 	type KeyboardEvent,
@@ -36,7 +37,9 @@ import {
 	TocSidebar,
 } from "@/components/editor/overlays/toc-sidebar";
 import { WikiLinkSuggestion } from "@/components/editor/overlays/wiki-link-suggestion";
+import { BlockSelectionKit } from "@/components/editor/plugins/block-selection-kit";
 import { convertBlockquoteMarkerToCallout } from "@/components/editor/plugins/callout-plugin";
+import { DndKit } from "@/components/editor/plugins/dnd-kit";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
 import { MarkdownEditorToolbar } from "@/components/editor/toolbar/markdown-toolbar";
 import {
@@ -129,6 +132,16 @@ const EmbeddedMarkdownProjection = lazy(async () => {
 	);
 	return { default: module.EmbeddedMarkdownProjection };
 });
+
+/** Re-publish Agent selection chips when the block-selection set changes. */
+function BlockSelectionPublishBridge({ onChange }: { onChange: () => void }) {
+	const selectedIds = usePluginOption(BlockSelectionPlugin, "selectedIds");
+	useEffect(() => {
+		void selectedIds;
+		onChange();
+	}, [onChange, selectedIds]);
+	return null;
+}
 
 /**
  * Headings are top-level blocks, so this counts them without touching leaves —
@@ -257,6 +270,9 @@ export function MarkdownEditor({
 	const plugins = useMemo(
 		() => [
 			...MarkdownEditorKit,
+			// After CalloutPlugin so block Cmd+A wraps the callout override.
+			...BlockSelectionKit,
+			...DndKit,
 			TocPlugin.configure({
 				options: { queryHeading: queryTocHeadings },
 			}),
@@ -389,6 +405,7 @@ export function MarkdownEditor({
 				) {
 					// Handle Select All before browser/Slate default handling so
 					// the editor selection and the native DOM selection stay in sync.
+					// BlockSelectionPlugin two-steps: current block, then all blocks.
 					event.preventDefault();
 					event.stopPropagation();
 					const scrollRoot = editorContainerRef.current;
@@ -619,6 +636,9 @@ export function MarkdownEditor({
 					}}
 					onValueChange={handleEditorValueChange}
 				>
+					<BlockSelectionPublishBridge
+						onChange={scheduleSelectionContextPublish}
+					/>
 					<div
 						className={cn(
 							"flex h-full min-h-0 min-w-0 flex-col overflow-hidden",
@@ -674,10 +694,12 @@ export function MarkdownEditor({
 											<Editor
 												placeholder={placeholder}
 												readOnly={readOnly}
+												// `pl-10` leaves room for the block drag handle
+												// (`-translate-x-full` in the left gutter).
 												// `pr-16` reserves a right gutter for the collapsed
 												// TOC strip (`right-2 w-12`) so it never covers text.
 												// Narrow panes hide that strip, so the gutter goes too.
-												className="min-h-full pl-6 pr-16 pt-4 pb-48 @max-2xs/editor:pr-6 [&>*:first-child]:mt-0"
+												className="min-h-full pl-10 pr-16 pt-4 pb-48 @max-2xs/editor:pr-6 [&>*:first-child]:mt-0"
 												style={editorTypographyStyle}
 											/>
 											{!readOnly ? (
