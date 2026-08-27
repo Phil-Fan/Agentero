@@ -29,6 +29,7 @@ export type CitationDestKeysResponse =
 			ok: true;
 			cites: [string, string][];
 			crossrefs: [string, CrossrefKind][];
+			crossrefKinds: [string, CrossrefKind[]][];
 	  }
 	| { id: number; ok: false; error: string };
 
@@ -47,6 +48,7 @@ scope.onmessage = (event) => {
 				ok: true,
 				cites: [...maps.cites.entries()],
 				crossrefs: [...maps.crossrefs.entries()],
+				crossrefKinds: [...maps.crossrefKinds.entries()],
 			});
 		})
 		.catch((error: unknown) => {

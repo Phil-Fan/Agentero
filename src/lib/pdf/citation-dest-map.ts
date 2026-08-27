@@ -77,6 +77,7 @@ function ensureWorker(): Worker | null {
 			request.resolve({
 				cites: new Map(event.data.cites),
 				crossrefs: new Map(event.data.crossrefs),
+				crossrefKinds: new Map(event.data.crossrefKinds),
 			});
 		} else request.reject(new Error(event.data.error));
 	};
@@ -132,6 +133,7 @@ export function getPdfDestMapsCached(
 			source,
 			cites: maps.cites.size,
 			crossrefs: maps.crossrefs.size,
+			crossrefKinds: maps.crossrefKinds.size,
 			duration_ms: Math.round(performance.now() - started),
 		});
 		return maps;

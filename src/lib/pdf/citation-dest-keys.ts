@@ -45,12 +45,25 @@ export type CrossrefKind = "figure" | "table" | "equation" | "algorithm";
 /** `pageIndex:pdfY` → kind of the numbered object at that destination. */
 export type CrossrefDestMap = ReadonlyMap<string, CrossrefKind>;
 
+/** `pageIndex:pdfY` → all kinds found at that destination (conflicts preserved). */
+export type CrossrefKindMap = ReadonlyMap<string, CrossrefKind[]>;
+
 /** Both destination indexes parsed from one PDF in a single object-tree walk. */
 export type PdfDestMaps = {
 	/** In-text citation destinations. */
 	cites: CitationDestKeyMap;
-	/** Figure / table / equation / algorithm destinations (`\ref` targets). */
+	/**
+	 * Best unambiguous cross-reference kind at each coordinate. Coordinates
+	 * shared by different kinds are omitted; callers can fall back to
+	 * `crossrefKinds` to disambiguate.
+	 */
 	crossrefs: CrossrefDestMap;
+	/**
+	 * All cross-reference kinds found at each coordinate. Used when the link
+	 * text or named destination name allows choosing among conflicting kinds
+	 * (e.g. ACS `/FitR` destinations where figure/table share the same page).
+	 */
+	crossrefKinds: CrossrefKindMap;
 };
 
 // ---- Pluggable destination-name parsers ----
@@ -310,6 +323,7 @@ export async function buildPdfDestMaps(
 	const pageRefs = doc.getPages().map((page) => page.ref.toString());
 	const citeByCoord = new Map<string, string | null>();
 	const crossByCoord = new Map<string, CrossrefKind | null>();
+	const crossKindsByCoord = new Map<string, CrossrefKind[]>();
 
 	const crossrefParsers = options.crossrefParsers ?? defaultCrossrefNameParsers;
 	const citationParsers = options.citationParsers ?? defaultCitationNameParsers;
@@ -339,6 +353,15 @@ export async function buildPdfDestMaps(
 		else if (existing !== value) map.set(coord, null);
 	};
 
+	const stashKind = (coord: string, kind: CrossrefKind) => {
+		const list = crossKindsByCoord.get(coord);
+		if (!list) {
+			crossKindsByCoord.set(coord, [kind]);
+			return;
+		}
+		if (!list.includes(kind)) list.push(kind);
+	};
+
 	for (const [name, dest] of namedDests) {
 		const citationKey = parseCitationKey(name);
 		if (citationKey) {
@@ -350,13 +373,17 @@ export async function buildPdfDestMaps(
 		const kind = parseCrossrefKind(name);
 		if (kind) {
 			const coord = destCoordKey(dest, context, pageRefs, coordResolvers);
-			if (coord) stash(crossByCoord, coord, kind);
+			if (coord) {
+				stash(crossByCoord, coord, kind);
+				stashKind(coord, kind);
+			}
 		}
 	}
 
 	return {
 		cites: resolveUnambiguous(citeByCoord),
 		crossrefs: resolveUnambiguous(crossByCoord),
+		crossrefKinds: crossKindsByCoord,
 	};
 }
 

@@ -17,7 +17,13 @@
  * the same link and at most one card appears.
  */
 
-import type { PdfEngine, PdfLinkAnnoObject } from "@embedpdf/models";
+import type {
+	PdfDocumentObject,
+	PdfEngine,
+	PdfLinkAnnoObject,
+	PdfPageObject,
+	Rect,
+} from "@embedpdf/models";
 import type { useDocumentManagerCapability } from "@embedpdf/plugin-document-manager/react";
 import {
 	type RefObject,
@@ -34,10 +40,15 @@ import { errorText } from "@/lib/core/error";
 import { logger } from "@/lib/core/logger";
 import {
 	type CrossrefDestMap,
+	type CrossrefKindMap,
 	citationDestKey,
 } from "@/lib/pdf/citation-dest-keys";
 import { loadPdfDestMaps } from "@/lib/pdf/citation-dest-map";
-import { pickCrossrefRegion } from "@/lib/pdf/crossref-resolve";
+import {
+	extractCrossrefLabel,
+	pickCrossrefRegion,
+	pickCrossrefRegionByLabel,
+} from "@/lib/pdf/crossref-resolve";
 import { getLayoutDocumentResult } from "@/lib/pdf/layout";
 
 /** Grace period so the pointer can travel from the link into the card. */
@@ -48,6 +59,34 @@ const DEST_MAP_IDLE_TIMEOUT_MS = 2000;
 const DEST_MAP_FALLBACK_DELAY_MS = 500;
 /** Longest edge of the preview crop (px). */
 const CROSSREF_CROP_MAX_EDGE = 520;
+
+/** Whether two PDF rects overlap in page coordinates. */
+function rectsOverlap(a: Rect, b: Rect): boolean {
+	return (
+		a.origin.x < b.origin.x + b.size.width &&
+		a.origin.x + a.size.width > b.origin.x &&
+		a.origin.y < b.origin.y + b.size.height &&
+		a.origin.y + a.size.height > b.origin.y
+	);
+}
+
+/**
+ * Read the text covered by a link annotation's rect on a specific page. Used as
+ * a fallback when the PDF destination only points at a page (ACS `/FitR`) so we
+ * can infer "Figure 1" / "Table 1" from the link text itself.
+ */
+async function extractLinkText(
+	engine: PdfEngine,
+	document: PdfDocumentObject,
+	page: PdfPageObject,
+	linkRect: Rect,
+): Promise<string> {
+	const rects = await engine.getPageTextRects(document, page).toPromise();
+	const overlapping = rects.filter((r) => rectsOverlap(r.rect, linkRect));
+	// PDF coords: origin bottom-left; sort top-to-bottom for natural reading order.
+	overlapping.sort((a, b) => b.rect.origin.y - a.rect.origin.y);
+	return overlapping.map((r) => r.content).join(" ");
+}
 
 function scheduleIdle(fn: () => void): () => void {
 	if (typeof requestIdleCallback === "function") {
@@ -97,6 +136,12 @@ export function usePdfCrossrefPreview({
 	const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	/** hyperref cross-reference destinations of the open PDF, by coords. */
 	const crossrefMapRef = useRef<CrossrefDestMap | null>(null);
+	/**
+	 * All cross-reference kinds found at each coordinate. Used as a fallback when
+	 * the unambiguous map drops a coordinate because multiple kinds share it
+	 * (e.g. ACS `/FitR` destinations pointing at a whole page).
+	 */
+	const crossrefKindsRef = useRef<CrossrefKindMap | null>(null);
 	/** Monotonic token so a stale crop never lands over a newer hover. */
 	const renderTokenRef = useRef(0);
 
@@ -105,6 +150,7 @@ export function usePdfCrossrefPreview({
 
 	useEffect(() => {
 		crossrefMapRef.current = null;
+		crossrefKindsRef.current = null;
 		if (!paperAbsPath) return;
 		let cancelled = false;
 		const cancelIdle = scheduleIdle(() => {
@@ -113,7 +159,10 @@ export function usePdfCrossrefPreview({
 				viewerBytes: sourceBytesRef.current,
 			})
 				.then((maps) => {
-					if (!cancelled && maps) crossrefMapRef.current = maps.crossrefs;
+					if (!cancelled && maps) {
+						crossrefMapRef.current = maps.crossrefs;
+						crossrefKindsRef.current = maps.crossrefKinds;
+					}
 				})
 				.catch((error: unknown) => {
 					logger.warn("crossref dest map failed", {
@@ -147,37 +196,15 @@ export function usePdfCrossrefPreview({
 		}, CROSSREF_HIDE_MS);
 	}, [cancelCrossrefHide]);
 
-	const handleCrossrefLinkHover = useCallback(
-		(link: PdfLinkAnnoObject | null) => {
-			if (!link) {
-				scheduleCrossrefHide();
-				return;
-			}
-			const destination = getLinkDestination(link.target);
-			const kind = destination
-				? crossrefMapRef.current?.get(
-						citationDestKey(destination.pageIndex, destination.pdfY),
-					)
-				: undefined;
-			if (!destination || !kind) {
-				scheduleCrossrefHide();
-				return;
-			}
-			const regions = getLayoutDocumentResult(docId)?.regions ?? [];
-			const document = docCapRef.current?.getDocument(docId) ?? null;
-			const pageHeightPt =
-				document?.pages[destination.pageIndex]?.size.height ?? null;
-			const region = pickCrossrefRegion(
-				regions,
-				destination.pageIndex,
-				destination.pdfY,
-				pageHeightPt,
-				kind,
-			);
-			if (!region) {
-				scheduleCrossrefHide();
-				return;
-			}
+	const showPreview = useCallback(
+		(
+			link: PdfLinkAnnoObject,
+			region: {
+				pageIndex: number;
+				bbox: { x: number; y: number; w: number; h: number };
+			},
+			kind: import("@/lib/pdf/citation-dest-keys").CrossrefKind,
+		) => {
 			cancelCrossrefHide();
 			const pageEl = pageElByIndex(hostRef.current, link.pageIndex);
 			if (!pageEl) return;
@@ -193,6 +220,7 @@ export function usePdfCrossrefPreview({
 			// (or a document close) superseded it.
 			const token = ++renderTokenRef.current;
 			const engine = engineRef.current;
+			const document = docCapRef.current?.getDocument(docId) ?? null;
 			if (!engine || !document) return;
 			void renderPdfRegionPromptImage({
 				engine,
@@ -209,14 +237,112 @@ export function usePdfCrossrefPreview({
 				})
 				.catch(() => {});
 		},
+		[docId, hostRef, zoomRef, engineRef, docCapRef, cancelCrossrefHide],
+	);
+
+	const handleCrossrefLinkHover = useCallback(
+		(link: PdfLinkAnnoObject | null) => {
+			if (!link) {
+				scheduleCrossrefHide();
+				return;
+			}
+			const destination = getLinkDestination(link.target);
+			if (!destination) {
+				scheduleCrossrefHide();
+				return;
+			}
+
+			const coord = citationDestKey(destination.pageIndex, destination.pdfY);
+			const regions = getLayoutDocumentResult(docId)?.regions ?? [];
+			const document = docCapRef.current?.getDocument(docId) ?? null;
+			const pageHeightPt =
+				document?.pages[destination.pageIndex]?.size.height ?? null;
+
+			// Fast path: unambiguous destination (standard hyperref /XYZ).
+			const unambiguousKind = crossrefMapRef.current?.get(coord);
+			if (unambiguousKind) {
+				const region = pickCrossrefRegion(
+					regions,
+					destination.pageIndex,
+					destination.pdfY,
+					pageHeightPt,
+					unambiguousKind,
+				);
+				if (region) {
+					showPreview(link, region, unambiguousKind);
+					return;
+				}
+			}
+
+			// Fallback: ambiguous or page-only destination (e.g. ACS /FitR).
+			// Infer the kind/number from the link text and match layout regions
+			// by caption title.
+			const kinds = crossrefKindsRef.current?.get(coord);
+			if (!kinds || kinds.length === 0) {
+				scheduleCrossrefHide();
+				return;
+			}
+
+			const engine = engineRef.current;
+			const page = document?.pages[link.pageIndex];
+			if (!engine || !document || !page) {
+				// No text extraction possible; if there is only one kind at this
+				// coordinate, make a best-effort region guess.
+				if (kinds.length === 1) {
+					const region = pickCrossrefRegion(
+						regions,
+						destination.pageIndex,
+						destination.pdfY,
+						pageHeightPt,
+						kinds[0],
+					);
+					if (region) {
+						showPreview(link, region, kinds[0]);
+						return;
+					}
+				}
+				scheduleCrossrefHide();
+				return;
+			}
+
+			cancelCrossrefHide();
+			// Keep the card empty/spinner-free until the async resolution lands.
+			const token = ++renderTokenRef.current;
+			void extractLinkText(engine, document, page, link.rect)
+				.then((text) => {
+					if (renderTokenRef.current !== token) return;
+					const label = extractCrossrefLabel(text);
+					if (!label) {
+						scheduleCrossrefHide();
+						return;
+					}
+					if (!kinds.includes(label.kind)) {
+						scheduleCrossrefHide();
+						return;
+					}
+					const region = pickCrossrefRegionByLabel(
+						regions,
+						destination.pageIndex,
+						label,
+					);
+					if (!region) {
+						scheduleCrossrefHide();
+						return;
+					}
+					showPreview(link, region, label.kind);
+				})
+				.catch(() => {
+					if (renderTokenRef.current !== token) return;
+					scheduleCrossrefHide();
+				});
+		},
 		[
 			docId,
-			hostRef,
-			zoomRef,
 			engineRef,
 			docCapRef,
 			cancelCrossrefHide,
 			scheduleCrossrefHide,
+			showPreview,
 		],
 	);
 
