@@ -111,13 +111,6 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      # Desktop packages no longer ship a real multi-MB CLI (#285). Seed a tiny
-      # externalBin stub so tauri-build accepts the resource path; users install
-      # the same-version CLI from Settings → About (GitHub Release download).
-      # `beforeBuildCommand` also runs `pnpm cli:bundle:stub`.
-      - name: Prepare externalBin CLI stub
-        run: pnpm cli:bundle:stub
-
       # macOS: Developer ID signing + notarytool (see docs/development/macos-signing.md).
       # Without APPLE_CERTIFICATE the build still runs unsigned (existing behavior).
       # Do NOT pass empty APPLE_TEAM_ID/APPLE_ID via the build env — empty strings make
@@ -384,24 +377,6 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf
-
-      # agentero package runs tauri-build which requires externalBin on disk
-      # even when only building the headless CLI (chicken-and-egg with bundling).
-      - name: Stub externalBin for Tauri build-script
-        shell: bash
-        run: |
-          set -euo pipefail
-          HOST="$(rustc -vV | sed -n 's/^host: //p')"
-          mkdir -p src-tauri/binaries
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            dest="src-tauri/binaries/agentero-cli-${HOST}.exe"
-            printf '@echo off\r\necho agentero-cli stub\r\nexit /b 1\r\n' > "$dest"
-          else
-            dest="src-tauri/binaries/agentero-cli-${HOST}"
-            printf '#!/bin/sh\necho agentero-cli stub >&2\nexit 1\n' > "$dest"
-            chmod +x "$dest"
-          fi
-          echo "Seeded stub: $dest"
 
       # tauri.macos.conf.json lists pdfium/libpdfium.dylib under
       # bundle.macOS.frameworks; tauri-build hard-fails when the file is

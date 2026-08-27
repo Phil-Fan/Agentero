@@ -20,8 +20,6 @@
 		"tauri": "tauri",
 		"cli:bundle": "node scripts/prepare-bundled-cli.mjs",
 		"cli:bundle:release": "node scripts/prepare-bundled-cli.mjs --release",
-		"cli:bundle:stub": "node scripts/prepare-bundled-cli.mjs --stub",
-		"cli:ensure": "node scripts/prepare-bundled-cli.mjs --ensure",
 		"pdfium:stage": "node scripts/prepare-pdfium.mjs",
 		"lint": "pnpm run lint:ts && pnpm run lint:rs",
 		"lint:ts": "biome check .",

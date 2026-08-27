@@ -49,7 +49,10 @@ const BUNDLED_CLI_NAME: &str = if cfg!(windows) {
     "agentero-cli"
 };
 
-/// Reject empty externalBin stubs (0-byte placeholders from prepare --stub).
+/// Reject placeholder files: empty stubs, and on Windows anything that is not
+/// a real PE image. The historical externalBin stub was a batch script renamed
+/// to `.exe`; executing it made Windows pop the scary "unsupported 16-bit
+/// application" dialog on end-user machines, so probing must never run it.
 const MIN_CLI_BYTES: u64 = 1;
 
 #[derive(Debug, Clone, Serialize)]
@@ -112,7 +115,26 @@ fn is_plausible_cli_file(path: &Path) -> bool {
         return false;
     };
     // Size alone is not enough (dev shell scripts are small); empty stubs are.
-    meta.is_file() && meta.len() >= MIN_CLI_BYTES
+    if !meta.is_file() || meta.len() < MIN_CLI_BYTES {
+        return false;
+    }
+    // Windows: require a genuine PE (MZ magic) before `--version` probing ever
+    // execs the file — batch/shell text renamed to `.exe` would otherwise raise
+    // the system 16-bit-incompatibility dialog.
+    if cfg!(windows) {
+        return has_pe_magic(path);
+    }
+    true
+}
+
+/// True when the file starts with the DOS/PE `MZ` magic bytes.
+fn has_pe_magic(path: &Path) -> bool {
+    use std::io::Read;
+    let Ok(mut file) = fs::File::open(path) else {
+        return false;
+    };
+    let mut magic = [0u8; 2];
+    file.read_exact(&mut magic).is_ok() && magic == *b"MZ"
 }
 
 /// True when the file looks real and can report a version.
@@ -597,9 +619,30 @@ mod tests {
         assert!(!is_plausible_cli_file(&tiny));
         assert!(!is_runnable_cli(&tiny));
         fs::write(&tiny, b"x").unwrap();
-        assert!(is_plausible_cli_file(&tiny));
+        if cfg!(windows) {
+            // `x` is not a PE image, so Windows rejects it pre-exec.
+            assert!(!is_plausible_cli_file(&tiny));
+        } else {
+            assert!(is_plausible_cli_file(&tiny));
+        }
         // Still not runnable without a working --version.
         assert!(!is_runnable_cli(&tiny));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn rejects_batch_stub_exe_on_windows() {
+        let dir = test_dir("stub");
+        let stub = dir.join(BUNDLED_CLI_NAME);
+        // The historical externalBin stub body: batch text with an .exe name.
+        fs::write(
+            &stub,
+            b"@echo off\r\necho agentero-cli stub\r\nexit /b 1\r\n",
+        )
+        .unwrap();
+        assert!(!is_plausible_cli_file(&stub));
+        assert!(!is_runnable_cli(&stub));
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -609,11 +652,14 @@ mod tests {
         let foreign = dir.join(SHIM_NAME);
         let bundled = dir.join(BUNDLED_CLI_NAME);
         fs::write(&foreign, b"not-agentero").unwrap();
-        // Passes size check but --version fails → install_shim errors first.
+        // Passes size check but --version fails → install_shim errors first
+        // (on Windows the non-PE body trips the plausibility check instead).
         fs::write(&bundled, b"not-a-real-binary").unwrap();
         let err = install_shim(&bundled, &foreign).unwrap_err();
         assert!(
-            err.to_string().contains("does not run") || err.to_string().contains("refusing"),
+            err.to_string().contains("does not run")
+                || err.to_string().contains("refusing")
+                || err.to_string().contains("missing or empty"),
             "{err}"
         );
         assert_eq!(fs::read(&foreign).unwrap(), b"not-agentero");

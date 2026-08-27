@@ -106,9 +106,10 @@ zh 目标走并行竞速）；商业 BYOK Key 只在桌面 settings 里，CLI �
 所以论文开着时跑 CLI 也能在 1~2 秒内看到黄底（见 [frontend/pdf.md](../frontend/pdf.md)）。
 
 ```bash
-# CLI 以 `default-features = false` 依赖 `agentero_lib`，headless 构建不走 tauri-build，无需 externalBin 占位。
-# 但桌面 `pnpm tauri dev` / `pnpm tauri build` 仍要求 src-tauri/binaries 存在，首次/干净树需先占位：
-pnpm cli:bundle:stub   # 或 pnpm cli:bundle
+# CLI 以 `default-features = false` 依赖 `agentero_lib`，headless 构建不走 tauri-build。
+# 桌面安装包不内置 CLI（已移除 `externalBin`，安装目录不会出现占位 agentero-cli.exe）；
+# 开发机可选跑下面命令把真二进制放进 src-tauri/binaries，让 设置 → 安装 CLI 走本地路径：
+pnpm cli:bundle
 cargo build -p agentero-cli
 cargo run -p agentero-cli -- vault which --json
 cargo run -p agentero-cli -- wiki check papers/demo/NOTES.md --json

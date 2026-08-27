@@ -1,13 +1,15 @@
 /**
- * Build headless CLI (`agentero-cli` cargo bin) and copy it into
- * src-tauri/binaries with the target-triple suffix required by Tauri
- * `bundle.externalBin`.
+ * Build the headless CLI (`agentero-cli` cargo bin) and copy it into
+ * `src-tauri/binaries` (dev discovery for Settings → Install CLI) and next to
+ * the GUI binary in `target/{debug,release}`.
+ *
+ * Desktop packages do NOT bundle the CLI anymore (no `externalBin`); end users
+ * install the same-version CLI from Settings → About via GitHub Release
+ * download. This script is a dev convenience only (`pnpm cli:bundle`).
  *
  * Usage:
  *   node scripts/prepare-bundled-cli.mjs           # debug (default)
  *   node scripts/prepare-bundled-cli.mjs --release
- *   node scripts/prepare-bundled-cli.mjs --stub    # tiny non-empty placeholder for typecheck
- *   node scripts/prepare-bundled-cli.mjs --ensure  # seed stub only if missing (tauri dev)
  */
 import { execSync } from "node:child_process";
 import fs from "node:fs";
@@ -17,8 +19,6 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const release = process.argv.includes("--release");
-const stub = process.argv.includes("--stub");
-const ensure = process.argv.includes("--ensure");
 const isWin = process.platform === "win32";
 const ext = isWin ? ".exe" : "";
 
@@ -35,70 +35,22 @@ function hostTriple() {
 
 const triple = process.env.TAURI_ENV_TARGET_TRIPLE || hostTriple();
 const tauriPlatform = process.env.TAURI_ENV_PLATFORM || "";
-// Mobile never ships the headless CLI (remote client only). Building it under
+// Mobile never ships the headless CLI (remote client only); building it under
 // iOS/Android env also pollutes native toolchains (e.g. tesseract/cmake).
 const isMobile =
 	tauriPlatform === "android" ||
 	tauriPlatform === "ios" ||
 	/-android|-ios\b/.test(triple);
-const outDir = path.join(root, "src-tauri", "binaries");
-fs.mkdirSync(outDir, { recursive: true });
-// Mobile triples use the host executable extension rules poorly; always omit .exe.
-const destExt = isMobile ? "" : ext;
-const dest = path.join(outDir, `agentero-cli-${triple}${destExt}`);
-
-/** Non-empty placeholder so Tauri build-script accepts `externalBin`. */
-function writeStub(target) {
-	const body = isWin
-		? "@echo off\r\necho agentero-cli stub\r\nexit /b 1\r\n"
-		: "#!/bin/sh\necho 'agentero-cli stub' >&2\nexit 1\n";
-	fs.writeFileSync(target, body);
-	try {
-		fs.chmodSync(target, 0o755);
-	} catch {
-		// windows
-	}
-}
-
-function needsSeed(target) {
-	return !fs.existsSync(target) || fs.statSync(target).size === 0;
-}
-
-if (ensure) {
-	// For `tauri dev`: create a compile-time placeholder without overwriting a real CLI.
-	if (needsSeed(dest)) {
-		writeStub(dest);
-		console.log(`[prepare-bundled-cli] ensure seeded stub → ${dest}`);
-	} else {
-		console.log(`[prepare-bundled-cli] ensure ok → ${dest}`);
-	}
-	process.exit(0);
-}
-
-if (stub) {
-	// Host still rejects stubs that cannot report --version before Install.
-	writeStub(dest);
-	console.log(`[prepare-bundled-cli] stub → ${dest}`);
-	process.exit(0);
-}
-
-// Mobile platform configs clear externalBin; if this script still runs (e.g.
-// shared beforeBuildCommand), never compile the desktop CLI under mobile env.
 if (isMobile) {
-	writeStub(dest);
 	console.log(
-		`[prepare-bundled-cli] mobile (${tauriPlatform || triple}): stub only → ${dest}`,
+		`[prepare-bundled-cli] mobile (${tauriPlatform || triple}): skipped (CLI is desktop-only)`,
 	);
 	process.exit(0);
 }
 
-// Fresh trees have no externalBin artifact; Tauri build-script fails while
-// compiling agentero_lib (dependency of agentero-cli). Seed a stub first,
-// then overwrite with the real binary after cargo build.
-if (!fs.existsSync(dest) || fs.statSync(dest).size === 0) {
-	writeStub(dest);
-	console.log(`[prepare-bundled-cli] seeded stub for compile → ${dest}`);
-}
+const outDir = path.join(root, "src-tauri", "binaries");
+fs.mkdirSync(outDir, { recursive: true });
+const dest = path.join(outDir, `agentero-cli-${triple}${ext}`);
 
 const profile = release ? "release" : "debug";
 console.log(
@@ -114,7 +66,7 @@ if (!fs.existsSync(src)) {
 	console.error(`[prepare-bundled-cli] missing ${src}`);
 	process.exit(1);
 }
-// Refuse to ship a broken empty artifact.
+// Refuse to stage a broken empty artifact.
 const st = fs.statSync(src);
 if (st.size < 1024) {
 	console.error(
@@ -123,11 +75,6 @@ if (st.size < 1024) {
 	process.exit(1);
 }
 fs.copyFileSync(src, dest);
-// Also stage next to the GUI binary for `tauri dev` Settings → Install CLI.
-const devSidecar = path.join(root, "target", profile, `agentero-cli${ext}`);
-if (path.resolve(src) !== path.resolve(devSidecar)) {
-	fs.copyFileSync(src, devSidecar);
-}
 try {
 	fs.chmodSync(dest, 0o755);
 } catch {
