@@ -60,8 +60,10 @@ function sourcePath(id: string): string {
 
 /** Custom-scheme origin, spelled the way each platform's WebView expects. */
 function schemeOrigin(scheme: string): string {
+	// Windows WebView2 intercepts http(s)://<scheme>.localhost; the filter is
+	// registered as http:// unless useHttpsSchemeForCustomProtocol is set.
 	return navigator.userAgent.includes("Windows")
-		? `https://${scheme}.localhost`
+		? `http://${scheme}.localhost`
 		: `${scheme}://localhost`;
 }
 

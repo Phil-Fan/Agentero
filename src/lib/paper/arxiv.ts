@@ -70,8 +70,10 @@ export function isArxivHostedUrl(url: string): boolean {
 /** Convert an arXiv URL to the local reader proxy, retaining its path and query. */
 export function arxivReaderUrl(url: string): string {
 	const parsed = new URL(url);
+	// Windows WebView2 intercepts http(s)://<scheme>.localhost; the filter is
+	// registered as http:// unless useHttpsSchemeForCustomProtocol is set.
 	const origin = navigator.userAgent.includes("Windows")
-		? "https://agentero-arxiv.localhost"
+		? "http://agentero-arxiv.localhost"
 		: "agentero-arxiv://localhost";
 	return `${origin}${parsed.pathname}${parsed.search}`;
 }

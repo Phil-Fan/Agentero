@@ -118,7 +118,7 @@ i18n：`sidebar:plaza.*`。
 
 ### 3.2 Cool Papers（P0，WebView）
 
-**主内容**：内嵌 iframe，经 Host 代理协议 `agentero-coolpapers://localhost`（Windows 为 `https://agentero-coolpapers.localhost`）加载 papers.cool。
+**主内容**：内嵌 iframe，经 Host 代理协议 `agentero-coolpapers://localhost`（Windows 为 `http://agentero-coolpapers.localhost`）加载 papers.cool。
 
 | 区域 | 行为 |
 |---|---|
