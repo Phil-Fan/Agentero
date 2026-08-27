@@ -54,6 +54,10 @@ function Draggable(props: PlateElementProps) {
 	// id in draggingId so a multi-block drag fades the whole set.
 	const isNodeDragging =
 		Boolean(isEditorDragging) && isIdInDraggingSet(element.id, draggingId);
+	// Headings reset their top margin at the document start (heading-node.tsx),
+	// so the handle offset differs there for the same element type.
+	const isDocumentStart =
+		Array.isArray(props.path) && props.path.length === 1 && props.path[0] === 0;
 
 	const prepareDrag = React.useCallback(
 		(event: React.MouseEvent) => {
@@ -117,7 +121,7 @@ function Draggable(props: PlateElementProps) {
 			)}
 			onMouseEnter={() => {
 				if (isDragging) return;
-				setDragButtonTop(calcDragButtonTop(editor, element));
+				setDragButtonTop(calcDragButtonTop(editor, element, isDocumentStart));
 			}}
 		>
 			{isBlank ? null : (
@@ -214,8 +218,30 @@ function isIdInDraggingSet(
 		: draggingId === id;
 }
 
-const calcDragButtonTop = (editor: PlateEditor, element: TElement): number => {
+/**
+ * Block top margins are fixed rem keyed by element type, plus the document-start
+ * heading reset — so one measurement serves every block of the same shape.
+ *
+ * This matters because the caller is the block's `mouseenter`, which also fires
+ * for every block that scrolls past a resting pointer (and when typing reflows
+ * the document under one). Measuring there forced a style recalc per block.
+ */
+const dragButtonTopCache = new Map<string, number>();
+
+const calcDragButtonTop = (
+	editor: PlateEditor,
+	element: TElement,
+	isDocumentStart: boolean,
+): number => {
+	// uiScale is applied as an inline root font-size, so reading it back is a
+	// CSSOM lookup rather than a layout read.
+	const key = `${document.documentElement.style.fontSize}|${element.type}|${isDocumentStart}`;
+	const cached = dragButtonTopCache.get(key);
+	if (cached !== undefined) return cached;
 	const child = editor.api.toDOMNode(element);
 	if (!child) return 0;
-	return Number.parseFloat(window.getComputedStyle(child).marginTop);
+	const marginTop = Number.parseFloat(window.getComputedStyle(child).marginTop);
+	const top = Number.isFinite(marginTop) ? marginTop : 0;
+	dragButtonTopCache.set(key, top);
+	return top;
 };

@@ -19,6 +19,7 @@ import {
 	PopoverAnchor,
 	PopoverContent,
 } from "@/components/ui/popover";
+import i18n from "@/i18n";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { cn } from "@/lib/core/utils";
 import {
@@ -79,6 +80,91 @@ function MenuItem({
 }
 
 /**
+ * The action list lives in its own component so the per-block handle does not
+ * pay for `useTranslation`, `t()` and `formatModShortcut()` on every render:
+ * Radix only mounts `PopoverContent`'s children once the menu is open.
+ */
+function BlockHandleActions({
+	element,
+	onDone,
+}: {
+	element: TElement;
+	onDone: () => void;
+}) {
+	const { t } = useTranslation("editor");
+	const editor = useEditorRef();
+
+	const run = useCallback(
+		(action: () => void | Promise<void>) => {
+			resolveHandleBlocks(editor, element);
+			void action();
+			onDone();
+		},
+		[editor, element, onDone],
+	);
+
+	return (
+		<>
+			<MenuItem
+				shortcut={formatModShortcut("c")}
+				onSelect={() =>
+					run(async () => {
+						const markdown = serializeSelectedBlocksAsMarkdown(editor);
+						if (!markdown) return;
+						await copyTextToClipboard(markdown, {
+							errorMessage: t("contextMenu.copyFailed"),
+						});
+					})
+				}
+			>
+				<Copy className="size-4" />
+				{t("contextMenu.copy")}
+			</MenuItem>
+			<MenuItem
+				shortcut={formatModShortcut("x")}
+				onSelect={() =>
+					run(async () => {
+						const markdown = serializeSelectedBlocksAsMarkdown(editor);
+						if (!markdown) return;
+						const copied = await copyTextToClipboard(markdown, {
+							errorMessage: t("contextMenu.copyFailed"),
+						});
+						if (!copied) return;
+						removeSelectedBlocks(editor);
+					})
+				}
+			>
+				<Scissors className="size-4" />
+				{t("contextMenu.cut")}
+			</MenuItem>
+			<MenuItem
+				onSelect={() => {
+					run(() => {
+						duplicateSelectedBlocks(editor);
+					});
+				}}
+			>
+				<CopyPlus className="size-4" />
+				{t("blockDrag.duplicate")}
+			</MenuItem>
+			<div className="-mx-1 my-1 h-px bg-border" />
+			<MenuItem
+				destructive
+				onSelect={() => {
+					run(() => {
+						removeSelectedBlocks(editor);
+						editor.getApi(BlockSelectionPlugin).blockSelection.deselect();
+					});
+				}}
+			>
+				<Trash2 className="size-4" />
+				{t("blockDrag.delete")}
+			</MenuItem>
+		</>
+	);
+}
+
+/**
  * Notion 6-dot handle: hovering the handle opens the block action list;
  * click-hold and drag (via `handleRef`) moves the block.
  */
@@ -90,8 +176,6 @@ export function BlockHandleMenu({
 	onPrepareDrag,
 	style,
 }: BlockHandleMenuProps) {
-	const { t } = useTranslation("editor");
-	const editor = useEditorRef();
 	const [open, setOpen] = useState(false);
 	const closeTimerRef = useRef<number | null>(null);
 
@@ -122,6 +206,8 @@ export function BlockHandleMenu({
 		}, MENU_CLOSE_MS);
 	}, [setMenuOpen]);
 
+	const closeMenu = useCallback(() => setMenuOpen(false), [setMenuOpen]);
+
 	useEffect(() => {
 		if (isDragging) setMenuOpen(false);
 	}, [isDragging, setMenuOpen]);
@@ -135,15 +221,6 @@ export function BlockHandleMenu({
 		[],
 	);
 
-	const run = useCallback(
-		(action: () => void | Promise<void>) => {
-			resolveHandleBlocks(editor, element);
-			void action();
-			setMenuOpen(false);
-		},
-		[editor, element, setMenuOpen],
-	);
-
 	return (
 		<Popover open={open && !isDragging} modal={false}>
 			<PopoverAnchor asChild>
@@ -154,7 +231,7 @@ export function BlockHandleMenu({
 						ref={handleRef}
 						role="button"
 						tabIndex={0}
-						aria-label={t("blockDrag.handle")}
+						aria-label={i18n.t("editor:blockDrag.handle")}
 						data-plate-prevent-deselect=""
 						className={cn(
 							"flex size-full items-center justify-center rounded-sm text-muted-foreground",
@@ -189,61 +266,7 @@ export function BlockHandleMenu({
 				onPointerEnter={openMenu}
 				onPointerLeave={scheduleClose}
 			>
-				<MenuItem
-					shortcut={formatModShortcut("c")}
-					onSelect={() =>
-						run(async () => {
-							const markdown = serializeSelectedBlocksAsMarkdown(editor);
-							if (!markdown) return;
-							await copyTextToClipboard(markdown, {
-								errorMessage: t("contextMenu.copyFailed"),
-							});
-						})
-					}
-				>
-					<Copy className="size-4" />
-					{t("contextMenu.copy")}
-				</MenuItem>
-				<MenuItem
-					shortcut={formatModShortcut("x")}
-					onSelect={() =>
-						run(async () => {
-							const markdown = serializeSelectedBlocksAsMarkdown(editor);
-							if (!markdown) return;
-							const copied = await copyTextToClipboard(markdown, {
-								errorMessage: t("contextMenu.copyFailed"),
-							});
-							if (!copied) return;
-							removeSelectedBlocks(editor);
-						})
-					}
-				>
-					<Scissors className="size-4" />
-					{t("contextMenu.cut")}
-				</MenuItem>
-				<MenuItem
-					onSelect={() => {
-						run(() => {
-							duplicateSelectedBlocks(editor);
-						});
-					}}
-				>
-					<CopyPlus className="size-4" />
-					{t("blockDrag.duplicate")}
-				</MenuItem>
-				<div className="-mx-1 my-1 h-px bg-border" />
-				<MenuItem
-					destructive
-					onSelect={() => {
-						run(() => {
-							removeSelectedBlocks(editor);
-							editor.getApi(BlockSelectionPlugin).blockSelection.deselect();
-						});
-					}}
-				>
-					<Trash2 className="size-4" />
-					{t("blockDrag.delete")}
-				</MenuItem>
+				<BlockHandleActions element={element} onDone={closeMenu} />
 			</PopoverContent>
 		</Popover>
 	);
