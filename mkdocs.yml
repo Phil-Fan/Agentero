@@ -63,6 +63,7 @@ nav:
       - Vault FS: backend/vault.md
       - 论文入库: backend/paper-import.md
       - Identifier Lookup: backend/identifier-lookup.md
+      - 学术搜索 API 一览: backend/academic-search-apis.md
       - 参考文献解析: backend/citation-parsing.md
       - Skill 导入: backend/skill-import.md
       - Zotero Connector: backend/connector.md
@@ -77,6 +78,7 @@ nav:
       - 运行日志: backend/logging.md
       - Vault Doctor: backend/doctor.md
       - 遥测: backend/telemetry.md
+      - 云同步（S3）: backend/sync.md
       - CLI: backend/cli.md
       - API 全表: backend/api.md
 
@@ -87,7 +89,10 @@ nav:
       - 标注惰性定位: development/mark-locate-lazy.md
       - 标注即时定位: development/mark-locate-eager.md
       - 广场 Plaza: development/plaza.md
+      - 广场订阅（Feeds）— MVP: development/plaza-feeds.md
       - 使用记录总结 (#239): development/usage-analytics.md
+      - 生命周期事件系统（Lifecycle Events）: development/lifecycle-events.md
+      - 云同步（S3）设计草稿: development/cloud-sync-s3.md
 
   - 测试:
       - 概览: test/index.md
@@ -116,6 +121,11 @@ nav:
       - 远程 Vault 无法新建文件: bug_fix/remote-create-folder-exists.md
       - 远程删除后 list 报 NoSuchFile: bug_fix/remote-delete-list-nosuchfile.md
       - 缩放时待办 checkbox 错位: bug_fix/todo-checkbox-scale-align.md
+      - Agent 引用来源外部链接在应用内弹出空标签页: bug_fix/agent-external-source-blank-window.md
+      - Cool Papers decode_entities 切中文 panic + 广场每次新建连接: bug_fix/coolpapers-entity-utf8-panic.md
+      - 版面解析任务一直排队（JobCenter 槽位泄漏）: bug_fix/layout-analyze-job-slot-leak.md
+      - 期刊 / venue 取不全（#399）: bug_fix/publication-venue-api.md
+      - 导入第三方 Skill 报「description is too long」（#355）: bug_fix/skill-import-description-length.md
 
 markdown_extensions:
   - admonition
