@@ -115,16 +115,29 @@ describe("cross-reference name parsers", () => {
 	it("parses standard hyperref names", () => {
 		expect(hyperrefCrossrefParser("figure.1")).toEqual({ kind: "figure" });
 		expect(hyperrefCrossrefParser("subfigure.1a")).toEqual({ kind: "figure" });
+		expect(hyperrefCrossrefParser("figure.caption.2")).toEqual({
+			kind: "figure",
+		});
 		expect(hyperrefCrossrefParser("table.2")).toEqual({ kind: "table" });
+		expect(hyperrefCrossrefParser("table.caption.2")).toEqual({
+			kind: "table",
+		});
 		expect(hyperrefCrossrefParser("equation.3")).toEqual({ kind: "equation" });
 		expect(hyperrefCrossrefParser("subequation.3a")).toEqual({
+			kind: "equation",
+		});
+		expect(hyperrefCrossrefParser("equation.E.4")).toEqual({
 			kind: "equation",
 		});
 		expect(hyperrefCrossrefParser("algorithm.1")).toEqual({
 			kind: "algorithm",
 		});
 		expect(hyperrefCrossrefParser("algocf.1")).toEqual({ kind: "algorithm" });
+		expect(hyperrefCrossrefParser("algocf.caption.1")).toEqual({
+			kind: "algorithm",
+		});
 		expect(hyperrefCrossrefParser("section.1")).toBeNull();
+		expect(hyperrefCrossrefParser("algocfline.1")).toBeNull();
 	});
 
 	it("parses ACS mk:* names", () => {

@@ -102,12 +102,21 @@ export type DestinationCoordResolver = (
  * (algorithm2e uses `algocf.<n>`).
  */
 export const hyperrefCrossrefParser: CrossrefNameParser = (name) => {
-	if (name.startsWith("figure.") || name.startsWith("subfigure."))
+	if (
+		name.startsWith("figure.") ||
+		name.startsWith("subfigure.") ||
+		name.startsWith("figure.caption.")
+	)
 		return { kind: "figure" };
-	if (name.startsWith("table.")) return { kind: "table" };
+	if (name.startsWith("table.") || name.startsWith("table.caption."))
+		return { kind: "table" };
 	if (name.startsWith("equation.") || name.startsWith("subequation."))
 		return { kind: "equation" };
-	if (name.startsWith("algorithm.") || name.startsWith("algocf."))
+	if (
+		name.startsWith("algorithm.") ||
+		name.startsWith("algocf.") ||
+		name.startsWith("algocf.caption.")
+	)
 		return { kind: "algorithm" };
 	return null;
 };
