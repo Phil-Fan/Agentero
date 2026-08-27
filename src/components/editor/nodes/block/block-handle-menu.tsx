@@ -31,6 +31,8 @@ import {
 import { formatModShortcut } from "@/lib/shell/shortcuts";
 
 const MENU_CLOSE_MS = 120;
+/** Past MENU_CLOSE_MS plus the PopoverContent fade, so the exit animation runs. */
+const MENU_UNMOUNT_MS = 400;
 
 type BlockHandleMenuProps = {
 	element: TElement;
@@ -177,13 +179,31 @@ export function BlockHandleMenu({
 	style,
 }: BlockHandleMenuProps) {
 	const [open, setOpen] = useState(false);
+	// A long note has one handle per block; mounting a Radix Popover root for each
+	// of them up front is thousands of components nobody has hovered yet. Arm on
+	// first pointer entry, release once the fade-out is done.
+	const [mounted, setMounted] = useState(false);
 	const closeTimerRef = useRef<number | null>(null);
+	const unmountTimerRef = useRef<number | null>(null);
 
 	const setMenuOpen = useCallback(
 		(next: boolean) => {
 			if (closeTimerRef.current != null) {
 				window.clearTimeout(closeTimerRef.current);
 				closeTimerRef.current = null;
+			}
+			if (unmountTimerRef.current != null) {
+				window.clearTimeout(unmountTimerRef.current);
+				unmountTimerRef.current = null;
+			}
+			if (next) {
+				setMounted(true);
+			} else {
+				// Radix needs the root alive for the whole exit animation.
+				unmountTimerRef.current = window.setTimeout(() => {
+					unmountTimerRef.current = null;
+					setMounted(false);
+				}, MENU_UNMOUNT_MS);
 			}
 			setOpen(next);
 			onMenuOpenChange?.(next);
@@ -217,57 +237,66 @@ export function BlockHandleMenu({
 			if (closeTimerRef.current != null) {
 				window.clearTimeout(closeTimerRef.current);
 			}
+			if (unmountTimerRef.current != null) {
+				window.clearTimeout(unmountTimerRef.current);
+			}
 		},
 		[],
 	);
 
 	return (
-		<Popover open={open && !isDragging} modal={false}>
-			<PopoverAnchor asChild>
-				<div className="absolute top-0 left-0 h-6 w-full" style={style}>
-					{/* Native <button> cannot start HTML5 drag. Connector lives here. */}
-					{/* biome-ignore lint/a11y/useSemanticElements: HTML5 drag cannot start from <button> */}
-					<div
-						ref={handleRef}
-						role="button"
-						tabIndex={0}
-						aria-label={i18n.t("editor:blockDrag.handle")}
-						data-plate-prevent-deselect=""
-						className={cn(
-							"flex size-full items-center justify-center rounded-sm text-muted-foreground",
-							"hover:bg-muted hover:text-foreground [&_svg]:pointer-events-none",
-							isDragging ? "cursor-grabbing" : "cursor-grab",
-						)}
-						onPointerEnter={openMenu}
-						onPointerLeave={scheduleClose}
-						onMouseDown={(event) => {
-							if (event.button !== 0 || event.shiftKey) return;
-							event.preventDefault();
-							window.getSelection()?.removeAllRanges();
-							onPrepareDrag(event);
-						}}
-						onKeyDown={(event) => {
-							if (event.key === "Enter" || event.key === " ") {
-								event.preventDefault();
-								openMenu();
-							}
-						}}
-					>
-						<GripVertical className="size-3.5" aria-hidden />
-					</div>
-				</div>
-			</PopoverAnchor>
-			<PopoverContent
-				side="left"
-				align="start"
-				sideOffset={6}
-				className="w-44 gap-0 p-1"
-				onOpenAutoFocus={(event) => event.preventDefault()}
+		<div className="absolute top-0 left-0 h-6 w-full" style={style}>
+			{/* Stays at this position in the tree whether or not the Popover is
+			    mounted: remounting would drop the react-dnd drag connector, and it
+			    would do so between pointerenter and mousedown. */}
+			{/* Native <button> cannot start HTML5 drag. Connector lives here. */}
+			{/* biome-ignore lint/a11y/useSemanticElements: HTML5 drag cannot start from <button> */}
+			<div
+				ref={handleRef}
+				role="button"
+				tabIndex={0}
+				aria-label={i18n.t("editor:blockDrag.handle")}
+				data-plate-prevent-deselect=""
+				className={cn(
+					"flex size-full items-center justify-center rounded-sm text-muted-foreground",
+					"hover:bg-muted hover:text-foreground [&_svg]:pointer-events-none",
+					isDragging ? "cursor-grabbing" : "cursor-grab",
+				)}
 				onPointerEnter={openMenu}
 				onPointerLeave={scheduleClose}
+				onMouseDown={(event) => {
+					if (event.button !== 0 || event.shiftKey) return;
+					event.preventDefault();
+					window.getSelection()?.removeAllRanges();
+					onPrepareDrag(event);
+				}}
+				onKeyDown={(event) => {
+					if (event.key === "Enter" || event.key === " ") {
+						event.preventDefault();
+						openMenu();
+					}
+				}}
 			>
-				<BlockHandleActions element={element} onDone={closeMenu} />
-			</PopoverContent>
-		</Popover>
+				<GripVertical className="size-3.5" aria-hidden />
+			</div>
+			{mounted ? (
+				<Popover open={open && !isDragging} modal={false}>
+					{/* Overlays the grip's box, so positioning matches anchoring the
+					    grip itself — without reparenting it. */}
+					<PopoverAnchor className="pointer-events-none absolute inset-0" />
+					<PopoverContent
+						side="left"
+						align="start"
+						sideOffset={6}
+						className="w-44 gap-0 p-1"
+						onOpenAutoFocus={(event) => event.preventDefault()}
+						onPointerEnter={openMenu}
+						onPointerLeave={scheduleClose}
+					>
+						<BlockHandleActions element={element} onDone={closeMenu} />
+					</PopoverContent>
+				</Popover>
+			) : null}
+		</div>
 	);
 }
