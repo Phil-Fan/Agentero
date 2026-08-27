@@ -6,7 +6,7 @@ import {
 	useTocSideBar,
 	useTocSideBarState,
 } from "@platejs/toc/react";
-import { NodeApi, type SlateEditor } from "platejs";
+import { ElementApi, NodeApi, type SlateEditor, type TNode } from "platejs";
 import i18n from "@/i18n";
 import { cn } from "@/lib/core/utils";
 
@@ -39,37 +39,75 @@ type TocHeadingCacheEntry = {
 /** Per-editor cache; editors are keyed weakly so tabs can be GC'd. */
 const tocHeadingCache = new WeakMap<object, TocHeadingCacheEntry>();
 
+/** A heading located relative to the subtree it was found in. */
+type RelHeading = Omit<Heading, "path"> & { path: number[] };
+
+const NO_HEADINGS: RelHeading[] = [];
+
+/**
+ * Headings inside one node's subtree, keyed on the node object.
+ *
+ * Slate reuses every node object an edit did not touch, so a keystroke
+ * invalidates only the block it landed in. Recursion skips text leaves, which
+ * cannot contain a heading and make up the bulk of a long document.
+ */
+const subtreeHeadingCache = new WeakMap<object, RelHeading[]>();
+
+function subtreeHeadings(node: TNode): RelHeading[] {
+	const cached = subtreeHeadingCache.get(node);
+	if (cached) return cached;
+
+	const found: RelHeading[] = [];
+	if (isHeading(node)) {
+		const title = NodeApi.string(node);
+		if (title) {
+			const { id, type } = node as { id?: string; type: string };
+			found.push({
+				id: id ?? "",
+				depth: headingDepthByType[type] ?? 6,
+				path: [],
+				title,
+				type,
+			});
+		}
+	} else if (ElementApi.isElement(node)) {
+		for (const [index, child] of node.children.entries()) {
+			if (!ElementApi.isElement(child)) continue;
+			for (const heading of subtreeHeadings(child)) {
+				found.push({ ...heading, path: [index, ...heading.path] });
+			}
+		}
+	}
+
+	const result = found.length === 0 ? NO_HEADINGS : found;
+	subtreeHeadingCache.set(node, result);
+	return result;
+}
+
 /**
  * `TocPlugin` `queryHeading` override.
  *
- * The library's `getHeadingList` walks the whole document and returns a fresh
- * array on every call — and both `useTocSideBarState` and its content observer
- * select it, so each edit cost two full walks plus an IntersectionObserver
- * rebuild (the observer effect depends on the list reference). Memoizing on
- * `editor.children` shares one walk between the two selectors per edit, and
- * keeping the array reference stable while heading id/depth/title are
- * unchanged means edits elsewhere neither re-render the sidebar nor rebuild
- * the observer.
+ * The library's `getHeadingList` walks the whole document — every element and
+ * every text leaf — and returns a fresh array on every call, while both
+ * `useTocSideBarState` and its content observer select it. On a long note that
+ * landed a full traversal on every keystroke, plus an IntersectionObserver
+ * rebuild (the observer effect depends on the list reference).
+ *
+ * Three layers avoid that: `editor.children` identity short-circuits repeat
+ * calls within one edit, `subtreeHeadings` reduces an edit to re-scanning the
+ * one block it touched, and holding the array reference while heading
+ * id/depth/title are unchanged keeps edits elsewhere from re-rendering the
+ * sidebar or rebuilding the observer.
  */
 export function queryTocHeadings(editor: SlateEditor): Heading[] {
 	let entry = tocHeadingCache.get(editor);
 	if (entry && entry.children === editor.children) return entry.list;
 
 	const list: Heading[] = [];
-	for (const [node, path] of editor.api.nodes({
-		at: [],
-		match: (n) => isHeading(n),
-	})) {
-		const title = NodeApi.string(node);
-		if (!title) continue;
-		const { id, type } = node as { id?: string; type: string };
-		list.push({
-			id: id ?? "",
-			depth: headingDepthByType[type] ?? 6,
-			path,
-			title,
-			type,
-		});
+	for (const [index, node] of editor.children.entries()) {
+		for (const heading of subtreeHeadings(node)) {
+			list.push({ ...heading, path: [index, ...heading.path] });
+		}
 	}
 	const key = list
 		.map(
@@ -85,14 +123,21 @@ export function queryTocHeadings(editor: SlateEditor): Heading[] {
 	if (key !== entry.key) {
 		entry.key = key;
 		entry.list = list;
+		return entry.list;
+	}
+	// Same headings at shifted positions (an edit above them). The sidebar renders
+	// only id/depth/title, so refreshing `path` in place keeps the array and object
+	// references stable while `onContentClick`'s `NodeApi.get` stays correct.
+	for (const [index, heading] of entry.list.entries()) {
+		heading.path = list[index].path;
 	}
 	return entry.list;
 }
 
 /**
- * Mounting this component costs two full-document walks per edit (both
- * `useTocSideBarState` and its observer call `getHeadingList`), so the caller
- * gates on this threshold instead of letting the component render null.
+ * Mounting this component adds two editor selectors and an
+ * IntersectionObserver over every heading, so the caller gates on this
+ * threshold instead of letting the component render null.
  */
 export const MINIMUM_TOC_HEADINGS = 3;
 
