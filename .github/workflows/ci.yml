@@ -28,16 +28,20 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Assert desktop bundle ships only a CLI stub
+      - name: Assert desktop package does not embed CLI
         if: matrix.task == 'quality'
-        # Desktop installers must not embed the multi-MB headless CLI (#285).
-        # An unrelated edit to beforeBuildCommand silently re-embedded it (#320).
+        # Desktop installers must not embed the headless CLI (#285). A prior
+        # guard required beforeBuildCommand to run cli:bundle:stub; that stub
+        # path was removed in 9dee13f0 after the fake Windows .exe triggered
+        # "Unsupported 16-bit application" (#320 follow-up). Guard the config
+        # directly: bundle.externalBin must stay empty/absent.
         run: |
           set -euo pipefail
           node --input-type=commonjs -e "
-            const cmd = require('./src-tauri/tauri.conf.json').build.beforeBuildCommand;
-            if (!cmd.includes('cli:bundle:stub')) {
-              console.error('::error file=src-tauri/tauri.conf.json::beforeBuildCommand must run cli:bundle:stub so desktop packages do not embed the CLI (#320). Got: ' + cmd);
+            const conf = require('./src-tauri/tauri.conf.json');
+            const bins = conf.bundle && conf.bundle.externalBin;
+            if (Array.isArray(bins) && bins.length > 0) {
+              console.error('::error file=src-tauri/tauri.conf.json::bundle.externalBin must be empty so desktop packages do not embed the CLI (#285/#320). Got: ' + JSON.stringify(bins));
               process.exit(1);
             }
           "
@@ -106,10 +110,6 @@ jobs:
           # missing even for clippy/tests that never bundle.
           mkdir -p src-tauri/pdfium
           cp "$dest/lib/libpdfium.dylib" src-tauri/pdfium/libpdfium.dylib
-      - name: Stub bundled CLI for Tauri externalBin
-        # tauri.conf.json lists binaries/agentero-cli; build-script requires the
-        # triple-suffixed file to exist even for lib/tests (not only app bundle).
-        run: node scripts/prepare-bundled-cli.mjs --stub
       - name: Run Rust checks
         run: |
           set -euo pipefail
