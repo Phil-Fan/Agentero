@@ -15,6 +15,7 @@
 		"remote-access": "Remote access",
 		"about": "About",
 		"quickSetup": "Quick setup wizard",
+		"featureTour": "Feature tour",
 		"sync": "Sync"
 	},
 	"remoteAccess": {

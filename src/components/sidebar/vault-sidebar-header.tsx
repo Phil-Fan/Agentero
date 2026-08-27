@@ -196,6 +196,7 @@ export const VaultSidebarHeader = memo(function VaultSidebarHeader({
 											type="button"
 											variant="ghost"
 											size="icon-xs"
+											data-magic-wand
 											aria-label={t("lookup.magicWand")}
 											disabled={lookupDisabled}
 										>

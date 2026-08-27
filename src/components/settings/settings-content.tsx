@@ -1,6 +1,7 @@
 import {
 	Bot,
 	CloudUpload,
+	Compass,
 	Info,
 	Keyboard,
 	Languages,
@@ -31,7 +32,10 @@ import type {
 } from "@/components/settings/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/core/utils";
-import { broadcastOnboardingRequest } from "@/lib/onboarding/api";
+import {
+	broadcastOnboardingRequest,
+	broadcastTourRequest,
+} from "@/lib/onboarding/api";
 import type { AppSettings } from "@/lib/settings";
 import { patchSettings } from "@/lib/settings/react-store";
 import { closeSettingsWindow } from "@/lib/shell/settings-window";
@@ -304,8 +308,8 @@ export function SettingsContent({
 					})}
 				</ul>
 
-				{/* Sidebar footer: replay the first-run setup wizard. */}
-				<div className="border-t px-2 py-2">
+				{/* Sidebar footer: replay the first-run wizard / feature tour. */}
+				<div className="flex flex-col gap-1.5 border-t px-2 py-2">
 					<Button
 						type="button"
 						variant="outline"
@@ -319,6 +323,19 @@ export function SettingsContent({
 					>
 						<Wand2 data-icon="inline-start" />
 						{t("nav.quickSetup")}
+					</Button>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="w-full"
+						onClick={() => {
+							broadcastTourRequest();
+							closeSettingsWindow();
+						}}
+					>
+						<Compass data-icon="inline-start" />
+						{t("nav.featureTour")}
 					</Button>
 				</div>
 			</nav>

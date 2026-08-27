@@ -68,5 +68,30 @@
 		"next": "Next",
 		"back": "Back",
 		"finish": "Finish setup"
+	},
+	"tour": {
+		"sidebar": {
+			"title": "Your vault, your files",
+			"desc": "Each paper is a plain folder with its PDF, notes and LaTeX source — Obsidian, VS Code and Git can take over anytime."
+		},
+		"magicWand": {
+			"title": "One-click import",
+			"desc": "Paste a DOI, arXiv ID or link; metadata, PDF and LaTeX source are fetched automatically. {{magicWandShortcut}} opens it anytime."
+		},
+		"workspace": {
+			"title": "Split-screen reading",
+			"desc": "Papers open with the PDF on the left and notes on the right. Select text to highlight, annotate, translate or ask."
+		},
+		"agent": {
+			"title": "Your agent, ready to help",
+			"desc": "Reuses your locally signed-in agent — no API keys. The current paper joins the context automatically; click a suggested question to summarize it."
+		},
+		"titlebar": {
+			"title": "That's it!",
+			"desc": "Toggle panels here. {{settingsShortcut}} opens Settings, {{quickOpenShortcut}} jumps anywhere. Tutorial notes were created in your vault — start there."
+		},
+		"next": "Next",
+		"back": "Back",
+		"done": "Done"
 	}
 }

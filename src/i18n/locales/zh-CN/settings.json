@@ -15,6 +15,7 @@
 		"remote-access": "远程访问",
 		"about": "关于",
 		"quickSetup": "快速配置向导",
+		"featureTour": "功能导引",
 		"sync": "同步"
 	},
 	"remoteAccess": {

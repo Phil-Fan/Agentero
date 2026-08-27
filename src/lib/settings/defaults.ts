@@ -65,6 +65,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	plazaEnabled: true,
 	plazaHiddenSources: [],
 	onboardingDone: false,
+	featureTourDone: false,
 	theme: "system",
 	uiTheme: DEFAULT_UI_THEME,
 	locale: "system",

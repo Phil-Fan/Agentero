@@ -186,6 +186,11 @@ export type AppSettings = {
 	 * onboarding overlay on the main window for fresh installs.
 	 */
 	onboardingDone: boolean;
+	/**
+	 * Post-vault feature tour (driver.js highlight walkthrough) completed or
+	 * skipped. `false` starts the tour the first time a vault is open.
+	 */
+	featureTourDone: boolean;
 	// Appearance
 	theme: ThemePreference;
 	/**

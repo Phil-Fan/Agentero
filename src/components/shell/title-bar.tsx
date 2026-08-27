@@ -64,7 +64,10 @@ export const TitleBar = memo(function TitleBar({
 	const agentTemplate = useAgentChromeStore((s) => s.template);
 
 	return (
-		<header className="flex h-8 shrink-0 items-center border-b select-none">
+		<header
+			data-titlebar
+			className="flex h-8 shrink-0 items-center border-b select-none"
+		>
 			{/*
 			  Traffic lights: x=14, three ~14px buttons + gaps → ends ~68px.
 			  Keep extra gap so the sidebar toggle never hugs the lights.
@@ -85,6 +88,7 @@ export const TitleBar = memo(function TitleBar({
 								type="button"
 								variant="ghost"
 								size="icon-xs"
+								data-tb-sidebar
 								aria-label={
 									sidebarCollapsed
 										? t("titlebar.showLeftSidebar")
@@ -119,6 +123,7 @@ export const TitleBar = memo(function TitleBar({
 										type="button"
 										variant="ghost"
 										size="icon-xs"
+										data-tb-agent
 										aria-label={
 											rightSidebarOpen
 												? t("titlebar.hideRightSidebar")

@@ -31,6 +31,7 @@ import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
 import { useUiStore, useVaultStore } from "@/hooks/use-app-stores";
 import { useConnectorSync } from "@/hooks/use-connector-sync";
 import { useExternalFileDrop } from "@/hooks/use-external-file-drop";
+import { useFeatureTour } from "@/hooks/use-feature-tour";
 import { useLayoutModelPrefetch } from "@/hooks/use-layout-model-prefetch";
 import { useMcpSync } from "@/hooks/use-mcp-sync";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
@@ -189,6 +190,8 @@ export default function App() {
 	useLayoutModelPrefetch();
 	// Cancel WebView navigation on any OS file drop (PDF import is tree-only).
 	useExternalFileDrop();
+	// First-vault highlight tour (driver.js) + Settings replay listener.
+	useFeatureTour();
 	const {
 		sidebarPanelRef,
 		rightSidebarPanelRef,
@@ -401,6 +404,7 @@ export default function App() {
 								>
 									<aside
 										ref={sidebarAsideRef}
+										data-vault-sidebar
 										className="flex h-full min-h-0 flex-col overflow-hidden bg-muted/20"
 									>
 										<VaultSidebar />
