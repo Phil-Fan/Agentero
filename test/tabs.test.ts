@@ -7,6 +7,7 @@ import {
 	extractTabsFromLayout,
 	insertPlaceholderTab,
 	loadPersistedTabs,
+	panelPersistParams,
 	paperReadingPlacements,
 	patchTab,
 	readingPairCloseIds,
@@ -297,6 +298,46 @@ describe("extractTabsFromLayout", () => {
 		expect(extracted.tabs).toEqual([
 			{ id: "/vault/x.md", path: "/vault/x.md", mode: "markdown" },
 		]);
+	});
+
+	it("carries persisted titles for restore before hydration (#410)", () => {
+		const layout = {
+			panels: {
+				"/vault/papers/x": {
+					id: "/vault/papers/x",
+					params: {
+						panelId: "/vault/papers/x",
+						path: "/vault/papers/x",
+						mode: "pdf",
+						title: "Attention Is All You Need",
+					},
+				},
+			},
+		};
+		const extracted = extractTabsFromLayout(layout);
+		expect(extracted.tabs).toEqual([
+			{
+				id: "/vault/papers/x",
+				path: "/vault/papers/x",
+				mode: "pdf",
+				title: "Attention Is All You Need",
+			},
+		]);
+	});
+});
+
+describe("panelPersistParams", () => {
+	it("round-trips the display title into layout params", () => {
+		const tab = makeTab("/vault/papers/x", {
+			kind: "paper",
+			title: "Attention Is All You Need",
+		});
+		expect(panelPersistParams(tab)).toEqual({
+			panelId: "/vault/papers/x",
+			path: "/vault/papers/x",
+			mode: "markdown",
+			title: "Attention Is All You Need",
+		});
 	});
 });
 

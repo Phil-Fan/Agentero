@@ -733,7 +733,10 @@ export const DockWorkspace = memo(
 				if (!panel) continue;
 				applyTabPanelMeta(panel, tab);
 			}
-		}, [metaKey]);
+			// Param updates (e.g. resolved title) don't emit onDidLayoutChange;
+			// re-save so the next restore shows titles before hydration (#410).
+			scheduleLayoutSave(api);
+		}, [metaKey, scheduleLayoutSave]);
 
 		// Activate panel when React activePanelId changes (openTab / library).
 		useEffect(() => {

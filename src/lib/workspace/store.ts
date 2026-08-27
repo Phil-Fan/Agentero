@@ -61,9 +61,14 @@ export function initWorkspaceStore(): void {
 	const persisted = loadPersistedTabs();
 	if (!persisted?.tabs.length) return;
 	workspaceStore.setState({
-		tabs: persisted.tabs.map((pt) =>
-			createPlaceholderTab(pt.path, pt.mode, pt.id),
-		),
+		tabs: persisted.tabs.map((pt) => {
+			const tab = createPlaceholderTab(pt.path, pt.mode, pt.id);
+			// Real-path placeholders default to the folder basename; prefer the
+			// persisted title so strips show paper names before hydration.
+			return pt.title && tab.kind === "file"
+				? { ...tab, title: pt.title }
+				: tab;
+		}),
 		activeTabId: persisted.activeId ?? null,
 		dockLayout: persisted.layout ?? null,
 	});

@@ -21,9 +21,9 @@
 
 标签组 chip 的颜色菜单会将展开/收起 icon 染为对应颜色，并同步用于组内 tab 的强调线；清除颜色后恢复默认颜色。
 
-布局只存 dockview `toJSON()`；path/mode 在 panel params。同一路径可存在多个 split pane，panel id 保留 pane 实例后缀用于恢复布局。
+布局只存 dockview `toJSON()`；path/mode/title 在 panel params。同一路径可存在多个 split pane，panel id 保留 pane 实例后缀用于恢复布局。
 
-启动恢复只 hydrate 每个 Dockview group 当前可见的 panel；隐藏标签在首次切换到前台时再读取资源。PDFium 保留当前可见与最近使用的至多两个 PDF viewer，本地 PDF `ArrayBuffer` 离开保留集合后释放，避免多标签工作区重启时并发加载全部 PDF 并长期占用 WebContent 内存。Markdown 编辑器（含 NOTES）同样保活：至多两个最近使用的编辑器保持挂载，切换标签不再重建 Plate；离开保留集合的编辑器卸载为占位，切回时重新反序列化，卸载时未落盘的编辑会照常 flush。
+启动恢复只 hydrate 每个 Dockview group 当前可见的 panel；隐藏标签在首次切换到前台时再读取资源。恢复出的占位 tab 直接用 params 里的 title 显示（论文名），无需等资源加载；未携带 title 的旧布局回退为文件夹名，激活后由资源加载刷新。PDFium 保留当前可见与最近使用的至多两个 PDF viewer，本地 PDF `ArrayBuffer` 离开保留集合后释放，避免多标签工作区重启时并发加载全部 PDF 并长期占用 WebContent 内存。Markdown 编辑器（含 NOTES）同样保活：至多两个最近使用的编辑器保持挂载，切换标签不再重建 Plate；离开保留集合的编辑器卸载为占位，切回时重新反序列化，卸载时未落盘的编辑会照常 flush。
 
 ## 面板类型
 

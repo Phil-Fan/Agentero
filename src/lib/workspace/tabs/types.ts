@@ -81,6 +81,8 @@ export type PersistedTab = {
 	id?: string;
 	path: string;
 	mode: CenterViewMode;
+	/** Last resolved display title (paper metadata title); shown before hydration. */
+	title?: string;
 };
 
 /**
@@ -99,6 +101,8 @@ export type PanelPersistParams = {
 	panelId: string;
 	path: string;
 	mode: CenterViewMode;
+	/** Display title at save time; restore shows it before resources hydrate. */
+	title: string;
 };
 
 export const NOTES_PLACEHOLDER =
