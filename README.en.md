@@ -17,30 +17,50 @@
 </p>
 
 If this project helps you, please **give it a star** on GitHub!
+
 <p align="center">
   <a href="https://github.com/poco-ai/agentero/stargazers"><img src="https://github.com/user-attachments/assets/1d49b049-89ae-4992-a92d-d2411c8053b6" alt="Give me a star" width="480" /></a>
 </p>
 
-Traditional reference managers are not agent-friendly:
+**Context is everything**.
 
-- Reading highlights and notes are locked inside individual paper files, making them hard for agents to reuse across papers.
-- Every conversation requires re-supplying context — there is no stable local knowledge map.
-- PDFs are human-friendly, but they are not the most comfortable reading material for an agent.
+If today's models are $f$ — smarter and more alike than ever — then what determines their output $y$ is the input $x$, namely the context.
 
-**Agentero** aims to build an agent-friendly, agent-native way of managing references, and to explore how humans and agents collaborate in literature management.
+Yet research context today is fragmented: PDFs and highlights live in Zotero, notes in Obsidian, and your discussions with AI in chat windows. These pieces don't talk to each other, so even the smartest agent can only see fragments.
+
+That's why we built **Agentero**: an agent-friendly, agent-native way of managing references, exploring how humans and agents can collaborate in literature management.
+
+Agentero is a local-first research workbench for the agent era, with AI participating in input, processing, and output. It does not lock you into a specific agent or model — connect your own local agent via **ACP** (BYOA), and keep your working context in your local Vault.
 
 ## Features
 
-- **BYOA** (Bring Your Own Agent): connect your local agent via ACP. Agentero is not locked to any specific agent or model, and your working context stays in the local Vault.
-- **Agent-native experience**: selection-based chat, paper import, and Skill import let agents take part in search, reading, and organization workflows.
-- **Zotero ecosystem bridge**: compatible import paths from the Zotero ecosystem — save papers from identifiers, links, or the browser extension. Import a Zotero library in one click, keeping tags, notes, and attachments. Export BibTeX / BibLaTeX anytime to plug into your LaTeX writing flow.
-- **Figure, table & formula parsing**: figures, tables, formulas, and algorithms in papers are all parsed and understood in context.
-- **Paper translation**: full-paper translation, plus side-by-side original/translated views after selecting text, with terminology kept consistent using paper context.
-- **Wikilinks & knowledge graph**: connect papers, concepts, and notes with Obsidian-style `[[wikilinks]]` and browse your local knowledge graph.
-- **Deep PDF reading**: page navigation, fit-width/fit-page, outline, ⌘F search, smooth text selection, highlights, annotations, Q&A, and translation.
-- **WYSIWYG Markdown**: live preview and editing.
-- **Reference management**: parse a paper's references and import them with one click.
-- **Remote library access**: browse remote knowledge bases over an SSH tunnel — data stays on your own server.
+- **Agent-native experience**
+  - Connect your local agent via **ACP**. Agentero does not lock you into any specific agent or model, and your working context stays in the local Vault.
+  - Quickly install, configure, and uninstall agents.
+  - Selection-based chat, paper import, and Skill import let agents take part in search, reading, and organization workflows.
+  - Built-in CLI for importing papers, fetching metadata, writing notes, managing highlights, and more.
+  - Built-in MCP lets you expose Agentero capabilities to ChatGPT and other external clients.
+- **Zotero ecosystem bridge**: compatible with Zotero-style import paths — save papers from identifiers, links, or the browser extension. Import a Zotero library in one click, keeping tags, notes, and attachments. Export BibTeX / BibLaTeX anytime to plug into your LaTeX writing flow.
+- **Paper import**
+  - Browse the [Cool Papers](https://papers.cool/) site inside the app and import papers.
+  - Import papers from ModelScope.
+  - Subscribe to RSS feeds.
+  - Get daily arXiv recommendations based on your existing library.
+  - Search by paper title to import.
+  - Import papers via the Zotero browser extension.
+- **Library management**
+  - Fetch publisher information for papers in your library and discover new papers that cite them.
+  - Parse a paper's references and import them with one click.
+  - Tags and filters for organizing your library.
+  - Quick jump to the corresponding arXiv or alphaXiv page.
+- **Reading and note-taking**
+  - WYSIWYG Markdown note editor.
+  - Obsidian-style `[[wikilinks]]` and `/` slash commands.
+  - One-click, page-level, and selection-based translation, with multiple free APIs and bring-your-own-key API support.
+  - Page navigation, fit-width/fit-page, outline, ⌘F search, smooth text selection, highlights, annotations, Q&A, and translation.
+  - Parse figures, tables, formulas, and algorithms in context.
+- **Cloud sync**: sync your Vault with S3-compatible cloud storage.
+- **Remote access**: browse remote knowledge bases over an SSH tunnel — data stays on your own server.
 - **Cross-platform**: Mac, Windows, and Linux, with shortcuts aligned with common software so your habits carry over.
 - **Multiple themes**: several theme styles to match different preferences.
 
