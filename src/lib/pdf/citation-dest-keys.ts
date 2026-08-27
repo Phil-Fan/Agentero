@@ -1,6 +1,6 @@
 /**
- * Exact in-text citation → bibliography entry resolution via hyperref named
- * destinations.
+ * Exact in-text citation → bibliography entry resolution and cross-reference
+ * (`\ref`) kind detection via PDF named destinations.
  *
  * LaTeX/hyperref writes each in-text citation link as a GoTo action to a named
  * destination `cite.<bibtexKey>`, and our reference sidecar carries the same key
@@ -8,6 +8,12 @@
  * `pageIndex` + y), so we read the name tree straight from the PDF bytes once
  * and index destinations by their coordinates — the same coordinates the viewer
  * gets back from a link target.
+ *
+ * Different publishers use different named-destination conventions (standard
+ * hyperref `figure.*`/`cite.*` vs. ACS `mk:fig*`/`mk:ref*`) and different
+ * destination types (`/XYZ` vs. `/FitR`). The parser layer below isolates those
+ * conventions so adding a new publisher is a matter of adding a small parser,
+ * not changing the core walk.
  *
  * Measured over 31 real papers / 3703 in-text citation links: 95% resolved, 0
  * wrong. Coordinates shared by several keys are dropped rather than guessed, so
@@ -25,8 +31,6 @@ import {
 	PDFString,
 } from "pdf-lib";
 
-const CITE_DEST_PREFIX = "cite.";
-
 /** Coordinate key: destination page + PDF-native y (as PDFium reports it). */
 export function citationDestKey(pageIndex: number, pdfY: number): string {
 	return `${pageIndex}:${pdfY.toFixed(1)}`;
@@ -35,7 +39,7 @@ export function citationDestKey(pageIndex: number, pdfY: number): string {
 /** `pageIndex:pdfY` → BibTeX key of the bibliography entry at that destination. */
 export type CitationDestKeyMap = ReadonlyMap<string, string>;
 
-/** Kind of numbered object a hyperref cross-reference points at. */
+/** Kind of numbered object a cross-reference points at. */
 export type CrossrefKind = "figure" | "table" | "equation" | "algorithm";
 
 /** `pageIndex:pdfY` → kind of the numbered object at that destination. */
@@ -43,28 +47,160 @@ export type CrossrefDestMap = ReadonlyMap<string, CrossrefKind>;
 
 /** Both destination indexes parsed from one PDF in a single object-tree walk. */
 export type PdfDestMaps = {
-	/** In-text citation destinations (`cite.<key>`). */
+	/** In-text citation destinations. */
 	cites: CitationDestKeyMap;
 	/** Figure / table / equation / algorithm destinations (`\ref` targets). */
 	crossrefs: CrossrefDestMap;
 };
 
+// ---- Pluggable destination-name parsers ----
+
+/** Result of parsing a named destination name into a cross-reference kind. */
+export type CrossrefNameMatch = {
+	kind: CrossrefKind;
+};
+
 /**
- * hyperref destination name → cross-reference kind, or null when the name is
- * not a numbered figure/table/equation/algorithm anchor. LaTeX packages write
- * `figure.<n>`, `table.<n>`, `equation.<n>` / `subequation.<n>`, and
- * `algorithm.<n>` (algorithm2e uses `algocf.<n>`).
+ * Maps a named-destination name (e.g. `figure.1`, `mk:fig1`) to a cross-reference
+ * kind. Returning `null` means "not a cross-reference target I understand".
  */
-function crossrefKindFromName(name: string): CrossrefKind | null {
-	if (name.startsWith("figure.")) return "figure";
-	if (name.startsWith("subfigure.")) return "figure";
-	if (name.startsWith("table.")) return "table";
-	if (name.startsWith("equation.")) return "equation";
-	if (name.startsWith("subequation.")) return "equation";
-	if (name.startsWith("algorithm.")) return "algorithm";
-	if (name.startsWith("algocf.")) return "algorithm";
+export type CrossrefNameParser = (name: string) => CrossrefNameMatch | null;
+
+/**
+ * Maps a named-destination name (e.g. `cite.key`, `mk:ref1`) to the citation key
+ * exposed by the reference sidecar. Returning `null` means "not a citation
+ * target I understand".
+ */
+export type CitationNameParser = (name: string) => string | null;
+
+/**
+ * Resolves a destination array to a concrete page index + PDF-native y. Only
+ * destination types that pin a vertical position are usable for hover preview.
+ */
+export type DestinationCoordResolver = (
+	dest: PDFArray,
+	context: PDFContext,
+	pageRefs: string[],
+) => { pageIndex: number; pdfY: number } | null;
+
+/**
+ * Standard hyperref cross-reference names. LaTeX packages write `figure.<n>`,
+ * `table.<n>`, `equation.<n>` / `subequation.<n>`, and `algorithm.<n>`
+ * (algorithm2e uses `algocf.<n>`).
+ */
+export const hyperrefCrossrefParser: CrossrefNameParser = (name) => {
+	if (name.startsWith("figure.") || name.startsWith("subfigure."))
+		return { kind: "figure" };
+	if (name.startsWith("table.")) return { kind: "table" };
+	if (name.startsWith("equation.") || name.startsWith("subequation."))
+		return { kind: "equation" };
+	if (name.startsWith("algorithm.") || name.startsWith("algocf."))
+		return { kind: "algorithm" };
 	return null;
-}
+};
+
+/**
+ * ACS (American Chemical Society) publisher destinations. Their production
+ * pipeline emits `mk:*` targets instead of hyperref names, e.g.
+ * `mk:fig1`, `mk:tbl1`, `mk:eq1` for floats and `mk:ref*` for references.
+ */
+export const acsCrossrefParser: CrossrefNameParser = (name) => {
+	if (name.startsWith("mk:fig")) return { kind: "figure" };
+	if (name.startsWith("mk:tbl")) return { kind: "table" };
+	if (name.startsWith("mk:eq")) return { kind: "equation" };
+	return null;
+};
+
+/** Built-in cross-reference name parsers, tried in order. */
+export const defaultCrossrefNameParsers: CrossrefNameParser[] = [
+	hyperrefCrossrefParser,
+	acsCrossrefParser,
+];
+
+/** Standard hyperref citation name: `cite.<bibtexKey>`. */
+export const hyperrefCitationParser: CitationNameParser = (name) => {
+	if (name.startsWith("cite.")) return name.slice("cite.".length);
+	return null;
+};
+
+/**
+ * ACS citation names. `mk:ref*` targets map to the bibliography list; the exact
+ * BibTeX key is not embedded in the PDF name, so we return the destination name
+ * itself and let the sidecar / viewer resolve `ref-N` ↔ `mk:refN` if needed.
+ */
+export const acsCitationParser: CitationNameParser = (name) => {
+	if (name.startsWith("mk:ref")) return name;
+	return null;
+};
+
+/** Built-in citation name parsers, tried in order. */
+export const defaultCitationNameParsers: CitationNameParser[] = [
+	hyperrefCitationParser,
+	acsCitationParser,
+];
+
+// ---- Pluggable destination-coordinate resolvers ----
+
+/**
+ * `/XYZ` destination: `[pageRef /XYZ x y zoom]`. The most common hyperref
+ * format; `y` is the PDF-native vertical position.
+ */
+export const xyzCoordResolver: DestinationCoordResolver = (
+	dest,
+	context,
+	pageRefs,
+) => {
+	const arr = dest.asArray();
+	if (arr.length < 4 || arr[1]?.toString() !== "/XYZ") return null;
+	const pageIndex = pageRefs.indexOf(arr[0].toString());
+	if (pageIndex < 0) return null;
+	const y = context.lookup(arr[3]);
+	if (!(y instanceof PDFNumber)) return null;
+	return { pageIndex, pdfY: y.asNumber() };
+};
+
+/**
+ * `/FitR` destination: `[pageRef /FitR left bottom right top]`. Used by ACS
+ * PDFs for all internal links. We use the rectangle top as the vertical anchor.
+ */
+export const fitRCoordResolver: DestinationCoordResolver = (
+	dest,
+	context,
+	pageRefs,
+) => {
+	const arr = dest.asArray();
+	if (arr.length < 6 || arr[1]?.toString() !== "/FitR") return null;
+	const pageIndex = pageRefs.indexOf(arr[0].toString());
+	if (pageIndex < 0) return null;
+	const top = context.lookup(arr[5]);
+	if (!(top instanceof PDFNumber)) return null;
+	return { pageIndex, pdfY: top.asNumber() };
+};
+
+/**
+ * `/FitH` destination: `[pageRef /FitH top]`. Rare for cross-references but
+ * supported for completeness; `top` gives the vertical anchor.
+ */
+export const fitHCoordResolver: DestinationCoordResolver = (
+	dest,
+	context,
+	pageRefs,
+) => {
+	const arr = dest.asArray();
+	if (arr.length < 3 || arr[1]?.toString() !== "/FitH") return null;
+	const pageIndex = pageRefs.indexOf(arr[0].toString());
+	if (pageIndex < 0) return null;
+	const top = context.lookup(arr[2]);
+	if (!(top instanceof PDFNumber)) return null;
+	return { pageIndex, pdfY: top.asNumber() };
+};
+
+/** Built-in coordinate resolvers, tried in order. */
+export const defaultDestinationCoordResolvers: DestinationCoordResolver[] = [
+	xyzCoordResolver,
+	fitRCoordResolver,
+	fitHCoordResolver,
+];
 
 /** Walk a /Dests name tree into `name → destination array`. */
 function collectNameTree(
@@ -104,22 +240,20 @@ function collectNameTree(
 }
 
 /**
- * Resolve a named-destination array to its coordinate key, or null when it
- * carries no usable `/XYZ` y (only XYZ destinations pin a vertical position).
+ * Resolve a named-destination array to its coordinate key using the provided
+ * resolvers. Returns null when no resolver can extract a usable page + y.
  */
 function destCoordKey(
 	dest: PDFArray,
 	context: PDFContext,
 	pageRefs: string[],
+	resolvers: DestinationCoordResolver[],
 ): string | null {
-	const arr = dest.asArray();
-	// [pageRef /XYZ x y zoom] — only XYZ carries a usable y.
-	if (arr.length < 4 || arr[1]?.toString() !== "/XYZ") return null;
-	const pageIndex = pageRefs.indexOf(arr[0].toString());
-	if (pageIndex < 0) return null;
-	const y = context.lookup(arr[3]);
-	if (!(y instanceof PDFNumber)) return null;
-	return citationDestKey(pageIndex, y.asNumber());
+	for (const resolve of resolvers) {
+		const coord = resolve(dest, context, pageRefs);
+		if (coord) return citationDestKey(coord.pageIndex, coord.pdfY);
+	}
+	return null;
 }
 
 /**
@@ -134,12 +268,31 @@ function resolveUnambiguous<T>(byCoord: Map<string, T | null>): Map<string, T> {
 	return out;
 }
 
+export type BuildPdfDestMapsOptions = {
+	/**
+	 * Parsers that turn a named-destination name into a cross-reference kind.
+	 * Defaults to `[hyperrefCrossrefParser, acsCrossrefParser]`.
+	 */
+	crossrefParsers?: CrossrefNameParser[];
+	/**
+	 * Parsers that turn a named-destination name into a citation key.
+	 * Defaults to `[hyperrefCitationParser, acsCitationParser]`.
+	 */
+	citationParsers?: CitationNameParser[];
+	/**
+	 * Resolvers that turn a destination array into page + PDF-native y.
+	 * Defaults to `[xyzCoordResolver, fitRCoordResolver, fitHCoordResolver]`.
+	 */
+	coordResolvers?: DestinationCoordResolver[];
+};
+
 /**
  * Build both destination indexes for one PDF in a single object-tree walk.
- * Returns empty maps for PDFs without hyperref named destinations.
+ * Returns empty maps for PDFs without recognizable named destinations.
  */
 export async function buildPdfDestMaps(
 	bytes: ArrayBuffer | Uint8Array,
+	options: BuildPdfDestMapsOptions = {},
 ): Promise<PdfDestMaps> {
 	const empty: PdfDestMaps = { cites: new Map(), crossrefs: new Map() };
 	const doc = await PDFDocument.load(bytes, { updateMetadata: false });
@@ -158,6 +311,27 @@ export async function buildPdfDestMaps(
 	const citeByCoord = new Map<string, string | null>();
 	const crossByCoord = new Map<string, CrossrefKind | null>();
 
+	const crossrefParsers = options.crossrefParsers ?? defaultCrossrefNameParsers;
+	const citationParsers = options.citationParsers ?? defaultCitationNameParsers;
+	const coordResolvers =
+		options.coordResolvers ?? defaultDestinationCoordResolvers;
+
+	const parseCrossrefKind = (name: string): CrossrefKind | null => {
+		for (const parser of crossrefParsers) {
+			const match = parser(name);
+			if (match) return match.kind;
+		}
+		return null;
+	};
+
+	const parseCitationKey = (name: string): string | null => {
+		for (const parser of citationParsers) {
+			const key = parser(name);
+			if (key) return key;
+		}
+		return null;
+	};
+
 	const stash = <T>(map: Map<string, T | null>, coord: string, value: T) => {
 		const existing = map.get(coord);
 		if (existing === undefined) map.set(coord, value);
@@ -166,14 +340,16 @@ export async function buildPdfDestMaps(
 	};
 
 	for (const [name, dest] of namedDests) {
-		if (name.startsWith(CITE_DEST_PREFIX)) {
-			const coord = destCoordKey(dest, context, pageRefs);
-			if (coord) stash(citeByCoord, coord, name.slice(CITE_DEST_PREFIX.length));
+		const citationKey = parseCitationKey(name);
+		if (citationKey) {
+			const coord = destCoordKey(dest, context, pageRefs, coordResolvers);
+			if (coord) stash(citeByCoord, coord, citationKey);
 			continue;
 		}
-		const kind = crossrefKindFromName(name);
+
+		const kind = parseCrossrefKind(name);
 		if (kind) {
-			const coord = destCoordKey(dest, context, pageRefs);
+			const coord = destCoordKey(dest, context, pageRefs, coordResolvers);
 			if (coord) stash(crossByCoord, coord, kind);
 		}
 	}
@@ -186,10 +362,11 @@ export async function buildPdfDestMaps(
 
 /**
  * Build the coordinate → BibTeX key index for one PDF.
- * Returns an empty map for PDFs without hyperref citation destinations.
+ * Returns an empty map for PDFs without recognizable citation destinations.
  */
 export async function buildCitationDestKeyMap(
 	bytes: ArrayBuffer | Uint8Array,
+	options?: BuildPdfDestMapsOptions,
 ): Promise<CitationDestKeyMap> {
-	return (await buildPdfDestMaps(bytes)).cites;
+	return (await buildPdfDestMaps(bytes, options)).cites;
 }
