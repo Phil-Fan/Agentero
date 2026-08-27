@@ -1,27 +1,29 @@
 {
 	"title": "Welcome to Agentero",
-	"subtitle": "Agent-friendly literature management — exploring how humans and agents collaborate.",
+	"subtitle": "Read papers and take notes alongside your AI assistant. A few quick steps to set up your workspace.",
 	"steps": {
 		"welcome": "Welcome",
 		"theme": "Appearance",
 		"agent": "Agent",
 		"translate": "Translation",
-		"layout": "Layout parsing",
+		"layout": "Figures & formulas",
 		"vault": "Get started"
 	},
 	"welcome": {},
 	"theme": {
-		"title": "Choose your color theme",
+		"title": "Pick your look",
+		"desc": "Choose a color scheme you like — you can change it anytime in Settings.",
 		"modeSystem": "System",
 		"modeLight": "Light",
 		"modeDark": "Dark",
 		"uiThemeSelect": "Select {{name}}"
 	},
 	"agent": {
-		"title": "Configure default Agent",
+		"title": "Choose your AI assistant",
+		"desc": "Agentero plugs into agents already installed on this computer to summarize papers and answer questions — no extra API keys, just pick one.",
 		"rescan": "Rescan",
 		"scanning": "Scanning…",
-		"none": "No agents found. Install an ACP agent (e.g. opencode, claude-acp) and rescan.",
+		"none": "No agents found yet. Install one on this computer (e.g. opencode or claude-acp), then click Rescan.",
 		"setDefault": "Set as default",
 		"install": "Install",
 		"installAgentAria": "Install {{name}} agent",
@@ -35,9 +37,10 @@
 		"scanFailed": "Failed to scan agents"
 	},
 	"translate": {
-		"title": "Configure translation service",
-		"configureOwn": "Bring your own API",
-		"useDefault": "Use system default",
+		"title": "Set up translation",
+		"desc": "Select text in foreign-language papers to translate it instantly. The built-in option works out of the box.",
+		"configureOwn": "I have my own translation API",
+		"useDefault": "Use the built-in translator",
 		"apiKeyPlaceholder": "API key",
 		"endpointPlaceholder": "Endpoint (optional)",
 		"openDocs": "Open provider website",
@@ -48,9 +51,10 @@
 		"probeFail": "Check your key and try again"
 	},
 	"layout": {
-		"title": "Layout parsing",
-		"configureOwn": "Configure a cloud API (recommended)",
-		"useDefault": "Local on-device model",
+		"title": "Spot figures and formulas automatically",
+		"desc": "Automatically locate figures, tables and formulas in your PDFs. The free on-device model works out of the box; a cloud API gets even better results.",
+		"configureOwn": "Use a cloud service (recommended)",
+		"useDefault": "Use the free on-device model",
 		"openDocs": "Open provider website",
 		"test": "Test",
 		"probeIdle": "Not tested yet",
@@ -59,7 +63,8 @@
 		"probeFail": "Check your key and try again"
 	},
 	"vault": {
-		"title": "Create your vault",
+		"title": "Create your library",
+		"desc": "A vault is just a plain folder on your computer where papers and notes live. You can create or switch to another one anytime.",
 		"create": "Create a vault",
 		"zotero": "Import from Zotero"
 	},

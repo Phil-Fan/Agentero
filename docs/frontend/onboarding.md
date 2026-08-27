@@ -15,13 +15,15 @@ Vault 首次打开后，`useFeatureTour` 用 driver.js 高亮侧栏 / 魔棒 / �
 
 ## 步骤
 
+每个步骤头部显示标题 + 一句人话说明（`<id>.title` / `<id>.desc`，welcome 除外）。
+
 | 步骤 | id | 内容 | 复用 |
 |---|---|---|---|
 | 欢迎 | `welcome` | 品牌 + 价值主张 + 特性 | — |
 | 外观 | `theme` | 明暗模式 + tweakcn 配色主题即时预览 | `patchSettings` + `applyUiTheme` / `next-themes` |
 | Agent | `agent` | 扫描本机 ACP Agent、安装可托管 Agent、探测、设默认（可跳过）；安装期间卡片显示 `agent-lifecycle:progress` 进度与阶段 | `scanCatalog` / `probeCatalogAgent` / `ensureCatalogAgent` / `useAgentToolLifecycle` |
-| 翻译 | `translate` | 直接内嵌 `TranslatePane` | 设置窗口同一组件，配置即落盘 |
-| 版面解析 | `layout` | 直接内嵌 `LayoutPane` | 设置窗口同一组件，配置即落盘 |
+| 翻译 | `translate` | 选择「用自己的翻译 API」或「内置免费翻译」，选前者则填 Key 并测试 | `probeCommercialMtProvider` |
+| 图表公式 | `layout` | 选择「配置云端服务」或「本地免费模型」，选前者则填 Key 并测试 | `probeLayoutProvider` |
 | 收尾 | `vault` | 创建 Vault / 从 Zotero 导入 / 稍后再说 | `createNewVault()` / `migrateZoteroFromWelcome()`（`src/lib/vault/actions.ts`） |
 
 流程状态机用 **@stepperize/react**（`defineStepper` + `useStepper`），定义见 `src/components/onboarding/flow.ts`；纯线性、无分支跳转。

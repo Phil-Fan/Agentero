@@ -1,27 +1,29 @@
 {
 	"title": "欢迎使用 Agentero",
-	"subtitle": "Agent 友好的文献管理方式，探索人与 Agent 在文献管理的协作方式",
+	"subtitle": "在这里，你和 AI 助手一起读论文、记笔记。接下来几步，帮你把工作台调成顺手的样子。",
 	"steps": {
 		"welcome": "欢迎",
 		"theme": "外观",
 		"agent": "Agent",
 		"translate": "翻译",
-		"layout": "版面解析",
+		"layout": "图表公式",
 		"vault": "开始使用"
 	},
 	"welcome": {},
 	"theme": {
-		"title": "选择你的颜色主题",
+		"title": "选一个喜欢的主题色",
+		"desc": "先挑个顺眼的配色，之后随时可以在设置里改。",
 		"modeSystem": "跟随系统",
 		"modeLight": "浅色",
 		"modeDark": "深色",
 		"uiThemeSelect": "选择 {{name}}"
 	},
 	"agent": {
-		"title": "配置默认 Agent",
+		"title": "选一个 AI 助手",
+		"desc": "Agentero 会调用你电脑上已安装的 AI 助手，帮你总结论文、回答问题。不用额外申请 API，选中一个就能用。",
 		"rescan": "重新扫描",
 		"scanning": "扫描中…",
-		"none": "未发现 Agent。请安装一个 ACP Agent（如 opencode、claude-acp）后重新扫描。",
+		"none": "没有发现可用的 AI 助手。先在电脑上安装一个（如 opencode、claude-acp），再点「重新扫描」。",
 		"setDefault": "设为默认",
 		"install": "安装",
 		"installAgentAria": "安装 {{name}} Agent",
@@ -35,9 +37,10 @@
 		"scanFailed": "扫描 Agent 失败"
 	},
 	"translate": {
-		"title": "配置翻译服务",
-		"configureOwn": "配置自有 API 服务",
-		"useDefault": "使用系统默认",
+		"title": "设置翻译",
+		"desc": "读外文文献时，划词就能翻译。不想折腾就用内置方案，开箱即用。",
+		"configureOwn": "我有自己的翻译 API",
+		"useDefault": "用内置免费翻译",
 		"apiKeyPlaceholder": "API Key",
 		"endpointPlaceholder": "端点（可选）",
 		"openDocs": "打开服务商官网",
@@ -48,9 +51,10 @@
 		"probeFail": "请检查你的 Key 后重试"
 	},
 	"layout": {
-		"title": "版面解析",
-		"configureOwn": "配置云端 API（推荐）",
-		"useDefault": "本地模型推理",
+		"title": "自动识别图表和公式",
+		"desc": "自动找出论文里的插图、表格和公式，方便快速定位。本地模型免费、直接能用；想要更好的效果可以配置云端服务。",
+		"configureOwn": "配置云端服务（推荐）",
+		"useDefault": "用本地免费模型",
 		"openDocs": "打开服务商官网",
 		"test": "测试",
 		"probeIdle": "尚未测试",
@@ -59,8 +63,9 @@
 		"probeFail": "请检查你的 Key 后重试"
 	},
 	"vault": {
-		"title": "创建你的 Vault",
-		"create": "创建一个 Vault",
+		"title": "建一个自己的文献库",
+		"desc": "文献库（Vault）就是一个普通文件夹，论文和笔记都存在你自己电脑上。之后随时可以创建新的或换着用。",
+		"create": "新建文献库",
 		"zotero": "从 Zotero 导入"
 	},
 	"actions": {

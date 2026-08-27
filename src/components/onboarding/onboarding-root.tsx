@@ -203,14 +203,24 @@ function OnboardingDialog() {
 		}
 	};
 
-	const stepTitle =
-		stepper.current.id === "theme"
-			? t("theme.title")
-			: stepper.current.id === "agent"
-				? t("agent.title")
-				: stepper.current.id === "translate"
-					? t("translate.title")
-					: t(`steps.${stepper.current.id}`);
+	const currentCopy = (() => {
+		switch (stepper.current.id) {
+			case "theme":
+				return { title: t("theme.title"), desc: t("theme.desc") };
+			case "agent":
+				return { title: t("agent.title"), desc: t("agent.desc") };
+			case "translate":
+				return { title: t("translate.title"), desc: t("translate.desc") };
+			case "layout":
+				return { title: t("layout.title"), desc: t("layout.desc") };
+			case "vault":
+				return { title: t("vault.title"), desc: t("vault.desc") };
+			default:
+				return undefined;
+		}
+	})();
+	const stepTitle = currentCopy?.title ?? t(`steps.${stepper.current.id}`);
+	const stepDesc = currentCopy?.desc;
 
 	return (
 		<div className="fixed inset-0 z-40 flex items-center justify-center bg-background p-6">
@@ -224,10 +234,17 @@ function OnboardingDialog() {
 
 			<div className="relative flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl">
 				{/* Header: current step title + per-step action */}
-				<div className="flex items-center justify-between gap-3 px-6 pt-5">
-					<div>
+				<div className="flex items-start justify-between gap-3 px-6 pt-5">
+					<div className="min-w-0 max-w-md">
 						{stepper.current.id === "welcome" ? null : (
-							<span className="font-medium text-sm">{stepTitle}</span>
+							<>
+								<span className="font-medium text-sm">{stepTitle}</span>
+								{stepDesc ? (
+									<p className="mt-1 text-muted-foreground text-xs leading-relaxed">
+										{stepDesc}
+									</p>
+								) : null}
+							</>
 						)}
 					</div>
 					{stepper.current.id === "theme" ? (
