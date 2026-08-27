@@ -13,7 +13,9 @@ use crate::features::catalog::{probe_paper_caps, CapsCache};
 use crate::features::import::{
     fetch_arxiv_metadata,
     pdf_recognize::fetch_crossref_metadata,
-    title_search::{fetch_s2_venue_by_doi, is_usable_publication, search_papers},
+    title_search::{
+        better_publication, fetch_s2_venue_by_doi, is_usable_publication, search_papers,
+    },
 };
 use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -651,17 +653,17 @@ async fn resolve_publication_for_backfill(
         }
     }
 
-    // 2. DOI → S2 publicationVenue.name (complete conference + journal names).
-    //    Crossref container-title is a fallback only: ACL/NAACL titles come
-    //    back clipped ("Proceedings of the 2019 Conference of the North").
+    // 2. DOI → pick the longer usable of S2 publicationVenue and Crossref
+    //    container-title. S2 wins on truncated ACL/NAACL titles; Crossref
+    //    wins when it has the full proceedings string (ACL 2026 Long Papers).
     if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
-        if let Some(venue) = fetch_s2_venue_by_doi(doi).await {
-            return Some(venue);
-        }
-        if let Ok(meta) = fetch_crossref_metadata(doi).await {
-            if let Some(pub_value) = meta.publication.filter(|p| is_usable_publication(p)) {
-                return Some(pub_value);
-            }
+        let s2 = fetch_s2_venue_by_doi(doi).await;
+        let crossref = match fetch_crossref_metadata(doi).await {
+            Ok(meta) => meta.publication.filter(|p| is_usable_publication(p)),
+            Err(_) => None,
+        };
+        if let Some(best) = better_publication(s2.as_deref(), crossref.as_deref()) {
+            return Some(best);
         }
     }
 

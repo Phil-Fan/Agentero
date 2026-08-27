@@ -235,24 +235,28 @@ pub fn needs_s2_venue_enrichment(publication: Option<&str>) -> bool {
     !is_usable_publication(p) || p.to_ascii_lowercase().starts_with("proceedings")
 }
 
-/// S2 venue in priority order: `publicationVenue.name` (skip repositories),
-/// then `journal.name`, then the legacy `venue` string.
+/// S2 venue: longest usable among `publicationVenue.name` (skip repositories),
+/// `journal.name`, and the legacy `venue` string. `journal.name` is sometimes
+/// the full proceedings title (ResNet) while `publicationVenue` is the short
+/// catalog name (CVPR).
 pub fn s2_venue_from_paper(v: &Value) -> Option<String> {
-    if let Some(pv) = v.get("publicationVenue") {
+    let pv = v.get("publicationVenue").and_then(|pv| {
         let is_repo = pv
             .get("type")
             .and_then(|t| t.as_str())
             .is_some_and(|t| t.eq_ignore_ascii_case("repository"));
-        if !is_repo {
-            if let Some(name) = str_field(pv, "name").filter(|s| is_usable_publication(s)) {
-                return Some(name);
-            }
+        if is_repo {
+            None
+        } else {
+            str_field(pv, "name").filter(|s| is_usable_publication(s))
         }
-    }
-    if let Some(name) = str_field_at(v, "/journal/name").filter(|s| is_usable_publication(s)) {
-        return Some(name);
-    }
-    str_field(v, "venue").filter(|s| is_usable_publication(s))
+    });
+    let journal = str_field_at(v, "/journal/name").filter(|s| is_usable_publication(s));
+    let venue = str_field(v, "venue").filter(|s| is_usable_publication(s));
+    better_publication(
+        better_publication(pv.as_deref(), journal.as_deref()).as_deref(),
+        venue.as_deref(),
+    )
 }
 
 fn is_arxiv_doi(doi: &str) -> bool {
@@ -592,5 +596,228 @@ mod tests {
         assert!(is_arxiv_doi("10.48550/ARXIV.1810.04805"));
         assert!(!is_arxiv_doi("10.1038/s41586-021-03819-2"));
         assert!(!is_arxiv_doi("10.18653/v1/N19-1423"));
+    }
+
+    /// Real S2 `paper/batch` payloads from a 60-paper vault
+    /// (`~/Downloads/paper`). Catalog had 3 usable publications; S2
+    /// `publicationVenue` recovered 10 (classic + a few 2025–26 ACL/ICML
+    /// papers). arXiv `journal_ref` was empty even for BERT / ResNet / GPT-3.
+    #[test]
+    fn vault_sample_s2_payloads_resolve_publication() {
+        struct Case {
+            id: &'static str,
+            json: serde_json::Value,
+            expected: Option<&'static str>,
+        }
+        let cases = [
+            Case {
+                id: "1810.04805 BERT",
+                json: serde_json::json!({
+                    "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+                    "venue": "North American Chapter of the Association for Computational Linguistics",
+                    "publicationVenue": {
+                        "name": "North American Chapter of the Association for Computational Linguistics",
+                        "type": "conference",
+                        "alternate_names": ["NAACL"]
+                    },
+                    "journal": { "pages": "4171-4186" },
+                    "externalIds": {
+                        "ArXiv": "1810.04805",
+                        "DOI": "10.18653/v1/N19-1423",
+                        "ACL": "N19-1423"
+                    }
+                }),
+                expected: Some(
+                    "North American Chapter of the Association for Computational Linguistics",
+                ),
+            },
+            Case {
+                // journal.name is the full IEEE proceedings title; prefer it
+                // over the short publicationVenue catalog name.
+                id: "1512.03385 ResNet",
+                json: serde_json::json!({
+                    "title": "Deep Residual Learning for Image Recognition",
+                    "venue": "Computer Vision and Pattern Recognition",
+                    "publicationVenue": {
+                        "name": "Computer Vision and Pattern Recognition",
+                        "type": "conference",
+                        "alternate_names": ["CVPR"]
+                    },
+                    "journal": {
+                        "name": "2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR)",
+                        "pages": "770-778"
+                    },
+                    "externalIds": { "ArXiv": "1512.03385", "DOI": "10.1109/cvpr.2016.90" }
+                }),
+                expected: Some(
+                    "2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR)",
+                ),
+            },
+            Case {
+                // journal.name is CoRR — reject, keep ICLR.
+                id: "1412.6980 Adam",
+                json: serde_json::json!({
+                    "title": "Adam: A Method for Stochastic Optimization",
+                    "venue": "International Conference on Learning Representations",
+                    "publicationVenue": {
+                        "name": "International Conference on Learning Representations",
+                        "type": "conference",
+                        "alternate_names": ["ICLR"]
+                    },
+                    "journal": { "name": "CoRR", "volume": "abs/1412.6980" },
+                    "externalIds": { "ArXiv": "1412.6980" }
+                }),
+                expected: Some("International Conference on Learning Representations"),
+            },
+            Case {
+                id: "2005.14165 GPT-3",
+                json: serde_json::json!({
+                    "title": "Language Models are Few-Shot Learners",
+                    "venue": "Neural Information Processing Systems",
+                    "publicationVenue": {
+                        "name": "Neural Information Processing Systems",
+                        "type": "conference",
+                        "alternate_names": ["NeurIPS", "NIPS"]
+                    },
+                    "journal": { "name": "ArXiv", "volume": "abs/2005.14165" },
+                    "externalIds": { "ArXiv": "2005.14165" }
+                }),
+                expected: Some("Neural Information Processing Systems"),
+            },
+            Case {
+                id: "2401.15077 EAGLE",
+                json: serde_json::json!({
+                    "title": "EAGLE: Speculative Sampling Requires Rethinking Feature Uncertainty",
+                    "venue": "International Conference on Machine Learning",
+                    "publicationVenue": {
+                        "name": "International Conference on Machine Learning",
+                        "type": "conference",
+                        "alternate_names": ["ICML"]
+                    },
+                    "journal": { "pages": "28935-28948" },
+                    "externalIds": { "ArXiv": "2401.15077", "DOI": "10.48550/arXiv.2401.15077" }
+                }),
+                expected: Some("International Conference on Machine Learning"),
+            },
+            Case {
+                id: "2312.04511 LLM Compiler",
+                json: serde_json::json!({
+                    "title": "An LLM Compiler for Parallel Function Calling",
+                    "venue": "International Conference on Machine Learning",
+                    "publicationVenue": {
+                        "name": "International Conference on Machine Learning",
+                        "type": "conference"
+                    },
+                    "journal": { "name": "ArXiv", "volume": "abs/2312.04511" },
+                    "externalIds": { "ArXiv": "2312.04511" }
+                }),
+                expected: Some("International Conference on Machine Learning"),
+            },
+            Case {
+                id: "2510.02358 DiffuSpec ACL",
+                json: serde_json::json!({
+                    "title": "DiffuSpec: Unlocking Diffusion Language Models for Speculative Decoding",
+                    "venue": "Annual Meeting of the Association for Computational Linguistics",
+                    "publicationVenue": {
+                        "name": "Annual Meeting of the Association for Computational Linguistics",
+                        "type": "conference",
+                        "alternate_names": ["ACL"]
+                    },
+                    "journal": { "name": "ArXiv", "volume": "abs/2510.02358" },
+                    "externalIds": { "ArXiv": "2510.02358" }
+                }),
+                expected: Some("Annual Meeting of the Association for Computational Linguistics"),
+            },
+            Case {
+                id: "10.18653/v1/2026.acl-long.1248 latent agents",
+                json: serde_json::json!({
+                    "title": "Enabling Agents to Communicate Entirely in Latent Space",
+                    "venue": "Annual Meeting of the Association for Computational Linguistics",
+                    "publicationVenue": {
+                        "name": "Annual Meeting of the Association for Computational Linguistics",
+                        "type": "conference"
+                    },
+                    "externalIds": { "DOI": "10.18653/v1/2026.acl-long.1248" }
+                }),
+                expected: Some("Annual Meeting of the Association for Computational Linguistics"),
+            },
+            Case {
+                // Preprint: publicationVenue is arXiv.org without type=repository.
+                id: "2603.23483 SpecEyes preprint",
+                json: serde_json::json!({
+                    "title": "SpecEyes: Accelerating Agentic Multimodal LLMs via Speculative Perception and Planning",
+                    "venue": "arXiv.org",
+                    "publicationVenue": {
+                        "name": "arXiv.org",
+                        "alternate_names": ["ArXiv"],
+                        "issn": "2331-8422"
+                    },
+                    "journal": { "name": "ArXiv", "volume": "abs/2603.23483" },
+                    "externalIds": { "ArXiv": "2603.23483", "DOI": "10.48550/arXiv.2603.23483" }
+                }),
+                expected: None,
+            },
+            Case {
+                id: "2503.03505 unpublished empty",
+                json: serde_json::json!({
+                    "title": "Parallelized Planning-Acting for Efficient LLM-based Multi-Agent Systems in Minecraft",
+                    "venue": "",
+                    "publicationVenue": null,
+                    "journal": null,
+                    "externalIds": { "ArXiv": "2503.03505" }
+                }),
+                expected: None,
+            },
+        ];
+        for case in cases {
+            assert_eq!(
+                s2_venue_from_paper(&case.json).as_deref(),
+                case.expected,
+                "{}",
+                case.id
+            );
+        }
+    }
+
+    #[test]
+    fn vault_acl_crossref_proceedings_title_is_more_complete_than_s2() {
+        // Same ACL 2026 paper: Crossref has the full proceedings title, S2
+        // has the catalog venue. Keep the longer string.
+        assert_eq!(
+            better_publication(
+                Some("Annual Meeting of the Association for Computational Linguistics"),
+                Some(
+                    "Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)"
+                ),
+            )
+            .as_deref(),
+            Some(
+                "Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)"
+            )
+        );
+    }
+
+    #[test]
+    fn vault_bert_search_candidate_keeps_arxiv_over_doi() {
+        let item = serde_json::json!({
+            "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+            "authors": [{ "name": "Jacob Devlin" }],
+            "year": 2019,
+            "venue": "North American Chapter of the Association for Computational Linguistics",
+            "publicationVenue": {
+                "name": "North American Chapter of the Association for Computational Linguistics",
+                "type": "conference"
+            },
+            "externalIds": {
+                "DOI": "10.18653/v1/N19-1423",
+                "ArXiv": "1810.04805"
+            }
+        });
+        let candidate = s2_candidate_from_item(&item).expect("candidate");
+        assert_eq!(candidate.identifier, "1810.04805");
+        assert_eq!(
+            candidate.venue.as_deref(),
+            Some("North American Chapter of the Association for Computational Linguistics")
+        );
     }
 }

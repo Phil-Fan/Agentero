@@ -85,7 +85,7 @@ Agentero Host 端（`src-tauri/src/features/`）在论文识别、入库、引�
 因此顺序是：
 
 1. arXiv id → arXiv Atom `export.arxiv.org/api/query?id_list={id}`，取 `<arxiv:journal_ref>`；缺失则 `GET /graph/v1/paper/ARXIV:{id}?fields=venue,publicationVenue,journal`（`s2_venue_from_paper`）。丢弃 `arXiv` / `CoRR` 等仓储名。
-2. DOI → 同样的 S2 paper 端点 `DOI:{doi}`（跳过 `10.48550/arXiv.…`）；S2 未命中再 Crossref `container-title`。
+2. DOI → 取 S2 `publicationVenue` 与 Crossref `container-title` 中更长的可用名（S2 赢截断的 ACL/NAACL；Crossref 赢完整 proceedings 标题）。跳过 `10.48550/arXiv.…`。
 3. 仅 title → Semantic Scholar `search_papers(title, 1)`，同样走 `publicationVenue`。
 
 UI 刷新（`paper_resolve_identifier`）对 DOI/arXiv/URL **先走标识符解析**，再用 S2 补全空缺或 Crossref 截断的 proceedings 标题；自由文本才走 title search。

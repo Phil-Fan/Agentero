@@ -16,6 +16,10 @@ Library publication 列和 Edit Metadata 刷新经常拿到缩写、截断或空
 
 另外：S2 search 的 `venue` 经常为空，完整名在 `publicationVenue`；`type=repository` 的 `arXiv.org` 不能当发表venue。OpenAlex 对 CS arXiv 常无 source；DBLP 只有 `NIPS` / `NAACL-HLT` 缩写。
 
+## 实测（`~/Downloads/paper` vault，60 篇）
+
+Catalog 里只有 3 篇可用 publication（其余空或 `arXiv` / `arXiv.org`）。对 57 个 arXiv id 拉 Atom：BERT / ResNet / Adam / GPT-3 / EAGLE 的 `journal_ref` **全空**。S2 `paper/batch` 命中 38 篇，其中 10 篇有可用 venue（NAACL / CVPR / ICLR / NeurIPS / ICML / ACL）；预印本的 `publicationVenue` 是无 `type` 的 `arXiv.org`，被丢弃。
+
 ## 修复
 
 - 解析 S2 时优先 `publicationVenue.name`（跳过 repository），其次 `journal.name`，再次 `venue`；丢弃 `arXiv` / `CoRR`。
