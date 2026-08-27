@@ -25,6 +25,7 @@ import { useSelectionContextPublish } from "@/components/editor/hooks/use-select
 import { useWikilinkEditing } from "@/components/editor/hooks/use-wikilink-editing";
 import { MarkdownExportDialog } from "@/components/editor/markdown-export-dialog";
 import { MarkdownExportSurface } from "@/components/editor/markdown-export-surface";
+import { BlockDragStateBridge } from "@/components/editor/nodes/block/block-draggable";
 import { ImageElement } from "@/components/editor/nodes/block/image-node";
 import { EditorStatusBar } from "@/components/editor/overlays/editor-status-bar";
 import { FindReplaceBar } from "@/components/editor/overlays/find-replace-bar";
@@ -668,6 +669,7 @@ export function MarkdownEditor({
 					<BlockSelectionPublishBridge
 						onChange={scheduleSelectionContextPublish}
 					/>
+					<BlockDragStateBridge />
 					<div
 						className={cn(
 							"flex h-full min-h-0 min-w-0 flex-col overflow-hidden",

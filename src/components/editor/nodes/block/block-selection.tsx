@@ -1,8 +1,7 @@
 "use client";
 
-import { DndPlugin } from "@platejs/dnd";
 import { useBlockSelected } from "@platejs/selection/react";
-import { type PlateElementProps, usePluginOption } from "platejs/react";
+import type { PlateElementProps } from "platejs/react";
 
 import { cn } from "@/lib/core/utils";
 import { isBlankParagraph } from "@/lib/markdown/block-selection";
@@ -23,7 +22,6 @@ export function hasSelectableClass({
 /** Tint over a block currently in the block-selection set. */
 export function BlockSelection(props: PlateElementProps) {
 	const isBlockSelected = useBlockSelected();
-	const isDragging = usePluginOption(DndPlugin, "isDragging");
 
 	if (
 		!isBlockSelected ||
@@ -38,7 +36,9 @@ export function BlockSelection(props: PlateElementProps) {
 		<div
 			className={cn(
 				"pointer-events-none absolute inset-0 z-1 rounded-md bg-foreground/10",
-				isDragging && "opacity-0",
+				// The drag preview stands in for the selection while dragging.
+				// Attribute comes from BlockDragStateBridge.
+				"[[data-dnd-dragging]_&]:opacity-0",
 			)}
 			data-slot="block-selection"
 		/>
