@@ -11,50 +11,21 @@ import {
 
 const CARD_WIDTH = 300;
 const CARD_ESTIMATED_HEIGHT = 110;
+/** Cap stacked range previews so a wide `1-30` cluster stays usable. */
+const LIST_MAX_HEIGHT = 280;
 
 export type CitationPreviewImportMenu = {
 	folders: string[];
 	lastImportParentDir: string;
-	importing: boolean;
+	importingId: string | null;
 	onImport: (citation: Citation, folder: string) => void;
 	/** Lets the hover card stay open while the folder picker is up. */
 	onOpenChange: (open: boolean) => void;
 };
 
-/**
- * Hover card for an in-text citation link: the reference it points at, resolved
- * exactly through the hyperref cite-key map. Only mounted when a match exists.
- * Header mirrors the References panel: in-library badge or import picker, plus
- * an external link.
- */
-export function PdfCitationPreview({
-	screen,
-	matched,
-	importMenu,
-	onPointerEnter,
-	onPointerLeave,
-}: {
-	screen: ScreenPoint;
-	matched: Citation;
-	importMenu?: CitationPreviewImportMenu;
-	onPointerEnter: () => void;
-	onPointerLeave: () => void;
-}) {
-	const { t } = useTranslation("viewer");
-	const viewportWidth =
-		typeof window === "undefined" ? 1200 : window.innerWidth;
-	const viewportHeight =
-		typeof window === "undefined" ? 800 : window.innerHeight;
-	const left = Math.min(
-		Math.max(12, screen.x),
-		viewportWidth - CARD_WIDTH - 12,
-	);
-	const top = Math.min(
-		Math.max(12, screen.y),
-		viewportHeight - CARD_ESTIMATED_HEIGHT - 12,
-	);
-	const m = matched.metadata;
-	const metaParts = [
+function citationMetaParts(citation: Citation): string[] {
+	const m = citation.metadata;
+	return [
 		m.authors?.length
 			? m.authors.length > 1
 				? `${m.authors[0]} et al.`
@@ -62,12 +33,27 @@ export function PdfCitationPreview({
 			: null,
 		m.year != null ? String(m.year) : null,
 		m.venue || null,
-	].filter(Boolean);
-	const inLibrary = Boolean(matched.localMatch);
-	const importable = !inLibrary && citationImportIdentifier(matched) != null;
-	const link = citationExternalUrl(matched);
+	].filter(Boolean) as string[];
+}
 
-	const importIcon = importMenu?.importing ? (
+function CitationPreviewRow({
+	citation,
+	importMenu,
+	showDivider,
+}: {
+	citation: Citation;
+	importMenu?: CitationPreviewImportMenu;
+	showDivider: boolean;
+}) {
+	const { t } = useTranslation("viewer");
+	const m = citation.metadata;
+	const metaParts = citationMetaParts(citation);
+	const inLibrary = Boolean(citation.localMatch);
+	const importable = !inLibrary && citationImportIdentifier(citation) != null;
+	const link = citationExternalUrl(citation);
+	const importing = importMenu?.importingId === citation.id;
+
+	const importIcon = importing ? (
 		<Loader2 className="size-3.5 animate-spin" aria-hidden />
 	) : (
 		<Import className="size-3.5" aria-hidden />
@@ -75,20 +61,17 @@ export function PdfCitationPreview({
 
 	return (
 		<div
-			role="dialog"
-			aria-label={t("references.previewLabel")}
-			className="fixed z-50 w-[300px] rounded-xl border border-border/80 bg-background/98 p-3 shadow-xl ring-1 ring-black/5 backdrop-blur-sm dark:ring-white/10"
-			style={{ left, top }}
-			onPointerEnter={onPointerEnter}
-			onPointerLeave={onPointerLeave}
+			className={showDivider ? "border-border/60 border-t pt-2.5" : undefined}
 		>
 			<div className="flex items-center justify-between gap-2">
-				{matched.display ? (
+				{citation.display ? (
 					<span className="shrink-0 font-medium text-[10px] text-muted-foreground tabular-nums">
-						{matched.display}
+						{citation.display}
 					</span>
 				) : (
-					<span />
+					<span className="shrink-0 font-medium text-[10px] text-muted-foreground tabular-nums">
+						{citation.id.replace(/^ref-?/i, "") || citation.id}
+					</span>
 				)}
 				<span className="flex items-center gap-1">
 					{inLibrary ? (
@@ -98,11 +81,11 @@ export function PdfCitationPreview({
 						/>
 					) : importable && importMenu ? (
 						<CitationImportPopover
-							citationId={matched.id}
+							citationId={citation.id}
 							folders={importMenu.folders}
 							lastImportParentDir={importMenu.lastImportParentDir}
-							importing={importMenu.importing}
-							onImport={(folder) => importMenu.onImport(matched, folder)}
+							importing={importing}
+							onImport={(folder) => importMenu.onImport(citation, folder)}
 							onOpenChange={importMenu.onOpenChange}
 						>
 							<button
@@ -136,13 +119,78 @@ export function PdfCitationPreview({
 				</span>
 			</div>
 			<p className="mt-1 line-clamp-2 text-[13px] leading-snug text-foreground">
-				{m.title ?? matched.raw ?? matched.rawKey ?? matched.id}
+				{m.title ?? citation.raw ?? citation.rawKey ?? citation.id}
 			</p>
 			{metaParts.length ? (
 				<p className="mt-0.5 truncate text-[11px] text-muted-foreground">
 					{metaParts.join(" · ")}
 				</p>
 			) : null}
+		</div>
+	);
+}
+
+/**
+ * Hover card for an in-text citation link: the reference(s) it points at.
+ * A single hyperref hit is one row; ACS ranges like `14-18` list every index
+ * in the expanded cluster. Only mounted when at least one match exists.
+ */
+export function PdfCitationPreview({
+	screen,
+	matched,
+	importMenu,
+	onPointerEnter,
+	onPointerLeave,
+}: {
+	screen: ScreenPoint;
+	matched: Citation[];
+	importMenu?: CitationPreviewImportMenu;
+	onPointerEnter: () => void;
+	onPointerLeave: () => void;
+}) {
+	const { t } = useTranslation("viewer");
+	const viewportWidth =
+		typeof window === "undefined" ? 1200 : window.innerWidth;
+	const viewportHeight =
+		typeof window === "undefined" ? 800 : window.innerHeight;
+	const estimatedHeight =
+		matched.length <= 1
+			? CARD_ESTIMATED_HEIGHT
+			: Math.min(LIST_MAX_HEIGHT, 28 + matched.length * 72);
+	const left = Math.min(
+		Math.max(12, screen.x),
+		viewportWidth - CARD_WIDTH - 12,
+	);
+	const top = Math.min(
+		Math.max(12, screen.y),
+		viewportHeight - estimatedHeight - 12,
+	);
+
+	return (
+		<div
+			role="dialog"
+			aria-label={t("references.previewLabel")}
+			className="fixed z-50 w-[300px] rounded-xl border border-border/80 bg-background/98 p-3 shadow-xl ring-1 ring-black/5 backdrop-blur-sm dark:ring-white/10"
+			style={{ left, top }}
+			onPointerEnter={onPointerEnter}
+			onPointerLeave={onPointerLeave}
+		>
+			<div
+				className={
+					matched.length > 1
+						? "flex max-h-[280px] flex-col gap-2.5 overflow-y-auto"
+						: undefined
+				}
+			>
+				{matched.map((citation, index) => (
+					<CitationPreviewRow
+						key={citation.id}
+						citation={citation}
+						importMenu={importMenu}
+						showDivider={index > 0}
+					/>
+				))}
+			</div>
 		</div>
 	);
 }

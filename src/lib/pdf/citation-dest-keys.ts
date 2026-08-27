@@ -149,6 +149,129 @@ export function citationSidecarKeysForDest(destKey: string): string[] {
 	return keys;
 }
 
+/** Parse the numeric bibliography index from an ACS `mk:refN` key. */
+export function citationRefNumber(destKey: string): number | null {
+	const mk = /^mk:ref(\d+)$/i.exec(destKey);
+	if (!mk) return null;
+	const n = Number.parseInt(mk[1] ?? "", 10);
+	return Number.isNaN(n) ? null : n;
+}
+
+/** Build an ACS-style dest key for bibliography index N. */
+export function citationDestKeyForRefNumber(n: number): string {
+	return `mk:ref${n}`;
+}
+
+/** Same-line tolerance (pt) when clustering superscript citation links. */
+const CITATION_CLUSTER_Y_TOLERANCE_PT = 3;
+/**
+ * Max gap (pt) between consecutive links still considered one in-text group
+ * (e.g. `7,9,14-18`). Larger gaps are separate citation clusters.
+ */
+const CITATION_CLUSTER_MAX_GAP_PT = 12;
+/**
+ * Min gap (pt) between two numeric links that indicates a range hyphen
+ * (`14-18`, ~5pt) rather than a comma (`7,9`, ~1.7pt) in ACS superscripts.
+ */
+const CITATION_RANGE_MIN_GAP_PT = 3.5;
+/** Safety cap so a pathological `1-999` link pair cannot explode the card. */
+const CITATION_RANGE_MAX_SPAN = 30;
+
+/**
+ * Expand a hovered citation link into the full set of dest keys for its
+ * in-text cluster. ACS often only links range endpoints (`14` and `18` in
+ * `14-18`); comma-separated neighbours stay as singletons (`7,9`).
+ *
+ * Returns at least the hovered key when it can be identified; empty when the
+ * hover rect matches nothing.
+ */
+export function expandCitationLinkCluster(
+	links: CitationLinkKeyList | null | undefined,
+	pageIndex: number,
+	rect: HoverRect,
+): string[] {
+	if (!links || links.length === 0) return [];
+	const hovered = matchLinkByRect(links, pageIndex, rect);
+	if (!hovered) return [];
+
+	const sameLine = links
+		.filter(
+			(l) =>
+				l.pageIndex === pageIndex &&
+				Math.abs(l.y - hovered.y) <= CITATION_CLUSTER_Y_TOLERANCE_PT,
+		)
+		.sort((a, b) => a.x - b.x);
+	if (sameLine.length === 0) return [hovered.key];
+
+	const hoveredIdx = sameLine.findIndex(
+		(l) =>
+			l.x === hovered.x &&
+			l.y === hovered.y &&
+			l.w === hovered.w &&
+			l.h === hovered.h &&
+			l.key === hovered.key,
+	);
+	const seed = hoveredIdx >= 0 ? hoveredIdx : 0;
+
+	let left = seed;
+	while (left > 0) {
+		const prev = sameLine[left - 1];
+		const cur = sameLine[left];
+		if (!prev || !cur) break;
+		const gap = cur.x - (prev.x + prev.w);
+		if (gap > CITATION_CLUSTER_MAX_GAP_PT) break;
+		left--;
+	}
+	let right = seed;
+	while (right < sameLine.length - 1) {
+		const cur = sameLine[right];
+		const next = sameLine[right + 1];
+		if (!cur || !next) break;
+		const gap = next.x - (cur.x + cur.w);
+		if (gap > CITATION_CLUSTER_MAX_GAP_PT) break;
+		right++;
+	}
+
+	const cluster = sameLine.slice(left, right + 1);
+	const numbers = new Set<number>();
+	const passthrough: string[] = [];
+
+	for (let i = 0; i < cluster.length; i++) {
+		const cur = cluster[i];
+		if (!cur) continue;
+		const n = citationRefNumber(cur.key);
+		if (n == null) {
+			passthrough.push(cur.key);
+			continue;
+		}
+		numbers.add(n);
+		const next = cluster[i + 1];
+		if (!next) continue;
+		const m = citationRefNumber(next.key);
+		if (m == null) continue;
+		const gap = next.x - (cur.x + cur.w);
+		const lo = Math.min(n, m);
+		const hi = Math.max(n, m);
+		if (
+			hi - lo > 1 &&
+			gap >= CITATION_RANGE_MIN_GAP_PT &&
+			hi - lo <= CITATION_RANGE_MAX_SPAN
+		) {
+			for (let k = lo; k <= hi; k++) numbers.add(k);
+		}
+	}
+
+	const keys = [
+		...passthrough,
+		...[...numbers]
+			.sort((a, b) => a - b)
+			.map((n) => citationDestKeyForRefNumber(n)),
+	];
+	// Always keep the hovered key even if number parsing failed.
+	if (!keys.includes(hovered.key)) keys.unshift(hovered.key);
+	return keys;
+}
+
 /** `pageIndex:pdfY` → BibTeX key of the bibliography entry at that destination. */
 export type CitationDestKeyMap = ReadonlyMap<string, string>;
 

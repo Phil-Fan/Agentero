@@ -78,8 +78,12 @@ export type SelectionMenuState = {
 
 export type CitationPreviewState = {
 	screen: ScreenPoint;
-	/** Sidecar citation the hovered link points at (exact hyperref lookup). */
-	matched: Citation;
+	/**
+	 * Sidecar citation(s) the hovered link points at. A single hyperref hit is
+	 * a one-element list; ACS ranges like `14-18` expand to every index in the
+	 * range (plus any comma-separated neighbours in the same superscript group).
+	 */
+	matched: Citation[];
 };
 
 /**

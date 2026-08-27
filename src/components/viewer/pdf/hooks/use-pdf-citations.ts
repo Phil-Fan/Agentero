@@ -42,6 +42,7 @@ import {
 	type CitationLinkKeyList,
 	citationDestKey,
 	citationSidecarKeysForDest,
+	expandCitationLinkCluster,
 	matchCitationLinkKey,
 } from "@/lib/pdf/citation-dest-keys";
 import { loadPdfDestMaps } from "@/lib/pdf/citation-dest-map";
@@ -124,17 +125,18 @@ function findCitationByDestKey(
 }
 
 /**
- * Which reference a citation link points at. Prefers unambiguous dest-coord
+ * Which reference(s) a citation link points at. Prefers unambiguous dest-coord
  * keys (hyperref `/XYZ`); falls back to the link-annotation dest name when ACS
- * `/FitR` bibliography entries collide on one page. Returns nothing when any
- * link in the chain is missing, so the card simply does not appear.
+ * `/FitR` bibliography entries collide. Nearby ACS superscripts are clustered
+ * so `14-18` expands to refs 14…18 (comma-separated neighbours stay separate).
+ * Returns an empty list when nothing resolves, so the card does not appear.
  */
-function resolveCitation(
+function resolveCitations(
 	link: PdfLinkAnnoObject,
 	destKeys: CitationDestKeyMap | null,
 	citationLinks: CitationLinkKeyList | null,
 	citations: Citation[],
-): Citation | undefined {
+): Citation[] {
 	const destination = getLinkDestination(link.target);
 	if (destination) {
 		const byCoord = destKeys?.get(
@@ -142,13 +144,35 @@ function resolveCitation(
 		);
 		if (byCoord) {
 			const matched = findCitationByDestKey(byCoord, citations);
-			if (matched) return matched;
+			if (matched) return [matched];
 		}
 	}
 
-	const byLink = matchCitationLinkKey(citationLinks, link.pageIndex, link.rect);
-	if (!byLink) return undefined;
-	return findCitationByDestKey(byLink, citations);
+	const clusterKeys = expandCitationLinkCluster(
+		citationLinks,
+		link.pageIndex,
+		link.rect,
+	);
+	if (clusterKeys.length === 0) {
+		const byLink = matchCitationLinkKey(
+			citationLinks,
+			link.pageIndex,
+			link.rect,
+		);
+		if (!byLink) return [];
+		const matched = findCitationByDestKey(byLink, citations);
+		return matched ? [matched] : [];
+	}
+
+	const out: Citation[] = [];
+	const seen = new Set<string>();
+	for (const key of clusterKeys) {
+		const matched = findCitationByDestKey(key, citations);
+		if (!matched || seen.has(matched.id)) continue;
+		seen.add(matched.id);
+		out.push(matched);
+	}
+	return out;
 }
 
 export function usePdfCitations({
@@ -264,13 +288,13 @@ export function usePdfCitations({
 				scheduleCitationHide();
 				return;
 			}
-			const matched = resolveCitation(
+			const matched = resolveCitations(
 				link,
 				destKeyMapRef.current,
 				citationLinksRef.current,
 				citationsRef.current,
 			);
-			if (!matched) {
+			if (matched.length === 0) {
 				scheduleCitationHide();
 				return;
 			}

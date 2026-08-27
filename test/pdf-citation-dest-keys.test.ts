@@ -7,6 +7,7 @@ import {
 	buildPdfDestMaps,
 	citationDestKey,
 	citationSidecarKeysForDest,
+	expandCitationLinkCluster,
 	fitHCoordResolver,
 	fitRCoordResolver,
 	hyperrefCrossrefParser,
@@ -481,6 +482,107 @@ describe("citationSidecarKeysForDest", () => {
 			"ref-12",
 			"ref12",
 		]);
+	});
+});
+
+describe("expandCitationLinkCluster", () => {
+	/** Geometry from ACS `7,9,14-18` (comma ~1.7pt, hyphen ~5.3pt). */
+	const cluster = [
+		{
+			pageIndex: 0,
+			x: 397.9,
+			y: 565.3,
+			w: 3.7,
+			h: 9,
+			key: "mk:ref7",
+		},
+		{
+			pageIndex: 0,
+			x: 403.3,
+			y: 565.3,
+			w: 3.7,
+			h: 9,
+			key: "mk:ref9",
+		},
+		{
+			pageIndex: 0,
+			x: 408.6,
+			y: 565.3,
+			w: 7.4,
+			h: 9,
+			key: "mk:ref14",
+		},
+		{
+			pageIndex: 0,
+			x: 421.4,
+			y: 565.3,
+			w: 7.4,
+			h: 9,
+			key: "mk:ref18",
+		},
+	];
+
+	it("expands hyphen ranges but keeps comma-separated neighbours", () => {
+		expect(
+			expandCitationLinkCluster(cluster, 0, {
+				origin: { x: 408.6, y: 565.3 },
+				size: { width: 7.4, height: 9 },
+			}),
+		).toEqual([
+			"mk:ref7",
+			"mk:ref9",
+			"mk:ref14",
+			"mk:ref15",
+			"mk:ref16",
+			"mk:ref17",
+			"mk:ref18",
+		]);
+	});
+
+	it("does not fill a comma-separated pair with a large numeric gap", () => {
+		const commaOnly = [
+			{
+				pageIndex: 0,
+				x: 346.7,
+				y: 577.4,
+				w: 7.3,
+				h: 9,
+				key: "mk:ref11",
+			},
+			{
+				pageIndex: 0,
+				x: 355.5,
+				y: 577.4,
+				w: 7.3,
+				h: 9,
+				key: "mk:ref19",
+			},
+		];
+		expect(
+			expandCitationLinkCluster(commaOnly, 0, {
+				origin: { x: 346.7, y: 577.4 },
+				size: { width: 7.3, height: 9 },
+			}),
+		).toEqual(["mk:ref11", "mk:ref19"]);
+	});
+
+	it("returns a singleton for an isolated link", () => {
+		expect(
+			expandCitationLinkCluster(
+				[
+					{
+						pageIndex: 1,
+						x: 100,
+						y: 200,
+						w: 8,
+						h: 9,
+						key: "mk:ref3",
+					},
+				],
+				1,
+				{ origin: { x: 100, y: 200 }, size: { width: 8, height: 9 } },
+			),
+		).toEqual(["mk:ref3"]);
 	});
 });
 

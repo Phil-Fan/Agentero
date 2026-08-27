@@ -1638,8 +1638,7 @@ function PdfViewerInner({
 						? {
 								folders: citationImport.folders,
 								lastImportParentDir: citationImport.lastImportParentDir,
-								importing:
-									citationImport.importingId === citationPreview?.matched.id,
+								importingId: citationImport.importingId,
 								onImport: citationImport.importCitation,
 								onOpenChange: (open) =>
 									open ? cancelCitationHide() : scheduleCitationHide(),
