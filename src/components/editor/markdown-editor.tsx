@@ -696,10 +696,10 @@ export function MarkdownEditor({
 												readOnly={readOnly}
 												// `pl-10` leaves room for the block drag handle
 												// (`-translate-x-full` in the left gutter).
-												// `pr-16` reserves a right gutter for the collapsed
-												// TOC strip (`right-2 w-12`) so it never covers text.
+												// `pr-14` reserves a right gutter for the collapsed
+												// TOC strip (`right-2 w-10`) so it never covers text.
 												// Narrow panes hide that strip, so the gutter goes too.
-												className="min-h-full pl-10 pr-16 pt-4 pb-48 @max-2xs/editor:pr-6 [&>*:first-child]:mt-0"
+												className="min-h-full pl-10 pr-14 pt-4 pb-48 @max-2xs/editor:pr-6 [&>*:first-child]:mt-0"
 												style={editorTypographyStyle}
 											/>
 											{!readOnly ? (

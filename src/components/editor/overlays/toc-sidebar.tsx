@@ -11,9 +11,9 @@ import i18n from "@/i18n";
 import { cn } from "@/lib/core/utils";
 
 const markerWidthByDepth = {
-	1: "w-8",
-	2: "w-6",
-	3: "w-[18px]",
+	1: "w-5",
+	2: "w-4",
+	3: "w-3.5",
 	4: "w-3",
 	5: "w-2.5",
 	6: "w-2",
@@ -107,7 +107,7 @@ export function TocSidebar(props: TocSideBarProps) {
 			{...navProps}
 			aria-label={i18n.t("editor:toc.label")}
 			className={cn(
-				"group/toc absolute top-1/4 right-2 z-20 w-12",
+				"group/toc absolute top-1/4 right-2 z-20 w-10",
 				// Hover expands to w-64: wider than a narrow pane, so drop the strip
 				// there (the editor also reclaims its right gutter at that width).
 				"@max-2xs/editor:hidden",
@@ -116,7 +116,7 @@ export function TocSidebar(props: TocSideBarProps) {
 		>
 			<div
 				className={cn(
-					"rounded-lg border border-transparent bg-transparent p-2",
+					"rounded-lg border border-transparent bg-transparent p-1",
 					"transition-[background-color,border-color,box-shadow] duration-200 ease-out",
 					"group-hover/toc:border-border/60 group-hover/toc:bg-background/95 group-hover/toc:shadow-md",
 					"group-focus-within/toc:border-border/60 group-focus-within/toc:bg-background/95 group-focus-within/toc:shadow-md",
@@ -124,7 +124,7 @@ export function TocSidebar(props: TocSideBarProps) {
 			>
 				<div
 					id="toc_wrap"
-					className="agentero-scroll max-h-[min(46vh,28rem)] overflow-y-auto overscroll-contain"
+					className="max-h-[min(46vh,28rem)] overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 				>
 					{state.headingList.map((item) => {
 						const active = item.id === state.activeContentId;
@@ -138,7 +138,8 @@ export function TocSidebar(props: TocSideBarProps) {
 								aria-label={item.title}
 								data-active={active}
 								className={cn(
-									"group/item flex h-6 w-full items-center justify-between gap-2 rounded-sm px-1 outline-none",
+									"group/item flex h-5 w-full items-center justify-between gap-0 rounded-sm px-1 outline-none",
+									"group-hover/toc:gap-1.5 group-focus-within/toc:gap-1.5",
 									"transition-[background-color,color] duration-200 ease-out",
 									"text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
 									active && "text-foreground hover:text-foreground",
@@ -160,7 +161,7 @@ export function TocSidebar(props: TocSideBarProps) {
 								<span
 									aria-hidden="true"
 									className={cn(
-										"h-0.5 shrink-0 rounded-full bg-muted-foreground/35",
+										"h-[3px] shrink-0 rounded-full bg-muted-foreground/35",
 										"transition-[height,width,background-color,box-shadow] duration-200 ease-out motion-reduce:transition-none",
 										markerWidthByDepth[
 											item.depth as keyof typeof markerWidthByDepth
