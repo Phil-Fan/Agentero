@@ -81,6 +81,11 @@
 		"open": "Open",
 		"apply": "Apply"
 	},
+	"blockDrag": {
+		"handle": "Drag to move",
+		"duplicate": "Duplicate",
+		"delete": "Delete"
+	},
 	"contextMenu": {
 		"cut": "Cut",
 		"copy": "Copy",

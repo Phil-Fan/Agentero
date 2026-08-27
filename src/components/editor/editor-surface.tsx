@@ -5,6 +5,7 @@ import {
 	PlateContent,
 	useComposedRef,
 	useEditorContainerRef,
+	useEditorRef,
 } from "platejs/react";
 import type * as React from "react";
 
@@ -21,10 +22,12 @@ export function EditorContainer({
 	ref,
 	...props
 }: React.ComponentProps<"div">) {
+	const editor = useEditorRef();
 	const plateContainerRef = useEditorContainerRef();
 	const composedRef = useComposedRef(plateContainerRef, ref);
 	const containerProps: React.ComponentProps<"div"> = {
 		...props,
+		id: editor.meta.uid,
 		ref: composedRef,
 	};
 

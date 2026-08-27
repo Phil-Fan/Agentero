@@ -134,26 +134,35 @@ async function boot() {
 
 	if (isDocWindow) {
 		// Doc windows may show PDF — need PDFium host; KaTeX for markdown notes.
-		const [{ DocWindowRoot }, { PdfEngineHost }] = await Promise.all([
-			import("@/components/shell/doc-window-root"),
-			import("@/components/viewer/pdf/engine-provider"),
-			import("katex/dist/katex.min.css"),
-		]);
+		const [{ DocWindowRoot }, { PdfEngineHost }, { EditorDndProvider }] =
+			await Promise.all([
+				import("@/components/shell/doc-window-root"),
+				import("@/components/viewer/pdf/engine-provider"),
+				import("@/components/editor/plugins/dnd-kit"),
+				import("katex/dist/katex.min.css"),
+			]);
 		bootStage("doc-window-module");
 		initVaultStore();
 		initWorkspaceStore();
 		ReactDOM.createRoot(root).render(
 			<PdfEngineHost>
-				<React.StrictMode>
-					<I18nextProvider i18n={i18n}>
-						<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-							<TooltipProvider delayDuration={300}>
-								<DocWindowRoot />
-								<Toaster />
-							</TooltipProvider>
-						</ThemeProvider>
-					</I18nextProvider>
-				</React.StrictMode>
+				{/* HTML5Backend cannot remount under StrictMode — drag sources go dead. */}
+				<EditorDndProvider>
+					<React.StrictMode>
+						<I18nextProvider i18n={i18n}>
+							<ThemeProvider
+								attribute="class"
+								defaultTheme="system"
+								enableSystem
+							>
+								<TooltipProvider delayDuration={300}>
+									<DocWindowRoot />
+									<Toaster />
+								</TooltipProvider>
+							</ThemeProvider>
+						</I18nextProvider>
+					</React.StrictMode>
+				</EditorDndProvider>
 			</PdfEngineHost>,
 		);
 		logger.info(
@@ -168,28 +177,33 @@ async function boot() {
 	// no viewer and no math, so it must not pay for PDFium or the KaTeX fonts.
 	// Keep the engine host outside StrictMode below so dev effect replay cannot
 	// initialize a second PDFium instance.
-	const [{ default: App }, { PdfEngineHost }] = await Promise.all([
-		import(isMobileApp() ? "./components/mobile/mobile-app" : "./App"),
-		import("@/components/viewer/pdf/engine-provider"),
-		import("katex/dist/katex.min.css"),
-	]);
+	const [{ default: App }, { PdfEngineHost }, { EditorDndProvider }] =
+		await Promise.all([
+			import(isMobileApp() ? "./components/mobile/mobile-app" : "./App"),
+			import("@/components/viewer/pdf/engine-provider"),
+			import("@/components/editor/plugins/dnd-kit"),
+			import("katex/dist/katex.min.css"),
+		]);
 	bootStage("app-module");
 	initSettingsStore();
 	initVaultStore();
 	initWorkspaceStore();
 	ReactDOM.createRoot(root).render(
 		<PdfEngineHost>
-			<React.StrictMode>
-				<I18nextProvider i18n={i18n}>
-					<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-						<TooltipProvider delayDuration={300}>
-							<App />
-							{/* Global error / notice stack (top-right); use notifyError from @/lib/notify */}
-							<Toaster />
-						</TooltipProvider>
-					</ThemeProvider>
-				</I18nextProvider>
-			</React.StrictMode>
+			{/* HTML5Backend cannot remount under StrictMode — drag sources go dead. */}
+			<EditorDndProvider>
+				<React.StrictMode>
+					<I18nextProvider i18n={i18n}>
+						<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+							<TooltipProvider delayDuration={300}>
+								<App />
+								{/* Global error / notice stack (top-right); use notifyError from @/lib/notify */}
+								<Toaster />
+							</TooltipProvider>
+						</ThemeProvider>
+					</I18nextProvider>
+				</React.StrictMode>
+			</EditorDndProvider>
 		</PdfEngineHost>,
 	);
 	logger.info(

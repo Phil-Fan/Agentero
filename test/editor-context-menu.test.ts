@@ -154,4 +154,19 @@ describe("Markdown editor context menu", () => {
 			renameHeading: true,
 		});
 	});
+
+	it("enables copy and cut when blocks are selected without a text range", () => {
+		expect(
+			editorContextMenuCapabilities({
+				exportAvailable: false,
+				headingRenameAvailable: false,
+				readOnly: false,
+				selectionExpanded: false,
+				hasBlockSelection: true,
+			}),
+		).toMatchObject({
+			copy: true,
+			cut: true,
+		});
+	});
 });

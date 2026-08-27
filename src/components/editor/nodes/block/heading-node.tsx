@@ -3,6 +3,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import type { PlateElementProps } from "platejs/react";
 import { PlateElement } from "platejs/react";
+import { cn } from "@/lib/core/utils";
 
 /*
  * Heading sizes step down with the editor pane width (`@container/editor` in
@@ -10,9 +11,9 @@ import { PlateElement } from "platejs/react";
  * Without that named container (export surface, embeds) the base size applies.
  */
 const headingVariants = cva(
-	// first:mt-0: notes almost always start with `# Title`; don't stack the
-	// section gap on top of the editor's pt-4.
-	"relative mb-1 first:mt-0 transition-colors duration-300 data-[nav-target=true]:rounded-md data-[nav-target=true]:bg-highlight/20",
+	// Document-start spacing is applied from `path` (not :first-child): block
+	// drag wrappers make every heading the first child of its own parent.
+	"relative mb-1 transition-colors duration-300 data-[nav-target=true]:rounded-md data-[nav-target=true]:bg-highlight/20",
 	{
 		variants: {
 			variant: {
@@ -31,6 +32,8 @@ export function HeadingElement({
 	variant = "h1",
 	...props
 }: PlateElementProps & VariantProps<typeof headingVariants>) {
+	const isDocumentStart =
+		Array.isArray(props.path) && props.path.length === 1 && props.path[0] === 0;
 	const attributes = {
 		...props.attributes,
 		// @platejs/toc 53.0.0 identifies IntersectionObserver targets by DOM
@@ -41,7 +44,7 @@ export function HeadingElement({
 	return (
 		<PlateElement
 			as={variant ?? "h1"}
-			className={headingVariants({ variant })}
+			className={cn(headingVariants({ variant }), isDocumentStart && "mt-0")}
 			{...props}
 			attributes={attributes}
 		>

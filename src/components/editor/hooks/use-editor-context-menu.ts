@@ -1,6 +1,7 @@
 "use client";
 
 import { MarkdownPlugin } from "@platejs/markdown";
+import { BlockSelectionPlugin } from "@platejs/selection/react";
 import { RangeApi, type RangeRef } from "platejs";
 import type { PlateEditor } from "platejs/react";
 import {
@@ -16,6 +17,11 @@ import {
 	readTextFromClipboard,
 } from "@/lib/core/clipboard";
 import { errorMessage, notifyError, notifyWarning } from "@/lib/core/notify";
+import {
+	hasSelectedBlocks,
+	isEditorClipboardTarget,
+	serializeSelectedBlocksAsMarkdown,
+} from "@/lib/markdown/block-selection";
 import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
 import {
 	type EditorLinkTemplateKind,
@@ -91,6 +97,7 @@ export function useEditorContextMenu({
 }: UseEditorContextMenuOptions): EditorContextMenu {
 	const selectionRef = useRef<RangeRef | null>(null);
 	const [selectionExpanded, setSelectionExpanded] = useState(false);
+	const [blockSelectionActive, setBlockSelectionActive] = useState(false);
 	const [headingContext, setHeadingContext] =
 		useState<WikiHeadingAnchor | null>(null);
 	const [renameOpen, setRenameOpen] = useState(false);
@@ -125,6 +132,34 @@ export function useEditorContextMenu({
 			: null;
 	}, [editor, savedRef]);
 
+	const refreshBlockSelection = useCallback(() => {
+		setBlockSelectionActive(hasSelectedBlocks(editor));
+	}, [editor]);
+
+	useEffect(() => {
+		const onCopyOrCut = (event: ClipboardEvent) => {
+			if (event.defaultPrevented) return;
+			if (!isEditorClipboardTarget(event.target, editorContainerRef.current)) {
+				return;
+			}
+			if (!hasSelectedBlocks(editor)) return;
+			const markdown = serializeSelectedBlocksAsMarkdown(editor);
+			if (!markdown) return;
+			event.preventDefault();
+			event.stopPropagation();
+			event.clipboardData?.setData("text/plain", markdown);
+			if (event.type === "cut" && !readOnly) {
+				editor.getTransforms(BlockSelectionPlugin).blockSelection.removeNodes();
+			}
+		};
+		document.addEventListener("copy", onCopyOrCut, true);
+		document.addEventListener("cut", onCopyOrCut, true);
+		return () => {
+			document.removeEventListener("copy", onCopyOrCut, true);
+			document.removeEventListener("cut", onCopyOrCut, true);
+		};
+	}, [editor, editorContainerRef, readOnly]);
+
 	const onContextMenu = useCallback(() => {
 		selectionRef.current?.unref();
 		const selection = editor.selection;
@@ -134,6 +169,8 @@ export function useEditorContextMenu({
 		setSelectionExpanded(
 			Boolean(selection && !RangeApi.isCollapsed(selection)),
 		);
+		refreshBlockSelection();
+		window.setTimeout(refreshBlockSelection, 0);
 		const heading = currentHeadingAnchor();
 		setHeadingContext(
 			canRenameWikiHeading({
@@ -153,6 +190,7 @@ export function useEditorContextMenu({
 		filePathRef,
 		onRenameHeading,
 		readOnly,
+		refreshBlockSelection,
 	]);
 
 	const onOpenChange = useCallback((open: boolean) => {
@@ -180,6 +218,14 @@ export function useEditorContextMenu({
 	);
 
 	const copy = useCallback(async () => {
+		if (hasSelectedBlocks(editor)) {
+			const markdown = serializeSelectedBlocksAsMarkdown(editor);
+			if (!markdown) return;
+			await copyTextToClipboard(markdown, {
+				errorMessage: i18n.t("editor:contextMenu.copyFailed"),
+			});
+			return;
+		}
 		const selection = takeSelection();
 		if (!selection || RangeApi.isCollapsed(selection)) return;
 		const text = editor.api.string(selection);
@@ -190,6 +236,16 @@ export function useEditorContextMenu({
 
 	const cut = useCallback(async () => {
 		if (readOnly) return;
+		if (hasSelectedBlocks(editor)) {
+			const markdown = serializeSelectedBlocksAsMarkdown(editor);
+			if (!markdown) return;
+			const copied = await copyTextToClipboard(markdown, {
+				errorMessage: i18n.t("editor:contextMenu.copyFailed"),
+			});
+			if (!copied || !editorContainerRef.current?.isConnected) return;
+			editor.getTransforms(BlockSelectionPlugin).blockSelection.removeNodes();
+			return;
+		}
 		const selection = takeSelection();
 		if (!selection || RangeApi.isCollapsed(selection)) return;
 		const text = editor.api.string(selection);
@@ -343,7 +399,7 @@ export function useEditorContextMenu({
 	);
 
 	return {
-		selectionExpanded,
+		selectionExpanded: selectionExpanded || blockSelectionActive,
 		onContextMenu,
 		onOpenChange,
 		copy,

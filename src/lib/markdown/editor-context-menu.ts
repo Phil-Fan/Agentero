@@ -24,16 +24,20 @@ export function editorContextMenuCapabilities({
 	headingRenameAvailable,
 	readOnly,
 	selectionExpanded,
+	hasBlockSelection = false,
 }: {
 	/** Desktop note export (PDF/PNG). False in browser preview. */
 	exportAvailable: boolean;
 	headingRenameAvailable: boolean;
 	readOnly: boolean;
 	selectionExpanded: boolean;
+	/** True when Plate block selection has one or more blocks. */
+	hasBlockSelection?: boolean;
 }): EditorContextMenuCapabilities {
+	const canCopy = selectionExpanded || hasBlockSelection;
 	return {
-		copy: selectionExpanded,
-		cut: !readOnly && selectionExpanded,
+		copy: canCopy,
+		cut: !readOnly && canCopy,
 		exportNote: exportAvailable,
 		formatMarkdown: !readOnly,
 		insertLink: !readOnly,
