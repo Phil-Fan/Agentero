@@ -79,7 +79,8 @@ function ensureWorker(): Worker | null {
 				crossrefs: new Map(event.data.crossrefs),
 				crossrefKinds: new Map(event.data.crossrefKinds),
 				crossrefLabels: new Map(event.data.crossrefLabels),
-				crossrefLinks: event.data.crossrefLinks,
+				crossrefLinks: event.data.crossrefLinks ?? [],
+				citationLinks: event.data.citationLinks ?? [],
 			});
 		} else request.reject(new Error(event.data.error));
 	};

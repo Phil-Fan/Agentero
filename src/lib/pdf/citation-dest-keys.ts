@@ -62,18 +62,25 @@ export function linkRectKey(
 /** Max centre-point distance (pt) when matching a hovered link to a parsed one. */
 const LINK_RECT_MATCH_TOLERANCE_PT = 3;
 
-/**
- * Find the crossref label for a hovered link annotation. Exact rect key first,
- * then nearest centre within {@link LINK_RECT_MATCH_TOLERANCE_PT}.
- */
-export function matchCrossrefLinkLabel(
-	links: CrossrefLinkLabelList | null | undefined,
+type LinkRectLike = {
+	pageIndex: number;
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+};
+
+type HoverRect = {
+	origin: { x: number; y: number };
+	size: { width: number; height: number };
+};
+
+/** Exact rect key, else nearest centre within {@link LINK_RECT_MATCH_TOLERANCE_PT}. */
+function matchLinkByRect<T extends LinkRectLike>(
+	links: readonly T[] | null | undefined,
 	pageIndex: number,
-	rect: {
-		origin: { x: number; y: number };
-		size: { width: number; height: number };
-	},
-): CrossrefDestLabel | null {
+	rect: HoverRect,
+): T | null {
 	if (!links || links.length === 0) return null;
 	const exact = linkRectKey(
 		pageIndex,
@@ -84,12 +91,12 @@ export function matchCrossrefLinkLabel(
 	);
 	const cx = rect.origin.x + rect.size.width / 2;
 	const cy = rect.origin.y + rect.size.height / 2;
-	let best: CrossrefLinkLabel | null = null;
+	let best: T | null = null;
 	let bestDist = Number.POSITIVE_INFINITY;
 	for (const link of links) {
 		if (link.pageIndex !== pageIndex) continue;
 		if (linkRectKey(link.pageIndex, link.x, link.y, link.w, link.h) === exact) {
-			return link.label;
+			return link;
 		}
 		const lx = link.x + link.w / 2;
 		const ly = link.y + link.h / 2;
@@ -99,8 +106,47 @@ export function matchCrossrefLinkLabel(
 			best = link;
 		}
 	}
-	if (best && bestDist <= LINK_RECT_MATCH_TOLERANCE_PT) return best.label;
+	if (best && bestDist <= LINK_RECT_MATCH_TOLERANCE_PT) return best;
 	return null;
+}
+
+/**
+ * Find the crossref label for a hovered link annotation. Exact rect key first,
+ * then nearest centre within {@link LINK_RECT_MATCH_TOLERANCE_PT}.
+ */
+export function matchCrossrefLinkLabel(
+	links: CrossrefLinkLabelList | null | undefined,
+	pageIndex: number,
+	rect: HoverRect,
+): CrossrefDestLabel | null {
+	return matchLinkByRect(links, pageIndex, rect)?.label ?? null;
+}
+
+/**
+ * Find the citation dest key (`cite.smith2020` / `mk:ref12`) for a hovered
+ * link annotation. Used when ACS `/FitR` bibliography destinations collide.
+ */
+export function matchCitationLinkKey(
+	links: CitationLinkKeyList | null | undefined,
+	pageIndex: number,
+	rect: HoverRect,
+): string | null {
+	return matchLinkByRect(links, pageIndex, rect)?.key ?? null;
+}
+
+/**
+ * Candidate sidecar ids / rawKeys for a PDF destination name. Hyperref
+ * `cite.<key>` passes through; ACS `mk:refN` also tries `ref-N` / `refN`
+ * (S2-parsed sidecars use `id: "ref-N"` without a `rawKey`).
+ */
+export function citationSidecarKeysForDest(destKey: string): string[] {
+	const keys = [destKey];
+	const mk = /^mk:ref(\d+)$/i.exec(destKey);
+	if (mk) {
+		const n = mk[1];
+		keys.push(`ref-${n}`, `ref${n}`);
+	}
+	return keys;
 }
 
 /** `pageIndex:pdfY` → BibTeX key of the bibliography entry at that destination. */
@@ -147,6 +193,29 @@ export type CrossrefLinkLabel = {
 /** All cross-reference link annotations found while walking the PDF. */
 export type CrossrefLinkLabelList = readonly CrossrefLinkLabel[];
 
+/**
+ * One in-text citation link annotation, keyed by its PDFium device-space
+ * (top-left) rect. Needed when ACS `/FitR` bibliography destinations collide
+ * (dozens of `mk:ref*` sharing one page rectangle).
+ */
+export type CitationLinkKey = {
+	/** 0-based page index of the *link* (not the destination). */
+	pageIndex: number;
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+	/**
+	 * Destination key from the link's named dest: hyperref `cite.<bibtexKey>`
+	 * (parser strips the prefix) or ACS `mk:refN` (kept as-is for
+	 * {@link citationSidecarKeysForDest}).
+	 */
+	key: string;
+};
+
+/** All citation link annotations found while walking the PDF. */
+export type CitationLinkKeyList = readonly CitationLinkKey[];
+
 /** Both destination indexes parsed from one PDF in a single object-tree walk. */
 export type PdfDestMaps = {
 	/** In-text citation destinations. */
@@ -175,6 +244,11 @@ export type PdfDestMaps = {
 	 * loses the dest name, but the link annotation still carries it.
 	 */
 	crossrefLinks: CrossrefLinkLabelList;
+	/**
+	 * Link annotation rect → citation dest key. Exact for ACS `mk:ref*` where
+	 * every bibliography entry on a page shares one `/FitR` coordinate.
+	 */
+	citationLinks: CitationLinkKeyList;
 };
 
 // ---- Pluggable destination-name parsers ----
@@ -536,6 +610,7 @@ export async function buildPdfDestMaps(
 		crossrefKinds: new Map(),
 		crossrefLabels: new Map(),
 		crossrefLinks: [],
+		citationLinks: [],
 	};
 	const doc = await PDFDocument.load(bytes, { updateMetadata: false });
 	const context = doc.context;
@@ -556,6 +631,7 @@ export async function buildPdfDestMaps(
 	const crossKindsByCoord = new Map<string, CrossrefKind[]>();
 	const crossLabelsByCoord = new Map<string, CrossrefDestLabel[]>();
 	const crossrefLinks: CrossrefLinkLabel[] = [];
+	const citationLinks: CitationLinkKey[] = [];
 
 	const crossrefParsers = options.crossrefParsers ?? defaultCrossrefNameParsers;
 	const citationParsers = options.citationParsers ?? defaultCitationNameParsers;
@@ -627,8 +703,9 @@ export async function buildPdfDestMaps(
 	}
 
 	// Index Link annotations by their device-space rect so ACS `/FitR`
-	// collisions (every float on a page shares one destination coordinate)
-	// can still be resolved from the link's own dest name (`mk:tbl1`).
+	// collisions (every float / bibliography entry on a page shares one
+	// destination coordinate) can still be resolved from the link's own
+	// dest name (`mk:tbl1` / `mk:ref12`).
 	for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
 		const page = pages[pageIndex];
 		if (!page) continue;
@@ -660,8 +737,10 @@ export async function buildPdfDestMaps(
 
 			const destName = linkAnnotationDestName(annot, context);
 			if (!destName) continue;
-			const match = parseCrossref(destName);
-			if (!match || match.number == null) continue;
+
+			const citationKey = parseCitationKey(destName);
+			const crossMatch = citationKey ? null : parseCrossref(destName);
+			if (!citationKey && (!crossMatch || crossMatch.number == null)) continue;
 
 			const rect = context.lookup(annot.get(PDFName.of("Rect")));
 			if (!(rect instanceof PDFArray) || rect.asArray().length < 4) continue;
@@ -680,14 +759,25 @@ export async function buildPdfDestMaps(
 				boxOriginX,
 				boxOriginY,
 			);
-			crossrefLinks.push({
-				pageIndex,
-				x: device.x,
-				y: device.y,
-				w: device.w,
-				h: device.h,
-				label: { kind: match.kind, number: match.number },
-			});
+			if (citationKey) {
+				citationLinks.push({
+					pageIndex,
+					x: device.x,
+					y: device.y,
+					w: device.w,
+					h: device.h,
+					key: citationKey,
+				});
+			} else if (crossMatch && crossMatch.number != null) {
+				crossrefLinks.push({
+					pageIndex,
+					x: device.x,
+					y: device.y,
+					w: device.w,
+					h: device.h,
+					label: { kind: crossMatch.kind, number: crossMatch.number },
+				});
+			}
 		}
 	}
 
@@ -697,6 +787,7 @@ export async function buildPdfDestMaps(
 		crossrefKinds: crossKindsByCoord,
 		crossrefLabels: crossLabelsByCoord,
 		crossrefLinks,
+		citationLinks,
 	};
 }
 

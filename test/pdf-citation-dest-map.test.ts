@@ -13,6 +13,7 @@ function citeMaps(entries: [string, string][]): PdfDestMaps {
 		crossrefKinds: new Map(),
 		crossrefLabels: new Map(),
 		crossrefLinks: [],
+		citationLinks: [],
 	};
 }
 

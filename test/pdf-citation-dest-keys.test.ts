@@ -6,10 +6,12 @@ import {
 	buildCitationDestKeyMap,
 	buildPdfDestMaps,
 	citationDestKey,
+	citationSidecarKeysForDest,
 	fitHCoordResolver,
 	fitRCoordResolver,
 	hyperrefCrossrefParser,
 	linkRectKey,
+	matchCitationLinkKey,
 	matchCrossrefLinkLabel,
 	xyzCoordResolver,
 } from "@/lib/pdf/citation-dest-keys";
@@ -357,7 +359,16 @@ describe("buildPdfDestMaps with mixed conventions", () => {
 			Rect: [473.7, 116.0, 502.9, 125.0],
 			A: { S: "GoTo", D: PDFString.of("mk:fig1") },
 		});
-		page.node.set(PDFName.of("Annots"), context.obj([tblLink, figLink]));
+		const refLink = context.obj({
+			Type: "Annot",
+			Subtype: "Link",
+			Rect: [100.0, 200.0, 112.0, 210.0],
+			A: { S: "GoTo", D: PDFString.of("mk:ref1") },
+		});
+		page.node.set(
+			PDFName.of("Annots"),
+			context.obj([tblLink, figLink, refLink]),
+		);
 
 		return { bytes: await doc.save(), page };
 	}
@@ -431,6 +442,7 @@ describe("buildPdfDestMaps with mixed conventions", () => {
 		const maps = await buildPdfDestMaps(bytes);
 
 		expect(maps.crossrefLinks.length).toBe(2);
+		expect(maps.citationLinks.length).toBe(1);
 
 		// PDF Rect [347.4, 96.2, 373.5, 105.2] on a 792-pt page → device y =
 		// 792 - 105.2 = 686.8.
@@ -447,6 +459,28 @@ describe("buildPdfDestMaps with mixed conventions", () => {
 				size: { width: 29.2, height: 9.0 },
 			}),
 		).toEqual({ kind: "figure", number: 1 });
+
+		// PDF Rect [100, 200, 112, 210] → device y = 792 - 210 = 582.
+		expect(
+			matchCitationLinkKey(maps.citationLinks, 0, {
+				origin: { x: 100.0, y: 582.0 },
+				size: { width: 12.0, height: 10.0 },
+			}),
+		).toBe("mk:ref1");
+	});
+});
+
+describe("citationSidecarKeysForDest", () => {
+	it("passes hyperref keys through", () => {
+		expect(citationSidecarKeysForDest("smith2020")).toEqual(["smith2020"]);
+	});
+
+	it("maps ACS mk:refN to sidecar ref-N ids", () => {
+		expect(citationSidecarKeysForDest("mk:ref12")).toEqual([
+			"mk:ref12",
+			"ref-12",
+			"ref12",
+		]);
 	});
 });
 
@@ -503,6 +537,34 @@ describe("ACS paper link-rect crossrefs", () => {
 			} catch {
 				// Sidecar optional outside the Agentero vault fixture.
 			}
+		},
+	);
+
+	it.skipIf(!paperDir)(
+		"indexes mk:ref* citation links when FitR bibliography coords collide",
+		async () => {
+			const dir = paperDir as string;
+			const name = dir.replace(/\/$/, "").split("/").pop();
+			const bytes = readFileSync(`${dir}/${name}.pdf`);
+			const maps = await buildPdfDestMaps(bytes);
+
+			// Coord map is empty: 32 refs share one /FitR rectangle per page.
+			expect(maps.cites.size).toBe(0);
+			expect(maps.citationLinks.length).toBeGreaterThan(0);
+
+			const ref1 = maps.citationLinks.find((l) => l.key === "mk:ref1");
+			const ref64 = maps.citationLinks.find((l) => l.key === "mk:ref64");
+			expect(ref1).toBeTruthy();
+			expect(ref64).toBeTruthy();
+
+			const sidecar = JSON.parse(
+				readFileSync(`${dir}/source/agentero-cite.json`, "utf8"),
+			) as { citations: { id: string; rawKey?: string }[] };
+			const keys = new Set(citationSidecarKeysForDest("mk:ref1"));
+			const matched = sidecar.citations.find(
+				(c) => (c.rawKey != null && keys.has(c.rawKey)) || keys.has(c.id),
+			);
+			expect(matched?.id).toBe("ref-1");
 		},
 	);
 });

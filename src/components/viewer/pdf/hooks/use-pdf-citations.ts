@@ -3,17 +3,20 @@
  * activating a link (GoTo destination → scroll, URI → system browser) and the
  * hover reference card.
  *
- * The card shows the reference a citation points at, resolved exactly through
- * the hyperref `cite.<bibtexKey>` destination map (95% of in-text links across
- * 31 sampled papers, no wrong hits); links the map cannot resolve show nothing.
+ * The card shows the reference a citation points at. Resolution order:
+ * 1. Unambiguous dest coordinate → key (hyperref `cite.<bibtexKey>` /XYZ).
+ * 2. Link annotation rect → dest key (`mk:ref12`) when ACS `/FitR`
+ *    bibliography entries collide on one page.
+ * 3. Key → sidecar via `rawKey`, or ACS `mk:refN` → `id: "ref-N"`.
+ * Links that cannot be resolved show nothing.
  *
  * Its own hook because the preview is a self-contained hover state machine —
  * a short hide delay lets the pointer travel from the link into the card.
  * Nothing else in the viewer reads it.
  *
- * The per-page link map itself (`citationLinks`) is *not* owned here: it is a
- * by-product of the annotation rebuild in the highlights cluster, so it stays
- * with its single writer and is passed straight into the page layers.
+ * The per-page link hit-target map (`citationLinks` in the highlights cluster)
+ * is *not* owned here: it is a by-product of the annotation rebuild, so it
+ * stays with its single writer and is passed straight into the page layers.
  */
 
 import type { PdfLinkAnnoObject } from "@embedpdf/models";
@@ -36,7 +39,10 @@ import { openExternalUrl } from "@/lib/core/open-external";
 import type { Citation } from "@/lib/paper/refs";
 import {
 	type CitationDestKeyMap,
+	type CitationLinkKeyList,
 	citationDestKey,
+	citationSidecarKeysForDest,
+	matchCitationLinkKey,
 } from "@/lib/pdf/citation-dest-keys";
 import { loadPdfDestMaps } from "@/lib/pdf/citation-dest-map";
 
@@ -102,19 +108,47 @@ export type PdfCitations = {
 };
 
 /**
- * Which reference a citation link points at: destination coordinates → BibTeX
- * key (hyperref name tree) → sidecar `rawKey`. Returns nothing when any link in
- * the chain is missing, so the card simply does not appear.
+ * Match a PDF destination key to a sidecar citation. Hyperref keys hit
+ * `rawKey`; ACS `mk:refN` hits sidecar `id: "ref-N"` (no rawKey on S2 parses).
  */
-function resolveCitation(
-	pageIndex: number,
-	pdfY: number,
-	destKeys: CitationDestKeyMap | null,
+function findCitationByDestKey(
+	destKey: string,
 	citations: Citation[],
 ): Citation | undefined {
-	const key = destKeys?.get(citationDestKey(pageIndex, pdfY));
-	if (!key) return undefined;
-	return citations.find((citation) => citation.rawKey === key);
+	const candidates = new Set(citationSidecarKeysForDest(destKey));
+	return citations.find(
+		(citation) =>
+			(citation.rawKey != null && candidates.has(citation.rawKey)) ||
+			candidates.has(citation.id),
+	);
+}
+
+/**
+ * Which reference a citation link points at. Prefers unambiguous dest-coord
+ * keys (hyperref `/XYZ`); falls back to the link-annotation dest name when ACS
+ * `/FitR` bibliography entries collide on one page. Returns nothing when any
+ * link in the chain is missing, so the card simply does not appear.
+ */
+function resolveCitation(
+	link: PdfLinkAnnoObject,
+	destKeys: CitationDestKeyMap | null,
+	citationLinks: CitationLinkKeyList | null,
+	citations: Citation[],
+): Citation | undefined {
+	const destination = getLinkDestination(link.target);
+	if (destination) {
+		const byCoord = destKeys?.get(
+			citationDestKey(destination.pageIndex, destination.pdfY),
+		);
+		if (byCoord) {
+			const matched = findCitationByDestKey(byCoord, citations);
+			if (matched) return matched;
+		}
+	}
+
+	const byLink = matchCitationLinkKey(citationLinks, link.pageIndex, link.rect);
+	if (!byLink) return undefined;
+	return findCitationByDestKey(byLink, citations);
 }
 
 export function usePdfCitations({
@@ -148,11 +182,17 @@ export function usePdfCitations({
 
 	/** hyperref `cite.<key>` destinations of the open PDF, by destination coords. */
 	const destKeyMapRef = useRef<CitationDestKeyMap | null>(null);
+	/**
+	 * Link annotation rect → citation dest key. Used when ACS `/FitR`
+	 * bibliography destinations collide and the coord map is empty.
+	 */
+	const citationLinksRef = useRef<CitationLinkKeyList | null>(null);
 	/** Mirrored so a late bytes prop never re-triggers the build effect. */
 	const sourceBytesRef = useRef<ArrayBuffer | null>(sourceBytes);
 	sourceBytesRef.current = sourceBytes;
 	useEffect(() => {
 		destKeyMapRef.current = null;
+		citationLinksRef.current = null;
 		if (!paperAbsPath) return;
 		let cancelled = false;
 		// Deferred to idle, parsed in a worker, memoized per PDF — the build
@@ -164,7 +204,10 @@ export function usePdfCitations({
 				viewerBytes: sourceBytesRef.current,
 			})
 				.then((maps) => {
-					if (!cancelled && maps) destKeyMapRef.current = maps.cites;
+					if (!cancelled && maps) {
+						destKeyMapRef.current = maps.cites;
+						citationLinksRef.current = maps.citationLinks;
+					}
 				})
 				.catch((error: unknown) => {
 					// Non-fatal: hover previews simply do not resolve.
@@ -221,15 +264,12 @@ export function usePdfCitations({
 				scheduleCitationHide();
 				return;
 			}
-			const destination = getLinkDestination(link.target);
-			const matched = destination
-				? resolveCitation(
-						destination.pageIndex,
-						destination.pdfY,
-						destKeyMapRef.current,
-						citationsRef.current,
-					)
-				: undefined;
+			const matched = resolveCitation(
+				link,
+				destKeyMapRef.current,
+				citationLinksRef.current,
+				citationsRef.current,
+			);
 			if (!matched) {
 				scheduleCitationHide();
 				return;
