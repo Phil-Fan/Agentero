@@ -98,5 +98,15 @@ export function getLinkDestination(
 			pdfY: destination.zoom.params.y,
 		};
 	}
+	// For non-XYZ destinations the viewer still exposes the raw /View array.
+	// /FitR: [left bottom right top]; /FitH: [top]. Use the vertical anchor so
+	// the coordinate key matches the value parsed by pdf-lib in citation-dest-keys.
+	const view = destination.view;
+	if (destination.zoom.mode === PdfZoomMode.FitRectangle && view.length >= 4) {
+		return { pageIndex: destination.pageIndex, pdfY: view[3] };
+	}
+	if (destination.zoom.mode === PdfZoomMode.FitHorizontal && view.length >= 1) {
+		return { pageIndex: destination.pageIndex, pdfY: view[0] };
+	}
 	return { pageIndex: destination.pageIndex, pdfY: 0 };
 }
