@@ -14,7 +14,7 @@ use crate::features::remote::{materialize_skills_to_work, resolve_remote_target,
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +41,13 @@ fn list_from_state(state: crate::features::agent::models::AgentRegistryState) ->
         default_id: state.default_id,
         enabled: state.enabled,
     }
+}
+
+/// Mounted Agent panels cache their agent list; notify every window after a
+/// registry mutation (probe / install / upsert / remove / default) so they
+/// refresh without a remount.
+fn emit_registry_changed(app: &AppHandle) {
+    let _ = app.emit("agent:registry-changed", serde_json::Value::Null);
 }
 
 #[tauri::command]
@@ -86,56 +93,76 @@ pub fn agent_scan_catalog(registry: State<'_, AgentRegistry>) -> ApiResult<Catal
 
 #[tauri::command]
 pub fn agent_upsert_agent(
+    app: AppHandle,
     registry: State<'_, AgentRegistry>,
     request: UpsertAgentRequest,
 ) -> ApiResult<AgentOnly> {
     match registry.upsert(request) {
-        Ok(agent) => ApiResult::ok(AgentOnly { agent }),
+        Ok(agent) => {
+            emit_registry_changed(&app);
+            ApiResult::ok(AgentOnly { agent })
+        }
         Err(e) => map_err(e),
     }
 }
 
 #[tauri::command]
 pub fn agent_ensure_catalog(
+    app: AppHandle,
     registry: State<'_, AgentRegistry>,
     template_id: String,
     set_default: bool,
 ) -> ApiResult<AgentOnly> {
     match registry.ensure_catalog_agent(&template_id, set_default) {
-        Ok(agent) => ApiResult::ok(AgentOnly { agent }),
+        Ok(agent) => {
+            emit_registry_changed(&app);
+            ApiResult::ok(AgentOnly { agent })
+        }
         Err(e) => map_err(e),
     }
 }
 
 #[tauri::command]
 pub fn agent_remove_agent(
+    app: AppHandle,
     registry: State<'_, AgentRegistry>,
     id: String,
 ) -> ApiResult<serde_json::Value> {
     match registry.remove(&id) {
-        Ok(()) => ApiResult::ok(serde_json::Value::Null),
+        Ok(()) => {
+            emit_registry_changed(&app);
+            ApiResult::ok(serde_json::Value::Null)
+        }
         Err(e) => map_err(e),
     }
 }
 
 #[tauri::command]
 pub fn agent_set_default(
+    app: AppHandle,
     registry: State<'_, AgentRegistry>,
     id: Option<String>,
 ) -> ApiResult<AgentListResponse> {
     match registry.set_default(id) {
-        Ok(s) => ApiResult::ok(list_from_state(s)),
+        Ok(s) => {
+            emit_registry_changed(&app);
+            ApiResult::ok(list_from_state(s))
+        }
         Err(e) => map_err(e),
     }
 }
 
 #[tauri::command]
 pub fn agent_set_enabled(
+    app: AppHandle,
     registry: State<'_, AgentRegistry>,
     enabled: bool,
 ) -> ApiResult<EnabledResponse> {
     match registry.set_enabled(enabled) {
-        Ok(s) => ApiResult::ok(EnabledResponse { enabled: s.enabled }),
+        Ok(s) => {
+            emit_registry_changed(&app);
+            ApiResult::ok(EnabledResponse { enabled: s.enabled })
+        }
         Err(e) => map_err(e),
     }
 }
@@ -157,6 +184,7 @@ pub fn agent_set_user_agent(
 
 #[tauri::command]
 pub async fn agent_probe(
+    app: AppHandle,
     registry: State<'_, AgentRegistry>,
     id: String,
 ) -> Result<ApiResult<ProbeResult>, String> {
@@ -176,10 +204,12 @@ pub async fn agent_probe(
             session_capabilities: None,
         };
         let _ = registry.apply_probe_result(&id, &result);
+        emit_registry_changed(&app);
         return Ok(ApiResult::ok(result));
     }
     let result = probe_agent(&desc, None).await;
     let _ = registry.apply_probe_result(&id, &result);
+    emit_registry_changed(&app);
     Ok(ApiResult::ok(result))
 }
 
@@ -209,6 +239,7 @@ pub async fn agent_run_tool_lifecycle(
     };
     let template_id_for_log = template_id.clone();
     let task_id_for_worker = task_id.clone();
+    let app_for_emit = app.clone();
     let result = tokio::task::spawn_blocking(move || {
         run_template_lifecycle(
             &template_id,
@@ -236,6 +267,7 @@ pub async fn agent_run_tool_lifecycle(
                 target: "agentero::agent",
                 "tool_lifecycle ok template={template_id_for_log} action={action_label}"
             );
+            emit_registry_changed(&app_for_emit);
             Ok(ApiResult::ok(serde_json::Value::Null))
         }
         Err(e) => {
@@ -262,6 +294,7 @@ pub fn agent_tool_uninstall_info(
 /// Ensure catalog agent is registered, then run ACP initialize probe.
 #[tauri::command]
 pub async fn agent_probe_catalog(
+    app: AppHandle,
     registry: State<'_, AgentRegistry>,
     template_id: String,
 ) -> Result<ApiResult<ProbeResult>, String> {
@@ -281,10 +314,12 @@ pub async fn agent_probe_catalog(
             session_capabilities: None,
         };
         let _ = registry.apply_probe_result(&desc.id, &result);
+        emit_registry_changed(&app);
         return Ok(ApiResult::ok(result));
     }
     let result = probe_agent(&desc, None).await;
     let _ = registry.apply_probe_result(&desc.id, &result);
+    emit_registry_changed(&app);
     Ok(ApiResult::ok(result))
 }
 

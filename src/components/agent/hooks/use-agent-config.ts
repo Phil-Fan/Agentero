@@ -26,6 +26,7 @@ import {
 	type CatalogScanResponse,
 	listAgentSkills,
 	listAgents,
+	listenAgentRegistryChanged,
 	loadCollaborationPref,
 	loadModelCatalog,
 	loadModelFavorites,
@@ -274,6 +275,29 @@ export function useAgentConfig({
 
 	useEffect(() => {
 		void refresh();
+	}, [refresh]);
+
+	// Settings probes/installs/removes agents while this panel stays mounted;
+	// refresh on the backend broadcast instead of serving a stale switcher list.
+	useEffect(() => {
+		if (!isTauri()) return;
+		let unlisten: (() => void) | undefined;
+		let disposed = false;
+		let timer: number | undefined;
+		void listenAgentRegistryChanged(() => {
+			window.clearTimeout(timer);
+			timer = window.setTimeout(() => {
+				void refresh();
+			}, 150);
+		}).then((u) => {
+			if (disposed) u();
+			else unlisten = u;
+		});
+		return () => {
+			disposed = true;
+			window.clearTimeout(timer);
+			unlisten?.();
+		};
 	}, [refresh]);
 
 	// Restore last model catalog / preference for the selected agent.

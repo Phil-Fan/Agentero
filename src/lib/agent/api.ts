@@ -663,6 +663,13 @@ function listenAgentEvent<T>(
 	);
 }
 
+/** Registry mutated (probe / install / upsert / remove / default) — refresh lists. */
+export async function listenAgentRegistryChanged(
+	handler: () => void,
+): Promise<UnlistenFn> {
+	return listenAgentEvent("agent:registry-changed", handler);
+}
+
 export async function listenAgentStream(
 	handler: (e: AgentStreamEvent) => void,
 ): Promise<UnlistenFn> {

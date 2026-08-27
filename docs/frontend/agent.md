@@ -15,6 +15,7 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 ## 面板行为
 
 - 空态建议 chips → workflow：`summary` / `qa` / `related_work`。
+- **Agent 切换器列表**：挂载与 vault 变化时 `listAgents + scanCatalog` 刷新；Settings 探测 / 安装 / 卸载 / 改默认会改 registry，Host 广播 `agent:registry-changed`，面板监听后防抖刷新——面板常驻不卸载，否则探测成功后切换器仍是旧列表。catalog 项仅 `acpStatus === "ready"`（ACP 握手成功）才显示，不可用项直接隐藏而非置灰。
 - **当前论文默认 context**（可 X 移除）；`@` 提及或文件树拖入 → context chip。
 - **选区上下文**（Cursor 式）：Markdown / PDF 中选中文字 → composer 出现瞬时选区 chip（虚线，实时跟随最新选区；取消选区即消失）；`⌘L` 或 PDF 划词菜单「加入对话」将其**固定**（实底，最多 4 个）并打开 Agent 面板；无选区时 `⌘L` 仍是开关侧栏。`⇧⌘A` 同样固定选区并打开面板，区别是它还把焦点移进输入框（无选区时只打开 + 聚焦，不折叠面板）；聚焦走 `src/lib/agent/composer-focus.ts` —— React `autoFocus` 只在挂载时生效，而 rail composer 常驻挂载，需要命令式聚焦。发送时选区以 `Selected text from {path} (page N):` + `> 引用` 追加进 prompt，随该轮消费清空；不落 localStorage，超长截断 4000 字符。Store：`src/lib/agent/selection-store.ts`。
 - **PDF 选区 → 对话卡片**：来自 PDF 且带页内几何（`rects` + `paperAbsPath`）的选区，在 **Agent 发送该轮** 时写入 `kind: ask` 对话线程（`anchor.quote` = 选中原文，`messages[]` = 用户问题 + Agent 回复）。页边针与浮层为**提问对话卡**（MessageSquare），**不是**视觉批注 `agent-trace`。Markdown 选区或缺少几何时仍只作 chip、不落盘。

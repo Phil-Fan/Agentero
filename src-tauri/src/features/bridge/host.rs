@@ -900,6 +900,7 @@ async fn dispatch_agent_rpc(
             }
             let args: Params = serde_json::from_value(params)?;
             api_result_data(crate::features::agent::commands::agent_ensure_catalog(
+                app.clone(),
                 app.state::<AgentRegistry>(),
                 args.template_id,
                 args.set_default,
@@ -913,6 +914,7 @@ async fn dispatch_agent_rpc(
             }
             let args: Params = serde_json::from_value(params)?;
             let result = crate::features::agent::commands::agent_probe_catalog(
+                app.clone(),
                 app.state::<AgentRegistry>(),
                 args.template_id,
             )
