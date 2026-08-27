@@ -66,8 +66,8 @@ describe("Markdown table of contents", () => {
 		);
 
 		expect(first).toContain("mt-0");
-		expect(later).toContain("mt-[1em]");
+		expect(later).toContain("mt-6");
 		expect(later).not.toContain("mt-0");
-		expect(later).not.toContain("mt-[1.6em]");
+		expect(later).not.toContain("mt-[1em]");
 	});
 });
