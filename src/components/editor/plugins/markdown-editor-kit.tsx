@@ -99,6 +99,7 @@ import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import { WikiBlockIdPlugin } from "@/components/editor/plugins/wiki-block-id-plugin";
 import { WikiLinkPlugin } from "@/components/editor/plugins/wikilink-plugin";
+import { insertBreakAfterHorizontalRule } from "@/lib/markdown/block-selection";
 import { handleCodeBlockDeleteBackward } from "@/lib/markdown/code-block-delete";
 import { inlineMathInputRule } from "@/lib/markdown/inline-math-input-rule";
 
@@ -161,7 +162,15 @@ export const MarkdownEditorKit = [
 			HorizontalRuleRules.markdown({ variant: "_" }),
 		],
 		node: { component: HrElement },
-	}),
+		// Enter on the void hr is a no-op by default; break out below it.
+	}).overrideEditor(({ editor, tf: { insertBreak } }) => ({
+		transforms: {
+			insertBreak() {
+				if (insertBreakAfterHorizontalRule(editor)) return;
+				insertBreak();
+			},
+		},
+	})),
 
 	// Marks
 	BoldPlugin.configure({

@@ -56,6 +56,7 @@ import { scrollBehavior } from "@/lib/core/motion";
 import { errorMessage, notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
+import { insertBreakAfterSelectedVoidBlocks } from "@/lib/markdown/block-selection";
 import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
 import { editorContextMenuCapabilities } from "@/lib/markdown/editor-context-menu";
 import {
@@ -480,6 +481,34 @@ export function MarkdownEditor({
 			closeMenus,
 		],
 	);
+
+	// The block-selection shadow input portals to document.body, so editor
+	// key capture never sees its events; intercept plain Enter there and
+	// break out below block-selected voids (hr / image).
+	useEffect(() => {
+		if (readOnly) return;
+		const handleShadowInputEnter = (event: globalThis.KeyboardEvent) => {
+			if (
+				event.key !== "Enter" ||
+				event.isComposing ||
+				event.metaKey ||
+				event.ctrlKey ||
+				event.altKey ||
+				event.shiftKey ||
+				!(event.target instanceof HTMLElement) ||
+				!event.target.classList.contains("slate-shadow-input")
+			) {
+				return;
+			}
+			if (insertBreakAfterSelectedVoidBlocks(editor)) {
+				event.preventDefault();
+				event.stopPropagation();
+			}
+		};
+		document.addEventListener("keydown", handleShadowInputEnter, true);
+		return () =>
+			document.removeEventListener("keydown", handleShadowInputEnter, true);
+	}, [editor, readOnly]);
 
 	const handleEditorBlur = useCallback(
 		(event: React.FocusEvent<HTMLDivElement>) => {

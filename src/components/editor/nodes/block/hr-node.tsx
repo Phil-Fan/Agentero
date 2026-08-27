@@ -16,7 +16,7 @@ export function HrElement(props: PlateElementProps) {
 
 	return (
 		<PlateElement {...props}>
-			<div className="py-6" contentEditable={false}>
+			<div className="py-2" contentEditable={false}>
 				<hr
 					className={cn(
 						"h-0.5 rounded-sm border-none bg-muted bg-clip-content",
