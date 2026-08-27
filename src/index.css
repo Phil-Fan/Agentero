@@ -464,6 +464,8 @@ body.dragging * {
 	flex-shrink: 0;
 	position: relative;
 	z-index: 2;
+	/* Divider vs. the toolbar/content below (#408). */
+	border-bottom: 1px solid var(--border);
 }
 
 /*
