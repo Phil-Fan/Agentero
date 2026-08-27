@@ -15,6 +15,7 @@ pub(crate) mod batch;
 pub(crate) mod map;
 pub(crate) mod parse;
 pub(crate) mod pdf_recognize;
+pub(crate) mod recognize_apply;
 mod skill_import;
 pub(crate) mod title_search;
 
@@ -229,8 +230,9 @@ pub struct ImportLocalPdfArgs {
     /// Frontend background-task id for parse-phase progress.
     #[serde(default)]
     pub task_id: Option<String>,
-    /// Translator base URL for identifier resolution during background
-    /// recognition (entries without dialog metadata). Empty → default.
+    /// Translator base URL override. Deferred recognition runs in the
+    /// RecognizeMetadata job, which reads Settings directly; kept for API
+    /// compatibility. Empty → default.
     #[serde(default)]
     pub translator_base_url: Option<String>,
 }
@@ -270,6 +272,12 @@ pub struct LookupImportResult {
     /// was merged into the existing entry instead of creating a duplicate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<paper_import::CommitStatus>,
+    /// Local PDF imported with placeholder metadata; a RecognizeMetadata job
+    /// is resolving real metadata in the background (and will rename the
+    /// folder to the canonical id). The frontend must not enqueue its own
+    /// layout analysis — the runner owns the follow-ups.
+    #[serde(default)]
+    pub recognize_pending: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -368,6 +376,7 @@ pub async fn import_by_identifier_with_progress(
             fresh_timestamps: false,
             cache,
             app,
+            defer_parse_jobs: false,
         },
     )
     .await?;
@@ -385,6 +394,7 @@ pub async fn import_by_identifier_with_progress(
         paper_md: commit.paper_md,
         asset_messages: commit.asset_messages,
         status: Some(commit.status),
+        recognize_pending: false,
     })
 }
 
@@ -737,12 +747,6 @@ pub async fn import_local_pdfs(
             &parent_rel,
             entry,
             &ImportLocalPdfContext {
-                translator_base: args
-                    .translator_base_url
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or(DEFAULT_TRANSLATOR_BASE_URL),
                 task_id: task_id.as_deref(),
                 app,
                 cache,
@@ -789,7 +793,6 @@ fn dedupe_local_pdf_entries(entries: Vec<LocalPdfImportEntry>) -> Vec<LocalPdfIm
 
 /// Shared per-import context threaded into `import_one_local_pdf`.
 struct ImportLocalPdfContext<'a> {
-    translator_base: &'a str,
     task_id: Option<&'a str>,
     app: Option<&'a AppHandle>,
     cache: Option<&'a CapsCache>,
@@ -803,7 +806,7 @@ async fn import_one_local_pdf(
     ctx: &ImportLocalPdfContext<'_>,
 ) -> Result<LookupImportResult, AppError> {
     use crate::features::import::paper_import::{
-        paper_commit, AssetsPolicy, DedupePolicy, PaperCommitOptions,
+        paper_commit, AssetsPolicy, CommitStatus, DedupePolicy, PaperCommitOptions,
     };
 
     let src = PathBuf::from(entry.file_path.trim());
@@ -848,50 +851,13 @@ async fn import_one_local_pdf(
         || entry.arxiv_id.is_some()
         || entry.extra.is_some();
 
-    // Entries straight from the picker (no dialog metadata) run background
-    // recognition so DOI/arXiv/title survive renamed files. Best-effort:
-    // any failure keeps the filename-derived metadata.
-    let mut meta = if dialog_meta {
-        local_pdf_meta(base_id, title)
-    } else {
-        let fallback = local_pdf_meta(base_id.clone(), title.clone());
-        match pdf_recognize::recognize_and_resolve(&src, ctx.translator_base, ctx.task_id).await {
-            probe if probe.status == "ok" => {
-                // Adopt the resolved identifier as the folder id (matches
-                // identifier-import naming, e.g. papers/1706.03762).
-                let resolved_id = probe
-                    .arxiv_id
-                    .as_deref()
-                    .map(slug_from_stem)
-                    .or_else(|| probe.doi.as_deref().map(map::doi_slug))
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or(base_id);
-                let mut m = local_pdf_meta(resolved_id, probe.title.clone().unwrap_or(title));
-                m.authors = probe.authors.clone();
-                m.year = probe.year;
-                m.doi = probe.doi.clone();
-                m.arxiv_id = probe.arxiv_id.clone();
-                m.abstract_text = probe.abstract_text.clone();
-                m.publication = probe.publication.clone();
-                m.volume = probe.volume.clone();
-                m.issue = probe.issue.clone();
-                m.pages = probe.pages.clone();
-                m.publisher = probe.publisher.clone();
-                m.meta_source = Some("recognize".into());
-                m
-            }
-            probe if probe.status == "title" => {
-                let mut m = local_pdf_meta(base_id, probe.title.clone().unwrap_or(title));
-                m.authors = probe.authors.clone();
-                m.year = probe.year;
-                m.doi = probe.doi.clone();
-                m.arxiv_id = probe.arxiv_id.clone();
-                m.meta_source = Some("recognize".into());
-                m
-            }
-            _ => fallback,
-        }
-    };
+    // Entries straight from the picker/drop (no dialog metadata) commit
+    // instantly with filename-derived metadata; a RecognizeMetadata job then
+    // resolves DOI/arXiv/title in the background and renames the folder to
+    // the canonical id (see `recognize_apply`). Best-effort: any recognition
+    // failure keeps the filename-derived metadata.
+    let recognize_deferred = !dialog_meta;
+    let mut meta = local_pdf_meta(base_id, title);
     if let Some(authors) = &entry.authors {
         meta.authors = authors
             .iter()
@@ -976,9 +942,18 @@ async fn import_one_local_pdf(
             fresh_timestamps: false,
             cache: ctx.cache,
             app: ctx.app,
+            // Parse/refs/layout follow-ups are orchestrated by the
+            // RecognizeMetadata runner once the final path is known.
+            defer_parse_jobs: recognize_deferred,
         },
     )
     .await?;
+
+    let recognize_pending = recognize_deferred && commit.status == CommitStatus::Created;
+    if recognize_pending {
+        #[cfg(feature = "desktop")]
+        crate::features::jobs::spawn_recognize_metadata(ctx.app, vault, &commit.path);
+    }
 
     Ok(LookupImportResult {
         paper_dir: commit.paper_dir,
@@ -992,6 +967,7 @@ async fn import_one_local_pdf(
         paper_md: commit.paper_md,
         asset_messages: commit.asset_messages,
         status: Some(commit.status),
+        recognize_pending,
     })
 }
 

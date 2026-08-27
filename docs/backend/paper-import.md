@@ -130,13 +130,13 @@ liteparse 在**运行时 `dlopen`** PDFium，而 `liteparse-pdfium-sys` 的 buil
 
 ## 本地 PDF
 
-- 魔棒多选或拖到 `papers/` 组织夹 → 直接后台导入（无确认对话框）：复制 PDF + catalog + 通常生成 `PAPER.md`，识别链路在导入任务内自动补全元数据，识别有误由用户在 Edit Metadata 中修正。
+- 魔棒多选或拖到 `papers/` 组织夹 → **即时导入**：复制 PDF + catalog + NOTES shell 立刻完成（秒级），论文马上出现在树/论文库；元数据识别在后台进行（见下），识别完成后自动改名/补全。
 - 窗口其它区域拖入不入库（防 WebView 导航）。
-- 标识符去重与合并（#406）：导入前按识别/对话框给出的 `id` / DOI / arXiv / PMID / ISBN 查 catalog；命中已有条目时不新建文件夹——原条目缺主 PDF `{id}.pdf` 时，本 PDF 直接成为主 PDF（常见于 PMID 入库后手动补全文）；否则放入 `{paper}/attachments/`（同名自动 `-2` 后缀），并回填 catalog 缺失的标识符列；前端返回 `status: "deduped"` 并 Toast 提示。
+- 标识符去重与合并（#406）：导入前按对话框给出的 `id` / DOI / arXiv / PMID / ISBN 查 catalog；命中已有条目时不新建文件夹——原条目缺主 PDF `{id}.pdf` 时，本 PDF 直接成为主 PDF（常见于 PMID 入库后手动补全文）；否则放入 `{paper}/attachments/`（同名自动 `-2` 后缀），并回填 catalog 缺失的标识符列；前端返回 `status: "deduped"` 并 Toast 提示。
 
 ### PDF 元数据识别（recognize 链路）
 
-文件名推导只是兜底；导入（拖入与魔棒直选）会在导入任务内跑一条识别链路补全 DOI/arXiv/标题/作者：
+文件名推导只是占位；本地 PDF 导入（拖入与魔棒直选）先以文件名 slug 建目录落库（`meta_source=local`），随后由 JobCenter 的 `RecognizeMetadata` job（并发 2，任务栏可见可取消）在后台跑识别链路补全 DOI/arXiv/标题/作者：
 
 ```
 本地 liteparse probe（隔离 worker，前 5 页投影行 + 词级字号/坐标，~秒级）
@@ -144,12 +144,22 @@ liteparse 在**运行时 `dlopen`** PDFium，而 `liteparse-pdfium-sys` 的 buil
   → 命中 DOI → Translator /search 解析；失败回退 Crossref works/{doi} 直连
   → 命中 arXiv → export.arxiv.org Atom 直连
   → 仅命中 title/authors（无标识符）→ 直接采用识别结果（Zotero 同款兜底）
-  → 任何一步失败静默降级为文件名元数据，绝不阻塞导入
+  → 任何一步失败静默降级为文件名元数据，绝不影响已完成的导入
 ```
 
-- 实现：`src-tauri/src/features/import/pdf_recognize.rs`（payload 组装 + HTTP client + `map_crossref_work`）；probe worker 变体在 `pdf_parse/mod.rs`（`--agentero-internal-pdf-recognize-worker`）。
+识别结果由 `src-tauri/src/features/import/recognize_apply.rs` 落地：
+
+- **命中标识符（`ok`）** → 目录经 wiki rename 事务改名为规范 id（`papers/<文件名slug>` → `papers/1706.03762`，含 `{id}.pdf` 改名、catalog path/id 重写、`[[...]]` 链接重写、失败回滚），`meta_source=recognize`，emit `paper:renamed`。
+- **规范 id 已在库中** → 占位条目并入已有条目（PDF 成为对方主 PDF 或进 `attachments/`），删除占位目录/行，emit `paper:renamed`（`outcome=merged`）。
+- **仅命中标题（`title`）** → 只 upsert catalog 元数据，不改目录名。
+- **未命中（`no-match`/`error`）** → `meta_source=local-unresolved`，用户可在 Edit Metadata 手填 DOI/arXiv 并刷新（`paper_resolve_identifier`）。
+- **用户抢先编辑**：识别完成时若 `meta_source` 已非 `local`（如 `manual`），识别结果整体放弃。
+
+时序约定：`paper_commit` 以 `defer_parse_jobs: true` 跳过 commit 期的 ParseBody/ParseRefs spawn，由 RecognizeMetadata runner 在目录名尘埃落定后统一编排 PAPER.md / refs / layout（`LookupImportResult.recognize_pending=true` 时前端也跳过自己的 layout enqueue）。
+
+- 实现：识别链路 `src-tauri/src/features/import/pdf_recognize.rs`（payload 组装 + HTTP client + `map_crossref_work`）；probe worker 变体在 `pdf_parse/mod.rs`（`--agentero-internal-pdf-recognize-worker`）；job 编排 `import/job_runners.rs::recognize_metadata_runner`。
 - payload 结构复刻 Zotero document-worker `getRecognizerData`：`word = [xMin,yMin,xMax,yMax,fontSize,spaceAfter,baseline,rotation,0,bold,italic,0,fontIndex,text]`，行来自 liteparse 投影行（竖排 arXiv stamp 落到独立行，服务端可重建）。
-- 拖入与魔棒直选统一在 `import_one_local_pdf` 内联跑同一链路，`meta_source=recognize`，识别出的 arXiv/DOI slug 作为文件夹 id（与标识符导入命名一致）；Host 侧 entries 仍支持 `title`/`doi`/`arxivId`/`extra` 覆盖（`meta_source=manual`），供 CLI 等调用方使用。导入后可在 Edit Metadata 中手填 DOI/arXiv 并刷新（`paper_resolve_identifier`）。
+- Host 侧 entries 仍支持 `title`/`doi`/`arxivId`/`extra` 覆盖（`meta_source=manual`，走原有同步路径不触发后台识别），供确认对话框/CLI 等调用方使用。
 - 隐私：上传的是前 5 页文本布局 JSON（~200KB），不是 PDF 文件；服务为 Zotero 托管的未公开 API，仅作尽力而为识别，失败无感知。
 - live 验证：`AGENTERO_RECOGNIZE_LIVE_PDF=<pdf> cargo test -p agentero --lib -- live_recognize --include-ignored --nocapture`。
 

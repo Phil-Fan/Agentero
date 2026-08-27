@@ -187,6 +187,7 @@ async fn import_one_item(
             fresh_timestamps: false,
             cache: None,
             app,
+            defer_parse_jobs: false,
         },
     )
     .await?;

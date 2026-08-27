@@ -3,8 +3,10 @@
  * registration order, so cross-handler ordering lives in this file.
  */
 
+import i18n from "@/i18n";
 import { clearAgentVaultState } from "@/lib/agent/agent-session-store";
 import { invokeApi } from "@/lib/core/ipc";
+import { notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { lifecycle } from "@/lib/lifecycle";
 import {
@@ -29,7 +31,13 @@ import {
 	refreshTree,
 	scheduleTreeRefresh,
 } from "@/lib/vault/store";
-import { clearWikiVaultState, rebuildWikiAndNotify } from "@/lib/wiki/store";
+import { remapMovedWorkspacePaths } from "@/lib/wiki/actions";
+import {
+	bumpWikiIndexRevision,
+	clearWikiVaultState,
+	rebuildWikiAndNotify,
+	trackInternalRenamePaths,
+} from "@/lib/wiki/store";
 
 /** Batch imports emit one `paper:imported` per paper; merge the rebuilds. */
 let importWikiTimer: ReturnType<typeof setTimeout> | null = null;
@@ -105,6 +113,30 @@ export function registerLifecycleHandlers(): () => void {
 			);
 			scheduleImportWikiRebuild(vaultId);
 			scheduleLibraryRefresh();
+		}),
+		lifecycle.on("paper:renamed", (event) => {
+			const { vaultId, oldPath, newPath, outcome } = event;
+			if (vaultId !== getVaultPath()) return;
+			const fromAbs = joinVaultPath(vaultId, oldPath);
+			const toAbs = joinVaultPath(vaultId, newPath);
+			// The Host performed this rename itself: suppress the watcher's
+			// external-rename repair for its echoes (same window the UI move
+			// flow uses, see `syncMovedPaths`).
+			trackInternalRenamePaths([fromAbs, toAbs], Date.now() + 2000);
+			if (outcome === "renamed") {
+				remapMovedWorkspacePaths(fromAbs, toAbs, oldPath, newPath);
+				bumpWikiIndexRevision();
+				scheduleImportWikiRebuild(vaultId);
+			}
+			scheduleTreeRefresh([fromAbs, toAbs]);
+			scheduleLibraryRefresh();
+			if (outcome === "merged") {
+				notifySuccess(
+					i18n.t("sidebar:papersLibrary.recognizeMerged", {
+						id: event.newPaperId,
+					}),
+				);
+			}
 		}),
 	];
 	return () => {

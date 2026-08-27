@@ -23,6 +23,7 @@ export type BackgroundTaskKind =
 	| "layout"
 	| "paperRead"
 	| "connector"
+	| "recognize"
 	| "other";
 
 export type BackgroundTaskStatus =

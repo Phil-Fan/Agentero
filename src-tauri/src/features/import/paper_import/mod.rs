@@ -80,6 +80,10 @@ pub struct PaperCommitOptions<'a> {
     pub cache: Option<&'a CapsCache>,
     /// Lifecycle event sink (`paper:imported` / `paper:assets-ready`).
     pub app: Option<&'a AppHandle>,
+    /// Skip the commit-time ParseBody/ParseRefs spawns; the caller
+    /// orchestrates follow-ups (deferred-recognition imports run them after
+    /// the paper's final path is known, i.e. after rename/merge).
+    pub defer_parse_jobs: bool,
 }
 
 /// Uniform result shape for every entry (camelCase matches the frontend).
@@ -267,14 +271,18 @@ pub async fn paper_commit(
         AssetsPolicy::Deferred => (AssetDownloadResult::default(), true),
     };
 
-    if assets.pdf && !assets.tex && !assets.paper_md {
-        #[cfg(feature = "desktop")]
-        crate::features::jobs::spawn_parse_body_after_assets(parse_app, vault, &path_rel, false);
-    }
+    if !opts.defer_parse_jobs {
+        if assets.pdf && !assets.tex && !assets.paper_md {
+            #[cfg(feature = "desktop")]
+            crate::features::jobs::spawn_parse_body_after_assets(
+                parse_app, vault, &path_rel, false,
+            );
+        }
 
-    // Background reference parse so the References panel has a sidecar soon
-    // after import (fingerprint-cached; safe if callers also spawn).
-    crate::features::refs::spawn_parse_after_import(parse_app, vault, &path_rel);
+        // Background reference parse so the References panel has a sidecar soon
+        // after import (fingerprint-cached; safe if callers also spawn).
+        crate::features::refs::spawn_parse_after_import(parse_app, vault, &path_rel);
+    }
 
     if let Some(c) = opts.cache {
         c.invalidate(vault, &path_rel);
@@ -432,7 +440,7 @@ async fn merge_pdf_into_existing(
 }
 
 /// Free `attachments/{name}` path, suffixing `-2`, `-3`, … on collision.
-fn unique_attachment_path(dir: &Path, src: &Path) -> std::path::PathBuf {
+pub(crate) fn unique_attachment_path(dir: &Path, src: &Path) -> std::path::PathBuf {
     let name = src
         .file_name()
         .and_then(|s| s.to_str())
@@ -510,6 +518,7 @@ mod tests {
                 fresh_timestamps: false,
                 cache: None,
                 app: None,
+                defer_parse_jobs: false,
             },
         )
         .await
@@ -580,6 +589,7 @@ mod tests {
                 fresh_timestamps: false,
                 cache: None,
                 app: None,
+                defer_parse_jobs: false,
             },
         )
         .await

@@ -60,6 +60,7 @@
 |---|---|
 | ⭐ `paper:imported` | `paper_commit` 成功（catalog 已写入、NOTES 已建）。四条导入路径（魔棒 / 本地 PDF / Zotero / Connector）统一发；`paper_download_assets` 为孤儿文件夹补建 catalog 行时也发 |
 | ⭐ `paper:assets-ready` | PDF 下载 / LaTeX 解压 / PAPER.md 生成完成（异步，与 imported 分离） |
+| ⭐ `paper:renamed` | 后台元数据识别落地：占位目录改名为规范 id（`outcome=renamed`，含 wiki 链接重写清单）或并入已有条目（`outcome=merged`）。前端 handler 抑制 watcher 外部 rename 修复、remap 打开 tab、定向刷新树/库 |
 | ○ `paper:deleted` / `paper:moved` / `paper:tags-changed` / `paper:metadata-updated` | 对象变更 |
 
 ### reader（阅读会话，前端本地事件）

@@ -78,6 +78,7 @@ pub async fn import_connector_item_with_cookies(
             fresh_timestamps: true,
             cache: None,
             app: app.as_ref(),
+            defer_parse_jobs: false,
         },
     )
     .await?;
@@ -624,6 +625,7 @@ async fn import_standalone_local(
             fresh_timestamps: true,
             cache: None,
             app,
+            defer_parse_jobs: false,
         },
     )
     .await?;

@@ -5,6 +5,7 @@ const WIRE_EVENTS = [
 	"window:closed",
 	"paper:imported",
 	"paper:assets-ready",
+	"paper:renamed",
 	"job:completed",
 	"job:failed",
 	"agent:registry-changed",

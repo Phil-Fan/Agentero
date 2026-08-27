@@ -138,6 +138,7 @@
 		"importPdfDone": "Imported {{count}} PDFs",
 		"importPdfMerged": "Merged PDF into existing entry: “{{title}}”",
 		"importPdfMergedMany": "Merged {{count}} PDFs into existing entries",
+		"recognizeMerged": "Matched PDF merged into existing entry: {{id}}",
 		"importFailed": "Import failed",
 		"exportFailed": "Export failed",
 		"backfillPublication": "Backfill venues",

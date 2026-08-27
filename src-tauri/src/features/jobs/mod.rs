@@ -37,6 +37,7 @@ pub enum JobKind {
     DownloadAssets,
     PageCount,
     WikiReindex,
+    RecognizeMetadata,
 }
 
 impl JobKind {
@@ -51,6 +52,7 @@ impl JobKind {
             JobKind::DownloadAssets => "downloadAssets",
             JobKind::PageCount => "pageCount",
             JobKind::WikiReindex => "wikiReindex",
+            JobKind::RecognizeMetadata => "recognizeMetadata",
         };
         // ParseRefs always runs with online lookup enabled; the segment is
         // kept for fingerprint compatibility with pre-refactor jobs.
@@ -324,6 +326,10 @@ fn kind_concurrency(inner: &JobCenterInner, kind: JobKind) -> usize {
         JobKind::ParseRefs => 2,
         JobKind::DownloadAssets => 3,
         JobKind::LayoutTranslate => 2,
+        // The liteparse probe subprocess is additionally globally capped at 2
+        // (pdf_parse::MAX_CONCURRENT_PDF_PARSE); the kind cap keeps queue
+        // order fair when many PDFs are imported at once.
+        JobKind::RecognizeMetadata => 2,
         JobKind::PageCount | JobKind::WikiReindex => usize::MAX,
     }
 }
@@ -558,6 +564,17 @@ impl JobCenter {
         force: bool,
     ) -> JobSnapshot {
         self.enqueue_core(JobKind::DownloadAssets, vault, path, lane, force, None)
+            .await
+    }
+
+    pub async fn enqueue_recognize_metadata(
+        &self,
+        vault: impl Into<PathBuf>,
+        path: impl Into<String>,
+        lane: JobLane,
+        force: bool,
+    ) -> JobSnapshot {
+        self.enqueue_core(JobKind::RecognizeMetadata, vault, path, lane, force, None)
             .await
     }
 
@@ -1149,6 +1166,31 @@ pub fn spawn_parse_body_after_assets(
         let center = app.state::<JobCenter>().handle();
         let snapshot = center
             .enqueue_parse_body(&vault, &path_rel, JobLane::Normal, force, None)
+            .await;
+        emit_job_changed(&app, snapshot.clone());
+        match center.try_start(&snapshot.id).await {
+            StartOutcome::Started(started) => {
+                center.run_started(&app, started).await;
+            }
+            StartOutcome::Skipped(skipped) => emit_job_changed(&app, skipped),
+            StartOutcome::Waiting => {}
+        }
+    });
+}
+
+/// Enqueue + try-start one deferred-recognition job for a freshly committed
+/// local PDF import (see `import_one_local_pdf`).
+pub fn spawn_recognize_metadata(app: Option<&tauri::AppHandle>, vault: &Path, path_rel: &str) {
+    let Some(app) = app else {
+        return;
+    };
+    let app = app.clone();
+    let vault = vault.to_path_buf();
+    let path_rel = path_rel.to_string();
+    tauri::async_runtime::spawn(async move {
+        let center = app.state::<JobCenter>().handle();
+        let snapshot = center
+            .enqueue_recognize_metadata(&vault, &path_rel, JobLane::Normal, false)
             .await;
         emit_job_changed(&app, snapshot.clone());
         match center.try_start(&snapshot.id).await {

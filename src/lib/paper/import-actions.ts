@@ -365,6 +365,11 @@ export async function importLocalPdf(opts?: {
 		);
 		if (result) {
 			for (const paper of result.papers) {
+				if (paper.recognizePending) {
+					// The RecognizeMetadata runner owns the follow-ups so they
+					// run against the paper's final (post-rename) path.
+					continue;
+				}
 				if (paper.paperDir) {
 					enqueuePaperLayoutAnalysis({
 						paperAbsPath: paper.paperDir.replace(/[\\/]+$/, ""),
@@ -405,9 +410,10 @@ export async function importLocalPdf(opts?: {
 }
 
 /**
- * OS PDF drop onto a papers/ folder or the Library → background import.
- * Metadata (title/authors/identifiers) is recognized by the Host during the
- * import task; the user edits via Edit Metadata if recognition is off.
+ * OS PDF drop onto a papers/ folder or the Library → instant import with
+ * placeholder (filename-derived) metadata; a RecognizeMetadata job then
+ * resolves identifiers in the background and renames the folder. The user
+ * can always correct via Edit Metadata.
  */
 export function dropLocalPdfs(
 	items: Array<{ path: string; sourceName: string }>,

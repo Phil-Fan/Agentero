@@ -5,6 +5,19 @@ export type LifecycleEventMap = {
 	"window:closed": { kind: string; view?: string };
 	"paper:imported": { vaultId: string; paperId: string; timestamp: number };
 	"paper:assets-ready": { vaultId: string; paperId: string; timestamp: number };
+	/** Deferred recognition renamed a paper folder or merged it into an existing entry. */
+	"paper:renamed": {
+		vaultId: string;
+		oldPaperId: string;
+		newPaperId: string;
+		/** Vault-relative folder paths. */
+		oldPath: string;
+		newPath: string;
+		outcome: "renamed" | "merged";
+		/** Markdown sources whose internal links the rename transaction rewrote. */
+		updatedSources: string[];
+		timestamp: number;
+	};
 	"paper:opened": { paperId: string; timestamp: number };
 	"job:completed": {
 		jobId: string;

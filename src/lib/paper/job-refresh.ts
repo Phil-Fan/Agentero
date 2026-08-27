@@ -20,6 +20,9 @@ import { scheduleLibraryRefresh } from "@/lib/paper/library-store";
 const REFRESH_ON_KINDS: ReadonlySet<JobKind> = new Set([
 	"downloadAssets",
 	"parseBody",
+	// Recognition upserts metadata (and may rename/merge folders) — the
+	// library rows need the refetch when the job settles.
+	"recognizeMetadata",
 ]);
 
 function isTerminalJobState(state: JobState): boolean {

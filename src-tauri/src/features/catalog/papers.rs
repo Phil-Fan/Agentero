@@ -910,7 +910,7 @@ pub fn update_meta(
 
 /// Append the new title to NOTES.md frontmatter aliases (best-effort; keeps
 /// old aliases so existing `[[...]]` links keep resolving).
-fn append_title_alias_best_effort(vault_root: &Path, rel_path: &str, title: &str) {
+pub(crate) fn append_title_alias_best_effort(vault_root: &Path, rel_path: &str, title: &str) {
     use crate::features::wiki::frontmatter as fm;
     let notes_path = vault_root.join(rel_path).join("NOTES.md");
     let Ok(body) = fs::read_to_string(&notes_path) else {

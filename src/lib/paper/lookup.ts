@@ -25,6 +25,9 @@ export type LookupAddResult = {
 	assetMessages?: string[];
 	/** `deduped` = paper already existed (a local PDF was merged into it). */
 	status?: "created" | "deduped" | "skipped";
+	/** Placeholder metadata committed; a RecognizeMetadata job resolves the
+	 *  real metadata (and renames the folder) in the background. */
+	recognizePending?: boolean;
 };
 
 export type SkillImportResult = {
@@ -88,6 +91,7 @@ type HostLookupResult = {
 	paperMd?: boolean;
 	assetMessages?: string[];
 	status?: "created" | "deduped" | "skipped";
+	recognizePending?: boolean;
 };
 
 function resolveTranslatorBaseUrl(
@@ -114,6 +118,7 @@ function toLookupAddResult(d: HostLookupResult): LookupAddResult {
 		paperMd: d.paperMd,
 		assetMessages: d.assetMessages,
 		status: d.status,
+		recognizePending: d.recognizePending,
 	};
 }
 

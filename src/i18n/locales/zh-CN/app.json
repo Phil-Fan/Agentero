@@ -242,6 +242,7 @@
 		"lookupFetching": "正在拉取元数据与资源… · {{id}}",
 		"libraryImport": "导入文献库",
 		"importPdf": "导入 PDF",
+		"recognizeMeta": "识别论文元数据",
 		"libraryExport": "导出文献库",
 		"citingScan": "发现引用我的新论文",
 		"citingScanPhaseMeta": "正在读取论文库元数据…",

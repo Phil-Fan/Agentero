@@ -48,7 +48,8 @@ export type JobKind =
 	| "layoutTranslate"
 	| "downloadAssets"
 	| "pageCount"
-	| "wikiReindex";
+	| "wikiReindex"
+	| "recognizeMetadata";
 
 export type JobExecutor = (offer: JobOfferPayload) => Promise<void>;
 
@@ -184,6 +185,7 @@ const PROJECTED_JOB_KINDS: Partial<Record<JobKind, BackgroundTaskKind>> = {
 	parseRefs: "parse",
 	parseBody: "pdfParse",
 	downloadAssets: "download",
+	recognizeMetadata: "recognize",
 };
 
 function projectedTaskKind(kind: JobKind): BackgroundTaskKind | null {
@@ -198,6 +200,8 @@ function jobPanelTitle(kind: JobKind): string {
 			return i18n.t("app:tasks.pdfParse");
 		case "downloadAssets":
 			return i18n.t("app:tasks.downloadPaper");
+		case "recognizeMetadata":
+			return i18n.t("app:tasks.recognizeMeta");
 		default:
 			return i18n.t("app:tasks.layoutAnalysis");
 	}

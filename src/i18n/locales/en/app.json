@@ -242,6 +242,7 @@
 		"lookupFetching": "Fetching metadata & assets… · {{id}}",
 		"libraryImport": "Import bibliography",
 		"importPdf": "Import PDF",
+		"recognizeMeta": "Match paper metadata",
 		"libraryExport": "Export library",
 		"citingScan": "Find papers citing your library",
 		"citingScanPhaseMeta": "Reading library metadata…",

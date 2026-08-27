@@ -71,6 +71,7 @@ pub async fn import_by_identifier_remote(
         paper_md: commit.paper_md,
         asset_messages: commit.asset_messages,
         status: None,
+        recognize_pending: false,
     })
 }
 
@@ -308,6 +309,7 @@ async fn import_one_local_pdf_remote(
         paper_md: commit.paper_md,
         asset_messages: commit.asset_messages,
         status: None,
+        recognize_pending: false,
     })
 }
 
