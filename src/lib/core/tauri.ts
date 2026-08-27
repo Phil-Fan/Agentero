@@ -28,6 +28,11 @@ export function isMacOS(): boolean {
 	return getPlatformOS() === "macos";
 }
 
+/** Windows desktop shell (user-PATH registry handling, terminal wording). */
+export function isWindows(): boolean {
+	return getPlatformOS() === "windows";
+}
+
 /** Phone/tablet app shell: iPhone/iPad (incl. iPadOS `MacIntel`) or Android. */
 export function isMobileApp(): boolean {
 	if (typeof window === "undefined" || typeof navigator === "undefined") {

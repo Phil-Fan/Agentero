@@ -280,8 +280,10 @@ async fn fetch_bytes(
         .map_err(|e| AppError::message(format!("download failed ({url}): {e}")))?;
     let status = res.status();
     if status.as_u16() == 404 {
+        // Include the requested URL: its asset name carries the host triple,
+        // so architecture/version mismatches are self-explanatory.
         return Err(AppError::message(format!(
-            "CLI asset not found for this app version (404). Publish the GitHub Release or open {tag_page}"
+            "CLI asset not found (404): {url}. Open {tag_page} to check the published release assets"
         )));
     }
     if !status.is_success() {

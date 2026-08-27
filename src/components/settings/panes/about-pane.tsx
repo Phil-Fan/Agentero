@@ -27,7 +27,7 @@ import {
 } from "@/lib/cli/api";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
-import { isMacOS, isTauri } from "@/lib/core/tauri";
+import { isMacOS, isTauri, isWindows } from "@/lib/core/tauri";
 import {
 	checkForUpdate,
 	getUpdateSnapshot,
@@ -50,6 +50,7 @@ export function AboutPane() {
 	const [cliBusy, setCliBusy] = useState(false);
 	const [cliLoading, setCliLoading] = useState(false);
 	const isMac = useMemo(() => isMacOS(), []);
+	const isWin = useMemo(() => isWindows(), []);
 
 	const refreshCli = useCallback(async () => {
 		if (!isTauri()) return;
@@ -99,7 +100,13 @@ export function AboutPane() {
 						: t("about.cli.installSuccess"),
 				);
 			})
-			.catch(() => notifyError(t("about.cli.installFailed")))
+			// Surface the Host error text: silent failures here are exactly what
+			// makes users guess at causes (e.g. "64-bit not supported").
+			.catch((err) =>
+				notifyError(t("about.cli.installFailed"), {
+					description: err instanceof Error ? err.message : String(err),
+				}),
+			)
 			.finally(() => setCliBusy(false));
 	};
 	const onUninstallCli = () => {
@@ -110,7 +117,11 @@ export function AboutPane() {
 				await refreshCli();
 				notifySuccess(t("about.cli.uninstallSuccess"));
 			})
-			.catch(() => notifyError(t("about.cli.uninstallFailed")))
+			.catch((err) =>
+				notifyError(t("about.cli.uninstallFailed"), {
+					description: err instanceof Error ? err.message : String(err),
+				}),
+			)
 			.finally(() => setCliBusy(false));
 	};
 	const onOpenCliRelease = () => {
@@ -131,12 +142,11 @@ export function AboutPane() {
 			});
 	};
 
+	// Derive the status line from structured fields; the Host `message` is
+	// English-only debug text and must never reach the UI verbatim (i18n).
 	const cliDescription = (() => {
 		if (!cli) {
 			return cliLoading ? "…" : t("about.cli.statusFailed");
-		}
-		if (cli.message?.trim()) {
-			return cli.message;
 		}
 		if (cli.installed && !cli.shimCurrent) {
 			return t("about.cli.versionMismatch", {
@@ -144,10 +154,13 @@ export function AboutPane() {
 				app: cli.appVersion,
 			});
 		}
-		if (cli.installed) {
-			return t("about.cli.description");
+		if (cli.installed && !cli.preferredBinOnPath) {
+			return t("about.cli.pathMissing", { dir: cli.preferredBinDir });
 		}
-		return undefined;
+		if (!cli.canInstall) {
+			return t("about.cli.notBundled");
+		}
+		return t("about.cli.description");
 	})();
 
 	const needsCliUpdate = Boolean(
@@ -298,6 +311,26 @@ export function AboutPane() {
 									"aria-label": t("about.cli.brewCopy"),
 									onCopy: () => notifySuccess(t("about.cli.brewCopied")),
 									onError: () => notifyError(t("about.cli.brewCopyFailed")),
+								}}
+							/>
+						</div>
+					) : null}
+					{cli?.installed && cli.shimCurrent && cli.commandName ? (
+						<div className="border-t px-3.5 py-3">
+							<p className="mb-2 text-muted-foreground text-xs leading-relaxed">
+								{isWin
+									? t("about.cli.windowsVerifyHint")
+									: t("about.cli.verifyHint")}
+							</p>
+							<CompactCodeBlock
+								code={`${cli.commandName} --version`}
+								language="shell"
+								wrap
+								className="[&_pre]:opacity-75"
+								copyButtonProps={{
+									"aria-label": t("about.cli.verifyCopy"),
+									onCopy: () => notifySuccess(t("about.cli.verifyCopied")),
+									onError: () => notifyError(t("about.cli.verifyCopyFailed")),
 								}}
 							/>
 						</div>

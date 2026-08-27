@@ -83,6 +83,8 @@ pub struct CliInstallStatus {
     pub preferred_bin_on_path: bool,
     /// Whether a `brew` executable is available (PATH or standard Homebrew roots).
     pub brew_available: bool,
+    /// Command users type after install (`agentero-cli` on Windows, `agentero` elsewhere).
+    pub command_name: &'static str,
     /// Human-readable note (e.g. PATH hint).
     pub message: Option<String>,
 }
@@ -441,6 +443,7 @@ pub fn collect_status<R: Runtime>(app: &AppHandle<R>) -> CliInstallStatus {
         preferred_bin_dir: bin_dir.to_string_lossy().into_owned(),
         preferred_bin_on_path,
         brew_available: brew_available(),
+        command_name: cli_command_name(),
         message,
     }
 }

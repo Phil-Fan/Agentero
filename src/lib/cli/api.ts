@@ -24,6 +24,8 @@ export type CliInstallStatus = {
 	preferredBinOnPath: boolean;
 	/** `brew` executable detected (PATH or standard Homebrew roots) */
 	brewAvailable: boolean;
+	/** Command users type after install (`agentero-cli` on Windows, `agentero` elsewhere) */
+	commandName: string;
 	message: string | null;
 };
 
