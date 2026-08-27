@@ -37,6 +37,8 @@ type PdfToolbarProps = {
 	layoutTranslateActive: boolean;
 	layoutTranslateLabel: string;
 	onToggleLayoutTranslate: () => void;
+	/** Auto show/hide driven by scroll + pointer proximity (issue #400). */
+	visible: boolean;
 };
 
 /** Top-right toolbar: zoom, region select, bulk translate. */
@@ -57,13 +59,24 @@ export function PdfToolbar({
 	layoutTranslateActive,
 	layoutTranslateLabel,
 	onToggleLayoutTranslate,
+	visible,
 }: PdfToolbarProps) {
 	const { t } = useTranslation("viewer");
 
 	return (
-		<div className="pointer-events-none absolute top-2 right-3 z-20 flex items-center gap-1">
+		<div
+			className={cn(
+				"pointer-events-none absolute top-2 right-3 z-20 flex items-center gap-1 transition-opacity duration-200",
+				visible ? "opacity-100" : "opacity-0",
+			)}
+		>
 			<TooltipProvider delayDuration={200}>
-				<div className="pointer-events-auto flex h-7 items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 shadow-sm backdrop-blur-sm">
+				<div
+					className={cn(
+						"flex h-7 items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 shadow-sm backdrop-blur-sm",
+						visible ? "pointer-events-auto" : "pointer-events-none",
+					)}
+				>
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button

@@ -59,6 +59,7 @@ import { PdfToolbar } from "@/components/viewer/pdf/chrome/pdf-toolbar";
 import { usePdfEngineContext } from "@/components/viewer/pdf/engine-provider";
 import { usePdfAskThreads } from "@/components/viewer/pdf/hooks/use-pdf-ask-threads";
 import { usePdfCards } from "@/components/viewer/pdf/hooks/use-pdf-cards";
+import { usePdfChromeVisibility } from "@/components/viewer/pdf/hooks/use-pdf-chrome-visibility";
 import { usePdfCitations } from "@/components/viewer/pdf/hooks/use-pdf-citations";
 import { usePdfColorScheme } from "@/components/viewer/pdf/hooks/use-pdf-color-scheme";
 import { usePdfCrossrefPreview } from "@/components/viewer/pdf/hooks/use-pdf-crossref-preview";
@@ -1532,6 +1533,21 @@ function PdfViewerInner({
 		[docId, pdfDark, zoomRef, pageMarks, pageLayout, pageMode, pageHandlers],
 	);
 
+	// ---- Top toolbar auto show/hide (#400) ----
+	const topChromeVisible = usePdfChromeVisibility({
+		hostRef,
+		scrollRef,
+		scrollReady,
+		sticky:
+			showOutline ||
+			showReferences ||
+			showFigures ||
+			findOpen ||
+			regionSelecting ||
+			visualCropPending,
+		held: () => zoomFieldFocusedRef.current,
+	});
+
 	return (
 		<div ref={hostRef} className="relative flex h-full min-h-0 w-full flex-col">
 			<PdfLeftToolbar
@@ -1543,6 +1559,7 @@ function PdfViewerInner({
 				onToggleReferences={handleToggleReferences}
 				showFigures={showFigures}
 				onToggleFigures={handleToggleFigures}
+				visible={topChromeVisible}
 			/>
 			<PdfOutlinePanel
 				outline={outline}
@@ -1589,6 +1606,7 @@ function PdfViewerInner({
 				layoutTranslateActive={layoutTranslateActive}
 				layoutTranslateLabel={layoutTranslateLabel}
 				onToggleLayoutTranslate={toggleLayoutTranslate}
+				visible={topChromeVisible}
 			/>
 
 			<DockviewViewport

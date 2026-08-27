@@ -8,6 +8,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/core/utils";
 
 type PdfLeftToolbarProps = {
 	outline: PdfBookmarkObject[];
@@ -19,6 +20,8 @@ type PdfLeftToolbarProps = {
 	showFigures: boolean;
 	onToggleFigures: () => void;
 	analyzing?: boolean;
+	/** Auto show/hide driven by scroll + pointer proximity (issue #400). */
+	visible: boolean;
 };
 
 /** Top-left toggle group: outline, references, figures. Buttons are only
@@ -34,14 +37,25 @@ export function PdfLeftToolbar({
 	showFigures,
 	onToggleFigures,
 	analyzing,
+	visible,
 }: PdfLeftToolbarProps) {
 	const { t } = useTranslation("viewer");
 	const hasOutline = outline.length > 0;
 
 	return (
-		<div className="pointer-events-none absolute top-2 left-3 z-30">
+		<div
+			className={cn(
+				"pointer-events-none absolute top-2 left-3 z-30 transition-opacity duration-200",
+				visible ? "opacity-100" : "opacity-0",
+			)}
+		>
 			<TooltipProvider delayDuration={200}>
-				<div className="pointer-events-auto flex h-7 items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 shadow-sm backdrop-blur-sm">
+				<div
+					className={cn(
+						"flex h-7 items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 shadow-sm backdrop-blur-sm",
+						visible ? "pointer-events-auto" : "pointer-events-none",
+					)}
+				>
 					{hasOutline ? (
 						<Tooltip>
 							<TooltipTrigger asChild>
