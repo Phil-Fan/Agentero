@@ -156,7 +156,22 @@ export function usePdfHighlights({
 		const all = scope.getAnnotations();
 		const doc = docCap?.getDocument(docId);
 		const objects = all.map((a) => a.object).filter(isHighlightObject);
-		const list = objects.map((o) => highlightViewFromObject(o, paperKey ?? ""));
+		const list = objects.map((o) => {
+			const view = highlightViewFromObject(o, paperKey ?? "");
+			const size = doc?.pages[o.pageIndex]?.size;
+			if (size?.width && size?.height) {
+				const pw = size.width;
+				const ph = size.height;
+				const sourceRects = o.segmentRects?.length ? o.segmentRects : [o.rect];
+				view.rects = sourceRects.map((r) => ({
+					x: r.origin.x / pw,
+					y: r.origin.y / ph,
+					w: r.size.width / pw,
+					h: r.size.height / ph,
+				}));
+			}
+			return view;
+		});
 		setHighlights(list);
 		onHighlightsChangeRef.current?.(list);
 		// Pin anchors: normalize each annotation rect here, where the objects are
