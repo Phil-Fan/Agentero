@@ -372,6 +372,9 @@ function normalizePartial(
 	if (typeof parsed.onboardingDone !== "boolean") {
 		merged.onboardingDone = DEFAULT_SETTINGS.onboardingDone;
 	}
+	if (typeof parsed.featureTourDone !== "boolean") {
+		merged.featureTourDone = DEFAULT_SETTINGS.featureTourDone;
+	}
 	if (
 		!Number.isInteger(merged.batchImportConcurrency) ||
 		merged.batchImportConcurrency < 1 ||

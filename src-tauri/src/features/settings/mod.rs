@@ -132,6 +132,12 @@ pub struct AppSettings {
     /// Plaza source ids hidden from the sidebar / Plaza home (right-click toggle).
     #[serde(default)]
     pub plaza_hidden_sources: Vec<String>,
+    /// First-run setup wizard completed. Default false → auto-show on fresh installs.
+    #[serde(default)]
+    pub onboarding_done: bool,
+    /// Post-vault feature tour completed or skipped. Default false → auto-start once.
+    #[serde(default)]
+    pub feature_tour_done: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -287,6 +293,8 @@ impl Default for AppSettings {
             telemetry_enabled: default_true(),
             plaza_enabled: default_true(),
             plaza_hidden_sources: Vec::new(),
+            onboarding_done: false,
+            feature_tour_done: false,
         }
     }
 }
@@ -896,7 +904,44 @@ mod tests {
         assert_eq!(loaded.translator_base_url, DEFAULT_TRANSLATOR_BASE_URL);
         assert_eq!(loaded.auto_update_internal_links, "ask");
         assert_eq!(loaded.paper_note_mode, "standard");
+        assert!(!loaded.onboarding_done);
+        assert!(!loaded.feature_tour_done);
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn onboarding_flags_roundtrip() {
+        let n = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("agentero-settings-onboarding-{n}"));
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("settings.json");
+        let s = AppSettings {
+            onboarding_done: true,
+            feature_tour_done: true,
+            ..AppSettings::default()
+        };
+        persist(&path, &s).expect("write");
+        let raw = fs::read_to_string(&path).expect("read json");
+        let json: serde_json::Value = serde_json::from_str(&raw).expect("parse json");
+        assert_eq!(json["onboardingDone"], true);
+        assert_eq!(json["featureTourDone"], true);
+        let (loaded, existed) = read_file(&path);
+        assert!(existed);
+        assert!(loaded.onboarding_done);
+        assert!(loaded.feature_tour_done);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn missing_onboarding_flags_default_false() {
+        let json = r#"{"theme":"dark"}"#;
+        let s: AppSettings = serde_json::from_str(json).expect("deserialize");
+        assert!(!s.onboarding_done);
+        assert!(!s.feature_tour_done);
+        assert_eq!(s.theme, "dark");
     }
 
     #[test]
