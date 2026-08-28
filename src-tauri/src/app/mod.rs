@@ -1,5 +1,7 @@
 //! Application assembly: plugins, managed state, setup, and event wiring.
 
+#[cfg(test)]
+mod bindings_test;
 mod handlers;
 mod logging;
 pub mod menu;

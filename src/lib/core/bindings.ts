@@ -6,6 +6,67 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 export const commands = {
 	translateText: (args: TranslateTextArgs) =>
 		__TAURI_INVOKE<ApiResult<TranslateTextResult>>("translate_text", { args }),
+	jobParseRefsEnqueue: (args: JobEnqueueArgs) =>
+		typedError<ApiResult<JobSnapshot>, string>(
+			__TAURI_INVOKE("job_parse_refs_enqueue", { args }),
+		),
+	jobParseBodyEnqueue: (args: JobParseBodyEnqueueArgs) =>
+		typedError<ApiResult<JobSnapshot>, string>(
+			__TAURI_INVOKE("job_parse_body_enqueue", { args }),
+		),
+	jobLayoutAnalyzeEnqueue: (args: JobEnqueueArgs) =>
+		typedError<ApiResult<JobSnapshot>, string>(
+			__TAURI_INVOKE("job_layout_analyze_enqueue", { args }),
+		),
+	jobDownloadAssetsEnqueue: (args: JobEnqueueArgs) =>
+		typedError<ApiResult<JobSnapshot>, string>(
+			__TAURI_INVOKE("job_download_assets_enqueue", { args }),
+		),
+	/**
+	 *  Per-paper reconcile (pipeline-orchestration §7.4 入口②): backfill a
+	 *  `ParseBody` job when the paper has a PDF but no TeX and no `PAPER.md`, and
+	 *  a `ParseRefs` job when the cite sidecar is absent. Returns the enqueued
+	 *  jobs (empty when nothing needs doing).
+	 */
+	jobReconcilePaper: (args: JobReconcilePaperArgs) =>
+		typedError<ApiResult<JobSnapshot[]>, string>(
+			__TAURI_INVOKE("job_reconcile_paper", { args }),
+		),
+	/**
+	 *  Vault-wide reconcile (§7.3 T2): backfill `ParseBody` for every catalog paper
+	 *  that has a PDF but no TeX and no `PAPER.md`. Jobs enqueue on the idle lane;
+	 *  the per-kind cap (ParseBody = 1) throttles execution. Returns the count.
+	 */
+	jobReconcileVault: (args: JobReconcileVaultArgs) =>
+		typedError<ApiResult<number>, string>(
+			__TAURI_INVOKE("job_reconcile_vault", { args }),
+		),
+	/**
+	 *  Vault-relative paths of papers still missing local assets, per §8.4 CapsCache
+	 *  (replaces the frontend `collectPapersNeedingAssetDownload` tree walk). A
+	 *  paper needs a download when it has no PDF, or its body is unknown (no
+	 *  catalog `body_source`) and it has neither TeX nor `PAPER.md`.
+	 */
+	jobPapersNeedingAssets: (args: JobPapersNeedingAssetsArgs) =>
+		typedError<ApiResult<string[]>, string>(
+			__TAURI_INVOKE("job_papers_needing_assets", { args }),
+		),
+	jobFocusPaper: (args: JobFocusPaperArgs) =>
+		typedError<ApiResult<JobSnapshot[]>, string>(
+			__TAURI_INVOKE("job_focus_paper", { args }),
+		),
+	jobCancel: (jobId: string) =>
+		typedError<ApiResult<boolean>, string>(
+			__TAURI_INVOKE("job_cancel", { jobId }),
+		),
+	jobReport: (args: JobReportArgs) =>
+		typedError<ApiResult<JobSnapshot>, string>(
+			__TAURI_INVOKE("job_report", { args }),
+		),
+	jobList: (args: JobListArgs) =>
+		typedError<ApiResult<JobSnapshot[]>, string>(
+			__TAURI_INVOKE("job_list", { args }),
+		),
 };
 
 /* Types */
@@ -15,10 +76,110 @@ export type ApiResult<T> = {
 	error: ErrorBody | null;
 };
 
+export type DepPolicy = "allSettled" | "allSucceeded";
+
 export type ErrorBody = {
 	code: string;
 	message: string;
 };
+
+export type JobChangedPayload = {
+	job: JobSnapshot;
+};
+
+/**
+ *  Shared enqueue args for kinds that take no extra parameters
+ *  (ParseRefs / LayoutAnalyze / DownloadAssets).
+ */
+export type JobEnqueueArgs = {
+	vaultPath: string;
+	path: string;
+	lane?: JobLane | null;
+	force?: boolean;
+};
+
+export type JobFocusPaperArgs = {
+	vaultPath: string;
+	path: string;
+};
+
+export type JobKind =
+	| "parseRefs"
+	| "parseBody"
+	| "layoutAnalyze"
+	| "layoutTranslate"
+	| "downloadAssets"
+	| "pageCount"
+	| "wikiReindex"
+	| "recognizeMetadata";
+
+export type JobLane = "focus" | "normal" | "idle";
+
+export type JobListArgs = {
+	vaultPath?: string | null;
+	path?: string | null;
+};
+
+export type JobOfferPayload = {
+	jobId: string;
+	kind: JobKind;
+	vaultPath: string;
+	paperPath: string | null;
+	force: boolean;
+};
+
+export type JobPapersNeedingAssetsArgs = {
+	vaultPath: string;
+};
+
+export type JobParseBodyEnqueueArgs = {
+	vaultPath: string;
+	path: string;
+	lane?: JobLane | null;
+	force?: boolean;
+	taskId?: string | null;
+};
+
+export type JobReconcilePaperArgs = {
+	vaultPath: string;
+	path: string;
+};
+
+export type JobReconcileVaultArgs = {
+	vaultPath: string;
+};
+
+export type JobReportArgs = {
+	jobId: string;
+	progress?: number | null;
+	phase?: string | null;
+	error?: string | null;
+	state?: JobState | null;
+};
+
+export type JobSnapshot = {
+	id: string;
+	kind: JobKind;
+	lane: JobLane;
+	state: JobState;
+	vaultPath: string;
+	paperPath: string | null;
+	fingerprint: string;
+	dependsOn: string[];
+	depPolicy: DepPolicy;
+	progress: number | null;
+	phase: string | null;
+	error: string | null;
+	force: boolean;
+};
+
+export type JobState =
+	| "queued"
+	| "running"
+	| "succeeded"
+	| "failed"
+	| "cancelled"
+	| "skipped";
 
 export type TranslateTextArgs = {
 	text: string;
@@ -45,3 +206,15 @@ export type TranslateTextResult = {
 	text: string;
 	provider: string;
 };
+
+/* Tauri Specta runtime */
+async function typedError<T, E>(
+	result: Promise<T>,
+): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
+	try {
+		return { status: "ok", data: await result };
+	} catch (e) {
+		if (e instanceof Error) throw e;
+		return { status: "error", error: e as any };
+	}
+}
