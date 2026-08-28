@@ -11,6 +11,7 @@
 //! random UUID persisted in the config directory.
 
 use crate::core::paths;
+use crate::features::agent::AgentTelemetrySummary;
 use crate::features::settings::AppSettings;
 use crate::features::usage::ActivityProjection;
 use serde_json::json;
@@ -142,12 +143,14 @@ impl Telemetry {
     /// product analytics is enabled. Local activity recording is always on;
     /// only the PostHog leg is gated by [`enabled`].
     /// Never fails the launch: every error is only logged.
-    pub fn start(&self, settings: &AppSettings) {
+    pub fn start(&self, settings: &AppSettings, agents: AgentTelemetrySummary) {
         let posthog_enabled = enabled(settings);
 
         let distinct_id = install_id();
         let session_id = uuid::Uuid::new_v4().to_string();
         let device = collect_device_info();
+        let installed_agents = agents.templates;
+        let custom_agent_count = agents.custom_count;
         let extra = json!({
             "app_version": APP_VERSION,
             "os_name": device.os_name,
@@ -158,6 +161,8 @@ impl Telemetry {
             "timezone": timezone_offset(),
             "tauri_version": tauri::VERSION,
             "session_id": session_id,
+            "installed_agents": installed_agents.clone(),
+            "custom_agent_count": custom_agent_count,
         });
 
         record_usage("app.started", None, extra.clone());
@@ -182,6 +187,8 @@ impl Telemetry {
                         "os_version": device.os_version,
                         "arch": device.arch,
                         "device_model": device.device_model,
+                        "installed_agents": installed_agents,
+                        "custom_agent_count": custom_agent_count,
                     }),
                 );
                 obj.insert(

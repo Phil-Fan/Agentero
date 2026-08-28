@@ -282,8 +282,10 @@ pub fn run() {
                     .inner(),
             );
             let telemetry_settings = settings.clone();
+            // Registry-only read (no PATH probing), safe on the setup path.
+            let agent_summary = agents.telemetry_summary();
             tauri::async_runtime::spawn_blocking(move || {
-                telemetry.start(&telemetry_settings);
+                telemetry.start(&telemetry_settings, agent_summary);
             });
         }
 

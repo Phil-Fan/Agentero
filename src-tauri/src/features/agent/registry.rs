@@ -1,8 +1,9 @@
 use crate::core::error::AppError;
 use crate::features::agent::discover::{probe_command, resolve_command};
 use crate::features::agent::models::{
-    default_agent_proxy_url, AgentDescriptor, AgentRegistryState, AgentTemplate, CatalogAcpStatus,
-    CatalogEntry, CatalogScanResponse, ProbeResult, UpsertAgentRequest,
+    default_agent_proxy_url, AgentDescriptor, AgentRegistryState, AgentTelemetrySummary,
+    AgentTemplate, CatalogAcpStatus, CatalogEntry, CatalogScanResponse, ProbeResult,
+    UpsertAgentRequest,
 };
 use crate::features::agent::templates::{
     catalog_templates, dsh_entrypoint_exists, dsh_launcher_dir, template_from_id, template_info,
@@ -523,6 +524,32 @@ impl AgentRegistry {
         })
     }
 
+    /// Anonymous summary of registered agents for telemetry (template ids +
+    /// custom count). Reads state without probing commands, so it is safe to
+    /// call during startup.
+    pub fn telemetry_summary(&self) -> AgentTelemetrySummary {
+        let Ok(guard) = self.inner.lock() else {
+            return AgentTelemetrySummary::default();
+        };
+        let mut templates: Vec<String> = guard
+            .agents
+            .iter()
+            .filter(|a| !matches!(a.template, AgentTemplate::Custom))
+            .map(|a| a.template.as_str().to_string())
+            .collect();
+        templates.sort();
+        templates.dedup();
+        let custom_count = guard
+            .agents
+            .iter()
+            .filter(|a| matches!(a.template, AgentTemplate::Custom))
+            .count();
+        AgentTelemetrySummary {
+            templates,
+            custom_count,
+        }
+    }
+
     pub fn resolve_default(&self, preferred: Option<&str>) -> Result<AgentDescriptor, AppError> {
         let state = self.snapshot()?;
         if !state.enabled {
@@ -968,6 +995,47 @@ mod tests {
         assert!(raw.contains("X-Tenant: acme"));
         assert!(raw.contains("User-Agent: claude-cli/2.1.161"));
         assert!(!raw.contains("old-cli/0.1"));
+    }
+
+    #[test]
+    fn telemetry_summary_dedups_templates_and_counts_custom() {
+        use super::AgentRegistry;
+        use std::path::PathBuf;
+        use std::sync::Mutex;
+
+        fn desc(name: &str, template: AgentTemplate) -> AgentDescriptor {
+            AgentDescriptor {
+                id: name.to_string(),
+                name: name.to_string(),
+                template,
+                command: name.to_string(),
+                args: vec![],
+                env: HashMap::new(),
+                available: true,
+                last_error: None,
+                last_probe_ok: None,
+                last_probe_agent_name: None,
+                last_probe_error: None,
+                last_probed_at: None,
+            }
+        }
+
+        let registry = AgentRegistry {
+            inner: Mutex::new(AgentRegistryState {
+                agents: vec![
+                    desc("claude", AgentTemplate::ClaudeAcp),
+                    desc("claude-2", AgentTemplate::ClaudeAcp),
+                    desc("gemini", AgentTemplate::Gemini),
+                    desc("my-agent", AgentTemplate::Custom),
+                ],
+                ..AgentRegistryState::default()
+            }),
+            path: PathBuf::new(),
+        };
+
+        let summary = registry.telemetry_summary();
+        assert_eq!(summary.templates, vec!["claude-acp", "gemini"]);
+        assert_eq!(summary.custom_count, 1);
     }
 
     #[test]

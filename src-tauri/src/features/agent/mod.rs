@@ -25,6 +25,7 @@ pub use acp::{
 pub use ask_user::AskUserGate;
 pub use elicitation::ElicitationGate;
 pub use events::AgentEventEmitter;
+pub use models::AgentTelemetrySummary;
 pub use permission::PermissionGate;
 pub use registry::AgentRegistry;
 pub use runtime::{AgentRunController, AgentWarmGate};

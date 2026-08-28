@@ -78,6 +78,15 @@ pub struct AgentDescriptor {
     pub last_probed_at: Option<String>,
 }
 
+/// Anonymous, telemetry-safe summary of registered agents: kebab-case
+/// template ids for catalog agents and a bare count for custom ones. Never
+/// carries agent names, commands, args, or env.
+#[derive(Debug, Clone, Default)]
+pub struct AgentTelemetrySummary {
+    pub templates: Vec<String>,
+    pub custom_count: usize,
+}
+
 pub const DEFAULT_AGENT_PROXY_URL: &str = "http://127.0.0.1:7890";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

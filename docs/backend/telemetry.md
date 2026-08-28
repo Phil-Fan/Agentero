@@ -28,9 +28,11 @@
 | `locale` | `AppSettings.locale` |
 | `timezone` | 本地 UTC 偏移（如 `+08:00`） |
 | `tauri_version` | `tauri::VERSION` |
+| `installed_agents` | 已注册 Agent 的 template id 数组（如 `["claude-acp","gemini"]`，排序去重；`AgentRegistry::telemetry_summary()`，只读注册表、无 PATH 探测） |
+| `custom_agent_count` | 已注册的自定义 Agent 数量（不含名称/命令） |
 | `$session_id` | 本次运行生成的 UUID（PostHog 保留属性，Sessions 口径依赖它） |
 
-Person 属性：`$set` → `app_version` / `os_name` / `os_version` / `arch` / `device_model`；`$set_once` → `first_app_version`。
+Person 属性：`$set` → `app_version` / `os_name` / `os_version` / `arch` / `device_model` / `installed_agents` / `custom_agent_count`；`$set_once` → `first_app_version`。`installed_agents` 随每次启动更新，可直接在 PostHog 按 Agent 过滤 / 分群。
 
 ### `app exited`（`RunEvent::Exit` 回调中发送并 flush）
 
@@ -64,6 +66,7 @@ Person 属性：`$set` → `app_version` / `os_name` / `os_version` / `arch` / `
 
 ## 隐私边界
 
-- 不含 Vault 路径、文件名、论文标题、DOI、检索词原文、划词/译文/批注正文、Skill URL/名称、Agent 配置。
+- 不含 Vault 路径、文件名、论文标题、DOI、检索词原文、划词/译文/批注正文、Skill URL/名称。
+- Agent 只上报已知 template id（如 `claude-acp`）与自定义 Agent 的数量；不含 Agent 名称、命令、参数、env 等配置。
 - 上报失败只记日志，绝不影响启动与退出。
 - 使用 `posthog-rs` blocking client：`capture()` 非阻塞（后台批量发送），退出回调中同步 `flush()`。
