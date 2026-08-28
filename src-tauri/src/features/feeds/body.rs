@@ -128,7 +128,9 @@ fn extract_latex_math(html: &str) -> (String, Vec<(String, String)>) {
         match earliest {
             Some((start, end, content)) => {
                 out.push_str(&rest[..start]);
-                let placeholder = format!("LATEXBLOCK{}", blocks.len());
+                // Fixed-width index: a bare `LATEXBLOCK1` placeholder would
+                // prefix-match inside `LATEXBLOCK10` during restore.
+                let placeholder = format!("LATEXBLOCK{:04}", blocks.len());
                 let marker = block_math_marker(&content);
                 blocks.push((placeholder.clone(), marker));
                 out.push_str(&placeholder);
@@ -149,19 +151,47 @@ fn extract_latex_math(html: &str) -> (String, Vec<(String, String)>) {
 /// for environments KaTeX cannot render.
 fn block_math_marker(content: &str) -> String {
     let Some(open) = content.strip_prefix("\\begin{") else {
-        return content.to_string();
+        return sanitize_math_html(content);
     };
     let Some(env) = open.split('}').next() else {
-        return format!("$$ {} $$", content);
+        return format!("$$ {} $$", sanitize_math_html(content));
     };
     if KATEX_UNSUPPORTED_ENVS.contains(&env) {
         let open_len = "\\begin{".len() + env.len() + 1;
         let close_len = "\\end{".len() + env.len() + 1;
         let inner = &content[open_len..content.len().saturating_sub(close_len)];
-        format!("$$ {} $$", inner.trim())
+        format!("$$ {} $$", sanitize_math_html(inner.trim()))
     } else {
-        format!("$$ {} $$", content)
+        format!("$$ {} $$", sanitize_math_html(content))
     }
+}
+
+/// Blogs embed HTML artifacts inside raw LaTeX (`<br />` line breaks,
+/// `&lt;` entities, stray tags). Extraction runs before htmd, so clean the
+/// math content itself: br → space, drop residual tags, decode entities.
+fn sanitize_math_html(content: &str) -> String {
+    let mut out = String::with_capacity(content.len());
+    let mut rest = content;
+    while let Some(lt) = rest.find('<') {
+        let Some(gt) = rest[lt..].find('>') else {
+            break;
+        };
+        let tag = &rest[lt..lt + gt + 1];
+        out.push_str(&rest[..lt]);
+        if tag.starts_with("<br") {
+            out.push(' ');
+        }
+        rest = &rest[lt + gt + 1..];
+    }
+    out.push_str(rest);
+    out.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Restore LaTeX math placeholders after htmd conversion.
@@ -779,6 +809,17 @@ mod tests {
             md.contains("$$ \\begin{aligned}a &= b \\\\ c &= d\\end{aligned} $$"),
             "{md}"
         );
+    }
+
+    #[test]
+    fn strips_html_artifacts_inside_math() {
+        let html = "<p>\\begin{equation}\\begin{aligned}<br />\na =&\\, b \\\\<br />\n=&\\, c &lt; d<br />\n\\end{aligned}\\end{equation}</p>";
+        let md = html_to_markdown(html);
+        assert!(
+            md.contains("$$ \\begin{aligned} a =&\\, b \\\\ =&\\, c < d \\end{aligned} $$"),
+            "{md}"
+        );
+        assert!(!md.contains("<br"), "{md}");
     }
 
     #[test]
