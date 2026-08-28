@@ -25,9 +25,10 @@ impl AgentRegistry {
         let path = config_path();
         let mut state = read_state(&path).unwrap_or_default();
         let migrated_codex = migrate_legacy_codex_agents(&mut state);
+        let migrated_grok = migrate_legacy_grok_agents(&mut state);
         let migrated_env = migrate_catalog_env_defaults(&mut state);
         state.enabled = true;
-        if migrated_codex || migrated_env {
+        if migrated_codex || migrated_grok || migrated_env {
             if let Err(error) = persist(&path, &state) {
                 log::error!(
                     target: "agentero::agent",
@@ -608,6 +609,25 @@ fn migrate_catalog_env_defaults(state: &mut AgentRegistryState) -> bool {
     changed
 }
 
+/// Grok Build used to launch as `npx @xai-official/grok@<pinned> agent stdio`,
+/// which downloaded the agent on first spawn. Repoint stale rows at the real CLI.
+fn migrate_legacy_grok_agents(state: &mut AgentRegistryState) -> bool {
+    let mut migrated = false;
+    for agent in &mut state.agents {
+        if agent.template != AgentTemplate::GrokBuild || agent.command != "npx" {
+            continue;
+        }
+        agent.command = "grok".to_string();
+        agent.args = vec!["agent".to_string(), "stdio".to_string()];
+        agent.last_probe_ok = None;
+        agent.last_probe_agent_name = None;
+        agent.last_probe_error = None;
+        agent.last_probed_at = None;
+        migrated = true;
+    }
+    migrated
+}
+
 fn migrate_legacy_codex_agents(state: &mut AgentRegistryState) -> bool {
     let mut migrated = false;
     for agent in &mut state.agents {
@@ -878,8 +898,8 @@ fn refresh_availability(state: &mut AgentRegistryState) {
 mod tests {
     use super::{
         apply_user_agent_to_agent, merge_anthropic_custom_headers_user_agent,
-        merge_codex_config_user_agent, migrate_legacy_codex_agents, AGENTERO_USER_AGENT_ENV,
-        ANTHROPIC_CUSTOM_HEADERS_ENV,
+        merge_codex_config_user_agent, migrate_legacy_codex_agents, migrate_legacy_grok_agents,
+        AGENTERO_USER_AGENT_ENV, ANTHROPIC_CUSTOM_HEADERS_ENV,
     };
     use crate::features::agent::models::{AgentDescriptor, AgentRegistryState, AgentTemplate};
     use std::collections::HashMap;
@@ -916,6 +936,41 @@ mod tests {
         assert_eq!(agent.args, Vec::<String>::new());
         assert!(!agent.env.contains_key("CODEX_PATH"));
         assert_eq!(agent.last_probe_ok, None);
+    }
+
+    #[test]
+    fn migrates_legacy_grok_npx_launcher_to_native_cli() {
+        let mut state = AgentRegistryState {
+            agents: vec![AgentDescriptor {
+                id: "catalog-grok-build".to_string(),
+                name: "Grok Build".to_string(),
+                template: AgentTemplate::GrokBuild,
+                command: "npx".to_string(),
+                args: vec![
+                    "@xai-official/grok@0.2.100".to_string(),
+                    "agent".to_string(),
+                    "stdio".to_string(),
+                ],
+                env: HashMap::new(),
+                available: true,
+                last_error: None,
+                last_probe_ok: Some(true),
+                last_probe_agent_name: Some("grok".to_string()),
+                last_probe_error: None,
+                last_probed_at: Some("1".to_string()),
+            }],
+            ..AgentRegistryState::default()
+        };
+
+        assert!(migrate_legacy_grok_agents(&mut state));
+        let agent = &state.agents[0];
+        assert_eq!(agent.command, "grok");
+        assert_eq!(agent.args, vec!["agent".to_string(), "stdio".to_string()]);
+        assert_eq!(agent.last_probe_ok, None);
+        assert_eq!(agent.last_probed_at, None);
+
+        // Already native: nothing left to migrate.
+        assert!(!migrate_legacy_grok_agents(&mut state));
     }
 
     #[test]

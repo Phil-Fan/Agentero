@@ -17,7 +17,7 @@ pub enum AgentTemplate {
     /// Qoder CLI native ACP (`qodercli --acp`).
     /// Docs: https://docs.qoder.com/en/cli/acp
     QoderCli,
-    /// Grok Build ACP (`npx @xai-official/grok@0.2.100 agent stdio`).
+    /// Grok Build native ACP (`grok agent stdio`).
     /// Docs: https://zed.dev/acp/agent/grok-build
     GrokBuild,
     /// Pi coding agent via the community `pi-acp` adapter (pi has no native ACP).

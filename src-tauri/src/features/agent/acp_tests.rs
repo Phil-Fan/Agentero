@@ -108,6 +108,33 @@ mod acp_live {
         assert_eq!(kimi.detect_command.as_deref(), Some("kimi"));
     }
 
+    /// grok-build must not detect or launch through `npx`: `npx` resolves on any
+    /// machine with Node, so the row looked installed and the Settings auto-probe
+    /// spawned `npx @xai-official/grok@<pinned>`, downloading the agent unasked.
+    #[test]
+    fn grok_template_uses_the_native_cli_not_npx() {
+        let grok = catalog_templates()
+            .into_iter()
+            .find(|entry| entry.id == "grok-build")
+            .expect("Grok Build template");
+        assert_eq!(grok.command, "grok");
+        assert_eq!(grok.args, vec!["agent".to_string(), "stdio".to_string()]);
+        assert_eq!(grok.detect_command.as_deref(), Some("grok"));
+    }
+
+    #[test]
+    fn no_catalog_template_resolves_through_npx() {
+        for tmpl in catalog_templates() {
+            assert_ne!(tmpl.command, "npx", "{} launches via npx", tmpl.id);
+            assert_ne!(
+                tmpl.detect_command.as_deref(),
+                Some("npx"),
+                "{} detects via npx",
+                tmpl.id
+            );
+        }
+    }
+
     #[test]
     fn permission_requests_are_cancelled_unless_yolo_is_enabled() {
         let request = RequestPermissionRequest::new(
@@ -178,9 +205,14 @@ mod acp_live {
             assert!(by_id("qodercli").binary_available);
             assert_ne!(by_id("qodercli").acp_status, CatalogAcpStatus::Missing);
         }
-        if resolve_command("npx").is_some() {
+        if resolve_command("grok").is_some() {
             assert!(by_id("grok-build").binary_available);
             assert_ne!(by_id("grok-build").acp_status, CatalogAcpStatus::Missing);
+        } else {
+            // Must stay Missing without the CLI: `acpCommandAvailable` gates the
+            // Settings auto-probe, and probing would npm-download the agent.
+            assert!(!by_id("grok-build").binary_available);
+            assert_eq!(by_id("grok-build").acp_status, CatalogAcpStatus::Missing);
         }
         if resolve_command("codex").is_some() {
             assert!(by_id("codex-acp").binary_available);
