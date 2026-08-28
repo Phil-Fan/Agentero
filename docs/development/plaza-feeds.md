@@ -161,6 +161,7 @@ CREATE INDEX items_timeline ON items (published_at DESC, first_seen_at DESC);
 - 无 `kind` 列：论文 / 其它由 `paper_url IS NOT NULL` 过滤。
 - 每源只保留最近 **200** 条（刷新后按 `published_at` 裁）。够用，避免库膨胀。
 - `etag` / `last_modified`：有则带条件请求；304 不当错误。
+- schema v4：正文转换（公式清理）变更后迁移清空 `body_markdown` 缓存，下次打开重解析；`paper_url` 保留。
 
 ### 4.2 拉取
 

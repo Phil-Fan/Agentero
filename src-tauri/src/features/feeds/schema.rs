@@ -6,7 +6,7 @@ use rusqlite::Connection;
 use std::fs;
 use std::path::Path;
 
-pub const SCHEMA_VERSION: i32 = 3;
+pub const SCHEMA_VERSION: i32 = 4;
 pub const ITEMS_PER_FEED: i64 = 200;
 
 const DDL_V1: &str = r#"
@@ -130,6 +130,15 @@ fn migrate(conn: &Connection) -> Result<(), AppError> {
             .map_err(|e| AppError::message(format!("feeds migrate v3 commit: {e}")))?;
         set_schema_version(conn, 3)?;
     }
+    let version = schema_version(conn).unwrap_or(0);
+    if version < 4 {
+        // Article→Markdown math conversion changed (env unwrapping, HTML
+        // artifact cleanup, placeholder restore fix); cached bodies from
+        // older versions may show broken math. Re-resolve on next open.
+        conn.execute("UPDATE items SET body_markdown = NULL", [])
+            .map_err(|e| AppError::message(format!("feeds migrate v4: {e}")))?;
+        set_schema_version(conn, 4)?;
+    }
     Ok(())
 }
 
@@ -238,7 +247,7 @@ mod tests {
             .unwrap();
         }
         let conn = ensure_feeds_at(&db).expect("migrate v3");
-        assert_eq!(schema_version(&conn).unwrap(), 3);
+        assert_eq!(schema_version(&conn).unwrap(), 4);
 
         let sub: (String, Option<String>) = conn
             .query_row(
@@ -306,7 +315,7 @@ mod tests {
         .unwrap();
         drop(conn);
         let conn = ensure_feeds_at(&db).expect("re-migrate");
-        assert_eq!(schema_version(&conn).unwrap(), 3);
+        assert_eq!(schema_version(&conn).unwrap(), 4);
         let added: String = conn
             .query_row(
                 "SELECT added_at FROM subscriptions WHERE id = 's1'",
@@ -316,6 +325,47 @@ mod tests {
             .unwrap();
         assert_eq!(added, "2026-08-01T08:00:00.000Z");
 
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn migrates_v3_to_v4_clears_body_cache() {
+        let dir = std::env::temp_dir().join(format!(
+            "agentero-feeds-schema-v4-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("feeds.sqlite");
+        {
+            let conn = ensure_feeds_at(&db).expect("ensure");
+            conn.execute_batch(
+                "INSERT INTO subscriptions (id, url, title, added_at, pinned) VALUES
+                 ('s1', 'https://ex.com/a', 'A', '2026-08-01T08:00:00.000Z', 0);
+                 INSERT INTO items (id, subscription_id, guid, title, first_seen_at, body_markdown, paper_url)
+                 VALUES ('i1', 's1', 'g1', 'one', '2026-08-03T10:00:01.000Z', '# old body', 'https://doi.org/10.1/x');",
+            )
+            .unwrap();
+            conn.execute(
+                "UPDATE schema_meta SET value = '3' WHERE key = 'schema_version'",
+                [],
+            )
+            .unwrap();
+        }
+        let conn = ensure_feeds_at(&db).expect("migrate v4");
+        assert_eq!(schema_version(&conn).unwrap(), 4);
+        let (body, paper_url): (Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT body_markdown, paper_url FROM items WHERE id = 'i1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(body, None);
+        assert_eq!(paper_url.as_deref(), Some("https://doi.org/10.1/x"));
         let _ = fs::remove_dir_all(&dir);
     }
 }
