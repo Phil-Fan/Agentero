@@ -68,18 +68,25 @@ function transformMathRegion(text: string): string {
 export function normalizeMarkdownMath(source: string): string {
 	if (!source?.includes("\\")) return source;
 
+	// Older cached markdown may still carry KaTeX-unsupported env
+	// wrappers inside $$…$$; $$ regions are protected below, so unwrap first.
+	const unwrapped = source.replace(
+		/\$\$\s*\\begin\{(equation\*?|multline\*?|flalign\*?)\}([\s\S]*?)\\end\{\1\}\s*\$\$/g,
+		(_m, _env: string, body: string) => `$$${body.trim()}$$`,
+	);
+
 	let result = "";
 	let last = 0;
-	for (const match of source.matchAll(PROTECTED)) {
+	for (const match of unwrapped.matchAll(PROTECTED)) {
 		const start = match.index ?? 0;
 		if (start > last) {
-			result += transformMathRegion(source.slice(last, start));
+			result += transformMathRegion(unwrapped.slice(last, start));
 		}
 		result += match[0];
 		last = start + match[0].length;
 	}
-	if (last < source.length) {
-		result += transformMathRegion(source.slice(last));
+	if (last < unwrapped.length) {
+		result += transformMathRegion(unwrapped.slice(last));
 	}
 	return result;
 }
