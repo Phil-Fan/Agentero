@@ -15,7 +15,7 @@ use crate::core::error::AppError;
 use crate::core::http;
 use body::{
     ensure_heading, extract_article_html, extract_paper_doi, html_to_markdown,
-    is_fetchable_http_url, is_paper_landing_url, looks_truncated, strip_trailing_ellipsis,
+    is_fetchable_http_url, strip_trailing_ellipsis,
 };
 use chrono::Utc;
 use parse::{
@@ -115,6 +115,15 @@ fn http_client() -> Result<reqwest::Client, AppError> {
     http::client(Duration::from_secs(FETCH_TIMEOUT_SECS))
 }
 
+/// Browser-impersonating client for article pages that reject bot UAs (403).
+fn http_client_browser() -> Result<reqwest::Client, AppError> {
+    http::client_with(
+        Duration::from_secs(FETCH_TIMEOUT_SECS),
+        http::DEFAULT_REDIRECT_LIMIT,
+        http::BROWSER_USER_AGENT,
+    )
+}
+
 struct RawFetch {
     url: String,
     status: u16,
@@ -138,7 +147,20 @@ async fn http_get_accept(
     last_modified: Option<&str>,
     accept: Option<&str>,
 ) -> Result<RawFetch, AppError> {
-    let client = http_client()?;
+    http_get_accept_with(&http_client()?, url, etag, last_modified, accept).await
+}
+
+async fn http_get_browser_accept(url: &str, accept: Option<&str>) -> Result<RawFetch, AppError> {
+    http_get_accept_with(&http_client_browser()?, url, None, None, accept).await
+}
+
+async fn http_get_accept_with(
+    client: &reqwest::Client,
+    url: &str,
+    etag: Option<&str>,
+    last_modified: Option<&str>,
+    accept: Option<&str>,
+) -> Result<RawFetch, AppError> {
     let mut req = client.get(url);
     if let Some(tag) = etag.filter(|s| !s.is_empty()) {
         req = req.header(reqwest::header::IF_NONE_MATCH, tag);
@@ -640,13 +662,8 @@ struct FetchedArticle {
 }
 
 async fn fetch_article(url: &str, title: &str) -> Result<FetchedArticle, AppError> {
-    let raw = http_get_accept(
-        url,
-        None,
-        None,
-        Some("text/html,application/xhtml+xml;q=0.9,*/*;q=0.8"),
-    )
-    .await?;
+    let raw = http_get_browser_accept(url, Some("text/html,application/xhtml+xml;q=0.9,*/*;q=0.8"))
+        .await?;
     if !(200..300).contains(&raw.status) {
         return Err(AppError::message(format!("feeds.http:{}", raw.status)));
     }
@@ -673,12 +690,15 @@ async fn fetch_article(url: &str, title: &str) -> Result<FetchedArticle, AppErro
     })
 }
 
-/// Resolve a full article body for the detail page. RSS often only ships an
-/// excerpt ending in `[...]`; opening the item fetches `item.url` and converts
-/// HTML → Markdown. Cached in `items.body_markdown`. While the page is open
-/// anyway, a DOI found in the publisher's `<meta>` tags backfills
-/// `items.paper_url` so feeds without explicit DOIs (e.g. nature.com subject
-/// feeds) still offer the paper import action.
+/// Resolve a full article body for the detail page.
+///
+/// Always attempts to fetch the original article page when `item.url` is a
+/// fetchable HTTP URL, regardless of whether the RSS already ships a summary.
+/// The fetched HTML is run through DOM-based Readability scoring and converted
+/// to Markdown.  While the page is open anyway, a DOI scraped from the
+/// publisher's `<meta>` tags backfills `items.paper_url` so feeds without
+/// explicit DOIs (e.g. nature.com subject feeds) still offer the paper import
+/// action.  Results are cached in `items.body_markdown`.
 pub async fn resolve_body(id: &str) -> Result<FeedItem, AppError> {
     let existing = {
         let conn = ensure_feeds()?;
@@ -694,17 +714,8 @@ pub async fn resolve_body(id: &str) -> Result<FeedItem, AppError> {
         return Ok(item_with_body(existing, md));
     }
     let rss = markdown_from_rss(&existing);
-    let missing_paper = existing
-        .paper_url
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .is_none();
-    let skip_fetch = is_paper_landing_url(existing.url.as_deref());
-    let need_fetch = !skip_fetch
-        && existing.url.as_deref().is_some_and(is_fetchable_http_url)
-        && (missing_paper || looks_truncated(&rss) || rss.chars().count() < 400);
-    if !need_fetch {
+    let can_fetch = existing.url.as_deref().is_some_and(is_fetchable_http_url);
+    if !can_fetch {
         let body = ensure_heading(&strip_trailing_ellipsis(&rss), &existing.title);
         let conn = ensure_feeds()?;
         return persist_resolved(&conn, id, &body, None);
@@ -727,11 +738,7 @@ pub async fn resolve_body(id: &str) -> Result<FeedItem, AppError> {
         }
         Err(_) => {
             let fallback = ensure_heading(&strip_trailing_ellipsis(&rss), &existing.title);
-            if looks_truncated(&rss) {
-                return Ok(item_with_body(existing, fallback));
-            }
-            let conn = ensure_feeds()?;
-            persist_resolved(&conn, id, &fallback, None)
+            Ok(item_with_body(existing, fallback))
         }
     }
 }

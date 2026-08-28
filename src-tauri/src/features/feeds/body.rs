@@ -1,6 +1,7 @@
 //! Turn RSS excerpts / article HTML into Markdown for the plaza detail page.
 
 use super::parse::strip_html;
+use scraper::{Html, Selector};
 use url::Url;
 
 const ARTICLE_CLASS_HINTS: &[&str] = &[
@@ -14,30 +15,138 @@ const ARTICLE_CLASS_HINTS: &[&str] = &[
     "prose",
 ];
 
+const POSITIVE_HINTS: &[&str] = &[
+    "article", "content", "post", "entry", "body", "text", "prose", "story", "blog", "main",
+];
+
+const NEGATIVE_HINTS: &[&str] = &[
+    "sidebar", "nav", "footer", "header", "aside", "comment", "share", "related", "advert",
+    "social", "menu", "widget", "promo", "banner",
+];
+
+const CANDIDATE_SELECTOR: &str = "article, main, div, section";
+const MIN_CONTENT_CHARS: usize = 40;
+
 pub fn html_to_markdown(html: &str) -> String {
-    htmd::convert(html)
-        .unwrap_or_else(|_| strip_html(html))
-        .replace('\u{200b}', "")
-        .trim()
-        .to_string()
+    let (processed, math_blocks) = extract_latex_math(html);
+    let md = htmd::convert(&processed).unwrap_or_else(|_| strip_html(&processed));
+    let restored = restore_latex_math(&md, &math_blocks);
+    restored.replace('\u{200b}', "").trim().to_string()
 }
 
-pub fn looks_truncated(text: &str) -> bool {
-    let t = text.trim();
-    if t.is_empty() {
-        return true;
+/// LaTeX block environments to preserve (equation, align, aligned, etc.).
+const LATEX_BLOCK_ENVS: &[&str] = &[
+    "equation",
+    "equation*",
+    "align",
+    "align*",
+    "aligned",
+    "gather",
+    "gather*",
+    "multline",
+    "multline*",
+    "alignat",
+    "alignat*",
+    "flalign",
+    "flalign*",
+];
+
+/// Extract LaTeX math from HTML before htmd conversion.
+///
+/// htmd strips backslashes, turning `\boldsymbol` into `boldsymbol`.
+/// We pull out `\begin{env}...\end{env}` blocks and `$...$` inline math,
+/// replace them with text placeholders, then restore them as
+/// `$$...$$` / `$...$` after conversion.
+fn extract_latex_math(html: &str) -> (String, Vec<(String, String)>) {
+    let mut out = String::with_capacity(html.len());
+    let mut blocks: Vec<(String, String)> = Vec::new();
+    let mut rest = html;
+
+    while !rest.is_empty() {
+        // Try to find the earliest LaTeX construct
+        let mut earliest: Option<(usize, usize, String)> = None;
+
+        // Find \begin{env}
+        if let Some(idx) = rest.find("\\begin{") {
+            let brace = idx + "\\begin{".len();
+            if let Some(end_brace) = rest[brace..].find('}') {
+                let env_name = &rest[brace..brace + end_brace];
+                if LATEX_BLOCK_ENVS.contains(&env_name) {
+                    let end_tag = format!("\\end{{{}}}", env_name);
+                    if let Some(end_idx) = rest[idx..].find(&end_tag) {
+                        let abs_end = idx + end_idx + end_tag.len();
+                        let content = rest[idx..abs_end].to_string();
+                        let pos = earliest.as_ref().is_none_or(|(p, _, _)| idx < *p);
+                        if pos {
+                            earliest = Some((idx, abs_end, content));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Find $...$ inline math (not $$...$$)
+        let mut search_from = 0;
+        while let Some(dollar) = rest[search_from..].find('$') {
+            let abs_dollar = search_from + dollar;
+            // Skip $$ (display math delimiter)
+            if abs_dollar + 1 < rest.len() && rest.as_bytes()[abs_dollar + 1] == b'$' {
+                search_from = abs_dollar + 2;
+                continue;
+            }
+            // Find closing $
+            let after = abs_dollar + 1;
+            if let Some(end_dollar) = rest[after..].find('$') {
+                let abs_end = after + end_dollar + 1;
+                // Make sure it's not $$ on the closing side either
+                if abs_end < rest.len() && rest.as_bytes()[abs_end] == b'$' {
+                    search_from = abs_end + 1;
+                    continue;
+                }
+                let content = rest[abs_dollar..abs_end].to_string();
+                let pos = earliest.as_ref().is_none_or(|(p, _, _)| abs_dollar < *p);
+                if pos {
+                    earliest = Some((abs_dollar, abs_end, content));
+                }
+                break;
+            }
+            break;
+        }
+
+        match earliest {
+            Some((start, end, content)) => {
+                out.push_str(&rest[..start]);
+                let placeholder = format!("LATEXBLOCK{}", blocks.len());
+                let marker = if content.starts_with("\\begin{") {
+                    format!("$$ {} $$", content)
+                } else {
+                    content.clone()
+                };
+                blocks.push((placeholder.clone(), marker));
+                out.push_str(&placeholder);
+                rest = &rest[end..];
+            }
+            None => {
+                out.push_str(rest);
+                break;
+            }
+        }
     }
-    let lower = t.to_ascii_lowercase();
-    lower.ends_with("[...]")
-        || t.ends_with("[…]")
-        || t.ends_with("...")
-        || t.ends_with('…')
-        || lower.ends_with("[..]")
-        || lower.ends_with("read more")
-        || lower.ends_with("continue reading")
+
+    (out, blocks)
+}
+
+/// Restore LaTeX math placeholders after htmd conversion.
+fn restore_latex_math(md: &str, blocks: &[(String, String)]) -> String {
+    let mut result = md.to_string();
+    for (placeholder, marker) in blocks {
+        result = result.replace(placeholder, marker);
+    }
+    result
 }
 
 /// Paper landing pages (arXiv abs / DOI) are not useful article HTML.
+#[allow(dead_code)]
 pub fn is_paper_landing_url(url: Option<&str>) -> bool {
     let Some(raw) = url.map(str::trim).filter(|s| !s.is_empty()) else {
         return false;
@@ -113,25 +222,133 @@ pub fn is_fetchable_http_url(url: &str) -> bool {
     matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_some()
 }
 
-/// Prefer `<article>` / common post containers, then `<main>` / `<body>`.
+/// Find the main article content using DOM-based Readability scoring.
+///
+/// Parses HTML into a proper DOM tree, scores candidate containers by
+/// class/id hints, paragraph count, text density, and link density, then
+/// returns the inner HTML of the best match.  Falls back to string-based
+/// tag matching when the DOM approach yields nothing useful.
 pub fn extract_article_html(html: &str) -> String {
     let cleaned = strip_noise_tags(html);
-    if let Some(inner) = extract_element(&cleaned, "article") {
+    if let Some(dom_result) = dom_extract_article(&cleaned) {
+        if strip_html(&dom_result).len() > MIN_CONTENT_CHARS {
+            return dom_result;
+        }
+    }
+    fallback_extract_article(&cleaned)
+}
+
+fn dom_extract_article(html: &str) -> Option<String> {
+    let doc = Html::parse_document(html);
+    let candidate_sel = Selector::parse(CANDIDATE_SELECTOR).ok()?;
+
+    let mut best: Option<scraper::ElementRef<'_>> = None;
+    let mut best_score = 0.0f64;
+    let mut best_depth = 0usize;
+
+    for element in doc.select(&candidate_sel) {
+        if is_noise_element(&element) {
+            continue;
+        }
+        let text: String = element.text().collect();
+        let text_len = text.trim().chars().count();
+        if text_len < MIN_CONTENT_CHARS {
+            continue;
+        }
+        let score = score_candidate(&element, text_len);
+        let depth = element.ancestors().count();
+        if score > best_score || (score == best_score && depth > best_depth) {
+            best = Some(element);
+            best_score = score;
+            best_depth = depth;
+        }
+    }
+
+    best.map(|e| e.inner_html())
+}
+
+fn is_noise_element(element: &scraper::ElementRef) -> bool {
+    let tag = element.value().name.local.as_ref();
+    if matches!(
+        tag,
+        "nav" | "footer" | "aside" | "header" | "script" | "style" | "noscript" | "svg" | "iframe"
+    ) {
+        return true;
+    }
+    for attr in element.value().attrs() {
+        let name: &str = attr.0;
+        if name == "class" || name == "id" {
+            let val: &str = attr.1;
+            let lower = val.to_ascii_lowercase();
+            if NEGATIVE_HINTS.iter().any(|h| lower.contains(h)) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn score_candidate(element: &scraper::ElementRef, text_len: usize) -> f64 {
+    let mut score = 0.0f64;
+
+    for attr in element.value().attrs() {
+        let name: &str = attr.0;
+        if name == "class" || name == "id" {
+            let val: &str = attr.1;
+            let lower = val.to_ascii_lowercase();
+            for hint in POSITIVE_HINTS {
+                if lower.contains(hint) {
+                    score += 25.0;
+                }
+            }
+            for hint in NEGATIVE_HINTS {
+                if lower.contains(hint) {
+                    score -= 25.0;
+                }
+            }
+        }
+    }
+
+    let p_sel = Selector::parse("p").unwrap();
+    let p_count = element.select(&p_sel).count();
+    score += (p_count as f64) * 3.0;
+
+    let h_sel = Selector::parse("h1, h2, h3, h4, h5, h6").unwrap();
+    let h_count = element.select(&h_sel).count();
+    score += (h_count as f64) * 1.0;
+
+    score += (text_len.min(2000) as f64) / 100.0;
+
+    let a_sel = Selector::parse("a").unwrap();
+    let link_text: usize = element
+        .select(&a_sel)
+        .map(|a| a.text().collect::<String>().len())
+        .sum();
+    if text_len > 0 {
+        let density = link_text as f64 / text_len as f64;
+        score -= density * 30.0;
+    }
+
+    score
+}
+
+fn fallback_extract_article(html: &str) -> String {
+    if let Some(inner) = extract_element(html, "article") {
         if strip_html(&inner).len() > 20 {
             return inner;
         }
     }
-    if let Some(inner) = extract_by_class(&cleaned, ARTICLE_CLASS_HINTS) {
+    if let Some(inner) = extract_by_class(html, ARTICLE_CLASS_HINTS) {
         if strip_html(&inner).len() > 40 {
             return inner;
         }
     }
-    if let Some(inner) = extract_element(&cleaned, "main") {
+    if let Some(inner) = extract_element(html, "main") {
         if strip_html(&inner).len() > 40 {
             return inner;
         }
     }
-    extract_element(&cleaned, "body").unwrap_or(cleaned)
+    extract_element(html, "body").unwrap_or_else(|| html.to_string())
 }
 
 /// Drop RSS “read more” tails (`[...]`, `…`) so the detail page is not a teaser.
@@ -371,13 +588,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn detects_truncation() {
-        assert!(looks_truncated("Hello world [...]"));
-        assert!(looks_truncated("Hello world…"));
-        assert!(!looks_truncated("A complete abstract about $m$ tokens."));
-    }
-
-    #[test]
     fn paper_landing_hosts() {
         assert!(is_paper_landing_url(Some(
             "https://arxiv.org/abs/1706.03762"
@@ -464,6 +674,84 @@ mod tests {
                 "The Geometry of Truth"
             ),
             "# The Geometry of Truth\n\n## The Setup"
+        );
+    }
+
+    #[test]
+    fn readability_picks_content_over_sidebar() {
+        let html = r#"
+        <html><body>
+          <div class="sidebar">Short sidebar text that is not the main content at all.</div>
+          <div class="article-content">
+            <p>This is the real article content with enough length to be considered meaningful by the scoring algorithm that evaluates candidates.</p>
+          </div>
+        </body></html>"#;
+        let inner = extract_article_html(html);
+        assert!(inner.contains("real article content"), "{inner}");
+        assert!(!inner.contains("sidebar"), "{inner}");
+    }
+
+    #[test]
+    fn readability_prefers_specific_inner_container() {
+        let html = r#"
+        <html><body>
+          <article>
+            <div class="post-content">
+              <p>Inner content that should be selected over the outer article wrapper because it has a positive class hint bonus.</p>
+            </div>
+          </article>
+        </body></html>"#;
+        let inner = extract_article_html(html);
+        assert!(inner.contains("Inner content"), "{inner}");
+        assert!(!inner.contains("<article"), "{inner}");
+    }
+
+    #[test]
+    fn readability_penalizes_link_heavy_containers() {
+        let html = r##"
+        <html><body>
+          <div class="nav-links">
+            <a href="#">Link 1</a>
+            <a href="#">Link 2</a>
+            <a href="#">Link 3</a>
+            <a href="#">Link 4</a>
+            <a href="#">Link 5</a>
+            <a href="#">Link 6</a>
+            <a href="#">Link 7</a>
+            <a href="#">Link 8</a>
+          </div>
+          <div class="content">
+            <p>This is actual readable content that has meaningful paragraphs and very few links in comparison to the navigation area.</p>
+          </div>
+        </body></html>"##;
+        let inner = extract_article_html(html);
+        assert!(inner.contains("actual readable content"), "{inner}");
+    }
+
+    #[test]
+    fn preserves_latex_inline_math() {
+        let html = r#"<div><p>The function $f(x) = x^2$ maps reals to reals.</p></div>"#;
+        let md = html_to_markdown(html);
+        assert!(md.contains("$f(x) = x^2$"), "{md}");
+    }
+
+    #[test]
+    fn preserves_latex_block_math() {
+        let html = r#"<div><p>Before.</p><p>\begin{equation}E = mc^2\end{equation}</p><p>After.</p></div>"#;
+        let md = html_to_markdown(html);
+        assert!(
+            md.contains("$$ \\begin{equation}E = mc^2\\end{equation} $$"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn preserves_latex_backslash_commands() {
+        let html = r#"<div><p>We use $\boldsymbol{\alpha} + \frac{1}{2}$ here.</p></div>"#;
+        let md = html_to_markdown(html);
+        assert!(
+            md.contains("$\\boldsymbol{\\alpha} + \\frac{1}{2}$"),
+            "{md}"
         );
     }
 }
