@@ -104,6 +104,7 @@ MVP **不做**：`@handle` 展开、OPML、登录态、RSSHub 拼接。
 - 失败 `notifyError`，不在侧栏挂错误条。
 - 列表卡摘要只示纯文本 3 行。详情打开时走 `feeds_resolve_body`：已缓存 `bodyMarkdown` 则直接用；否则若 RSS 已是全文（或 arXiv / DOI 落地页）转 Markdown；博客摘要带 `[...]` 或 `paper_url` 为空（可能从落地页 metadata 确认论文身份）则抓原文 HTML，抽 `<article>` / 常见正文容器后 `htmd` 成 Markdown，并顺手解析 `citation_doi` 等回填 `paper_url`。渲染复用 `MessageResponse`（Streamdown + `$…$`）。
 - 点标题 = 主操作。另给一个外链图标，论文卡也可打开原文。
+- 抓原文页用浏览器 UA + cookie store 的 client：部分站点（如 spaces.ac.cn 的 WAF）首访回 403 + Set-Cookie + `window.location` 重定向壳页，`fetch_article` 检测到这类挑战页会带 Cookie 自动重发一次。抓取失败记 `agentero::feeds` warn 日志，回退 RSS 摘要。
 
 不做第三种「提醒卡」、图墙、视频墙、全文阅读栏（经典三栏的第三栏）。
 
