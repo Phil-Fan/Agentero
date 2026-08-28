@@ -6,8 +6,10 @@
  * often emit:
  * - bare TeX: `\pi_\theta`
  * - TeX delimiters: `\(...\)` / `\[...\]`
+ * - block environments: `\begin{equation}...\end{equation}`
  * without dollar wrapping. Bare `_` also breaks GFM emphasis, so wrapping helps
- * both rendering and layout.
+ * both rendering and layout. KaTeX cannot render `equation` / `multline` /
+ * `flalign` wrappers, so those are stripped while the inner math is kept.
  */
 
 /** Fenced code, inline code, or existing dollar math — leave untouched. */
@@ -17,6 +19,13 @@ const PROTECTED =
 /** `\(...\)` inline and `\[...\]` display (non-greedy, allows nested `\cmd`). */
 const TEX_DISPLAY = /\\\[([\s\S]*?)\\\]/g;
 const TEX_INLINE = /\\\(([\s\S]*?)\\\)/g;
+
+/** `\begin{env}...\end{env}` block environments (blogs, RSS excerpts). */
+const TEX_ENV =
+	/\\begin\{(equation\*?|multline\*?|flalign\*?|align\*?|alignat\*?|gather\*?|aligned|eqnarray\*?)\}([\s\S]*?)\\end\{\1\}/g;
+
+/** Environments whose wrappers KaTeX cannot render (inner math is kept). */
+const ENV_STRIP_WRAPPERS = /^(equation|multline|flalign)/;
 
 /**
  * Bare command with at least one subscript/superscript, e.g. `\pi_\theta`,
@@ -34,17 +43,25 @@ const BARE_BRACED = /(?<![$\\])\\[a-zA-Z]+(?:\{[^{}]*\})+/g;
 function transformMathRegion(text: string): string {
 	if (!text.includes("\\")) return text;
 
-	let out = text
-		.replace(TEX_DISPLAY, (_m, body: string) => `$$${body}$$`)
-		.replace(TEX_INLINE, (_m, body: string) => `$${body}$`);
+	// Converted regions are stashed behind placeholders so later passes
+	// (bare-command wrapping) cannot fragment their insides.
+	const stash: string[] = [];
+	const keep = (value: string) => {
+		stash.push(value);
+		return `\uE000${stash.length - 1}\uE000`;
+	};
 
-	out = out.replace(BARE_SCRIPTED, (match) => `$${match}$`);
-	out = out.replace(BARE_BRACED, (match) => {
-		// Already wrapped by scripted pass or adjacent `$`.
-		return match.startsWith("$") ? match : `$${match}$`;
-	});
+	let out = text.replace(TEX_ENV, (match, env: string, body: string) =>
+		keep(ENV_STRIP_WRAPPERS.test(env) ? `$$${body.trim()}$$` : `$$${match}$$`),
+	);
+	out = out
+		.replace(TEX_DISPLAY, (_m, body: string) => keep(`$$${body}$$`))
+		.replace(TEX_INLINE, (_m, body: string) => keep(`$${body}$`));
 
-	return out;
+	out = out.replace(BARE_SCRIPTED, (match) => keep(`$${match}$`));
+	out = out.replace(BARE_BRACED, (match) => keep(`$${match}$`));
+
+	return out.replace(/\uE000(\d+)\uE000/g, (_m, i: string) => stash[Number(i)]);
 }
 
 /** Prepare markdown so KaTeX can render common agent LaTeX forms. */

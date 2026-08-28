@@ -51,6 +51,18 @@ const LATEX_BLOCK_ENVS: &[&str] = &[
     "flalign*",
 ];
 
+/// Environments KaTeX cannot render (MathJax-only). Their wrappers are
+/// stripped so the inner math still displays; supported envs (align, gather,
+/// aligned, …) keep their wrappers inside `$$…$$`.
+const KATEX_UNSUPPORTED_ENVS: &[&str] = &[
+    "equation",
+    "equation*",
+    "multline",
+    "multline*",
+    "flalign",
+    "flalign*",
+];
+
 /// Extract LaTeX math from HTML before htmd conversion.
 ///
 /// htmd strips backslashes, turning `\boldsymbol` into `boldsymbol`.
@@ -117,11 +129,7 @@ fn extract_latex_math(html: &str) -> (String, Vec<(String, String)>) {
             Some((start, end, content)) => {
                 out.push_str(&rest[..start]);
                 let placeholder = format!("LATEXBLOCK{}", blocks.len());
-                let marker = if content.starts_with("\\begin{") {
-                    format!("$$ {} $$", content)
-                } else {
-                    content.clone()
-                };
+                let marker = block_math_marker(&content);
                 blocks.push((placeholder.clone(), marker));
                 out.push_str(&placeholder);
                 rest = &rest[end..];
@@ -134,6 +142,26 @@ fn extract_latex_math(html: &str) -> (String, Vec<(String, String)>) {
     }
 
     (out, blocks)
+}
+
+/// Display-math marker for an extracted LaTeX construct. Inline `$…$` passes
+/// through; `\begin{env}…\end{env}` becomes `$$…$$`, with the wrapper dropped
+/// for environments KaTeX cannot render.
+fn block_math_marker(content: &str) -> String {
+    let Some(open) = content.strip_prefix("\\begin{") else {
+        return content.to_string();
+    };
+    let Some(env) = open.split('}').next() else {
+        return format!("$$ {} $$", content);
+    };
+    if KATEX_UNSUPPORTED_ENVS.contains(&env) {
+        let open_len = "\\begin{".len() + env.len() + 1;
+        let close_len = "\\end{".len() + env.len() + 1;
+        let inner = &content[open_len..content.len().saturating_sub(close_len)];
+        format!("$$ {} $$", inner.trim())
+    } else {
+        format!("$$ {} $$", content)
+    }
 }
 
 /// Restore LaTeX math placeholders after htmd conversion.
@@ -739,8 +767,16 @@ mod tests {
     fn preserves_latex_block_math() {
         let html = r#"<div><p>Before.</p><p>\begin{equation}E = mc^2\end{equation}</p><p>After.</p></div>"#;
         let md = html_to_markdown(html);
+        assert!(md.contains("$$ E = mc^2 $$"), "{md}");
+        assert!(!md.contains("\\begin{equation}"), "{md}");
+    }
+
+    #[test]
+    fn keeps_katex_supported_env_wrappers() {
+        let html = r#"<p>\begin{aligned}a &= b \\ c &= d\end{aligned}</p>"#;
+        let md = html_to_markdown(html);
         assert!(
-            md.contains("$$ \\begin{equation}E = mc^2\\end{equation} $$"),
+            md.contains("$$ \\begin{aligned}a &= b \\\\ c &= d\\end{aligned} $$"),
             "{md}"
         );
     }
