@@ -156,7 +156,6 @@
 	},
 	"plaza": {
 		"plaza": "广场",
-		"plazaDescription": "从外部来源发现论文与科研 Skill；入库后会出现在论文库中。",
 		"back": "后退",
 		"forward": "前进",
 		"reload": "重新载入",
@@ -164,6 +163,7 @@
 		"comingSoon": "即将推出",
 		"comingSoonFor": "{{label}} 即将推出。",
 		"hideSource": "在侧栏隐藏",
+		"showSource": "在侧栏显示",
 		"arxivDescription": "浏览 arXiv 日更与会议论文流",
 		"modelscope": "ModelScope 论文",
 		"modelscopeDescription": "浏览魔搭每日读论文与中文解读",

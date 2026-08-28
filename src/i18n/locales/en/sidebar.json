@@ -156,7 +156,6 @@
 	},
 	"plaza": {
 		"plaza": "Plaza",
-		"plazaDescription": "Discover papers and research Skills from external sources; imported papers appear in your library.",
 		"back": "Back",
 		"forward": "Forward",
 		"reload": "Reload",
@@ -164,6 +163,7 @@
 		"comingSoon": "Coming soon",
 		"comingSoonFor": "{{label}} is coming soon.",
 		"hideSource": "Hide from sidebar",
+		"showSource": "Show in sidebar",
 		"arxivDescription": "Browse daily arXiv updates and conference papers",
 		"modelscope": "ModelScope Papers",
 		"modelscopeDescription": "Browse ModelScope daily papers and Chinese interpretations",

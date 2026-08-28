@@ -15,12 +15,7 @@ import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { isTauri } from "@/lib/core/tauri";
 import { isPaperDirectory } from "@/lib/paper";
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
-import {
-	isPlazaRootPath,
-	isPlazaVirtualPath,
-	PLAZA_SOURCES,
-	plazaSourceForPath,
-} from "@/lib/plaza";
+import { plazaSourceForPath } from "@/lib/plaza";
 import { getSettings, patchSettings } from "@/lib/settings/react-store";
 import { type FileNode, resolveCreateParent } from "@/lib/vault";
 import { openInTerminal, revealInFileManager } from "@/lib/vault/reveal";
@@ -105,12 +100,12 @@ export function useTreeContextMenu({
 	const handleContextMenuPath = useCallback(
 		(path: string, event: ReactMouseEvent) => {
 			if (createDraft || renameDraft) return;
-			// Real vault paths + virtual Library (export) / Recycle Bin (empty) / Plaza (hide/show sources).
+			// Real vault paths + virtual Library (export) / Recycle Bin (empty) / Plaza source (hide).
 			if (
 				!canRevealPath(path) &&
 				path !== TRASH_VIRTUAL_PATH &&
 				path !== LIBRARY_VIRTUAL_PATH &&
-				!isPlazaVirtualPath(path)
+				!plazaSourceForPath(path)
 			) {
 				return;
 			}
@@ -182,16 +177,6 @@ export function useTreeContextMenu({
 		}
 	}, []);
 
-	// Keep the menu open so several sources can be toggled in one go.
-	const togglePlazaSource = useCallback((id: string, hide: boolean) => {
-		const current = getSettings().plazaHiddenSources;
-		if (hide && !current.includes(id)) {
-			patchSettings({ plazaHiddenSources: [...current, id] });
-		} else if (!hide && current.includes(id)) {
-			patchSettings({ plazaHiddenSources: current.filter((s) => s !== id) });
-		}
-	}, []);
-
 	if (!menu) {
 		return { menuProps: null, revealError, handleContextMenuPath };
 	}
@@ -202,18 +187,8 @@ export function useTreeContextMenu({
 		menuNode?.kind === "directory" &&
 		isPaperDirectory(menuNode.path, menuNode.children);
 	const targetIsVirtual =
-		menu.path === LIBRARY_VIRTUAL_PATH ||
-		menu.path === TRASH_VIRTUAL_PATH ||
-		isPlazaVirtualPath(menu.path);
-	const plazaMenuSource = isPlazaVirtualPath(menu.path)
-		? plazaSourceForPath(menu.path)
-		: null;
-	const plazaRootSources = isPlazaRootPath(menu.path)
-		? PLAZA_SOURCES.map((source) => ({
-				source,
-				hidden: getSettings().plazaHiddenSources.includes(source.id),
-			}))
-		: undefined;
+		menu.path === LIBRARY_VIRTUAL_PATH || menu.path === TRASH_VIRTUAL_PATH;
+	const plazaMenuSource = plazaSourceForPath(menu.path);
 	const targetKey = pathKey(menu.path);
 	const canPasteAtTarget =
 		cutPaths.length > 0 &&
@@ -232,11 +207,9 @@ export function useTreeContextMenu({
 		citingScanBusy,
 		canPasteAtTarget,
 		plazaMenuSource: plazaMenuSource ?? undefined,
-		plazaRootSources,
 		onHidePlazaSource: plazaMenuSource
 			? () => hidePlazaSource(plazaMenuSource.id)
 			: undefined,
-		onTogglePlazaSource: togglePlazaSource,
 		onClose: close,
 		onExportLibrary: onExportLibrary
 			? () => {

@@ -1,9 +1,9 @@
-import { Download, Eye, EyeOff, Loader2, Radar, Trash2 } from "lucide-react";
+import { Download, EyeOff, Loader2, Radar, Trash2 } from "lucide-react";
 import { type RefObject, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { ViewportFloating } from "@/components/ui/viewport-floating";
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
-import { type PlazaSource, plazaSourceLabel } from "@/lib/plaza";
+import type { PlazaSource } from "@/lib/plaza";
 import { formatShortcutById } from "@/lib/shell/shortcuts";
 import { revealInOsLabelKey } from "@/lib/vault/reveal";
 import type { TreeContextMenu } from "./types";
@@ -19,10 +19,7 @@ export type TreeContextMenuPortalProps = {
 	canPasteAtTarget: boolean;
 	/** Right-clicked Plaza source row — menu offers hiding it. */
 	plazaMenuSource?: PlazaSource;
-	/** All sources on the Plaza parent row menu — click toggles hide/restore. */
-	plazaRootSources?: { source: PlazaSource; hidden: boolean }[];
 	onHidePlazaSource?: () => void;
-	onTogglePlazaSource?: (id: string, hide: boolean) => void;
 	onClose: () => void;
 	/** Each callback is optional — `undefined` hides the matching menu item. */
 	onExportLibrary?: () => void;
@@ -56,9 +53,7 @@ export function TreeContextMenuPortal({
 	citingScanBusy,
 	canPasteAtTarget,
 	plazaMenuSource,
-	plazaRootSources,
 	onHidePlazaSource,
-	onTogglePlazaSource,
 	onClose,
 	onExportLibrary,
 	onDiscoverCiting,
@@ -195,26 +190,6 @@ export function TreeContextMenuPortal({
 					<EyeOff className="size-3.5 shrink-0" aria-hidden />
 					<span>{t("plaza.hideSource")}</span>
 				</button>
-			) : plazaRootSources && plazaRootSources.length > 0 ? (
-				plazaRootSources.map(({ source, hidden }) => (
-					<button
-						key={source.id}
-						type="button"
-						role="menuitem"
-						className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-						onClick={() => onTogglePlazaSource?.(source.id, !hidden)}
-					>
-						{hidden ? (
-							<Eye
-								className="size-3.5 shrink-0 text-muted-foreground"
-								aria-hidden
-							/>
-						) : (
-							<EyeOff className="size-3.5 shrink-0" aria-hidden />
-						)}
-						<span>{plazaSourceLabel(source)}</span>
-					</button>
-				))
 			) : (
 				<>
 					{menuCount === 1 && isPaperMenu && onOpenNotes ? (
