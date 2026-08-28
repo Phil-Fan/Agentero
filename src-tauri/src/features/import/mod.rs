@@ -51,6 +51,8 @@ pub use pdf_parse::engines::refresh_parser_config;
 #[cfg(feature = "desktop")]
 pub(crate) use pdf_parse::CANCELLED_MESSAGE;
 
+#[cfg(not(feature = "desktop"))]
+use crate::core::app_handle::AppHandle;
 use crate::core::error::AppError;
 use crate::features::catalog::{
     papers::{self, PaperRecord},
@@ -69,8 +71,6 @@ use std::sync::Arc;
 use std::time::Duration;
 #[cfg(feature = "desktop")]
 use tauri::{AppHandle, Emitter};
-#[cfg(not(feature = "desktop"))]
-pub struct AppHandle;
 use tokio::sync::Mutex;
 
 /// Public helper for remote PDF import staging.

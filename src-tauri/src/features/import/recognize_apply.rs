@@ -14,11 +14,11 @@
 //! Every failure degrades to the metadata upsert — a paper is never lost or
 //! left half-renamed because recognition could not be applied.
 
+use super::AppHandle;
 use crate::core::error::AppError;
 use crate::features::catalog::papers::{self, PaperRecord};
 use crate::features::catalog::CapsCache;
 use crate::features::import::pdf_recognize::PdfIdentProbe;
-use crate::features::import::AppHandle;
 use crate::features::import::{map, slug_from_stem};
 use crate::features::lifecycle::{emit_paper_renamed, PaperRenamedEvent};
 use crate::features::rename::{run_local_rename_transaction, WikiIndex};
