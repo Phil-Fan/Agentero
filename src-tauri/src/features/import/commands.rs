@@ -6,12 +6,11 @@ use crate::core::fs::{resolve_vault, WriteOpts};
 use crate::core::log_util::{trunc, OpTimer};
 use crate::features::catalog::CapsCache;
 use crate::features::import::pdf_parse::{PaperParseBodyArgs, PaperParseResult};
+use crate::features::import::resolver::{fetch_arxiv_metadata, fetch_crossref_metadata};
+use crate::features::import::title_search::{
+    better_publication, fetch_s2_venue_by_doi, is_usable_publication, search_papers,
+};
 use crate::features::import::{
-    fetch_arxiv_metadata,
-    pdf_recognize::fetch_crossref_metadata,
-    title_search::{
-        better_publication, fetch_s2_venue_by_doi, is_usable_publication, search_papers,
-    },
     AssetDownloadResult, ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportBatchArgs,
     LookupImportBatchResult, PaperDownloadAssetsArgs, SkillImportResult, StageImportFileArgs,
     StageImportFileResult,
@@ -279,17 +278,16 @@ pub async fn paper_resolve_identifier(
     let text = trunc(args.text.trim(), 60);
     let op = OpTimer::start_with("paper_resolve_identifier", format!("text={text}"));
 
-    let ident = super::parse::extract_primary_identifier(&args.text);
-    let try_identifier = ident
-        .as_ref()
-        .is_some_and(|(kind, _)| *kind != super::parse::IdentifierKind::Skill);
+    // Skill 分流不在 resolver 表内：由 extract_skill_source 判定。
+    let try_identifier = super::parse::extract_skill_source(&args.text).is_none()
+        && super::parse::extract_primary_identifier(&args.text).is_some();
 
     if try_identifier {
         let base = args
             .translator_base_url
             .clone()
             .unwrap_or_else(|| super::DEFAULT_TRANSLATOR_BASE_URL.to_string());
-        match super::pdf_recognize::resolve_identifier_full(&args.text, &base, None).await {
+        match super::resolve_metadata(&args.text, &base, None).await {
             Ok((mut meta, _used_translator)) => {
                 enrich_publication_from_s2(&mut meta).await;
                 super::enrich_remote_urls(&mut meta);
