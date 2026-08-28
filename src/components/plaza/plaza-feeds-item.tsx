@@ -73,7 +73,7 @@ export function PlazaFeedItemRow({
 				type="button"
 				onClick={() => onOpen(item)}
 				className={cn(
-					"w-full min-w-0 pr-8 text-left",
+					"block w-full min-w-0 pr-8 text-left",
 					"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 				)}
 			>
