@@ -1522,7 +1522,7 @@ fn render_note_template(template: &str, meta: &PaperMeta) -> String {
 
 /// Aliases guarantee for a rendered (Custom) shell: when the frontmatter has
 /// no aliases, merge in the title + short alias following the same logic as
-/// `catalog::papers::append_title_alias_best_effort`.
+/// `wiki::append_title_alias_best_effort`.
 fn ensure_note_aliases(notes: &str, aliases: &[String]) -> String {
     use crate::features::wiki::frontmatter::{self as fm, AliasEdit};
     let inspection = fm::inspect_aliases(notes);
