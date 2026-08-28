@@ -175,11 +175,18 @@
 			"translate": "翻译全部摘要",
 			"translating": "正在翻译…",
 			"computing": "正在排序今日论文…",
+			"probing": "正在检测 Embedding 模型…",
 			"idle": "暂无推荐。点击刷新，结合论文库对当天 arXiv 新论文排序。",
 			"needsEmbedding": "请先配置 Embedding 模型 —— 推荐需要把新论文摘要与你的论文库比对。",
+			"probeFailed": "Embedding 接口不可达，请检查 Base URL / API Key / Model。",
 			"needsCorpus": "论文库中没有可比对的摘要，先导入几篇论文。",
 			"noCandidates": "所选分类下没有找到新的 arXiv 论文。",
-			"openSettings": "打开 Agent 设置"
+			"openSettings": "打开 Agent 设置",
+			"retry": "重试",
+			"addCategory": "添加分类",
+			"searchCategory": "搜索分类…",
+			"noCategoryMatch": "没有匹配的分类。",
+			"removeCategory": "移除 {{category}}"
 		},
 		"feeds": {
 			"label": "订阅",

@@ -175,11 +175,18 @@
 			"translate": "Translate all abstracts",
 			"translating": "Translating…",
 			"computing": "Ranking today's papers…",
+			"probing": "Checking embedding model…",
 			"idle": "No recommendations yet. Refresh to rank today's arXiv papers against your library.",
 			"needsEmbedding": "Configure an embedding model first — recommendations compare abstracts against your library.",
+			"probeFailed": "Embedding endpoint is unreachable. Re-check the Base URL / API key / Model.",
 			"needsCorpus": "No library abstracts to compare against. Import a few papers first.",
 			"noCandidates": "No new arXiv papers found for the selected categories.",
-			"openSettings": "Open Agent settings"
+			"openSettings": "Open Agent settings",
+			"retry": "Retry",
+			"addCategory": "Add category",
+			"searchCategory": "Search category…",
+			"noCategoryMatch": "No matching category.",
+			"removeCategory": "Remove {{category}}"
 		},
 		"feeds": {
 			"label": "Feeds",
