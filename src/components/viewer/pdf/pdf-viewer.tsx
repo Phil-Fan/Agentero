@@ -139,7 +139,7 @@ import {
 } from "@/lib/pdf/selection";
 import type { PdfTranslateRect } from "@/lib/pdf/translate/types";
 import { PDF_ZOOM_MAX, PDF_ZOOM_MIN } from "@/lib/pdf/zoom";
-import { openRightTab } from "@/lib/shell/ui-store";
+import { openRightTab } from "@/lib/shell/ui-window-actions";
 
 export type {
 	PdfViewerHandle,
