@@ -212,6 +212,15 @@
 			},
 			"model": {
 				"label": "模型"
+			},
+			"test": "测试连接",
+			"testing": "测试中…",
+			"probeStatus": {
+				"idle": "尚未测试",
+				"probing": "测试中…",
+				"ok": "可用",
+				"failed": "不可达",
+				"unconfigured": "未配置"
 			}
 		},
 		"desktopOnly": "Agent 注册表需要桌面应用。",

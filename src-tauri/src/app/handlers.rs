@@ -117,6 +117,7 @@ macro_rules! common_commands {
             crate::features::feeds::commands::feeds_resolve_body,
             crate::features::recommend::commands::recommend_arxiv,
             crate::features::recommend::commands::recommend_arxiv_last,
+            crate::features::recommend::commands::probe_embedding,
             crate::app::menu::set_locale,
             $($extra),*
         ]

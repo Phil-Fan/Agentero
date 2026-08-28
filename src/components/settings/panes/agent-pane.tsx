@@ -57,6 +57,11 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAgentToolLifecycle } from "@/hooks/use-agent-tool-lifecycle";
 import {
 	type AgentTemplate,
@@ -82,6 +87,7 @@ import { errorText } from "@/lib/core/error";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
+import { probeEmbedding } from "@/lib/recommend";
 import type { AppSettings, EmbeddingSettings } from "@/lib/settings";
 import { isTranslateApiKeyMask } from "@/lib/translate";
 import {
@@ -133,6 +139,57 @@ export function AgentPane({
 		},
 		[patch, settings.embedding],
 	);
+	const [embProbeBusy, setEmbProbeBusy] = useState(false);
+	const [embProbeStatus, setEmbProbeStatus] = useState<
+		"idle" | "probing" | "ok" | "failed" | "unconfigured"
+	>("idle");
+	// Auto-flip the dot to "unconfigured" when the draft lacks a baseUrl/model
+	// (and we're not in the middle of a probe). Otherwise keep the last status.
+	useEffect(() => {
+		if (embProbeBusy) return;
+		if (!embDraft.baseUrl.trim() || !embDraft.model.trim()) {
+			setEmbProbeStatus("unconfigured");
+		} else if (embProbeStatus === "unconfigured") {
+			setEmbProbeStatus("idle");
+		}
+	}, [embDraft.baseUrl, embDraft.model, embProbeBusy, embProbeStatus]);
+	const runEmbProbe = useCallback(async () => {
+		const baseUrl = embDraft.baseUrl.trim();
+		const model = embDraft.model.trim();
+		if (!baseUrl || !model) return;
+		setEmbProbeBusy(true);
+		setEmbProbeStatus("probing");
+		try {
+			// Skip the apiKey override when the user has not typed a new key
+			// (empty or Host `*` mask) so the Host falls back to the stored secret.
+			const apiKey = embDraft.apiKey.trim();
+			await probeEmbedding({
+				baseUrl,
+				apiKey: apiKey && !isTranslateApiKeyMask(apiKey) ? apiKey : undefined,
+				model,
+			});
+			setEmbProbeStatus("ok");
+		} catch {
+			setEmbProbeStatus("failed");
+		} finally {
+			setEmbProbeBusy(false);
+		}
+	}, [embDraft.apiKey, embDraft.baseUrl, embDraft.model]);
+
+	function embProbeDotClass(status: typeof embProbeStatus): string {
+		switch (status) {
+			case "ok":
+				return "bg-emerald-500";
+			case "failed":
+				return "bg-destructive";
+			case "probing":
+				return "bg-amber-500 animate-pulse";
+			case "unconfigured":
+				return "bg-muted-foreground/35";
+			default:
+				return "bg-muted-foreground/50";
+		}
+	}
 	const { probingKeys, setProbingKeys, clearProbingKey, clearAllProbingKeys } =
 		useProbingKeys();
 	const autoProbedRef = useRef(false);
@@ -1061,9 +1118,48 @@ export function AgentPane({
 			</SettingsGroup>
 
 			{/* Embedding endpoint (BYOK) for arxiv daily recommendation & semantic features. */}
-			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
-				{t("agent.embedding.section")}
-			</p>
+			<div className="mb-1.5 mt-4 flex items-center justify-between gap-2">
+				<p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+					{t("agent.embedding.section")}
+				</p>
+				<div className="flex items-center gap-1.5">
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<span
+								role="status"
+								aria-label={t(
+									`agent.embedding.probeStatus.${embProbeStatus}` as "agent.embedding.probeStatus.idle",
+								)}
+								className={cn(
+									"size-1.5 shrink-0 rounded-full",
+									embProbeDotClass(embProbeStatus),
+								)}
+							/>
+						</TooltipTrigger>
+						<TooltipContent>
+							{t(
+								`agent.embedding.probeStatus.${embProbeStatus}` as "agent.embedding.probeStatus.idle",
+							)}
+						</TooltipContent>
+					</Tooltip>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						disabled={
+							embProbeBusy || !embDraft.baseUrl.trim() || !embDraft.model.trim()
+						}
+						onClick={() => void runEmbProbe()}
+					>
+						{embProbeBusy ? (
+							<Loader2 className="size-3.5 animate-spin" aria-hidden />
+						) : null}
+						{embProbeBusy
+							? t("agent.embedding.testing")
+							: t("agent.embedding.test")}
+					</Button>
+				</div>
+			</div>
 			<SettingsGroup>
 				<SettingsRow
 					label={t("agent.embedding.baseUrl.label")}

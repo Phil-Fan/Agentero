@@ -35,9 +35,17 @@ const EMBED_BATCH: usize = 64;
 const MAX_EMBED_CHARS: usize = 4_000;
 const FEED_TIMEOUT: Duration = Duration::from_secs(30);
 const EMBED_TIMEOUT: Duration = Duration::from_secs(120);
+/// Shorter than a real embed because the probe only needs the response shape.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Marker error the UI turns into "configure an embedding model first".
 pub const ERR_NO_EMBEDDING: &str = "recommend.no_embedding";
+/// Marker error the UI turns into "embedding endpoint is unreachable".
+pub const ERR_PROBE_FAILED: &str = "recommend.probe_failed";
+
+/// Single token sent for a liveness probe — cheap, and any real embedding
+/// provider must accept an input of this length.
+const PROBE_INPUT: &str = "hi";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -61,6 +69,31 @@ pub struct RecommendResult {
     pub corpus_size: usize,
     /// True when `items` came from the stored same-day run.
     pub reused_cache: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeEmbeddingResult {
+    /// Dimensionality reported by the embedding endpoint for the probe input.
+    pub dim: usize,
+    /// Wall-clock latency of the probe request in milliseconds.
+    pub latency_ms: u64,
+}
+
+/// Resolve a user-supplied embedding base URL into a full `/embeddings` URL.
+///
+/// Accepts trailing slashes and bases that already end in `/embeddings`.
+/// All other paths get `/embeddings` appended after a single separator.
+fn resolve_endpoint(base_url: &str) -> String {
+    let base = base_url.trim().trim_end_matches('/');
+    if base.is_empty() {
+        return String::new();
+    }
+    if base.ends_with("/embeddings") {
+        base.to_string()
+    } else {
+        format!("{base}/embeddings")
+    }
 }
 
 /// Read the stored run without recomputing (page open / stale check).
@@ -382,6 +415,71 @@ async fn embed_batch(
     Ok(out)
 }
 
+/// Liveness probe: POST one tiny input, confirm the endpoint actually serves
+/// `/embeddings`, and report the returned dimensionality + latency.
+///
+/// Returns `AppError::message(ERR_PROBE_FAILED)` for any failure so the UI
+/// can switch the arxiv daily panel into its "unreachable" state.
+pub async fn probe_embedding_endpoint(
+    base_url: &str,
+    api_key: Option<&str>,
+    model: &str,
+) -> Result<ProbeEmbeddingResult, AppError> {
+    let endpoint = resolve_endpoint(base_url);
+    if endpoint.is_empty() {
+        return Err(AppError::message(format!(
+            "{ERR_PROBE_FAILED}: empty base URL"
+        )));
+    }
+    let client = http::client_builder()
+        .timeout(PROBE_TIMEOUT)
+        .build()
+        .map_err(|e| AppError::message(format!("{ERR_PROBE_FAILED}: {e}")))?;
+    let inputs = [PROBE_INPUT.to_string()];
+    let mut request = client.post(&endpoint).json(&EmbedRequest {
+        model,
+        input: &inputs,
+    });
+    if let Some(key) = api_key {
+        request = request.header("Authorization", format!("Bearer {key}"));
+    }
+    let started = std::time::Instant::now();
+    let resp = request
+        .send()
+        .await
+        .map_err(|e| AppError::message(format!("{ERR_PROBE_FAILED}: {e}")))?;
+    let status = resp.status();
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| AppError::message(format!("{ERR_PROBE_FAILED}: {e}")))?;
+    if !status.is_success() {
+        let snippet = http::http_err_snippet(&body);
+        return Err(AppError::message(format!(
+            "{ERR_PROBE_FAILED}: HTTP {status} — {snippet}"
+        )));
+    }
+    let value: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| AppError::message(format!("{ERR_PROBE_FAILED}: parse {e}")))?;
+    let vector: Vec<f64> = value
+        .get("data")
+        .and_then(|d| d.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|entry| entry.get("embedding"))
+        .and_then(|e| e.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_f64()).collect())
+        .unwrap_or_default();
+    if vector.is_empty() {
+        return Err(AppError::message(format!(
+            "{ERR_PROBE_FAILED}: response has no embedding"
+        )));
+    }
+    Ok(ProbeEmbeddingResult {
+        dim: vector.len(),
+        latency_ms: started.elapsed().as_millis() as u64,
+    })
+}
+
 /// Embed every text, serving hits from `embed_cache` and caching new vectors.
 async fn embed_all(
     vault_root: &Path,
@@ -502,14 +600,10 @@ pub async fn recommend(
     let Some((base_url, api_key, model)) = embedding else {
         return Err(AppError::message(ERR_NO_EMBEDDING));
     };
-    let endpoint = {
-        let base = base_url.trim().trim_end_matches('/');
-        if base.ends_with("/embeddings") {
-            base.to_string()
-        } else {
-            format!("{base}/embeddings")
-        }
-    };
+    let endpoint = resolve_endpoint(&base_url);
+    if endpoint.is_empty() {
+        return Err(AppError::message(ERR_NO_EMBEDDING));
+    }
 
     // Corpus: library papers with an abstract, newest-added first.
     let corpus_texts = {
@@ -647,6 +741,31 @@ mod tests {
             "cs.LG".into(),
         ]);
         assert_eq!(out, vec!["cs.AI".to_string(), "cs.LG".to_string()]);
+    }
+
+    #[test]
+    fn resolve_endpoint_appends_embeddings_path() {
+        assert_eq!(
+            resolve_endpoint("https://api.openai.com/v1"),
+            "https://api.openai.com/v1/embeddings"
+        );
+        assert_eq!(
+            resolve_endpoint("https://api.openai.com/v1/"),
+            "https://api.openai.com/v1/embeddings"
+        );
+        assert_eq!(
+            resolve_endpoint("https://api.openai.com/v1/embeddings"),
+            "https://api.openai.com/v1/embeddings"
+        );
+        assert_eq!(
+            resolve_endpoint("https://api.openai.com/v1/embeddings/"),
+            "https://api.openai.com/v1/embeddings"
+        );
+        assert_eq!(
+            resolve_endpoint("  https://api.openai.com/v1/  "),
+            "https://api.openai.com/v1/embeddings"
+        );
+        assert_eq!(resolve_endpoint(""), "");
     }
 
     #[test]

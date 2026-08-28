@@ -42,6 +42,8 @@ export const ERR_NO_EMBEDDING = "recommend.no_embedding";
 export const ERR_EMPTY_CORPUS = "recommend.empty_corpus";
 /** Host marker for "the arXiv feeds returned nothing usable". */
 export const ERR_NO_CANDIDATES = "recommend.no_candidates";
+/** Host marker for "the embedding endpoint did not respond to the probe". */
+export const ERR_PROBE_FAILED = "recommend.probe_failed";
 
 export function isNoEmbeddingError(error: unknown): boolean {
 	return errorMessage(error) === ERR_NO_EMBEDDING;
@@ -53,6 +55,41 @@ export function isEmptyCorpusError(error: unknown): boolean {
 
 export function isNoCandidatesError(error: unknown): boolean {
 	return errorMessage(error) === ERR_NO_CANDIDATES;
+}
+
+export function isProbeFailedError(error: unknown): boolean {
+	return errorMessage(error) === ERR_PROBE_FAILED;
+}
+
+/** Result of the Host's liveness probe against the embedding endpoint. */
+export type ProbeEmbeddingResult = {
+	dim: number;
+	latencyMs: number;
+};
+
+/**
+ * Liveness check for the configured embedding endpoint.
+ *
+ * Pass any subset of `baseUrl` / `apiKey` / `model` to override the stored
+ * values (the Agent settings pane tests its draft before committing). The
+ * Host treats an empty string or the `*` mask as "use the stored value".
+ */
+export async function probeEmbedding(opts?: {
+	baseUrl?: string;
+	apiKey?: string;
+	model?: string;
+}): Promise<ProbeEmbeddingResult> {
+	return invokeApi<ProbeEmbeddingResult>(
+		"probe_embedding",
+		{
+			args: {
+				baseUrl: opts?.baseUrl,
+				apiKey: opts?.apiKey,
+				model: opts?.model,
+			},
+		},
+		{ fallback: "recommend.probe_failed" },
+	);
 }
 
 function errorMessage(error: unknown): string {

@@ -212,6 +212,15 @@
 			},
 			"model": {
 				"label": "Model"
+			},
+			"test": "Test connection",
+			"testing": "Testing…",
+			"probeStatus": {
+				"idle": "Not tested yet",
+				"probing": "Testing…",
+				"ok": "Reachable",
+				"failed": "Unreachable",
+				"unconfigured": "Not configured"
 			}
 		},
 		"desktopOnly": "Agent registry requires the desktop app.",
