@@ -95,7 +95,7 @@ fn rank(
     hits
 }
 
-fn normalize_title(s: &str) -> String {
+pub(crate) fn normalize_title(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut pending_space = false;
     for ch in s.chars() {
@@ -112,11 +112,11 @@ fn normalize_title(s: &str) -> String {
     out
 }
 
-fn http_client() -> Result<reqwest::Client, String> {
+pub(crate) fn http_client() -> Result<reqwest::Client, String> {
     crate::core::http::client(Duration::from_secs(20)).map_err(|e| e.to_string())
 }
 
-async fn get_text(url: &str) -> Result<String, String> {
+pub(crate) async fn get_text(url: &str) -> Result<String, String> {
     let _permit = acquire_search_permit().await;
     let client = http_client()?;
     let res = client
@@ -132,7 +132,7 @@ async fn get_text(url: &str) -> Result<String, String> {
     res.text().await.map_err(|e| format!("body: {e}"))
 }
 
-async fn get_json(url: &str) -> Result<Value, String> {
+pub(crate) async fn get_json(url: &str) -> Result<Value, String> {
     let text = get_text(url).await?;
     serde_json::from_str(&text).map_err(|e| format!("json: {e}"))
 }
@@ -239,7 +239,7 @@ pub fn needs_s2_venue_enrichment(publication: Option<&str>) -> bool {
 /// `journal.name`, and the legacy `venue` string. `journal.name` is sometimes
 /// the full proceedings title (ResNet) while `publicationVenue` is the short
 /// catalog name (CVPR).
-pub fn s2_venue_from_paper(v: &Value) -> Option<String> {
+pub(crate) fn s2_venue_from_paper(v: &Value) -> Option<String> {
     let pv = v.get("publicationVenue").and_then(|pv| {
         let is_repo = pv
             .get("type")
@@ -264,7 +264,10 @@ fn is_arxiv_doi(doi: &str) -> bool {
 }
 
 /// `GET /graph/v1/paper/search?query=…` — relevance-ordered, keeps API order.
-async fn s2_search(query: &str, limit: usize) -> Result<Vec<PaperSearchCandidate>, String> {
+pub(crate) async fn s2_search(
+    query: &str,
+    limit: usize,
+) -> Result<Vec<PaperSearchCandidate>, String> {
     let url = format!(
         "https://api.semanticscholar.org/graph/v1/paper/search?query={}&limit={}&fields=title,authors,year,venue,publicationVenue,journal,externalIds,citationCount,url",
         urlencoding::encode(query),
@@ -288,7 +291,7 @@ async fn s2_search(query: &str, limit: usize) -> Result<Vec<PaperSearchCandidate
     Ok(out)
 }
 
-fn s2_candidate_from_item(item: &Value) -> Option<PaperSearchCandidate> {
+pub(crate) fn s2_candidate_from_item(item: &Value) -> Option<PaperSearchCandidate> {
     let title = str_field(item, "title")?;
     let doi = str_field_at(item, "/externalIds/DOI");
     let arxiv_id = str_field_at(item, "/externalIds/ArXiv")
@@ -320,7 +323,10 @@ fn s2_candidate_from_item(item: &Value) -> Option<PaperSearchCandidate> {
 ///
 /// `map::map_arxiv_atom` parses a single-entry response, so multi-result search
 /// splits `<entry>` blocks here.
-async fn arxiv_search(query: &str, limit: usize) -> Result<Vec<PaperSearchCandidate>, String> {
+pub(crate) async fn arxiv_search(
+    query: &str,
+    limit: usize,
+) -> Result<Vec<PaperSearchCandidate>, String> {
     // Quotes would terminate the phrase early and break the query syntax.
     let phrase = query.replace('"', " ");
     let url = format!(
@@ -369,7 +375,7 @@ async fn arxiv_search(query: &str, limit: usize) -> Result<Vec<PaperSearchCandid
 }
 
 /// First `<tag>…</tag>` in `xml`, whitespace collapsed.
-fn tag_text(xml: &str, tag: &str) -> Option<String> {
+pub(crate) fn tag_text(xml: &str, tag: &str) -> Option<String> {
     let body = xml
         .split(&format!("<{tag}>"))
         .nth(1)?
@@ -383,21 +389,21 @@ fn tag_text(xml: &str, tag: &str) -> Option<String> {
     }
 }
 
-fn pick_identifier(arxiv_id: Option<&str>, doi: Option<&str>) -> Option<String> {
+pub(crate) fn pick_identifier(arxiv_id: Option<&str>, doi: Option<&str>) -> Option<String> {
     arxiv_id
         .or(doi)
         .map(|s| s.to_string())
         .filter(|s| !s.is_empty())
 }
 
-fn str_field(v: &Value, key: &str) -> Option<String> {
+pub(crate) fn str_field(v: &Value, key: &str) -> Option<String> {
     v.get(key)
         .and_then(|x| x.as_str())
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
 }
 
-fn str_field_at(v: &Value, pointer: &str) -> Option<String> {
+pub(crate) fn str_field_at(v: &Value, pointer: &str) -> Option<String> {
     v.pointer(pointer)
         .and_then(|x| x.as_str())
         .map(|s| s.trim().to_string())

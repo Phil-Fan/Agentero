@@ -300,22 +300,18 @@ pub async fn paper_resolve_identifier(
         }
     }
 
-    match super::title_search::search_papers(&args.text, 1).await {
-        Ok(candidates) if !candidates.is_empty() => {
-            let mut meta = super::map::meta_from_search_candidate(&candidates[0]);
+    match super::chain_resolve::resolve_metadata_chain(&args.text).await {
+        Ok(mut meta) => {
             super::enrich_remote_urls(&mut meta);
             op.finish_ok();
             return ApiResult::ok(meta);
         }
-        Ok(_) => {
-            log::warn!("title search returned no candidates for {text}");
-        }
         Err(e) => {
-            log::warn!("title search failed for {text}: {e}");
+            log::warn!("chain resolve failed for {text}: {e}");
         }
     }
 
-    let err = AppError::message(format!("could not resolve a usable venue for {text}"));
+    let err = AppError::message(format!("could not resolve metadata for {text}"));
     op.finish_err(&err);
     crate::core::error::map_err(err)
 }

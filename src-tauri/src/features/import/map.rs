@@ -549,7 +549,8 @@ pub fn map_crossref_work(message: &Value, doi: &str) -> Result<PaperMeta, AppErr
 }
 
 /// Build metadata from a title-search candidate when no identifier resolved.
-/// Used by Edit Metadata refresh to backfill publication/venue from a title.
+/// Kept for unit tests; the production title path now uses `chain_resolve`.
+#[allow(dead_code)]
 pub fn meta_from_search_candidate(
     candidate: &crate::features::import::title_search::PaperSearchCandidate,
 ) -> PaperMeta {

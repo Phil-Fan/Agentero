@@ -12,6 +12,7 @@ pub mod pdf_parse;
 
 mod assets;
 pub(crate) mod batch;
+pub(crate) mod chain_resolve;
 pub(crate) mod map;
 pub(crate) mod parse;
 pub(crate) mod pdf_recognize;
