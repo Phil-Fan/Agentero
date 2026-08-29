@@ -85,6 +85,7 @@ import { usePdfTextSelection } from "@/components/viewer/pdf/hooks/use-pdf-text-
 import { usePdfViewerHandle } from "@/components/viewer/pdf/hooks/use-pdf-viewer-handle";
 import { usePdfVisualMarks } from "@/components/viewer/pdf/hooks/use-pdf-visual-marks";
 import { usePdfZoomControls } from "@/components/viewer/pdf/hooks/use-pdf-zoom-controls";
+import { excludeOverlappingPdfTextLinks } from "@/components/viewer/pdf/layers/citation-links";
 import { COMMENT_RAIL_WIDTH_PX } from "@/components/viewer/pdf/layers/comment-cards-layer";
 import {
 	type PdfPageHandlers,
@@ -104,6 +105,7 @@ import { DockviewViewport } from "@/components/viewer/pdf/viewport/dockview-view
 import { WheelZoomHandler } from "@/components/viewer/pdf/viewport/wheel-zoom-handler";
 import { useLibraryStore } from "@/hooks/use-app-stores";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { openExternalUrl } from "@/lib/core/open-external";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
 import { arxivUrls } from "@/lib/paper/arxiv";
@@ -430,7 +432,7 @@ function PdfViewerInner({
 	 * Per-page 0–1 text rects from PDFium `getPageTextRects` — used to decide
 	 * whether a gutter pin sits on real glyphs (translucent) vs in a free gutter.
 	 */
-	const { pageTextMap, pageTextMapRef } = usePdfPageText({
+	const { pageTextMap, pageTextLinkMap, pageTextMapRef } = usePdfPageText({
 		engine,
 		docCap,
 		docId,
@@ -441,6 +443,19 @@ function PdfViewerInner({
 		highlights,
 		visualTraces,
 	});
+	const textLinks = useMemo(() => {
+		const next = new Map(pageTextLinkMap);
+		for (const [pageIndex, links] of pageTextLinkMap) {
+			next.set(
+				pageIndex,
+				excludeOverlappingPdfTextLinks(
+					links,
+					citationLinks.get(pageIndex) ?? [],
+				),
+			);
+		}
+		return next;
+	}, [pageTextLinkMap, citationLinks]);
 	/**
 	 * Mirror of the translate cluster's `translateStreaming`. Created here (not in
 	 * {@link usePdfSelectionTranslate}) because `usePdfCards` is declared first and
@@ -977,6 +992,7 @@ function PdfViewerInner({
 			focusedVisualRegion,
 			commentWikiTarget,
 			citationLinks,
+			textLinks,
 			activeCardId: activeCard?.id ?? null,
 			hoveredCommentId,
 		}),
@@ -993,6 +1009,7 @@ function PdfViewerInner({
 			focusedVisualRegion,
 			commentWikiTarget,
 			citationLinks,
+			textLinks,
 			activeCard?.id,
 			hoveredCommentId,
 		],
@@ -1068,6 +1085,7 @@ function PdfViewerInner({
 			onCardHoverEnter: markCardHoverEnter,
 			onCardHoverLeave: scheduleHoverHide,
 			onCitationActivate: handleCitationLinkActivate,
+			onTextLinkActivate: openExternalUrl,
 			onCitationHover: handleLinkHover,
 			onRegionSelect: handleVisualRegionSelect,
 			onLayoutRegionClick: handleLayoutRegionClick,
