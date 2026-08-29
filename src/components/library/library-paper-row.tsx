@@ -12,6 +12,7 @@ import {
 	FolderOpen,
 	MessageSquarePlus,
 	Pencil,
+	RefreshCw,
 	Trash2,
 } from "lucide-react";
 import { Fragment, memo } from "react";
@@ -45,6 +46,7 @@ type LibraryPaperRowProps = {
 	paperAbsPath: string | null;
 	canEditMeta: boolean;
 	onOpenPaper: (paper: PaperMetadata) => void;
+	onRefreshMetadata?: (paper: PaperMetadata) => void;
 	/** rowVirtualizer.measureElement — attached to the `<tr>`. */
 	measureRef: (element: Element | null) => void;
 };
@@ -58,6 +60,7 @@ export const LibraryPaperRow = memo(function LibraryPaperRow({
 	paperAbsPath,
 	canEditMeta,
 	onOpenPaper,
+	onRefreshMetadata,
 	measureRef,
 }: LibraryPaperRowProps) {
 	const p = row.paper;
@@ -98,6 +101,14 @@ export const LibraryPaperRow = memo(function LibraryPaperRow({
 					<ContextMenuItem onSelect={() => setEditMetaDraft(p)}>
 						<Pencil className="size-3.5" />
 						{ctx.t("papersLibrary.rowEditMeta")}
+					</ContextMenuItem>
+				) : null}
+				{canEditMeta &&
+				onRefreshMetadata &&
+				(p.doi?.trim() || p.arxiv_id?.trim() || p.title?.trim()) ? (
+					<ContextMenuItem onSelect={() => void onRefreshMetadata?.(p)}>
+						<RefreshCw className="size-3.5" />
+						{ctx.t("papersLibrary.rowRefreshMeta")}
 					</ContextMenuItem>
 				) : null}
 				{paperAbsPath ? (

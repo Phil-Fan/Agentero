@@ -499,12 +499,13 @@ export async function paperMetaChange(
 }
 
 /**
- * Re-resolve the `publication` field for the given papers via identifier
- * lookup (library header refresh button). Online-only and slow enough to
- * surface in the background-tasks panel with progress + partial-failure
- * reporting; concurrency 3 to stay polite with metadata providers.
+ * Re-resolve external metadata for the given papers and overwrite catalog fields
+ * where the provider returned a non-empty value (library header refresh button).
+ * Online-only and slow enough to surface in the background-tasks panel with
+ * progress + partial-failure reporting; concurrency 3 to stay polite with
+ * metadata providers.
  */
-export async function refreshLibraryPublications(
+export async function refreshLibraryMetadata(
 	vaultPath: string | null | undefined,
 	targets: PaperMetadata[],
 ): Promise<void> {
@@ -513,14 +514,14 @@ export async function refreshLibraryPublications(
 		(p) => p.path && (p.doi?.trim() || p.arxiv_id?.trim() || p.title?.trim()),
 	);
 	if (papers.length === 0) {
-		notifyError(i18n.t("sidebar:papersLibrary.refreshPublicationNoTargets"));
+		notifyError(i18n.t("sidebar:papersLibrary.refreshMetadataNoTargets"));
 		return;
 	}
 	await enqueueBackgroundTask(
 		{
 			kind: "other",
-			title: i18n.t("sidebar:papersLibrary.refreshPublicationTaskTitle"),
-			detail: i18n.t("sidebar:papersLibrary.refreshPublicationTaskDetail", {
+			title: i18n.t("sidebar:papersLibrary.refreshMetadataTaskTitle"),
+			detail: i18n.t("sidebar:papersLibrary.refreshMetadataTaskDetail", {
 				current: 0,
 				total: papers.length,
 			}),
@@ -531,7 +532,7 @@ export async function refreshLibraryPublications(
 			const updateStats = () => {
 				setProgress(Math.round((stats.processed / papers.length) * 100));
 				setDetail(
-					i18n.t("sidebar:papersLibrary.refreshPublicationTaskDetail", {
+					i18n.t("sidebar:papersLibrary.refreshMetadataTaskDetail", {
 						current: stats.processed,
 						total: papers.length,
 						updated: stats.updated,
@@ -546,11 +547,24 @@ export async function refreshLibraryPublications(
 					paper.doi?.trim() || paper.arxiv_id?.trim() || paper.title?.trim();
 				try {
 					const meta = await resolveIdentifierMetadata(text ?? "");
-					const publication = meta.publication?.trim();
-					if (publication && paper.path) {
-						await updatePaperMeta(vaultPath, paper.path, {
-							publication,
-						});
+					const patch: PaperMetaPatch = {};
+					if (meta.title?.trim()) patch.title = meta.title.trim();
+					if (meta.authors?.length) patch.authors = meta.authors;
+					if (meta.year != null) patch.year = String(meta.year);
+					if (meta.doi?.trim()) patch.doi = meta.doi.trim();
+					if (meta.arxivId?.trim()) patch.arxivId = meta.arxivId.trim();
+					if (meta.publication?.trim())
+						patch.publication = meta.publication.trim();
+					if (meta.volume?.trim()) patch.volume = meta.volume.trim();
+					if (meta.issue?.trim()) patch.issue = meta.issue.trim();
+					if (meta.pages?.trim()) patch.pages = meta.pages.trim();
+					if (meta.publisher?.trim()) patch.publisher = meta.publisher.trim();
+					if (meta.abstract?.trim()) patch.abstract = meta.abstract.trim();
+					if (meta.pdfUrl?.trim()) patch.pdfUrl = meta.pdfUrl.trim();
+					if (meta.htmlUrl?.trim()) patch.htmlUrl = meta.htmlUrl.trim();
+
+					if (Object.keys(patch).length > 0 && paper.path) {
+						await updatePaperMeta(vaultPath, paper.path, patch);
 						stats.updated++;
 						scheduleLibraryRefresh();
 					} else {
@@ -558,7 +572,7 @@ export async function refreshLibraryPublications(
 					}
 				} catch (e) {
 					stats.failed++;
-					logger.error("refresh publication failed", {
+					logger.error("refresh metadata failed", {
 						path: paper.path,
 						error: String(e),
 					});
@@ -570,7 +584,7 @@ export async function refreshLibraryPublications(
 			await refreshLibrary();
 			if (stats.failed > 0) {
 				throw new Error(
-					i18n.t("sidebar:papersLibrary.refreshPublicationPartial", {
+					i18n.t("sidebar:papersLibrary.refreshMetadataPartial", {
 						updated: stats.updated,
 						failed: stats.failed,
 						empty: stats.empty,
@@ -579,4 +593,52 @@ export async function refreshLibraryPublications(
 			}
 		},
 	);
+}
+
+/**
+ * Re-resolve external metadata for a single paper. Used by the row context menu.
+ */
+export async function refreshPaperMetadata(
+	vaultPath: string | null | undefined,
+	paper: PaperMetadata,
+): Promise<void> {
+	if (!vaultPath || isRemoteVaultHandle(vaultPath)) return;
+	if (!paper.path) return;
+	const text =
+		paper.doi?.trim() || paper.arxiv_id?.trim() || paper.title?.trim();
+	if (!text) {
+		notifyError(i18n.t("sidebar:papersLibrary.refreshMetadataNoTargets"));
+		return;
+	}
+	try {
+		const meta = await resolveIdentifierMetadata(text);
+		const patch: PaperMetaPatch = {};
+		if (meta.title?.trim()) patch.title = meta.title.trim();
+		if (meta.authors?.length) patch.authors = meta.authors;
+		if (meta.year != null) patch.year = String(meta.year);
+		if (meta.doi?.trim()) patch.doi = meta.doi.trim();
+		if (meta.arxivId?.trim()) patch.arxivId = meta.arxivId.trim();
+		if (meta.publication?.trim()) patch.publication = meta.publication.trim();
+		if (meta.volume?.trim()) patch.volume = meta.volume.trim();
+		if (meta.issue?.trim()) patch.issue = meta.issue.trim();
+		if (meta.pages?.trim()) patch.pages = meta.pages.trim();
+		if (meta.publisher?.trim()) patch.publisher = meta.publisher.trim();
+		if (meta.abstract?.trim()) patch.abstract = meta.abstract.trim();
+		if (meta.pdfUrl?.trim()) patch.pdfUrl = meta.pdfUrl.trim();
+		if (meta.htmlUrl?.trim()) patch.htmlUrl = meta.htmlUrl.trim();
+
+		if (Object.keys(patch).length > 0) {
+			await updatePaperMeta(vaultPath, paper.path, patch);
+			scheduleLibraryRefresh();
+			notifySuccess(i18n.t("sidebar:papersLibrary.refreshMetadataDone"));
+		} else {
+			notifyWarning(i18n.t("sidebar:papersLibrary.refreshMetadataEmpty"));
+		}
+	} catch (e) {
+		logger.error("refresh paper metadata failed", {
+			path: paper.path,
+			error: String(e),
+		});
+		notifyError(i18n.t("sidebar:papersLibrary.refreshMetadataFailed"));
+	}
 }

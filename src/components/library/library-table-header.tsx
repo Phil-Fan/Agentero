@@ -1,7 +1,7 @@
 /**
  * Sticky header row for the papers library table.
  *
- * Per-column sort button, title-header inline search, publication refresh,
+ * Per-column sort button, title-header inline search, metadata refresh,
  * and the tags-filter popover; right-click customizes column order +
  * visibility. Transient drag state (dragKey/dragOverKey) lives here — the
  * parent only receives committed reorder events. Memoized so scrolling the
@@ -53,9 +53,9 @@ type LibraryTableHeaderProps = {
 	searchEnabled: boolean;
 	inputValue: string;
 	onInputChange: (value: string) => void;
-	/** Publication refresh (local vault only). */
-	canRefreshPublications: boolean;
-	onRefreshPublications: () => void;
+	/** Metadata refresh (local vault only). */
+	canRefreshMetadata: boolean;
+	onRefreshMetadata: () => void;
 	/** Tags-column filter popover. */
 	availableTags: PaperTag[];
 	tagFilterSet: Set<string>;
@@ -79,8 +79,8 @@ export const LibraryTableHeader = memo(function LibraryTableHeader({
 	searchEnabled,
 	inputValue,
 	onInputChange,
-	canRefreshPublications,
-	onRefreshPublications,
+	canRefreshMetadata,
+	onRefreshMetadata,
 	availableTags,
 	tagFilterSet,
 	tagFilterActive,
@@ -191,7 +191,7 @@ export const LibraryTableHeader = memo(function LibraryTableHeader({
 												/>
 											</div>
 										) : null}
-										{isPublication && canRefreshPublications ? (
+										{isPublication && canRefreshMetadata ? (
 											<Tooltip>
 												<TooltipTrigger asChild>
 													<button
@@ -202,10 +202,10 @@ export const LibraryTableHeader = memo(function LibraryTableHeader({
 															"hover:bg-muted/60 hover:text-foreground",
 															"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 														)}
-														aria-label={t("papersLibrary.refreshPublication")}
+														aria-label={t("papersLibrary.refreshMetadata")}
 														onClick={(e) => {
 															e.stopPropagation();
-															onRefreshPublications();
+															onRefreshMetadata();
 														}}
 														onMouseDown={(e) => e.stopPropagation()}
 													>
@@ -213,7 +213,7 @@ export const LibraryTableHeader = memo(function LibraryTableHeader({
 													</button>
 												</TooltipTrigger>
 												<TooltipContent side="bottom">
-													{t("papersLibrary.refreshPublication")}
+													{t("papersLibrary.refreshMetadata")}
 												</TooltipContent>
 											</Tooltip>
 										) : null}

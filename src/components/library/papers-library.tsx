@@ -32,7 +32,10 @@ import { useDebouncedCallback } from "@/hooks/use-debounce";
 import { cn } from "@/lib/core/utils";
 import type { PaperMetadata } from "@/lib/paper";
 import { filterPapersByScope } from "@/lib/paper/api";
-import { refreshLibraryPublications } from "@/lib/paper/library-actions";
+import {
+	refreshLibraryMetadata,
+	refreshPaperMetadata,
+} from "@/lib/paper/library-actions";
 import { heatmapCacheKey } from "@/lib/paper/reading-heatmap";
 import { type PaperTag, visiblePaperTags } from "@/lib/paper/tags";
 import {
@@ -187,11 +190,18 @@ export function PapersLibrary({
 		[columns, onColumnsChange],
 	);
 
-	const canRefreshPublications =
+	const canRefreshMetadata =
 		Boolean(vaultPath) && !isRemoteVaultHandle(vaultPath);
-	const handleRefreshPublications = useCallback(() => {
-		void refreshLibraryPublications(vaultPath, scopedPapers);
+	const handleRefreshMetadata = useCallback(() => {
+		void refreshLibraryMetadata(vaultPath, scopedPapers);
 	}, [vaultPath, scopedPapers]);
+
+	const handleRefreshPaperMetadata = useCallback(
+		(paper: PaperMetadata) => {
+			void refreshPaperMetadata(vaultPath, paper);
+		},
+		[vaultPath],
+	);
 
 	const normalizedQuery = (inputValue ?? "").trim().toLocaleLowerCase();
 	const tagFilterSet = useMemo(() => new Set(tagFilter), [tagFilter]);
@@ -326,8 +336,8 @@ export function PapersLibrary({
 						searchEnabled={Boolean(onQueryChange)}
 						inputValue={inputValue}
 						onInputChange={onSearchInputChange}
-						canRefreshPublications={canRefreshPublications}
-						onRefreshPublications={handleRefreshPublications}
+						canRefreshMetadata={canRefreshMetadata}
+						onRefreshMetadata={handleRefreshMetadata}
 						availableTags={availableTags}
 						tagFilterSet={tagFilterSet}
 						tagFilterActive={tagFilterActive}
@@ -403,6 +413,7 @@ export function PapersLibrary({
 											}
 											canEditMeta={canEditMeta}
 											onOpenPaper={openPaperFromRow}
+											onRefreshMetadata={handleRefreshPaperMetadata}
 											measureRef={rowVirtualizer.measureElement}
 										/>
 									);
