@@ -176,6 +176,9 @@ jobs:
       - name: Build Tauri installers
         uses: tauri-apps/tauri-action@v1
         env:
+          # macos-latest runners have 7GB RAM, so Node's default ~2GB heap
+          # limit is not enough for `vite build` on this bundle.
+          NODE_OPTIONS: --max-old-space-size=6144
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # PostHog project API key baked in at compile time (build.rs);
           # empty/absent secret compiles telemetry out. See docs/backend/telemetry.md.
