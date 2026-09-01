@@ -19,7 +19,14 @@ import {
 	Search,
 	X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	type CSSProperties,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -182,6 +189,8 @@ function TaskRow({ task }: { task: BackgroundTask }) {
 type RingCenterPhase = "progress" | "icon";
 
 const RING_CENTER_MS = 2400;
+/** Success pop / ring-merge celebration after the last active task ends. */
+const RING_SUCCESS_MS = 900;
 
 /** Circular progress control — center cycles progress / kind icon. */
 function ProgressRing({
@@ -201,14 +210,23 @@ function ProgressRing({
 }) {
 	const radius = 16;
 	const circumference = 2 * Math.PI * radius;
-	const normalizedProgress =
-		progress == null ? null : Math.max(0, Math.min(100, progress));
+	const finished = activeCount === 0;
+	// Finished → always a closed (merged) ring at 100%. While running with no
+	// numeric progress, keep the indeterminate arc.
+	const isIndeterminate = !finished && progress == null;
+	const normalizedProgress = finished
+		? 100
+		: progress == null
+			? null
+			: Math.max(0, Math.min(100, progress));
 	const offset =
 		normalizedProgress == null
 			? 0
 			: circumference - (normalizedProgress / 100) * circumference;
 
 	const [phase, setPhase] = useState<RingCenterPhase>("progress");
+	const [celebrate, setCelebrate] = useState(false);
+	const prevActiveRef = useRef(activeCount);
 	const active = activeCount > 0 && !failed;
 
 	useEffect(() => {
@@ -226,13 +244,32 @@ function ProgressRing({
 		return () => window.clearInterval(id);
 	}, [active]);
 
+	// Last active task ended successfully → play merge/success animation once.
+	useEffect(() => {
+		const prev = prevActiveRef.current;
+		prevActiveRef.current = activeCount;
+		if (prev > 0 && activeCount === 0 && !failed) {
+			setCelebrate(true);
+			const id = window.setTimeout(() => setCelebrate(false), RING_SUCCESS_MS);
+			return () => window.clearTimeout(id);
+		}
+		if (activeCount > 0 || failed) {
+			setCelebrate(false);
+		}
+	}, [activeCount, failed]);
+
 	const center = (() => {
 		if (failed) {
 			return <CircleX className="relative size-3.5 text-destructive" />;
 		}
-		if (activeCount === 0) {
+		if (finished) {
 			return (
-				<CheckCircle2 className="relative size-3.5 text-emerald-600 dark:text-emerald-400" />
+				<CheckCircle2
+					className={cn(
+						"relative size-3.5 text-emerald-600 dark:text-emerald-400",
+						celebrate && "task-ring-success-icon",
+					)}
+				/>
 			);
 		}
 		// Active work: cycle progress ↔ kind icon.
@@ -261,7 +298,10 @@ function ProgressRing({
 	return (
 		<button
 			type="button"
-			className="relative flex size-9 items-center justify-center rounded-full bg-background text-foreground shadow-sm ring-1 ring-border transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+			className={cn(
+				"relative flex size-9 items-center justify-center rounded-full bg-background text-foreground shadow-sm ring-1 ring-border transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+				celebrate && "task-ring-success-pulse",
+			)}
 			aria-label={label}
 			aria-expanded={false}
 			onClick={onActivate}
@@ -276,6 +316,11 @@ function ProgressRing({
 				className="pointer-events-none absolute inset-0 size-full -rotate-90"
 				viewBox="0 0 40 40"
 				aria-hidden="true"
+				style={
+					{
+						"--task-ring-c": String(circumference),
+					} as CSSProperties
+				}
 			>
 				{/* Track: muted-foreground (not --muted, which is nearly white in light mode). */}
 				<circle
@@ -296,17 +341,17 @@ function ProgressRing({
 					strokeLinecap="round"
 					strokeWidth="3"
 					strokeDasharray={
-						normalizedProgress == null
+						isIndeterminate
 							? `${circumference * 0.28} ${circumference}`
 							: circumference
 					}
 					strokeDashoffset={offset}
 					className={cn(
-						"text-primary transition-[stroke-dashoffset]",
+						"text-primary transition-[stroke-dashoffset,stroke] duration-500 ease-out",
+						isIndeterminate && "task-ring-indeterminate",
 						failed && "text-destructive",
-						activeCount === 0 &&
-							!failed &&
-							"text-emerald-600 dark:text-emerald-400",
+						finished && !failed && "text-emerald-600 dark:text-emerald-400",
+						celebrate && "task-ring-success-stroke",
 					)}
 				/>
 			</svg>
