@@ -71,7 +71,8 @@
     },
     "windows": {
       "nsis": {
-        "sidebarImage": "icons/nsis-sidebar.bmp"
+        "sidebarImage": "icons/nsis-sidebar.bmp",
+        "installerHooks": "nsis/hooks.nsh"
       }
     }
   }
