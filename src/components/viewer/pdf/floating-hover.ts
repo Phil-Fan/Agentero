@@ -12,7 +12,7 @@
 export const EPHEMERAL_PREVIEW_HIDE_MS = 400;
 
 /** How long a pin-attached card survives after leaving every hover surface. */
-export const CARD_HOVER_HIDE_MS = 1000;
+export const CARD_HOVER_HIDE_MS = 700;
 
 export function isFloatingDialogActive(): boolean {
 	if (typeof document === "undefined") return false;

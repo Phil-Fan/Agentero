@@ -19,7 +19,7 @@ Settings → **翻译**：
 
 - PDF 划词菜单「翻译」（首要入口）。
   - 结果卡贴合选区锚点（`trackPin`），PDF 滚轮滚动时随页重定位。
-  - 翻译完成后若未悬停结果卡 / 原文黄高亮 / 页边针，约 1s 后自动收起；流式输出期间保持可见。隐藏后仍可从页边针重新打开。
+  - 翻译完成后若未悬停结果卡 / 原文黄高亮 / 页边针，约 700ms 后自动收起；流式输出期间保持可见。隐藏后仍可从页边针重新打开。
 - PDF **全文翻译**（工具栏 Languages，在视觉批注旁）：
   - 依赖版面分析 + PDF 文字层；翻译 `text` / `abstract` / `header` / `figure_title`（图题·表题）区域（score ≥ 30%）。
   - **不翻译**：算法框及其内部文字；`reference` / `reference_content` 文献条目；“References / Bibliography / 参考文献” 标题；侧栏 `aside_text`。

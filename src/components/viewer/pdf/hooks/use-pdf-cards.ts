@@ -197,8 +197,9 @@ export function usePdfCards({
 
 	/**
 	 * Leave pin / card / source fragment. Translate cards hide when nothing is
-	 * hovered (unless still streaming). Ask / visual / note editors keep a 1s
-	 * delay, and never dismiss while the floating dialog is hovered or focused.
+	 * hovered (unless still streaming). Ask / visual / note editors keep a
+	 * {@link CARD_HOVER_HIDE_MS} delay, and never dismiss while the floating
+	 * dialog is hovered or focused.
 	 */
 	const scheduleHoverHide = useCallback(() => {
 		cardHoverSurfaceRef.current = false;
