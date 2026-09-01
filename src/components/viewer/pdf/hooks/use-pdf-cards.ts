@@ -18,6 +18,10 @@ import {
 	useState,
 } from "react";
 import { pageElByIndex } from "@/components/viewer/pdf/coords";
+import {
+	CARD_HOVER_HIDE_MS,
+	isFloatingDialogActive,
+} from "@/components/viewer/pdf/floating-hover";
 import type { CardScreenPoint } from "@/components/viewer/pdf/types";
 import {
 	isVisualMarkKind,
@@ -31,9 +35,6 @@ import {
 	pinFromRects,
 } from "@/lib/pdf/selection";
 import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
-
-/** How long a card survives after the pointer leaves every hover surface. */
-const CARD_HOVER_HIDE_MS = 1000;
 
 export type UsePdfCardsOptions = {
 	hostRef: RefObject<HTMLDivElement | null>;
@@ -72,29 +73,6 @@ export type PdfCards = {
 	/** True while the pointer is over the active card, pin, or source fragment. */
 	cardHoverSurfaceRef: RefObject<boolean>;
 };
-
-/**
- * Selection / note modals are portaled `role="dialog"`. After pin leave the
- * hide timer may fire before (or without) a card pointerenter — keep open
- * while the pointer is still over a dialog or a field inside it is focused.
- */
-function isFloatingDialogActive(): boolean {
-	if (typeof document === "undefined") return false;
-	const dialogs = document.querySelectorAll('[role="dialog"]');
-	for (const node of dialogs) {
-		if (!(node instanceof HTMLElement)) continue;
-		// Fixed floating selection cards / annotation editors only.
-		if (!node.classList.contains("fixed")) continue;
-		try {
-			if (node.matches(":hover")) return true;
-		} catch {
-			// :hover may throw in non-browser test envs
-		}
-		const ae = document.activeElement;
-		if (ae instanceof HTMLElement && node.contains(ae)) return true;
-	}
-	return false;
-}
 
 export function usePdfCards({
 	hostRef,
