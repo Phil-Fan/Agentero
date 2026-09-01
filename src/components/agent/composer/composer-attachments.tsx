@@ -173,12 +173,12 @@ export function ComposerSubmitControl({
 	return (
 		<PromptInputSubmit
 			className={cn(
-				// Match attach / context toolbar controls (`size-7`, icon `size-3.5`).
-				"size-7 shrink-0 rounded-full border shadow-none disabled:opacity-100",
+				// Filled circle: match attach/context footprint (`size-7`); solid fill like ChatGPT send.
+				"size-7 shrink-0 rounded-full border-0 shadow-none disabled:opacity-100",
 				compact ? "self-center" : "ml-auto",
 				idleEmpty
-					? "border-border text-muted-foreground/40 hover:bg-transparent"
-					: "border-foreground/20 text-foreground hover:bg-muted",
+					? "bg-muted text-muted-foreground/55 hover:bg-muted"
+					: "bg-foreground text-background hover:bg-foreground/90",
 			)}
 			size="icon-xs"
 			variant="ghost"
