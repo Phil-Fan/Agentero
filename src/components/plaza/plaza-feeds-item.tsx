@@ -1,7 +1,7 @@
 /**
  * Feed timeline card + in-panel detail. Click opens the item; import lives
  * on the detail page so a truncated abstract is never treated as the whole
- * paper.
+ * paper. Detail body supports selection Ask / Add-to-chat (ephemeral).
  */
 
 import {
@@ -11,15 +11,18 @@ import {
 	ExternalLink,
 	Loader2,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MessageResponse } from "@/components/ai-elements/message";
+import { PlazaSelectionMenu } from "@/components/plaza/plaza-selection-menu";
+import { usePlazaFeedSelection } from "@/components/plaza/use-plaza-feed-selection";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { AskPopover } from "@/components/viewer/pdf/cards/ask-popover";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { cn } from "@/lib/core/utils";
 import {
@@ -148,11 +151,13 @@ export function PlazaFeedItemDetail({
 	const { t, i18n } = useTranslation("sidebar");
 	const [busy, setBusy] = useState(false);
 	const [resolving, setResolving] = useState(!item.bodyMarkdown);
+	const bodyRef = useRef<HTMLDivElement | null>(null);
 	const when = formatFeedWhen(item.publishedAt, i18n.language);
 	const href = item.url ?? item.paperUrl;
 	const imported = Boolean(item.importedAt);
 	const isPaper = Boolean(item.paperUrl);
 	const markdown = feedDetailMarkdown(item);
+	const selection = usePlazaFeedSelection({ item, bodyRef });
 
 	useEffect(() => {
 		if (item.bodyMarkdown?.trim()) {
@@ -260,13 +265,41 @@ export function PlazaFeedItemDetail({
 					)
 				) : null}
 			</div>
-			<div className="agentero-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4">
+			<div
+				ref={bodyRef}
+				className="agentero-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4"
+			>
 				{markdown ? (
 					<MessageResponse className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&_h1]:mt-0 [&_h1]:mb-3 [&_h1]:font-medium [&_h1]:text-base [&_h1]:leading-snug">
 						{markdown}
 					</MessageResponse>
 				) : null}
 			</div>
+			{selection.menu && !selection.ask ? (
+				<PlazaSelectionMenu
+					screen={selection.menu.screen}
+					onCopy={selection.handleCopy}
+					onAsk={selection.handleAsk}
+					onAddToChat={selection.handleAddToChat}
+				/>
+			) : null}
+			{selection.ask ? (
+				<div data-plaza-ask-card>
+					<AskPopover
+						thread={selection.ask.thread}
+						paperTitle={selection.itemTitle}
+						paperLink={selection.itemLink}
+						screen={selection.ask.screen}
+						streaming={selection.streaming}
+						error={selection.askError}
+						onSend={selection.sendAskQuestion}
+						onResend={selection.resendAskQuestion}
+						onHide={selection.hideAsk}
+						onDelete={selection.deleteAsk}
+						onStop={selection.stopAskStreaming}
+					/>
+				</div>
+			) : null}
 		</div>
 	);
 }

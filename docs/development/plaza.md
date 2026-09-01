@@ -282,7 +282,7 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 | 魔棒 / 入库 | **已复用** `lookup_import_batch`：喂上游 URL，见 §3.2.1。订阅论文卡走同一条 |
 | 订阅 | 独立 XDG `feeds.sqlite`，不进 catalog；见 [`plaza-feeds.md`](plaza-feeds.md) |
 | PDF\|NOTES | 推荐打开本地论文时走现有阅读布局 |
-| Agent | P0 不强制；P1 可做「解释为何推荐」 |
+| Agent | 订阅详情已支持划词提问 / 加入对话（#421，ephemeral，不写 `marks/`）；arXiv Daily 远程 PDF 划词提问另跟 |
 | 命令面板 | P1：`Plaza: Cool Papers` 等 |
 
 ## 5. 虚拟路径与类型草图

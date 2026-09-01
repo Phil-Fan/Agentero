@@ -105,10 +105,20 @@ export function AskPopover({
 		const lines: string[] = [t("pdfAsk.openInPrompt"), ""];
 		if (paperTitle?.trim()) lines.push(`Paper: ${paperTitle.trim()}`);
 		if (paperLink?.trim()) lines.push(`Link: ${paperLink.trim()}`);
-		lines.push(`Page: ${thread.anchor.page}`);
+		// Page only when the anchor has PDF geometry (plaza / feed asks have none).
+		if (thread.anchor.rects.length > 0) {
+			lines.push(`Page: ${thread.anchor.page}`);
+		}
 		if (quote) lines.push(`"${quote}"`);
 		return lines.join("\n");
-	}, [t, paperTitle, paperLink, thread.anchor.page, thread.anchor.quote]);
+	}, [
+		t,
+		paperTitle,
+		paperLink,
+		thread.anchor.page,
+		thread.anchor.quote,
+		thread.anchor.rects.length,
+	]);
 
 	// Leave edit mode when the thread changes or a run starts.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reset edit UI when identity/run changes
