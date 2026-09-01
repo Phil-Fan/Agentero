@@ -38,7 +38,7 @@ type SelectionMenuProps = {
 	onTranslate: () => void;
 	/** Dismiss the menu without acting */
 	onClose: () => void;
-	/** Hide annotation/ask/translate actions; copy-only for remote papers. */
+	/** Hide highlight / note / translate (need marks/); keep Copy / Ask / Add-to-chat. */
 	readOnly?: boolean;
 };
 

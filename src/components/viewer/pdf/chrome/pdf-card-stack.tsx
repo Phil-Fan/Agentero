@@ -27,7 +27,7 @@ type PdfCardStackProps = {
 		onAddToChat: () => void;
 		onTranslate: () => void;
 		onClose: () => void;
-		/** Hide annotation/ask/translate actions; copy-only for remote papers. */
+		/** Hide highlight / note / translate; keep Copy / Ask / Add-to-chat. */
 		readOnly?: boolean;
 	};
 	citationPreview: {
