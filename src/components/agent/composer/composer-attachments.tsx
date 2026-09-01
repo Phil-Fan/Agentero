@@ -173,13 +173,14 @@ export function ComposerSubmitControl({
 	return (
 		<PromptInputSubmit
 			className={cn(
-				"shrink-0 rounded-full border shadow-none disabled:opacity-100",
-				compact ? "size-7 self-center" : "ml-auto size-8",
+				// Match attach / context toolbar controls (`size-7`, icon `size-3.5`).
+				"size-7 shrink-0 rounded-full border shadow-none disabled:opacity-100",
+				compact ? "self-center" : "ml-auto",
 				idleEmpty
 					? "border-border text-muted-foreground/40 hover:bg-transparent"
 					: "border-foreground/20 text-foreground hover:bg-muted",
 			)}
-			size={compact ? "icon-xs" : "icon-sm"}
+			size="icon-xs"
 			variant="ghost"
 			status={
 				stop

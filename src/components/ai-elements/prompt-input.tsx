@@ -670,14 +670,14 @@ export const PromptInputSubmit = ({
 	const isGenerating = status === "submitted" || status === "streaming";
 	const canStop = isGenerating && Boolean(onStop);
 
-	let Icon = <ArrowUpIcon className="size-4" />;
+	let Icon = <ArrowUpIcon className="size-3.5" />;
 
 	if (status === "submitted") {
 		Icon = <Spinner />;
 	} else if (status === "streaming") {
-		Icon = <SquareIcon className="size-4" />;
+		Icon = <SquareIcon className="size-3.5" />;
 	} else if (status === "error") {
-		Icon = <XIcon className="size-4" />;
+		Icon = <XIcon className="size-3.5" />;
 	}
 
 	const handleClick = useCallback(
