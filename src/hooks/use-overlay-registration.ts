@@ -10,14 +10,16 @@ import {
 /**
  * While `open` is true, register this overlay on the app stack so
  * Esc / ⌘W can dismiss it via {@link closeTopOverlay}.
- * `modal` (default true) also gates workspace shortcuts while open;
- * docked non-modal surfaces (agent ask/permission cards) pass false.
+ *
+ * @param modal - When true (default), this overlay blocks global shortcuts
+ *   that declare `whenSettingsClosed: true`. Set to false for docked surfaces
+ *   that should remain dismissable with Esc but not steal shortcut focus.
  */
 export function useOverlayRegistration(
 	id: string,
 	open: boolean,
 	close: () => void,
-	options?: { modal?: boolean },
+	modal = true,
 ): void {
 	const closeRef = useRef(close);
 	closeRef.current = close;
@@ -26,12 +28,12 @@ export function useOverlayRegistration(
 		if (!open) return;
 		return pushOverlay({
 			id,
-			modal: options?.modal ?? true,
+			modal,
 			close: () => {
 				closeRef.current();
 			},
 		});
-	}, [id, open, options?.modal]);
+	}, [id, open, modal]);
 }
 
 /**

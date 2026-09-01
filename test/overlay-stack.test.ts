@@ -55,6 +55,33 @@ describe("overlay-stack", () => {
 		expect(b).not.toHaveBeenCalled();
 		expect(getOverlayStackSnapshot().map((h) => h.id)).toEqual(["b"]);
 	});
+
+	it("non-modal overlays count toward isAnyOverlayOpen but not isAnyModalOverlayOpen", () => {
+		const modal = vi.fn();
+		const docked = vi.fn();
+		pushOverlay({ id: "modal", close: modal });
+		pushOverlay({ id: "docked", close: docked, modal: false });
+
+		expect(isAnyOverlayOpen()).toBe(true);
+		expect(isAnyModalOverlayOpen()).toBe(true);
+
+		expect(closeTopOverlay()).toBe(true);
+		expect(docked).toHaveBeenCalledTimes(1);
+		expect(modal).not.toHaveBeenCalled();
+		expect(isAnyOverlayOpen()).toBe(true);
+		expect(isAnyModalOverlayOpen()).toBe(true);
+
+		expect(closeTopOverlay()).toBe(true);
+		expect(modal).toHaveBeenCalledTimes(1);
+		expect(isAnyOverlayOpen()).toBe(false);
+		expect(isAnyModalOverlayOpen()).toBe(false);
+	});
+
+	it("defaults modal to true when omitted", () => {
+		pushOverlay({ id: "default", close: () => {} });
+		expect(isAnyModalOverlayOpen()).toBe(true);
+		closeTopOverlay();
+	});
 });
 
 describe("overlay-stack modal gating", () => {

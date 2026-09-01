@@ -298,8 +298,8 @@ export default function App() {
 		},
 	});
 
-	const anyOverlayOpen = useAnyModalOverlayOpen();
-	useAppShortcuts(anyOverlayOpen, {
+	const anyModalOverlayOpen = useAnyModalOverlayOpen();
+	useAppShortcuts(anyModalOverlayOpen, {
 		settings: toggleSettingsWindow,
 		// Esc → dismiss top overlay (settings, palette, dialogs…)
 		closeSheet: () => {

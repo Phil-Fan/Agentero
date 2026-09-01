@@ -1,8 +1,12 @@
 /**
  * Interactive ACP surfaces: permission requests (ask mode), Codex
  * request_user_input elicitation, Grok ask_user_question, and the
- * tool-shaped ask promoted by the runtime. Each registers in the overlay
- * stack so Esc dismisses (and cancels) the topmost one.
+ * tool-shaped ask promoted by the runtime.
+ *
+ * The permission dialog is modal and blocks global shortcuts. The docked
+ * ask-user forms register on the overlay stack as non-modal so Esc can still
+ * dismiss them via {@link closeTopOverlay}, but they do not steal shortcut
+ * focus from the rest of the app.
  */
 import { type Dispatch, type SetStateAction, useRef, useState } from "react";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
@@ -74,7 +78,7 @@ export function useAgentPermissionSurfaces({
 			});
 			setElicitationRequest(null);
 		},
-		{ modal: false },
+		false,
 	);
 
 	const askUserRequestRef = useRef(askUserRequest);
@@ -91,7 +95,7 @@ export function useAgentPermissionSurfaces({
 			});
 			setAskUserRequest(null);
 		},
-		{ modal: false },
+		false,
 	);
 
 	const toolAskUserRequestRef = useRef(toolAskUserRequest);
@@ -102,7 +106,7 @@ export function useAgentPermissionSurfaces({
 		() => {
 			setToolAskUserRequest(null);
 		},
-		{ modal: false },
+		false,
 	);
 
 	useTauriEvent<PermissionRequest>("agent:permission-request", (payload) =>
