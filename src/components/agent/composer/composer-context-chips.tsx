@@ -44,13 +44,7 @@ export function ComposerContextChips({
 		return null;
 	}
 	return (
-		<div
-			className={cn(
-				"mb-2 flex flex-wrap gap-1.5",
-				compact &&
-					"mb-0 max-w-[45%] shrink-0 flex-nowrap gap-1 overflow-hidden",
-			)}
-		>
+		<>
 			{currentFilePath ? (
 				<button
 					type="button"
@@ -176,7 +170,7 @@ export function ComposerContextChips({
 					</button>
 				);
 			})}
-		</div>
+		</>
 	);
 }
 
@@ -192,13 +186,7 @@ export function ComposerSkillChips({
 	const { t } = useTranslation("agent");
 	if (selectedSkills.length === 0) return null;
 	return (
-		<div
-			className={cn(
-				"mb-2 flex flex-wrap gap-1.5",
-				compact &&
-					"mb-0 max-w-[30%] shrink-0 flex-nowrap gap-1 overflow-hidden",
-			)}
-		>
+		<>
 			{selectedSkills.map((skill) => (
 				<button
 					key={skill.id}
@@ -223,6 +211,6 @@ export function ComposerSkillChips({
 					)}
 				</button>
 			))}
-		</div>
+		</>
 	);
 }

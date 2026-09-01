@@ -148,206 +148,212 @@ export function AgentComposer(props: AgentComposerProps) {
 			<div
 				ref={shellRef}
 				data-composer-drop-shell
-				className="relative min-h-0 flex-1"
+				className="relative flex min-h-0 flex-1 flex-col gap-1.5"
 			>
-				<PromptInput
-					className={cn(
-						"h-full w-full rounded-xl border-border bg-background shadow-none transition-[background-color,box-shadow,border-color] duration-150",
-						isFileDragOver &&
-							"border-primary/55 bg-primary/5 shadow-[inset_0_0_0_1px] shadow-primary/25 ring-2 ring-primary/35",
-					)}
-					inputGroupClassName={cn(
-						"!flex !h-full min-h-0 !flex-col overflow-hidden",
-						// Keep the same surface while any child is disabled or a run is
-						// in progress — never dim / recolor the composer for "processing".
-						"has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30",
-						// No focus ring / border flash while typing.
-						"has-[[data-slot=input-group-control]:focus-visible]:border-input has-[[data-slot=input-group-control]:focus-visible]:ring-0",
-						isFileDragOver && "bg-transparent dark:bg-transparent",
-					)}
-					accept={COMPOSER_IMAGE_ACCEPT}
-					multiple
-					maxFiles={COMPOSER_IMAGE_MAX_FILES}
-					maxFileSize={COMPOSER_IMAGE_MAX_BYTES}
-					onError={(err) => {
-						if (err.code === "accept") {
-							notifyError(t("composer.imageAcceptError"));
-							return;
-						}
-						notifyError(err.message);
-					}}
-					onDragEnter={onFileDragEnter}
-					onDragLeave={onFileDragLeave}
-					onDragOver={onFileDragOver}
-					onDrop={onFileDropHighlightEnd}
-					onSubmit={async ({ text, files }) => {
-						const images = fileUiPartsToPromptImages(files);
-						await onSubmit(text, images.length ? images : undefined);
-					}}
-				>
-					<PromptInputBody>
-						<Popover
-							open={composerMenuOpen}
-							modal={false}
-							onOpenChange={(open) => {
-								if (!open) onDismissComposerMenu();
-							}}
-						>
-							<PopoverAnchor asChild>
-								<ComposerDropTarget
-									className={cn(
-										"relative flex min-h-0 w-full flex-1 overflow-hidden",
-										compact
-											? "flex-row items-center gap-1 px-2 py-2"
-											: "flex-col px-3 pt-3",
-									)}
-									onVaultPathDragOver={onComposerDragOver}
-									onVaultPathDrop={onComposerDrop}
-								>
-									<ComposerImageAttachments compact={compact} />
-									<ComposerContextChips
-										compact={compact}
-										currentFilePath={props.currentFilePath}
-										currentFileLabel={props.currentFileLabel}
-										mentionChipPaths={props.mentionChipPaths}
-										selectionChips={props.selectionChips}
-										onRemoveSelection={props.onRemoveSelection}
-										visualDrafts={visualDrafts}
-										onRemoveVisualDraft={props.onRemoveVisualDraft}
-										directoryPathSet={props.directoryPathSet}
-										paperPathSet={props.paperPathSet}
-										labelForPath={props.labelForPath}
-										onRemoveContextPath={props.onRemoveContextPath}
-									/>
-									<ComposerSkillChips
-										compact={compact}
-										selectedSkills={props.selectedSkills}
-										onRemoveSkill={props.onRemoveSkill}
-									/>
-									{/* The three menus stay in this Popover subtree on purpose — PopoverContent needs its context. */}
-									{showMentionMenu ? (
-										<ComposerMentionMenu
-											mentionBrowseRoot={props.mentionBrowseRoot}
-											mentionOptions={props.mentionOptions}
-											mentionActiveIndex={mentionActiveIndex}
-											mentionCandidates={props.mentionCandidates}
-											directoryPathSet={props.directoryPathSet}
-											paperPathSet={props.paperPathSet}
-											labelForPath={props.labelForPath}
-											onLeaveMentionFolder={props.onLeaveMentionFolder}
-											onEnterMentionFolder={props.onEnterMentionFolder}
-											onAttachMention={props.onAttachMention}
-											onMentionActiveIndexChange={
-												props.onMentionActiveIndexChange
+				{/* Context / skill chips sit above the bordered prompt shell. */}
+				<div className="flex shrink-0 flex-wrap items-center gap-1.5 empty:hidden">
+					<ComposerContextChips
+						compact={compact}
+						currentFilePath={props.currentFilePath}
+						currentFileLabel={props.currentFileLabel}
+						mentionChipPaths={props.mentionChipPaths}
+						selectionChips={props.selectionChips}
+						onRemoveSelection={props.onRemoveSelection}
+						visualDrafts={visualDrafts}
+						onRemoveVisualDraft={props.onRemoveVisualDraft}
+						directoryPathSet={props.directoryPathSet}
+						paperPathSet={props.paperPathSet}
+						labelForPath={props.labelForPath}
+						onRemoveContextPath={props.onRemoveContextPath}
+					/>
+					<ComposerSkillChips
+						compact={compact}
+						selectedSkills={props.selectedSkills}
+						onRemoveSkill={props.onRemoveSkill}
+					/>
+				</div>
+				<div className="relative min-h-0 flex-1">
+					<PromptInput
+						className="h-full w-full"
+						inputGroupClassName={cn(
+							"!flex !h-full min-h-0 !flex-col overflow-hidden rounded-xl border border-border bg-background shadow-none transition-[background-color,box-shadow,border-color] duration-150",
+							// Keep the same surface while any child is disabled or a run is
+							// in progress — never dim / recolor the composer for "processing".
+							"has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30 dark:bg-background",
+							// No focus ring / border flash while typing.
+							"has-[[data-slot=input-group-control]:focus-visible]:border-input has-[[data-slot=input-group-control]:focus-visible]:ring-0",
+							isFileDragOver &&
+								"border-primary/55 bg-primary/5 shadow-[inset_0_0_0_1px] shadow-primary/25 ring-2 ring-primary/35 dark:bg-primary/5",
+						)}
+						accept={COMPOSER_IMAGE_ACCEPT}
+						multiple
+						maxFiles={COMPOSER_IMAGE_MAX_FILES}
+						maxFileSize={COMPOSER_IMAGE_MAX_BYTES}
+						onError={(err) => {
+							if (err.code === "accept") {
+								notifyError(t("composer.imageAcceptError"));
+								return;
+							}
+							notifyError(err.message);
+						}}
+						onDragEnter={onFileDragEnter}
+						onDragLeave={onFileDragLeave}
+						onDragOver={onFileDragOver}
+						onDrop={onFileDropHighlightEnd}
+						onSubmit={async ({ text, files }) => {
+							const images = fileUiPartsToPromptImages(files);
+							await onSubmit(text, images.length ? images : undefined);
+						}}
+					>
+						<PromptInputBody>
+							<Popover
+								open={composerMenuOpen}
+								modal={false}
+								onOpenChange={(open) => {
+									if (!open) onDismissComposerMenu();
+								}}
+							>
+								<PopoverAnchor asChild>
+									<ComposerDropTarget
+										className={cn(
+											"relative flex min-h-0 w-full flex-1 overflow-hidden",
+											compact
+												? "flex-row items-center gap-1 px-2 py-2"
+												: "flex-col px-3 pt-3",
+										)}
+										onVaultPathDragOver={onComposerDragOver}
+										onVaultPathDrop={onComposerDrop}
+									>
+										<ComposerImageAttachments compact={compact} />
+										{/* The three menus stay in this Popover subtree on purpose — PopoverContent needs its context. */}
+										{showMentionMenu ? (
+											<ComposerMentionMenu
+												mentionBrowseRoot={props.mentionBrowseRoot}
+												mentionOptions={props.mentionOptions}
+												mentionActiveIndex={mentionActiveIndex}
+												mentionCandidates={props.mentionCandidates}
+												directoryPathSet={props.directoryPathSet}
+												paperPathSet={props.paperPathSet}
+												labelForPath={props.labelForPath}
+												onLeaveMentionFolder={props.onLeaveMentionFolder}
+												onEnterMentionFolder={props.onEnterMentionFolder}
+												onAttachMention={props.onAttachMention}
+												onMentionActiveIndexChange={
+													props.onMentionActiveIndexChange
+												}
+											/>
+										) : null}
+										{showSkillMenu ? (
+											<ComposerSkillMenu
+												skillOptions={props.skillOptions}
+												skillActiveIndex={skillActiveIndex}
+												onAttachSkill={props.onAttachSkill}
+												onSkillActiveIndexChange={
+													props.onSkillActiveIndexChange
+												}
+											/>
+										) : null}
+										{showSlashMenu ? (
+											<ComposerSlashMenu
+												slashOptions={props.slashOptions}
+												slashActiveIndex={slashActiveIndex}
+												onAttachSlashCommand={props.onAttachSlashCommand}
+												onSlashActiveIndexChange={
+													props.onSlashActiveIndexChange
+												}
+											/>
+										) : null}
+										<PromptInputTextarea
+											{...{ [AGENT_COMPOSER_INPUT_ATTR]: "" }}
+											autoFocus={autoFocus || undefined}
+											className={cn(
+												"agentero-scroll min-h-0 flex-1 overflow-y-auto px-0 py-1 placeholder:text-muted-foreground/80",
+												compact
+													? "max-h-none min-w-0 text-sm leading-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+													: "text-[15px] leading-6",
+											)}
+											value={composerText}
+											onChange={(event) => {
+												onComposerTextChange(event.currentTarget.value);
+											}}
+											onKeyDown={onComposerKeyDown}
+											aria-expanded={
+												showMentionMenu || showSkillMenu || showSlashMenu
+											}
+											aria-autocomplete="list"
+											aria-controls={
+												showMentionMenu
+													? "agent-mention-menu"
+													: showSkillMenu
+														? "agent-skill-menu"
+														: showSlashMenu
+															? "agent-slash-menu"
+															: undefined
+											}
+											aria-activedescendant={
+												showMentionMenu
+													? `agent-mention-option-${mentionActiveIndex}`
+													: showSkillMenu
+														? `agent-skill-option-${skillActiveIndex}`
+														: showSlashMenu
+															? `agent-slash-option-${slashActiveIndex}`
+															: undefined
+											}
+											role="combobox"
+											disabled={switching}
+											placeholder={
+												activeTabIsRunning
+													? t("composer.queueHint")
+													: t("composer.placeholder")
 											}
 										/>
-									) : null}
-									{showSkillMenu ? (
-										<ComposerSkillMenu
-											skillOptions={props.skillOptions}
-											skillActiveIndex={skillActiveIndex}
-											onAttachSkill={props.onAttachSkill}
-											onSkillActiveIndexChange={props.onSkillActiveIndexChange}
-										/>
-									) : null}
-									{showSlashMenu ? (
-										<ComposerSlashMenu
-											slashOptions={props.slashOptions}
-											slashActiveIndex={slashActiveIndex}
-											onAttachSlashCommand={props.onAttachSlashCommand}
-											onSlashActiveIndexChange={props.onSlashActiveIndexChange}
-										/>
-									) : null}
-									<PromptInputTextarea
-										{...{ [AGENT_COMPOSER_INPUT_ATTR]: "" }}
-										autoFocus={autoFocus || undefined}
-										className={cn(
-											"agentero-scroll min-h-0 flex-1 overflow-y-auto px-0 py-1 placeholder:text-muted-foreground/80",
-											compact
-												? "max-h-none min-w-0 text-sm leading-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-												: "text-[15px] leading-6",
-										)}
-										value={composerText}
-										onChange={(event) => {
-											onComposerTextChange(event.currentTarget.value);
-										}}
-										onKeyDown={onComposerKeyDown}
-										aria-expanded={
-											showMentionMenu || showSkillMenu || showSlashMenu
-										}
-										aria-autocomplete="list"
-										aria-controls={
-											showMentionMenu
-												? "agent-mention-menu"
-												: showSkillMenu
-													? "agent-skill-menu"
-													: showSlashMenu
-														? "agent-slash-menu"
-														: undefined
-										}
-										aria-activedescendant={
-											showMentionMenu
-												? `agent-mention-option-${mentionActiveIndex}`
-												: showSkillMenu
-													? `agent-skill-option-${skillActiveIndex}`
-													: showSlashMenu
-														? `agent-slash-option-${slashActiveIndex}`
-														: undefined
-										}
-										role="combobox"
-										disabled={switching}
-										placeholder={
-											activeTabIsRunning
-												? t("composer.queueHint")
-												: t("composer.placeholder")
-										}
+										{compact ? (
+											<ComposerSubmitControl
+												canSubmitBase={canSubmitBase}
+												switching={switching}
+												submitting={submitting}
+												activeTabIsRunning={activeTabIsRunning}
+												compact
+												onCancelRun={onCancelRun}
+											/>
+										) : null}
+									</ComposerDropTarget>
+								</PopoverAnchor>
+							</Popover>
+						</PromptInputBody>
+						{compact ? null : (
+							<PromptInputFooter className="flex-wrap items-end gap-x-2 gap-y-1.5 px-3 pb-2.5">
+								<PromptInputTools className="min-w-0 flex-1 flex-wrap gap-1">
+									<ComposerToolbar
+										switching={switching}
+										activeUsage={props.activeUsage}
 									/>
-									{compact ? (
-										<ComposerSubmitControl
-											canSubmitBase={canSubmitBase}
-											switching={switching}
-											submitting={submitting}
-											activeTabIsRunning={activeTabIsRunning}
-											compact
-											onCancelRun={onCancelRun}
-										/>
-									) : null}
-								</ComposerDropTarget>
-							</PopoverAnchor>
-						</Popover>
-					</PromptInputBody>
-					{compact ? null : (
-						<PromptInputFooter className="flex-wrap items-end gap-x-2 gap-y-1.5 px-3 pb-2.5">
-							<PromptInputTools className="min-w-0 flex-1 flex-wrap gap-1">
-								<ComposerToolbar
+								</PromptInputTools>
+								<ComposerSubmitControl
+									canSubmitBase={canSubmitBase}
 									switching={switching}
-									activeUsage={props.activeUsage}
+									submitting={submitting}
+									activeTabIsRunning={activeTabIsRunning}
+									onCancelRun={onCancelRun}
 								/>
-							</PromptInputTools>
-							<ComposerSubmitControl
-								canSubmitBase={canSubmitBase}
-								switching={switching}
-								submitting={submitting}
-								activeTabIsRunning={activeTabIsRunning}
-								onCancelRun={onCancelRun}
-							/>
-						</PromptInputFooter>
-					)}
-				</PromptInput>
-				{isFileDragOver ? (
-					<div
-						className={cn(
-							"pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl",
-							"border-2 border-primary/50 border-dashed bg-primary/10 backdrop-blur-[1px]",
+							</PromptInputFooter>
 						)}
-						aria-hidden
-					>
-						<div className="flex items-center gap-2 rounded-full border border-primary/25 bg-background/90 px-3 py-1.5 text-primary text-xs font-medium shadow-sm">
-							<ImageIcon className="size-3.5 shrink-0" />
-							<span>{t("composer.dropImageHint")}</span>
+					</PromptInput>
+					{isFileDragOver ? (
+						<div
+							className={cn(
+								"pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl",
+								"border-2 border-primary/50 border-dashed bg-primary/10 backdrop-blur-[1px]",
+							)}
+							aria-hidden
+						>
+							<div className="flex items-center gap-2 rounded-full border border-primary/25 bg-background/90 px-3 py-1.5 text-primary text-xs font-medium shadow-sm">
+								<ImageIcon className="size-3.5 shrink-0" />
+								<span>{t("composer.dropImageHint")}</span>
+							</div>
 						</div>
-					</div>
-				) : null}
+					) : null}
+				</div>
 			</div>
 		</div>
 	);
