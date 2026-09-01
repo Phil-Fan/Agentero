@@ -61,7 +61,7 @@ export function useAgentPermissionSurfaces({
 			void respondPermission(req.requestId, null);
 			setPermissionRequest(null);
 		},
-		{ modal: false },
+		false,
 	);
 
 	const elicitationRequestRef = useRef(elicitationRequest);
