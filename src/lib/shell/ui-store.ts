@@ -53,7 +53,11 @@ export type AgentSessionOpenRequest = {
 };
 
 /** A title-search result set awaiting the user's pick, plus its destination. */
-export type PaperSearchDraftGroup = PaperSearchGroup & { parentDir: string };
+export type PaperSearchDraftGroup = PaperSearchGroup & {
+	parentDir: string;
+	/** Host search still in flight — dialog shows shimmer skeletons. */
+	pending?: boolean;
+};
 
 type UiStore = {
 	sidebarCollapsed: boolean;
@@ -160,6 +164,28 @@ export function addPaperSearchDraft(groups: PaperSearchDraftGroup[]): void {
 	}));
 }
 
+/**
+ * Replace a pending title-search placeholder with real candidates, or drop it
+ * when the Host path did not yield a picker (identifier hit / no results /
+ * error). No-op if the user already cancelled (pending row gone).
+ */
+export function settlePaperSearchDraft(
+	query: string,
+	group: PaperSearchDraftGroup | null,
+): void {
+	uiStore.setState((s) => {
+		const list = [...(s.paperSearchDraft ?? [])];
+		const idx = list.findIndex((g) => g.pending && g.query === query);
+		if (idx < 0) return s;
+		if (group && group.candidates.length > 0) {
+			list[idx] = { ...group, pending: false };
+		} else {
+			list.splice(idx, 1);
+		}
+		return { paperSearchDraft: list.length > 0 ? list : null };
+	});
+}
+
 /** Drop the group the user just resolved; null once the queue drains. */
 export function shiftPaperSearchDraft(): void {
 	uiStore.setState((s) => {
@@ -242,6 +268,7 @@ export function clearAgentSessionOpenRequest(): void {
 export function clearUiVaultState(): void {
 	uiStore.setState({
 		skillImportDraft: null,
+		paperSearchDraft: null,
 		zoteroOpen: false,
 		zoteroSyncOpen: false,
 		commandOpen: false,

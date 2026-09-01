@@ -50,6 +50,7 @@ export {
 	setSettingsOpenState,
 	setSidebarCollapsedState,
 	setSkillImportDraft,
+	settlePaperSearchDraft,
 	setZoteroOpen,
 	setZoteroSyncOpen,
 	shiftPaperSearchDraft,

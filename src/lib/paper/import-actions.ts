@@ -26,6 +26,7 @@ import {
 	installDiscoveredSkills,
 	type LocalPdfImportEntry,
 	type LookupBatchAddResult,
+	looksLikeTitleSearchQuery,
 	type PaperSearchCandidate,
 } from "@/lib/paper/lookup";
 import { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout";
@@ -40,6 +41,7 @@ import {
 	clearPaperSearchDraft,
 	layout,
 	setSkillImportDraft,
+	settlePaperSearchDraft,
 	shiftPaperSearchDraft,
 	uiStore,
 } from "@/lib/shell/ui-store";
@@ -81,6 +83,14 @@ export async function lookupSubmit(
 	for (const text of texts) {
 		const input = text.trim();
 		if (!input) continue;
+		// Open the picker immediately with shimmer when input looks like a title
+		// (#438). settlePaperSearchDraft no-ops if the user already cancelled.
+		const expectTitleSearch = looksLikeTitleSearchQuery(input);
+		if (expectTitleSearch) {
+			addPaperSearchDraft([
+				{ query: input, candidates: [], parentDir, pending: true },
+			]);
+		}
 		void enqueueBackgroundTask(
 			{
 				kind: "lookup",
@@ -111,7 +121,23 @@ export async function lookupSubmit(
 					);
 				}
 
-				if (result.searchCandidates.length > 0) {
+				if (expectTitleSearch) {
+					const matched =
+						result.searchCandidates.find((group) => group.query === input) ??
+						result.searchCandidates[0] ??
+						null;
+					settlePaperSearchDraft(
+						input,
+						matched ? { ...matched, parentDir, pending: false } : null,
+					);
+					if (matched) {
+						setDetail(
+							i18n.t("sidebar:lookup.searchCandidatesFound", {
+								count: matched.candidates.length,
+							}),
+						);
+					}
+				} else if (result.searchCandidates.length > 0) {
 					addPaperSearchDraft(
 						result.searchCandidates.map((group) => ({ ...group, parentDir })),
 					);
