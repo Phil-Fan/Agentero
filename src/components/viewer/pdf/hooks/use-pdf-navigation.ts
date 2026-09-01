@@ -63,6 +63,22 @@ export function usePdfNavigation({
 	useEffect(() => {
 		const scrollScope = scrollRef.current;
 		if (restoredRef.current || totalPages <= 0 || !scrollScope) return;
+
+		// Guard against the restore firing after the user has already scrolled.
+		// On Windows the EmbedPDF scroll plugin may report readiness late (e.g.
+		// while the viewport is still settling with fractional DPR), in which case
+		// scrolling to the saved page would yank the view back to an earlier
+		// position while the user is actively paging through the document.
+		try {
+			const metrics = scrollScope.getMetrics();
+			if (metrics && metrics.currentPage > 1) {
+				restoredRef.current = true;
+				return;
+			}
+		} catch {
+			// Viewport metrics may not be available yet; fall through and restore.
+		}
+
 		restoredRef.current = true;
 		if (paperKey) {
 			const saved = readReadingPage(paperKey);
