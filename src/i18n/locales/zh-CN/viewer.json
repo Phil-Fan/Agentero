@@ -21,6 +21,7 @@
 		"linkAria": "PDF 链接",
 		"useDarkMode": "使用暗色模式",
 		"useLightMode": "使用亮色模式",
+		"remoteMode": "远程模式",
 		"importToLibrary": "导入本地库",
 		"findPlaceholder": "在文档中查找",
 		"findPrev": "上一个",

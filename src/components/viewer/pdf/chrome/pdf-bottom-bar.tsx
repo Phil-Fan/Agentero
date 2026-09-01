@@ -1,6 +1,7 @@
 import { Moon, MoveHorizontal, MoveVertical, Sun } from "lucide-react";
 import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { SiArxiv } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -8,6 +9,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/core/utils";
 
 type PdfBottomBarProps = {
 	/** Hidden until the document reports its page count. */
@@ -24,6 +26,8 @@ type PdfBottomBarProps = {
 	onFitWidth: () => void;
 	/** Request the fit-page zoom mode. */
 	onFitPage: () => void;
+	/** True for remote arXiv papers with no local sidecar. */
+	isRemotePaper?: boolean;
 };
 
 /** Bottom bar: page nav + PDF color scheme. */
@@ -37,6 +41,7 @@ export function PdfBottomBar({
 	onTogglePdfColorScheme,
 	onFitWidth,
 	onFitPage,
+	isRemotePaper = false,
 }: PdfBottomBarProps) {
 	const { t } = useTranslation("viewer");
 
@@ -50,6 +55,27 @@ export function PdfBottomBar({
 		<div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
 			<TooltipProvider delayDuration={200}>
 				<div className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 shadow-sm backdrop-blur-sm">
+					{isRemotePaper ? (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<div
+									className={cn(
+										"flex items-center gap-1 rounded px-1.5 py-0.5 text-primary",
+										"bg-primary/10",
+									)}
+								>
+									<SiArxiv
+										className="size-3.5 shrink-0 text-[#B31B1B]"
+										aria-hidden
+									/>
+									<span className="whitespace-nowrap text-[11px] font-medium">
+										{t("pdf.remoteMode")}
+									</span>
+								</div>
+							</TooltipTrigger>
+							<TooltipContent side="top">{t("pdf.remoteMode")}</TooltipContent>
+						</Tooltip>
+					) : null}
 					<input
 						type="text"
 						inputMode="numeric"
