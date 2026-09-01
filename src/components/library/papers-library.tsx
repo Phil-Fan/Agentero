@@ -315,7 +315,7 @@ export function PapersLibrary({
 				className="agentero-scroll-both min-h-0 min-w-0 flex-1"
 			>
 				{/* Fixed weights keep the table stable while content and rows change. */}
-				<table className="w-full min-w-[900px] table-fixed border-collapse text-left text-sm">
+				<table className="h-full w-full min-w-[900px] table-fixed border-collapse text-left text-sm">
 					<colgroup>
 						{visibleColumns.map((col) => (
 							<col
@@ -349,11 +349,14 @@ export function PapersLibrary({
 						onColumnReorder={handleColumnReorder}
 					/>
 					{/* key={reorderKey} remounts the tbody to replay the fade animation. */}
-					<tbody key={reorderKey} className="animate-in fade-in-0 duration-150">
+					<tbody
+						key={reorderKey}
+						className="h-full animate-in fade-in-0 duration-150"
+					>
 						{!rows.length ? (
-							<tr>
-								<td colSpan={visibleColumns.length} className="p-0">
-									<div className="flex min-h-[200px] flex-col items-center justify-center gap-2 p-8 text-center">
+							<tr className="h-full">
+								<td colSpan={visibleColumns.length} className="h-full p-0">
+									<div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 p-8 text-center">
 										<p className="font-medium text-sm">
 											{filtering
 												? t("papersLibrary.noMatch")
