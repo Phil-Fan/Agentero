@@ -195,6 +195,9 @@ pub fn attach_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
             crate::features::cli_install::commands::cli_install_status,
             crate::features::cli_install::commands::cli_install_command,
             crate::features::cli_install::commands::cli_uninstall_command,
+            crate::features::finder_service::commands::finder_service_status,
+            crate::features::finder_service::commands::finder_service_install,
+            crate::features::finder_service::commands::finder_service_uninstall,
             crate::features::export::commands::export_system_cjk_font,
         ])
     }

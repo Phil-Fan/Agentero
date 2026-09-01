@@ -52,6 +52,35 @@ export function uninstallCliCommand(): Promise<CliInstallResult> {
 	});
 }
 
+export type FinderServiceStatus = {
+	/** Quick Action integration exists only on macOS */
+	supported: boolean;
+	installed: boolean;
+	installPath: string | null;
+	appBundlePath: string | null;
+	/** installed && baked-in bundle matches the current app bundle */
+	current: boolean;
+	message: string | null;
+};
+
+export function fetchFinderServiceStatus(): Promise<FinderServiceStatus> {
+	return invokeApi<FinderServiceStatus>("finder_service_status", undefined, {
+		fallback: "Failed to read Finder service status",
+	});
+}
+
+export function installFinderService(): Promise<FinderServiceStatus> {
+	return invokeApi<FinderServiceStatus>("finder_service_install", undefined, {
+		fallback: "Failed to install Finder service",
+	});
+}
+
+export function uninstallFinderService(): Promise<FinderServiceStatus> {
+	return invokeApi<FinderServiceStatus>("finder_service_uninstall", undefined, {
+		fallback: "Failed to remove Finder service",
+	});
+}
+
 /** Consume Host-queued vault path from a cold-start deep link (null if none). */
 export async function takePendingVaultOpen(): Promise<string | null> {
 	if (!isTauri()) return null;

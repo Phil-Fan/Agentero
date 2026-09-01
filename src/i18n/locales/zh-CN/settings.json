@@ -613,6 +613,19 @@
 			"statusFailed": "无法读取 CLI 状态",
 			"openReleaseFailed": "无法打开发布页"
 		},
+		"finder": {
+			"label": "访达集成",
+			"description": "在访达文件夹右键菜单中添加“用 Agentero 打开”",
+			"descriptionInstalled": "在访达中右键文件夹即可作为 Vault 打开",
+			"stale": "Agentero 位置已变化，更新以修复菜单项",
+			"install": "安装",
+			"update": "更新",
+			"uninstall": "移除",
+			"installSuccess": "已安装访达快捷操作",
+			"uninstallSuccess": "已移除访达快捷操作",
+			"installFailed": "无法安装访达快捷操作",
+			"uninstallFailed": "无法移除访达快捷操作"
+		},
 		"onboarding": {
 			"label": "首次运行引导",
 			"description": "在主窗口重放主题、Agent 与翻译的设置向导",

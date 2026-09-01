@@ -613,6 +613,19 @@
 			"statusFailed": "Could not read CLI status",
 			"openReleaseFailed": "Could not open the release page"
 		},
+		"finder": {
+			"label": "Finder integration",
+			"description": "Adds \"Open with Agentero\" to the right-click menu for folders in Finder",
+			"descriptionInstalled": "Right-click a folder in Finder to open it as a Vault",
+			"stale": "Agentero was moved — update to fix the menu entry",
+			"install": "Install",
+			"update": "Update",
+			"uninstall": "Remove",
+			"installSuccess": "Finder Quick Action installed",
+			"uninstallSuccess": "Finder Quick Action removed",
+			"installFailed": "Could not install the Finder Quick Action",
+			"uninstallFailed": "Could not remove the Finder Quick Action"
+		},
 		"onboarding": {
 			"label": "First-run setup",
 			"description": "Replay the theme, agent and translation setup wizard in the main window",

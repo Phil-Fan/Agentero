@@ -5,6 +5,7 @@ import {
 	Download,
 	FolderOpen,
 	LoaderCircle,
+	MousePointerClick,
 	RefreshCw,
 	Star,
 	Terminal,
@@ -21,9 +22,13 @@ import {
 import { Button } from "@/components/ui/button";
 import {
 	type CliInstallStatus,
+	type FinderServiceStatus,
 	fetchCliInstallStatus,
+	fetchFinderServiceStatus,
 	installCliCommand,
+	installFinderService,
 	uninstallCliCommand,
+	uninstallFinderService,
 } from "@/lib/cli/api";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
@@ -49,6 +54,8 @@ export function AboutPane() {
 	const [cli, setCli] = useState<CliInstallStatus | null>(null);
 	const [cliBusy, setCliBusy] = useState(false);
 	const [cliLoading, setCliLoading] = useState(false);
+	const [finder, setFinder] = useState<FinderServiceStatus | null>(null);
+	const [finderBusy, setFinderBusy] = useState(false);
 	const isMac = useMemo(() => isMacOS(), []);
 	const isWin = useMemo(() => isWindows(), []);
 
@@ -65,6 +72,15 @@ export function AboutPane() {
 		}
 	}, [t]);
 
+	const refreshFinder = useCallback(async () => {
+		if (!isTauri() || !isMac) return;
+		try {
+			setFinder(await fetchFinderServiceStatus());
+		} catch {
+			setFinder(null);
+		}
+	}, [isMac]);
+
 	useEffect(() => {
 		void getVersion()
 			.then(setVersion)
@@ -74,6 +90,9 @@ export function AboutPane() {
 	useEffect(() => {
 		void refreshCli();
 	}, [refreshCli]);
+	useEffect(() => {
+		void refreshFinder();
+	}, [refreshFinder]);
 
 	const checking = update.phase === "checking";
 	const installing =
@@ -124,6 +143,36 @@ export function AboutPane() {
 			)
 			.finally(() => setCliBusy(false));
 	};
+	const onInstallFinder = () => {
+		setFinderBusy(true);
+		void installFinderService()
+			.then(async (status) => {
+				setFinder(status);
+				await refreshFinder();
+				notifySuccess(t("about.finder.installSuccess"));
+			})
+			.catch((err) =>
+				notifyError(t("about.finder.installFailed"), {
+					description: err instanceof Error ? err.message : String(err),
+				}),
+			)
+			.finally(() => setFinderBusy(false));
+	};
+	const onUninstallFinder = () => {
+		setFinderBusy(true);
+		void uninstallFinderService()
+			.then(async (status) => {
+				setFinder(status);
+				await refreshFinder();
+				notifySuccess(t("about.finder.uninstallSuccess"));
+			})
+			.catch((err) =>
+				notifyError(t("about.finder.uninstallFailed"), {
+					description: err instanceof Error ? err.message : String(err),
+				}),
+			)
+			.finally(() => setFinderBusy(false));
+	};
 	const onOpenCliRelease = () => {
 		const url = cli?.releasePageUrl;
 		if (!url) return;
@@ -169,6 +218,15 @@ export function AboutPane() {
 	const canInstallCli = Boolean(cli?.canInstall) && !cliBusy;
 	const showInstall = !cli?.installed || needsCliUpdate;
 	const showBrewCliHint = isMac && showInstall && Boolean(cli?.brewAvailable);
+
+	const showFinderRow = isMac && isTauri() && finder?.supported !== false;
+	const needsFinderUpdate = Boolean(finder?.installed && !finder.current);
+	const finderDescription = (() => {
+		if (!finder) return "…";
+		if (finder.installed && !finder.current) return t("about.finder.stale");
+		if (finder.installed) return t("about.finder.descriptionInstalled");
+		return t("about.finder.description");
+	})();
 
 	return (
 		<>
@@ -335,6 +393,60 @@ export function AboutPane() {
 							/>
 						</div>
 					) : null}
+				</SettingsGroup>
+			) : null}
+			{showFinderRow ? (
+				<SettingsGroup>
+					<SettingsRow
+						label={
+							<span className="inline-flex items-center gap-1.5">
+								<MousePointerClick
+									className="size-3.5 shrink-0 text-muted-foreground"
+									aria-hidden
+								/>
+								{t("about.finder.label")}
+							</span>
+						}
+						description={finderDescription}
+					>
+						<div className="flex flex-wrap items-center justify-end gap-2">
+							{finder?.installed ? (
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={finderBusy}
+									onClick={onUninstallFinder}
+								>
+									{finderBusy ? (
+										<LoaderCircle
+											data-icon="inline-start"
+											className="animate-spin"
+										/>
+									) : null}
+									{t("about.finder.uninstall")}
+								</Button>
+							) : null}
+							{!finder?.installed || needsFinderUpdate ? (
+								<Button
+									size="sm"
+									disabled={finderBusy || !finder}
+									onClick={onInstallFinder}
+								>
+									{finderBusy ? (
+										<LoaderCircle
+											data-icon="inline-start"
+											className="animate-spin"
+										/>
+									) : (
+										<Download data-icon="inline-start" />
+									)}
+									{needsFinderUpdate
+										? t("about.finder.update")
+										: t("about.finder.install")}
+								</Button>
+							) : null}
+						</div>
+					</SettingsRow>
 				</SettingsGroup>
 			) : null}
 			{isTauri() ? (

@@ -347,6 +347,15 @@ pub fn run() {
             });
         }
 
+        // Finder "Open with Agentero" Quick Action: default-installed and kept
+        // current on macOS (opt-out remembered via a config marker).
+        #[cfg(target_os = "macos")]
+        {
+            tauri::async_runtime::spawn_blocking(|| {
+                crate::features::finder_service::ensure_installed();
+            });
+        }
+
         // Auto sync: resume background schedulers for configured vaults.
         app.state::<crate::features::sync::SyncService>()
             .start_all(app.handle());

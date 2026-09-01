@@ -20,6 +20,8 @@ pub mod doctor;
 #[cfg(feature = "desktop")]
 pub mod export;
 pub mod feeds;
+#[cfg(feature = "desktop")]
+pub mod finder_service;
 pub mod import;
 #[cfg(feature = "desktop")]
 pub mod jobs;
