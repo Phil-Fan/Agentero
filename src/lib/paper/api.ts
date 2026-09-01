@@ -205,6 +205,8 @@ export async function savePaperPageCounts(
 export type TrashResult = {
 	batchId: string;
 	count: number;
+	/** Vault-relative paths actually moved (subset of the requested rels). */
+	rels: string[];
 };
 
 /**

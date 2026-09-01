@@ -113,9 +113,14 @@ pub async fn trash_paths(
 
     if items.is_empty() {
         let _ = fs.remove(&batch_rel, true).await;
-        return Ok(TrashResult { batch_id, count: 0 });
+        return Ok(TrashResult {
+            batch_id,
+            count: 0,
+            rels: Vec::new(),
+        });
     }
 
+    let rels: Vec<String> = items.iter().map(|item| item.rel.clone()).collect();
     let manifest = TrashManifest {
         batch_id: batch_id.clone(),
         created_at: crate::core::time::now_rfc3339_millis(),
@@ -131,6 +136,7 @@ pub async fn trash_paths(
     Ok(TrashResult {
         batch_id: manifest.batch_id,
         count: manifest.items.len(),
+        rels,
     })
 }
 

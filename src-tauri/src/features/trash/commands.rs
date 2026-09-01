@@ -2,6 +2,7 @@
 
 use crate::core::error::{map_err, ApiResult};
 use crate::core::log_util::{trunc, OpTimer};
+use crate::features::jobs::{emit_job_changed, JobCenter};
 use crate::features::remote::{parse_remote_handle, trash_bridge, RemoteRegistry};
 use crate::features::trash;
 use serde::Deserialize;
@@ -20,7 +21,9 @@ pub struct PathTrashArgs {
 /// Move files/folders into the vault recycle bin (undoable delete).
 #[tauri::command]
 pub async fn path_trash(
+    app: tauri::AppHandle,
     registry: State<'_, Arc<RemoteRegistry>>,
+    center: State<'_, JobCenter>,
     args: PathTrashArgs,
 ) -> Result<ApiResult<trash::TrashResult>, String> {
     let n = args.rels.len();
@@ -51,8 +54,20 @@ pub async fn path_trash(
         let vault = PathBuf::from(args.vault_path.trim());
         match trash::trash_paths(&vault, &args.rels) {
             Ok(res) => {
+                // A deleted paper must not keep running/scheduling background
+                // work (parse, download, layout, …): cancel its jobs now.
+                let mut cancelled = 0usize;
+                for rel in &res.rels {
+                    for snapshot in center.cancel_for_paper(&vault, rel).await {
+                        emit_job_changed(&app, snapshot);
+                        cancelled += 1;
+                    }
+                }
+                if cancelled > 0 {
+                    center.drain_and_spawn(&app).await;
+                }
                 op.finish_ok_extra(format!(
-                    "batch_id={} count={}",
+                    "batch_id={} count={} jobs_cancelled={cancelled}",
                     trunc(&res.batch_id, 40),
                     res.count
                 ));

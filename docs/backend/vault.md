@@ -56,6 +56,8 @@
 | `path_restore_item` | 恢复 |
 | `path_purge_item` / `path_purge_trash` | 永久删除 / 清空 |
 
+本地 `path_trash` 成功后会取消被删论文的全部排队/运行中 JobCenter 任务（`JobCenter::cancel_for_paper`），避免已删论文继续下载 / 解析。
+
 ## 文件监听
 
 - Host `notify` → `vault:file-changed`。

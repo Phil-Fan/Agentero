@@ -44,6 +44,8 @@ pub struct TrashResult {
     pub batch_id: String,
     /// Number of items actually moved into the recycle bin.
     pub count: usize,
+    /// Vault-relative paths actually moved (subset of the requested rels).
+    pub rels: Vec<String>,
 }
 
 /// One item in the recycle bin (flattened across batches) for the UI list.
@@ -157,9 +159,14 @@ pub fn trash_paths(vault_root: &Path, rels: &[String]) -> Result<TrashResult, Ap
     if items.is_empty() {
         // Nothing moved — drop the (possibly created) empty batch dir.
         let _ = fs::remove_dir(&batch_dir);
-        return Ok(TrashResult { batch_id, count: 0 });
+        return Ok(TrashResult {
+            batch_id,
+            count: 0,
+            rels: Vec::new(),
+        });
     }
 
+    let rels: Vec<String> = items.iter().map(|item| item.rel.clone()).collect();
     let manifest = TrashManifest {
         batch_id: batch_id.clone(),
         created_at: crate::core::time::now_rfc3339_millis(),
@@ -172,6 +179,7 @@ pub fn trash_paths(vault_root: &Path, rels: &[String]) -> Result<TrashResult, Ap
     Ok(TrashResult {
         batch_id: manifest.batch_id,
         count: manifest.items.len(),
+        rels,
     })
 }
 

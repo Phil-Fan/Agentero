@@ -693,6 +693,39 @@ impl JobCenter {
         }
     }
 
+    /// Cancel every queued/running job for one paper (or for papers nested
+    /// under `rel`), e.g. when the paper folder moves to the recycle bin.
+    /// Returns the snapshots of the cancelled jobs so callers can emit
+    /// `job:changed` and drain freed slots.
+    pub async fn cancel_for_paper(&self, vault: &Path, rel: &str) -> Vec<JobSnapshot> {
+        let vault = normalize_vault_path(vault.to_path_buf());
+        let prefix = format!("{rel}/");
+        let ids: Vec<JobId> = {
+            let inner = self.inner.lock().await;
+            inner
+                .jobs
+                .iter()
+                .filter(|(_, job)| {
+                    job.vault_path == vault
+                        && job
+                            .paper_path
+                            .as_deref()
+                            .is_some_and(|p| p == rel || p.starts_with(prefix.as_str()))
+                })
+                .map(|(id, _)| id.clone())
+                .collect()
+        };
+        let mut cancelled = Vec::new();
+        for id in ids {
+            if self.cancel(&id.0).await {
+                if let Some(snapshot) = self.snapshot(&id.0).await {
+                    cancelled.push(snapshot);
+                }
+            }
+        }
+        cancelled
+    }
+
     /// Current snapshot for a job id, if it exists.
     pub async fn snapshot(&self, job_id: &str) -> Option<JobSnapshot> {
         let inner = self.inner.lock().await;
@@ -1331,6 +1364,42 @@ mod tests {
         assert!(center.cancel(&job.id).await);
         let jobs = center.list(None, Some("papers/a")).await;
         assert_eq!(jobs[0].state, JobState::Cancelled);
+    }
+
+    #[tokio::test]
+    async fn cancel_for_paper_cancels_matching_and_nested_jobs() {
+        let center = JobCenter::new();
+        let vault = vault("cancel-paper");
+        center
+            .enqueue_parse_refs(vault.clone(), "papers/a", JobLane::Normal, false)
+            .await;
+        center
+            .enqueue_parse_body(vault.clone(), "papers/a", JobLane::Normal, false, None)
+            .await;
+        center
+            .enqueue_parse_refs(vault.clone(), "papers/a/sub", JobLane::Normal, false)
+            .await;
+        let sibling = center
+            .enqueue_parse_refs(vault.clone(), "papers/ab", JobLane::Normal, false)
+            .await;
+        let other = center
+            .enqueue_parse_refs(vault.clone(), "papers/b", JobLane::Normal, false)
+            .await;
+
+        let cancelled = center.cancel_for_paper(&vault, "papers/a").await;
+        assert_eq!(cancelled.len(), 3);
+        assert!(cancelled.iter().all(|job| job.state == JobState::Cancelled));
+
+        assert_eq!(
+            center.snapshot(&sibling.id).await.unwrap().state,
+            JobState::Queued
+        );
+        assert_eq!(
+            center.snapshot(&other.id).await.unwrap().state,
+            JobState::Queued
+        );
+        // Idempotent: nothing left to cancel for that paper.
+        assert!(center.cancel_for_paper(&vault, "papers/a").await.is_empty());
     }
 
     #[test]

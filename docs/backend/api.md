@@ -271,10 +271,11 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 }
 ```
 
-- **`path_trash` 返回**（`ApiResult<{ batchId: string; count: number }>`）
-  - `batchId` 标识批次（浏览/恢复用）；`count` 为实际移入回收站的项数。
+- **`path_trash` 返回**（`ApiResult<{ batchId: string; count: number; rels: string[] }>`）
+  - `batchId` 标识批次（浏览/恢复用）；`count` 为实际移入回收站的项数；`rels` 为实际移入的相对路径（请求 `rels` 的子集）。
   - `papers/` 下的项：**先移文件**，再快照并删除 catalog 行（含嵌套 paper），避免幽灵 catalog。
   - 跳过空 / 含 `..` / `.agentero` / `papers` 根 / 不存在的路径。
+  - 本地 Vault：删除成功后立即取消被删路径（含嵌套论文）的所有排队/运行中 JobCenter 任务（`JobCenter::cancel_for_paper`），逐个发 `job:changed(cancelled)` 并 `drain_and_spawn` 释放槽位——已删论文不会继续下载 / 解析 / 版面分析，任务面板对应行随之置为已取消。
 
 #### `path_list_trash` / `path_restore_item` / `path_purge_item` / `path_purge_trash`
 
