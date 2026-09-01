@@ -169,11 +169,18 @@ export function ComposerSubmitControl({
 	const canSubmit = canSubmitBase || attachments.files.length > 0;
 	// Streaming + empty composer → stop; with text/images/drafts → queue follow-up.
 	const stop = activeTabIsRunning && !canSubmit;
+	const idleEmpty = !stop && !canSubmit;
 	return (
 		<PromptInputSubmit
-			className="ml-auto shrink-0"
+			className={cn(
+				"shrink-0 rounded-full border shadow-none disabled:opacity-100",
+				compact ? "size-7 self-center" : "ml-auto size-8",
+				idleEmpty
+					? "border-border text-muted-foreground/40 hover:bg-transparent"
+					: "border-foreground/20 text-foreground hover:bg-muted",
+			)}
 			size={compact ? "icon-xs" : "icon-sm"}
-			variant={compact ? "ghost" : "default"}
+			variant="ghost"
 			status={
 				stop
 					? "streaming"
@@ -182,11 +189,7 @@ export function ComposerSubmitControl({
 						: "ready"
 			}
 			onStop={stop ? onCancelRun : undefined}
-			disabled={
-				switching ||
-				(submitting && !activeTabIsRunning) ||
-				(!stop && !canSubmit)
-			}
+			disabled={switching || (submitting && !activeTabIsRunning) || idleEmpty}
 		/>
 	);
 }

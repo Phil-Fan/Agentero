@@ -5,7 +5,7 @@
 // command, screenshot) were trimmed locally — keep this file lean.
 
 import type { ChatStatus, FileUIPart } from "ai";
-import { CornerDownLeftIcon, SquareIcon, XIcon } from "lucide-react";
+import { ArrowUpIcon, SquareIcon, XIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 import type {
 	ChangeEventHandler,
@@ -670,7 +670,7 @@ export const PromptInputSubmit = ({
 	const isGenerating = status === "submitted" || status === "streaming";
 	const canStop = isGenerating && Boolean(onStop);
 
-	let Icon = <CornerDownLeftIcon className="size-4" />;
+	let Icon = <ArrowUpIcon className="size-4" />;
 
 	if (status === "submitted") {
 		Icon = <Spinner />;

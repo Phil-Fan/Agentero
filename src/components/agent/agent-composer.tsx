@@ -196,7 +196,7 @@ export function AgentComposer(props: AgentComposerProps) {
 									className={cn(
 										"relative flex min-h-0 w-full flex-1 overflow-hidden",
 										compact
-											? "flex-row items-start gap-1 px-2 pt-2"
+											? "flex-row items-center gap-1 px-2 py-2"
 											: "flex-col px-3 pt-3",
 									)}
 									onVaultPathDragOver={onComposerDragOver}
@@ -300,37 +300,37 @@ export function AgentComposer(props: AgentComposerProps) {
 												: t("composer.placeholder")
 										}
 									/>
+									{compact ? (
+										<ComposerSubmitControl
+											canSubmitBase={canSubmitBase}
+											switching={switching}
+											submitting={submitting}
+											activeTabIsRunning={activeTabIsRunning}
+											compact
+											onCancelRun={onCancelRun}
+										/>
+									) : null}
 								</ComposerDropTarget>
 							</PopoverAnchor>
 						</Popover>
 					</PromptInputBody>
-					<PromptInputFooter
-						className={cn(
-							"flex-wrap items-end gap-x-2 gap-y-1.5",
-							compact ? "px-2 pb-2" : "px-3 pb-2.5",
-						)}
-					>
-						<PromptInputTools
-							className={cn(
-								"min-w-0 flex-1 flex-wrap gap-1",
-								compact && "flex-none",
-							)}
-						>
-							<ComposerToolbar
-								compact={compact}
+					{compact ? null : (
+						<PromptInputFooter className="flex-wrap items-end gap-x-2 gap-y-1.5 px-3 pb-2.5">
+							<PromptInputTools className="min-w-0 flex-1 flex-wrap gap-1">
+								<ComposerToolbar
+									switching={switching}
+									activeUsage={props.activeUsage}
+								/>
+							</PromptInputTools>
+							<ComposerSubmitControl
+								canSubmitBase={canSubmitBase}
 								switching={switching}
-								activeUsage={props.activeUsage}
+								submitting={submitting}
+								activeTabIsRunning={activeTabIsRunning}
+								onCancelRun={onCancelRun}
 							/>
-						</PromptInputTools>
-						<ComposerSubmitControl
-							canSubmitBase={canSubmitBase}
-							switching={switching}
-							submitting={submitting}
-							activeTabIsRunning={activeTabIsRunning}
-							compact={compact}
-							onCancelRun={onCancelRun}
-						/>
-					</PromptInputFooter>
+						</PromptInputFooter>
+					)}
 				</PromptInput>
 				{isFileDragOver ? (
 					<div
