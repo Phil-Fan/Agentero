@@ -121,43 +121,43 @@ export function buildMarksIndex({
 	}
 	for (const trace of visualTraces) {
 		const hasAgent = Boolean(trace.agent);
-		const note = trace.comment.trim();
-		// Note-only visual marks (and visual marks that already have a
-		// comment) live in the comment rail.
-		if (!hasAgent || note) {
-			const entry: PageAnnotationComment = {
-				id: trace.id,
-				pageIndex: trace.page - 1,
-				anchorY: trace.rects[0]?.y ?? 0,
-				rects: trace.rects,
-				quote: "",
-				comment: trace.comment,
-				color: DEFAULT_HIGHLIGHT_COLOR,
-				kind: "visual",
-				linkAlias:
-					annotationWikilinkAlias(
-						paperTitle,
-						annotationSnippet({ comment: trace.comment }),
-					) ?? null,
-			};
-			const list = comments.get(trace.page);
-			if (list) list.push(entry);
-			else comments.set(trace.page, [entry]);
-			if (!hasAgent) continue;
-		}
-		const pageText = pageTextMap.get(trace.page - 1);
-		const pin = pinFromRects(trace.rects, pageText);
-		add(trace.page, {
+		// Every visual mark has a right-rail comment card; the add-to-chat
+		// action lives there instead of in a floating card (#396).
+		const entry: PageAnnotationComment = {
 			id: trace.id,
+			pageIndex: trace.page - 1,
+			anchorY: trace.rects[0]?.y ?? 0,
+			rects: trace.rects,
+			quote: "",
+			comment: trace.comment,
+			color: DEFAULT_HIGHLIGHT_COLOR,
 			kind: "visual",
-			x: pin.x,
-			y: pin.y,
-			preview: tracePreview(trace),
-			ended: trace.agent?.status !== "running",
-			traceId: trace.id,
-			overText: pinObscuresBodyText(pin, pageText),
-			side: pin.side,
-		});
+			linkAlias:
+				annotationWikilinkAlias(
+					paperTitle,
+					annotationSnippet({ comment: trace.comment }),
+				) ?? null,
+		};
+		const list = comments.get(trace.page);
+		if (list) list.push(entry);
+		else comments.set(trace.page, [entry]);
+		// Marks with an active Agent conversation still keep a gutter pin so
+		// users can locate them; clicking the pin opens the rail card.
+		if (hasAgent) {
+			const pageText = pageTextMap.get(trace.page - 1);
+			const pin = pinFromRects(trace.rects, pageText);
+			add(trace.page, {
+				id: trace.id,
+				kind: "visual",
+				x: pin.x,
+				y: pin.y,
+				preview: tracePreview(trace),
+				ended: trace.agent?.status !== "running",
+				traceId: trace.id,
+				overText: pinObscuresBodyText(pin, pageText),
+				side: pin.side,
+			});
+		}
 	}
 	return { pinsByPage: pins, commentsByPage: comments };
 }

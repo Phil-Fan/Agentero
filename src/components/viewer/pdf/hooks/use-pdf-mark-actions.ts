@@ -9,10 +9,14 @@
 
 import type { useAnnotationCapability } from "@embedpdf/plugin-annotation/react";
 import { type RefObject, useCallback } from "react";
+import type { RailEditState } from "@/components/viewer/pdf/types";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import { isVisualMarkKind } from "@/lib/pdf/agent-trace";
 import type { PdfAskThread } from "@/lib/pdf/ask/types";
-import type { HighlightColor } from "@/lib/pdf/highlight/palette";
+import {
+	DEFAULT_HIGHLIGHT_COLOR,
+	type HighlightColor,
+} from "@/lib/pdf/highlight/palette";
 import type { ActiveSelectionCard, SelectionPin } from "@/lib/pdf/selection";
 
 type AnnotationCapabilityProvides = ReturnType<
@@ -30,6 +34,8 @@ export type UsePdfMarkActionsOptions = {
 	openCard: (card: ActiveSelectionCard) => void;
 	/** Note editor: open the rail edit of a highlight pin. */
 	openEditorForAnnotation: (id: string) => void;
+	/** Note editor: open the rail edit of a visual pin (#396). */
+	beginRailEdit: (state: RailEditState) => void;
 	/** EmbedPDF capability; owned by `PdfViewerInner` (plugin context). */
 	annotationCap: AnnotationCapabilityProvides;
 	docId: string;
@@ -60,6 +66,7 @@ export function usePdfMarkActions({
 	openThread,
 	openCard,
 	openEditorForAnnotation,
+	beginRailEdit,
 	annotationCap,
 	docId,
 	deleteHighlightAnnotation,
@@ -81,8 +88,18 @@ export function usePdfMarkActions({
 				const markId = pin.traceId || pin.id;
 				const tr = visualTracesRef.current.find((item) => item.id === markId);
 				if (!tr) return;
-				// Pin hover: page is already on-screen; openCard places beside the mark.
-				openCard({ kind: "visual", id: tr.id });
+				// Visual marks now edit in the right-rail comment card (#396).
+				const state: RailEditState = {
+					id: tr.id,
+					pageIndex: tr.page - 1,
+					kind: "visual",
+					comment: tr.comment,
+					quote: "",
+					color: DEFAULT_HIGHLIGHT_COLOR,
+					anchorY: tr.rects[0]?.y ?? 0,
+					rects: tr.rects,
+				};
+				beginRailEdit(state);
 			}
 		},
 		[
@@ -90,6 +107,7 @@ export function usePdfMarkActions({
 			openThread,
 			openCard,
 			openEditorForAnnotation,
+			beginRailEdit,
 			threadsRef,
 			visualTracesRef,
 		],

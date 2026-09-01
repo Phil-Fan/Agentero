@@ -163,6 +163,8 @@ export type PdfPageHandlers = {
 	onCopyCommentLink: (comment: PageAnnotationComment) => void;
 	/** Copy the comment card's `![[target@id]]` embed. */
 	onCopyCommentEmbed: (comment: PageAnnotationComment) => void;
+	/** Add a visual comment's crop to the Agent sidebar composer (#396). */
+	onAddCommentToChat: (comment: PageAnnotationComment) => void;
 	/** Hover enters a comment-rail card. */
 	onHoverComment: (comment: PageAnnotationComment) => void;
 	/** Hover leaves a comment-rail card. */
@@ -683,6 +685,34 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 							/>
 						))
 					: null}
+				{/*
+				 * Bidirectional hover for visual annotations: hovering the page region
+				 * highlights the right-rail card and shows the border (#396).
+				 */}
+				{comments
+					.filter((comment) => comment.kind === "visual")
+					.map((comment) =>
+						comment.rects.map((rect) => (
+							<button
+								key={`visual-hover-${comment.id}-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
+								type="button"
+								className="absolute z-[3] cursor-pointer bg-transparent"
+								style={{
+									left: `${rect.x * 100}%`,
+									top: `${rect.y * 100}%`,
+									width: `${rect.w * 100}%`,
+									height: `${rect.h * 100}%`,
+								}}
+								aria-label={t("pdfExplain.visualAnnotation")}
+								onMouseEnter={() => handlers.onHoverComment(comment)}
+								onMouseLeave={handlers.onLeaveComment}
+								onClick={(event) => {
+									event.stopPropagation();
+									handlers.onOpenComment(comment);
+								}}
+							/>
+						)),
+					)}
 				<CommentCardsLayer
 					items={comments}
 					pageHeightPx={height}
@@ -695,6 +725,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 					onDelete={handlers.onDeleteComment}
 					onCopyLink={handlers.onCopyCommentLink}
 					onCopyEmbed={handlers.onCopyCommentEmbed}
+					onAddToChat={handlers.onAddCommentToChat}
 					onHover={handlers.onHoverComment}
 					onLeave={handlers.onLeaveComment}
 				/>

@@ -1,17 +1,14 @@
 /**
- * Region-crop draft card state for the PDF viewer.
+ * Screen-anchor helper for region crops.
  *
- * The card's *content* belongs to {@link usePdfVisualMarks}; the state and the
- * region anchor live here because both region framing (⌘. marquee) and the
- * layout hit targets open the same card.
+ * The floating visual-annotation draft card has been removed (#396); this hook
+ * now only provides `screenPointForRegion` so the crop completion callback can
+ * compute the old card anchor (kept for any future overlay use).
  */
 
-import { type RefObject, useCallback, useState } from "react";
+import { type RefObject, useCallback } from "react";
 import { pageElByIndex } from "@/components/viewer/pdf/coords";
-import type {
-	ScreenPoint,
-	VisualDraftEditorState,
-} from "@/components/viewer/pdf/types";
+import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
 
 export type UsePdfVisualDraftOptions = {
@@ -19,10 +16,7 @@ export type UsePdfVisualDraftOptions = {
 };
 
 export type PdfVisualDraft = {
-	visualDraftEditor: VisualDraftEditorState | null;
-	openVisualDraftEditor: (draft: VisualDraftEditorState) => void;
-	closeVisualDraftEditor: () => void;
-	/** Screen anchor beside a page-normalized region (draft card placement). */
+	/** Screen anchor beside a page-normalized region (legacy card placement). */
 	screenPointForRegion: (
 		pageIndex0: number,
 		region: PdfAskNormalizedRect,
@@ -32,17 +26,6 @@ export type PdfVisualDraft = {
 export function usePdfVisualDraft({
 	hostRef,
 }: UsePdfVisualDraftOptions): PdfVisualDraft {
-	const [visualDraftEditor, setVisualDraftEditor] =
-		useState<VisualDraftEditorState | null>(null);
-
-	const openVisualDraftEditor = useCallback((draft: VisualDraftEditorState) => {
-		setVisualDraftEditor(draft);
-	}, []);
-
-	const closeVisualDraftEditor = useCallback(() => {
-		setVisualDraftEditor(null);
-	}, []);
-
 	/** Screen point near a layout bbox (right edge) for the draft card. */
 	const screenPointForRegion = useCallback(
 		(pageIndex0: number, region: PdfAskNormalizedRect) => {
@@ -57,10 +40,5 @@ export function usePdfVisualDraft({
 		[hostRef],
 	);
 
-	return {
-		visualDraftEditor,
-		openVisualDraftEditor,
-		closeVisualDraftEditor,
-		screenPointForRegion,
-	};
+	return { screenPointForRegion };
 }

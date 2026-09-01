@@ -8,7 +8,7 @@
  * textarea, ⌘/Ctrl+Enter or blur saves, Escape cancels. No floating editor.
  */
 
-import { Crop, Link2, Trash2 } from "lucide-react";
+import { Crop, Link2, MessageSquarePlus, Trash2 } from "lucide-react";
 import { memo, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,8 @@ type CommentCardsLayerProps = {
 	onDelete: (comment: PageAnnotationComment) => void;
 	onCopyLink: (comment: PageAnnotationComment) => void;
 	onCopyEmbed: (comment: PageAnnotationComment) => void;
+	/** Add this visual mark's crop to the Agent sidebar composer (#396). */
+	onAddToChat: (comment: PageAnnotationComment) => void;
 	onHover: (comment: PageAnnotationComment) => void;
 	onLeave: () => void;
 };
@@ -156,6 +158,7 @@ type CommentCardProps = {
 	onDelete: (comment: PageAnnotationComment) => void;
 	onCopyLink: (comment: PageAnnotationComment) => void;
 	onCopyEmbed: (comment: PageAnnotationComment) => void;
+	onAddToChat: (comment: PageAnnotationComment) => void;
 	onHover: (comment: PageAnnotationComment) => void;
 	onLeave: () => void;
 };
@@ -173,6 +176,7 @@ const CommentCard = memo(function CommentCard({
 	onDelete,
 	onCopyLink,
 	onCopyEmbed,
+	onAddToChat,
 	onHover,
 	onLeave,
 }: CommentCardProps) {
@@ -396,6 +400,28 @@ const CommentCard = memo(function CommentCard({
 							</Tooltip>
 						</>
 					) : null}
+					{item.kind === "visual" ? (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									className="size-6 text-muted-foreground hover:text-foreground"
+									aria-label={t("pdfExplain.addToSidebarChat")}
+									onClick={(e) => {
+										e.stopPropagation();
+										onAddToChat(item);
+									}}
+								>
+									<MessageSquarePlus className="size-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent>
+								{t("pdfExplain.addToSidebarChat")}
+							</TooltipContent>
+						</Tooltip>
+					) : null}
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button
@@ -433,6 +459,7 @@ export const CommentCardsLayer = memo(function CommentCardsLayer({
 	onDelete,
 	onCopyLink,
 	onCopyEmbed,
+	onAddToChat,
 	onHover,
 	onLeave,
 }: CommentCardsLayerProps) {
@@ -462,6 +489,7 @@ export const CommentCardsLayer = memo(function CommentCardsLayer({
 							onDelete={onDelete}
 							onCopyLink={onCopyLink}
 							onCopyEmbed={onCopyEmbed}
+							onAddToChat={onAddToChat}
 							onHover={onHover}
 							onLeave={onLeave}
 						/>

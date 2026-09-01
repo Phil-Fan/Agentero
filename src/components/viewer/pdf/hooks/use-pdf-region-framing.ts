@@ -53,9 +53,11 @@ export type UsePdfRegionFramingOptions = {
 	interactionCap: InteractionManagerCapability;
 	/** Text-selection cluster: framing a region dismisses an open menu. */
 	setSelectionMenu: Dispatch<SetStateAction<SelectionMenuState | null>>;
-	/** Draft card transitions; owned by {@link usePdfVisualDraft}. */
-	openVisualDraftEditor: (draft: VisualDraftEditorState) => void;
-	closeVisualDraftEditor: () => void;
+	/**
+	 * Draft completion callback: persist the crop as a note-only visual mark and
+	 * open it in the right-rail comment editor (#396).
+	 */
+	onVisualDraft: (draft: VisualDraftEditorState) => void;
 	/** Screen anchor beside a page-normalized region (draft card placement). */
 	screenPointForRegion: (
 		pageIndex0: number,
@@ -94,8 +96,7 @@ export function usePdfRegionFraming({
 	selectionCap,
 	interactionCap,
 	setSelectionMenu,
-	openVisualDraftEditor,
-	closeVisualDraftEditor,
+	onVisualDraft,
 	screenPointForRegion,
 }: UsePdfRegionFramingOptions): PdfRegionFraming {
 	const { t } = useTranslation("viewer");
@@ -119,12 +120,11 @@ export function usePdfRegionFraming({
 	const toggleRegionSelect = useCallback(() => {
 		if (visualCropPendingRef.current) return;
 		setSelectionMenu(null);
-		closeVisualDraftEditor();
 		selectionCap?.clear(docId);
 		setRegionSelecting((active) => !active);
-	}, [closeVisualDraftEditor, selectionCap, docId, setSelectionMenu]);
+	}, [selectionCap, docId, setSelectionMenu]);
 
-	/** Crop a region and open the visual-annotation draft editor (does not send). */
+	/** Crop a region and hand it to the visual-mark cluster (#396). */
 	const beginVisualAnnotation = useCallback(
 		async (page: number, region: PdfAskNormalizedRect) => {
 			if (!engine || !docCap || visualCropPendingRef.current) return;
@@ -146,7 +146,7 @@ export function usePdfRegionFraming({
 				});
 				if (!docCap.isDocumentOpen(docId)) return;
 				const screen = screenPointForRegion(page - 1, region);
-				openVisualDraftEditor({
+				onVisualDraft({
 					screen,
 					page,
 					region,
@@ -167,7 +167,7 @@ export function usePdfRegionFraming({
 				setVisualCropRegion(null);
 			}
 		},
-		[engine, docCap, docId, t, openVisualDraftEditor, screenPointForRegion],
+		[engine, docCap, docId, t, onVisualDraft, screenPointForRegion],
 	);
 
 	const handleVisualRegionSelect = useCallback(
