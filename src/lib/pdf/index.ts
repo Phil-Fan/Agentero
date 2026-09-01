@@ -166,6 +166,7 @@ export {
 } from "@/lib/pdf/layout";
 export { initJobCenterExecutors } from "@/lib/pdf/layout/enqueue-paper-layout";
 export {
+	layoutBackendsAfterClearingProvider,
 	persistLayoutProviderConfig,
 	probeLayoutProvider,
 } from "@/lib/pdf/layout/provider-config";

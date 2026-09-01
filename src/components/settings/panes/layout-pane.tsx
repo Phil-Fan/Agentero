@@ -31,6 +31,7 @@ import {
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import {
+	layoutBackendsAfterClearingProvider,
 	persistLayoutProviderConfig,
 	probeLayoutProvider,
 } from "@/lib/pdf/layout/provider-config";
@@ -289,38 +290,71 @@ function ProviderConfigCard({
 		[provider.id],
 	);
 
-	/** Confirm: persist drafts (key kept secret by Host), mask UI, then probe. */
-	const confirmProvider = useCallback(async () => {
-		const apiKey = displayApiKey.trim();
-		if (!apiKey) {
-			setStatus("idle");
-			return;
-		}
-		const baseUrl = provider.supportsBaseUrl ? displayBaseUrl.trim() : "";
-		const model = provider.supportsModel ? displayModel.trim() : "";
-		const prompt = provider.supportsPrompt ? displayPrompt.trim() : "";
-		const language = provider.supportsLanguage ? displayLanguage : "";
-		const isOcr = provider.supportsOcr ? displayIsOcr : false;
-		const { displayLayout } = await persistLayoutProviderConfig({
+	/**
+	 * Persist the current card fields. Empty apiKey clears the stored secret,
+	 * falls backends back to local when needed, and drops the provider from the
+	 * selects — clearing the input triggers this immediately (no Confirm).
+	 */
+	const persistConfig = useCallback(
+		async (apiKey: string) => {
+			const baseUrl = provider.supportsBaseUrl ? displayBaseUrl.trim() : "";
+			const model = provider.supportsModel ? displayModel.trim() : "";
+			const prompt = provider.supportsPrompt ? displayPrompt.trim() : "";
+			const language = provider.supportsLanguage ? displayLanguage : "";
+			const isOcr = provider.supportsOcr ? displayIsOcr : false;
+			const config = { apiKey, baseUrl, model, prompt, language, isOcr };
+
+			if (!apiKey) {
+				// Optimistic UI: hide from backend selects before Host round-trip.
+				const cleared = layoutBackendsAfterClearingProvider(
+					layout,
+					provider.id,
+				);
+				patch({
+					layout: {
+						...layout,
+						...cleared,
+						providerConfigs: {
+							...layout.providerConfigs,
+							[provider.id]: { ...stored, ...config },
+						},
+					},
+				});
+				setDraft({});
+				setStatus("idle");
+			}
+
+			const { displayLayout } = await persistLayoutProviderConfig({
+				settings,
+				provider: provider.id,
+				config,
+			});
+			patch({ layout: displayLayout });
+			setDraft({});
+			if (!apiKey) {
+				setStatus("idle");
+				return;
+			}
+			runProbe(apiKey);
+		},
+		[
+			displayBaseUrl,
+			displayModel,
+			displayPrompt,
+			displayLanguage,
+			displayIsOcr,
+			layout,
+			patch,
+			provider,
+			runProbe,
 			settings,
-			provider: provider.id,
-			config: { apiKey, baseUrl, model, prompt, language, isOcr },
-		});
-		patch({ layout: displayLayout });
-		setDraft({});
-		runProbe(apiKey);
-	}, [
-		displayApiKey,
-		displayBaseUrl,
-		displayModel,
-		displayPrompt,
-		displayLanguage,
-		displayIsOcr,
-		patch,
-		provider,
-		runProbe,
-		settings,
-	]);
+			stored,
+		],
+	);
+
+	const confirmProvider = useCallback(() => {
+		void persistConfig(displayApiKey.trim());
+	}, [displayApiKey, persistConfig]);
 
 	useEffect(() => {
 		return () => {
@@ -403,9 +437,26 @@ function ProviderConfigCard({
 							className="h-8 min-w-0 flex-1 font-mono text-xs placeholder:text-muted-foreground/50"
 							spellCheck={false}
 							autoComplete="off"
-							onChange={(e) =>
-								setDraft((prev) => ({ ...prev, apiKey: e.target.value }))
-							}
+							onChange={(e) => {
+								const next = e.target.value;
+								if (!next.trim()) {
+									setDraft((prev) => ({ ...prev, apiKey: "" }));
+									// Clear immediately — do not wait for Confirm.
+									if (
+										stored.apiKey.trim() ||
+										(isLayoutBackend(provider.id) &&
+											layout.backend === provider.id) ||
+										(isParserBackend(provider.id) &&
+											layout.parserBackend === provider.id)
+									) {
+										void persistConfig("");
+									} else {
+										setStatus("idle");
+									}
+									return;
+								}
+								setDraft((prev) => ({ ...prev, apiKey: next }));
+							}}
 							onFocus={(e) => e.target.select()}
 						/>
 					</div>

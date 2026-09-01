@@ -2204,7 +2204,7 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 - `language` 仅 mineru 使用：OCR 语言包（API `language` 参数，顶层字段）。白名单校验（`ch` / `en` / `japan` / `korean` 等 16 个语言包，含仅 Host 侧保留的 `ch_server`），未知值回落 `ch`；UI 只提供「中英文」（`ch`，默认，涵盖简体/繁体/混排）与「纯英文」（`en`）。
 - `isOcr` 仅 mineru 使用：强制对所有页面执行 OCR（API `files[].is_ocr`）。默认 `false`，由 MinerU 按文本层自动判断；扫描件文本层缺失/乱码时开启。
 - `parserBackend` 与版面 `backend` 独立选择，但共用 `providerConfigs` 凭据池；正文引擎详见 [paper-import.md](paper-import.md) § 正文解析引擎。
-- 设置 UI：Settings →「版面解析 / Layout」（版面后端由前端 `LAYOUT_PROVIDERS`、正文引擎由 `PARSER_PROVIDERS` 注册表驱动；所有远程 provider 平铺为配置卡，`mergeProviderCards` 按 provider 合并、按 `requiresApiKey` / `supportsBaseUrl` / `supportsModel` / `supportsPrompt` / `supportsLanguage` / `supportsOcr` 显隐 API Key / Base URL / Model / Prompt / 语言 / 强制 OCR 输入 + 连通性测试；Model / Base URL 空值时预填引擎默认值，语言预填 `ch`（中英文）。两个 backend 选择只提供本地 + 已配置（apiKey 非空）的 provider；可选项 ≤1 时渲染为只读文本，不显示下拉）。
+- 设置 UI：Settings →「版面解析 / Layout」（版面后端由前端 `LAYOUT_PROVIDERS`、正文引擎由 `PARSER_PROVIDERS` 注册表驱动；所有远程 provider 平铺为配置卡，`mergeProviderCards` 按 provider 合并、按 `requiresApiKey` / `supportsBaseUrl` / `supportsModel` / `supportsPrompt` / `supportsLanguage` / `supportsOcr` 显隐 API Key / Base URL / Model / Prompt / 语言 / 强制 OCR 输入 + 连通性测试；Model / Base URL 空值时预填引擎默认值，语言预填 `ch`（中英文）。两个 backend 选择只提供本地 + 已配置（apiKey 非空）的 provider；可选项 ≤1 时渲染为只读文本，不显示下拉。清空 API Key 输入框会立即落盘清除密钥（无需点确认）；若当前 `backend` / `parserBackend` 指向该 provider 则回退 `local`，下拉随之移除该项）。
 
 #### `layout_remote_analyze_pdf`（已实现）
 
