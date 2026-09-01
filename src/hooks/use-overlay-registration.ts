@@ -11,16 +11,18 @@ import {
  * While `open` is true, register this overlay on the app stack so
  * Esc / ⌘W can dismiss it via {@link closeTopOverlay}.
  *
- * @param modal - When true (default), this overlay blocks global shortcuts
- *   that declare `whenSettingsClosed: true`. Set to false for docked surfaces
- *   that should remain dismissable with Esc but not steal shortcut focus.
+ * @param options.modal - When true (default), this overlay blocks global
+ *   shortcuts that declare `whenSettingsClosed: true`. Set to false for
+ *   docked surfaces that should remain dismissable with Esc but not steal
+ *   shortcut focus.
  */
 export function useOverlayRegistration(
 	id: string,
 	open: boolean,
 	close: () => void,
-	modal = true,
+	options?: { modal?: boolean },
 ): void {
+	const modal = options?.modal ?? true;
 	const closeRef = useRef(close);
 	closeRef.current = close;
 

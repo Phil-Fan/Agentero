@@ -78,7 +78,7 @@ export function useAgentPermissionSurfaces({
 			});
 			setElicitationRequest(null);
 		},
-		false,
+		{ modal: false },
 	);
 
 	const askUserRequestRef = useRef(askUserRequest);
@@ -95,7 +95,7 @@ export function useAgentPermissionSurfaces({
 			});
 			setAskUserRequest(null);
 		},
-		false,
+		{ modal: false },
 	);
 
 	const toolAskUserRequestRef = useRef(toolAskUserRequest);
@@ -106,7 +106,7 @@ export function useAgentPermissionSurfaces({
 		() => {
 			setToolAskUserRequest(null);
 		},
-		false,
+		{ modal: false },
 	);
 
 	useTauriEvent<PermissionRequest>("agent:permission-request", (payload) =>
