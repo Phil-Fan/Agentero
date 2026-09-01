@@ -29,6 +29,10 @@ import {
 	useState,
 } from "react";
 import { pageElByIndex, rectRightScreen } from "@/components/viewer/pdf/coords";
+import {
+	EPHEMERAL_PREVIEW_HIDE_MS,
+	isFloatingDialogActive,
+} from "@/components/viewer/pdf/floating-hover";
 import { getLinkDestination } from "@/components/viewer/pdf/layers/citation-links";
 import type { CitationPreviewState } from "@/components/viewer/pdf/types";
 import { useCitationImport } from "@/hooks/use-citation-import";
@@ -46,9 +50,6 @@ import {
 	matchCitationLinkKey,
 } from "@/lib/pdf/citation-dest-keys";
 import { loadPdfDestMaps } from "@/lib/pdf/citation-dest-map";
-
-/** Grace period so the pointer can travel from the link into the card. */
-const CITATION_HIDE_MS = 250;
 
 /** Upper bound before the deferred dest-key map build runs anyway. */
 const DEST_MAP_IDLE_TIMEOUT_MS = 2000;
@@ -91,12 +92,21 @@ export type UsePdfCitationsOptions = {
 	 * the cite-key map build so opening a paper never reads the PDF twice.
 	 */
 	sourceBytes?: ArrayBuffer | null;
+	/**
+	 * Fired when a citation card is about to show. Used by the viewer to clear
+	 * sibling ephemeral overlays (crossref preview).
+	 */
+	onPreviewShow?: () => void;
 };
 
 export type PdfCitations = {
 	citationPreview: CitationPreviewState | null;
 	cancelCitationHide: () => void;
 	scheduleCitationHide: () => void;
+	/** Keep the card open while the pointer is over it (or the import menu). */
+	markCitationHoverEnter: () => void;
+	/** Drop the preview immediately (overlay exclusivity / suppress). */
+	clearCitationPreview: () => void;
 	handleCitationLinkActivate: (link: PdfLinkAnnoObject) => void;
 	handleCitationLinkHover: (link: PdfLinkAnnoObject | null) => void;
 	/** Library-import surface for the hover card; null when not a vault paper. */
@@ -184,12 +194,17 @@ export function usePdfCitations({
 	paperPath,
 	paperAbsPath,
 	sourceBytes = null,
+	onPreviewShow,
 }: UsePdfCitationsOptions): PdfCitations {
+	const onPreviewShowRef = useRef(onPreviewShow);
+	onPreviewShowRef.current = onPreviewShow;
 	const [citationPreview, setCitationPreview] =
 		useState<CitationPreviewState | null>(null);
 	const citationHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
+	/** True while pointer is over the preview card or the import folder menu. */
+	const citationHoverSurfaceRef = useRef(false);
 	const { sidecar, setSidecar } = usePaperRefsSidecar(vaultPath, paperPath);
 	/** Mirrored so the hover callback identity does not change per sidecar load. */
 	const citationsRef = useRef(sidecar?.citations ?? []);
@@ -249,6 +264,7 @@ export function usePdfCitations({
 	// Reset the hover preview when the active PDF document changes.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: docId is the effect trigger, not a value read inside the effect.
 	useEffect(() => {
+		citationHoverSurfaceRef.current = false;
 		setCitationPreview(null);
 	}, [docId]);
 
@@ -258,12 +274,33 @@ export function usePdfCitations({
 		citationHideTimerRef.current = null;
 	}, []);
 
+	const clearCitationPreview = useCallback(() => {
+		cancelCitationHide();
+		citationHoverSurfaceRef.current = false;
+		setCitationPreview(null);
+	}, [cancelCitationHide]);
+
+	const markCitationHoverEnter = useCallback(() => {
+		citationHoverSurfaceRef.current = true;
+		cancelCitationHide();
+	}, [cancelCitationHide]);
+
+	/**
+	 * Leave link / card. Delay so the pointer can bridge into the card; never
+	 * dismiss while the card (or its import menu) is still hovered / focused.
+	 */
 	const scheduleCitationHide = useCallback(() => {
+		citationHoverSurfaceRef.current = false;
 		cancelCitationHide();
 		citationHideTimerRef.current = setTimeout(() => {
 			citationHideTimerRef.current = null;
+			if (citationHoverSurfaceRef.current) return;
+			if (isFloatingDialogActive()) {
+				citationHoverSurfaceRef.current = true;
+				return;
+			}
 			setCitationPreview(null);
-		}, CITATION_HIDE_MS);
+		}, EPHEMERAL_PREVIEW_HIDE_MS);
 	}, [cancelCitationHide]);
 
 	/** GoTo/destination → smooth scroll (annotation plugin); URI → browser. */
@@ -299,8 +336,12 @@ export function usePdfCitations({
 				return;
 			}
 			cancelCitationHide();
+			// Treat show as an active hover surface so a mount-under-cursor
+			// (which skips pointerenter) does not auto-close.
+			citationHoverSurfaceRef.current = true;
 			const pageEl = pageElByIndex(hostRef.current, link.pageIndex);
 			if (!pageEl) return;
+			onPreviewShowRef.current?.();
 			setCitationPreview({
 				screen: rectRightScreen(pageEl, link.rect, zoomRef.current),
 				matched,
@@ -324,6 +365,8 @@ export function usePdfCitations({
 		citationPreview,
 		cancelCitationHide,
 		scheduleCitationHide,
+		markCitationHoverEnter,
+		clearCitationPreview,
 		handleCitationLinkActivate,
 		handleCitationLinkHover,
 		citationImport,

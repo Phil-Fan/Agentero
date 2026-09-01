@@ -1,4 +1,9 @@
 import { ArrowUpRight, BookCheck, Import, Loader2 } from "lucide-react";
+import {
+	type PointerEvent as ReactPointerEvent,
+	useEffect,
+	useRef,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { CitationImportPopover } from "@/components/viewer/citation-import-menu";
 import type { ScreenPoint } from "@/components/viewer/pdf/types";
@@ -149,6 +154,7 @@ export function PdfCitationPreview({
 	onPointerLeave: () => void;
 }) {
 	const { t } = useTranslation("viewer");
+	const rootRef = useRef<HTMLDivElement>(null);
 	const viewportWidth =
 		typeof window === "undefined" ? 1200 : window.innerWidth;
 	const viewportHeight =
@@ -166,14 +172,28 @@ export function PdfCitationPreview({
 		viewportHeight - estimatedHeight - 12,
 	);
 
+	// Mount under an existing pointer skips pointerenter — re-arm sticky hover.
+	useEffect(() => {
+		const el = rootRef.current;
+		if (!el) return;
+		if (el.matches(":hover")) onPointerEnter();
+	}, [onPointerEnter]);
+
+	const handlePointerLeave = (e: ReactPointerEvent<HTMLDivElement>) => {
+		const next = e.relatedTarget;
+		if (next instanceof Node && e.currentTarget.contains(next)) return;
+		onPointerLeave();
+	};
+
 	return (
 		<div
+			ref={rootRef}
 			role="dialog"
 			aria-label={t("references.previewLabel")}
 			className="fixed z-50 w-[300px] rounded-xl border border-border/80 bg-background/98 p-3 shadow-xl ring-1 ring-black/5 backdrop-blur-sm dark:ring-white/10"
 			style={{ left, top }}
 			onPointerEnter={onPointerEnter}
-			onPointerLeave={onPointerLeave}
+			onPointerLeave={handlePointerLeave}
 		>
 			<div
 				className={

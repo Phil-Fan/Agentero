@@ -1,4 +1,9 @@
 import { Loader2 } from "lucide-react";
+import {
+	type PointerEvent as ReactPointerEvent,
+	useEffect,
+	useRef,
+} from "react";
 import { useTranslation } from "react-i18next";
 import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import type { PromptImage } from "@/lib/agent/api";
@@ -28,6 +33,7 @@ export function PdfCrossrefPreview({
 	onPointerLeave: () => void;
 }) {
 	const { t } = useTranslation("viewer");
+	const rootRef = useRef<HTMLDivElement>(null);
 	const viewportWidth =
 		typeof window === "undefined" ? 1200 : window.innerWidth;
 	const viewportHeight =
@@ -49,14 +55,28 @@ export function PdfCrossrefPreview({
 					? t("crossref.kindEquation")
 					: t("crossref.kindAlgorithm");
 
+	// Mount under an existing pointer skips pointerenter — re-arm sticky hover.
+	useEffect(() => {
+		const el = rootRef.current;
+		if (!el) return;
+		if (el.matches(":hover")) onPointerEnter();
+	}, [onPointerEnter]);
+
+	const handlePointerLeave = (e: ReactPointerEvent<HTMLDivElement>) => {
+		const next = e.relatedTarget;
+		if (next instanceof Node && e.currentTarget.contains(next)) return;
+		onPointerLeave();
+	};
+
 	return (
 		<div
+			ref={rootRef}
 			role="dialog"
 			aria-label={t("crossref.previewLabel")}
 			className="fixed z-50 w-[320px] rounded-xl border border-border/80 bg-background/98 p-2 shadow-xl ring-1 ring-black/5 backdrop-blur-sm dark:ring-white/10"
 			style={{ left, top }}
 			onPointerEnter={onPointerEnter}
-			onPointerLeave={onPointerLeave}
+			onPointerLeave={handlePointerLeave}
 		>
 			<div className="mb-1.5 flex items-center justify-between gap-2 px-1">
 				<span className="font-medium text-[11px] text-foreground">

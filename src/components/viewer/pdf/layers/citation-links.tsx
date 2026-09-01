@@ -163,8 +163,10 @@ export const CitationLinkLayer = memo(function CitationLinkLayer({
 						e.stopPropagation();
 						onActivate(link);
 					}}
-					onMouseEnter={() => onHover(link)}
-					onMouseLeave={() => onHover(null)}
+					// Match floating preview cards (pointerenter/leave) so hide
+					// timers do not race mouse-only leave on trackpads.
+					onPointerEnter={() => onHover(link)}
+					onPointerLeave={() => onHover(null)}
 				/>
 			))}
 			{textLinks.map((link) => (

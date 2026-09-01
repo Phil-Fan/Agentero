@@ -35,6 +35,10 @@ import {
 	useState,
 } from "react";
 import { pageElByIndex, rectRightScreen } from "@/components/viewer/pdf/coords";
+import {
+	EPHEMERAL_PREVIEW_HIDE_MS,
+	isFloatingDialogActive,
+} from "@/components/viewer/pdf/floating-hover";
 import { getLinkDestination } from "@/components/viewer/pdf/layers/citation-links";
 import { renderPdfRegionPromptImage } from "@/components/viewer/pdf/region-crop";
 import type { CrossrefPreviewState } from "@/components/viewer/pdf/types";
@@ -56,8 +60,6 @@ import {
 } from "@/lib/pdf/crossref-resolve";
 import { getLayoutDocumentResult } from "@/lib/pdf/layout";
 
-/** Grace period so the pointer can travel from the link into the card. */
-const CROSSREF_HIDE_MS = 250;
 /** Upper bound before the deferred dest-map build runs anyway. */
 const DEST_MAP_IDLE_TIMEOUT_MS = 2000;
 /** Fallback delay when `requestIdleCallback` is unavailable (WebKit). */
@@ -139,12 +141,21 @@ export type UsePdfCrossrefPreviewOptions = {
 	/** Engine + document manager, for cropping the resolved region. */
 	engineRef: RefObject<PdfEngine | null>;
 	docCapRef: RefObject<DocumentManagerCapability>;
+	/**
+	 * Fired when a crossref card is about to show. Used by the viewer to clear
+	 * sibling ephemeral overlays (citation preview).
+	 */
+	onPreviewShow?: () => void;
 };
 
 export type PdfCrossrefPreview = {
 	crossrefPreview: CrossrefPreviewState | null;
 	cancelCrossrefHide: () => void;
 	scheduleCrossrefHide: () => void;
+	/** Keep the card open while the pointer is over it. */
+	markCrossrefHoverEnter: () => void;
+	/** Drop the preview immediately (overlay exclusivity / suppress). */
+	clearCrossrefPreview: () => void;
 	handleCrossrefLinkHover: (link: PdfLinkAnnoObject | null) => void;
 };
 
@@ -156,10 +167,15 @@ export function usePdfCrossrefPreview({
 	sourceBytes = null,
 	engineRef,
 	docCapRef,
+	onPreviewShow,
 }: UsePdfCrossrefPreviewOptions): PdfCrossrefPreview {
+	const onPreviewShowRef = useRef(onPreviewShow);
+	onPreviewShowRef.current = onPreviewShow;
 	const [crossrefPreview, setCrossrefPreview] =
 		useState<CrossrefPreviewState | null>(null);
 	const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	/** True while pointer is over the preview card. */
+	const crossrefHoverSurfaceRef = useRef(false);
 	/** hyperref cross-reference destinations of the open PDF, by coords. */
 	const crossrefMapRef = useRef<CrossrefDestMap | null>(null);
 	/**
@@ -221,6 +237,7 @@ export function usePdfCrossrefPreview({
 	// Reset the preview when the active PDF document changes.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: docId is the effect trigger, not a value read inside the effect.
 	useEffect(() => {
+		crossrefHoverSurfaceRef.current = false;
 		setCrossrefPreview(null);
 	}, [docId]);
 
@@ -230,12 +247,35 @@ export function usePdfCrossrefPreview({
 		hideTimerRef.current = null;
 	}, []);
 
+	const clearCrossrefPreview = useCallback(() => {
+		cancelCrossrefHide();
+		crossrefHoverSurfaceRef.current = false;
+		// Invalidate in-flight crops so a stale resolve cannot remount the card.
+		renderTokenRef.current += 1;
+		setCrossrefPreview(null);
+	}, [cancelCrossrefHide]);
+
+	const markCrossrefHoverEnter = useCallback(() => {
+		crossrefHoverSurfaceRef.current = true;
+		cancelCrossrefHide();
+	}, [cancelCrossrefHide]);
+
+	/**
+	 * Leave link / card. Delay so the pointer can bridge into the card; never
+	 * dismiss while the card is still hovered / focused.
+	 */
 	const scheduleCrossrefHide = useCallback(() => {
+		crossrefHoverSurfaceRef.current = false;
 		cancelCrossrefHide();
 		hideTimerRef.current = setTimeout(() => {
 			hideTimerRef.current = null;
+			if (crossrefHoverSurfaceRef.current) return;
+			if (isFloatingDialogActive()) {
+				crossrefHoverSurfaceRef.current = true;
+				return;
+			}
 			setCrossrefPreview(null);
-		}, CROSSREF_HIDE_MS);
+		}, EPHEMERAL_PREVIEW_HIDE_MS);
 	}, [cancelCrossrefHide]);
 
 	const showPreview = useCallback(
@@ -248,8 +288,12 @@ export function usePdfCrossrefPreview({
 			kind: import("@/lib/pdf/citation-dest-keys").CrossrefKind,
 		) => {
 			cancelCrossrefHide();
+			// Treat show as an active hover surface so mount-under-cursor skips
+			// pointerenter do not auto-close.
+			crossrefHoverSurfaceRef.current = true;
 			const pageEl = pageElByIndex(hostRef.current, link.pageIndex);
 			if (!pageEl) return;
+			onPreviewShowRef.current?.();
 			setCrossrefPreview({
 				screen: rectRightScreen(pageEl, link.rect, zoomRef.current),
 				kind,
@@ -439,6 +483,8 @@ export function usePdfCrossrefPreview({
 		crossrefPreview,
 		cancelCrossrefHide,
 		scheduleCrossrefHide,
+		markCrossrefHoverEnter,
+		clearCrossrefPreview,
 		handleCrossrefLinkHover,
 	};
 }
