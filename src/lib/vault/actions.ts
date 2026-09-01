@@ -267,8 +267,15 @@ export function refreshAll(): void {
  */
 export function seedVaultSkills(path: string): void {
 	if (!isTauri() || !path) return;
-	void ensureVault(path, i18n.language)
-		.then((result) => {
+	void (async () => {
+		try {
+			// A restored vault may have been moved/deleted since the path was
+			// persisted; never seed (and thus scaffold) a missing local path.
+			if (!isRemoteVaultHandle(path)) {
+				const { exists } = await import("@tauri-apps/plugin-fs");
+				if (!(await exists(path))) return;
+			}
+			const result = await ensureVault(path, i18n.language);
 			const installed = seededSkillIdsFromCreated(result.created);
 			const updated = seededSkillIdsFromCreated(result.updated);
 			if (installed.length === 0 && updated.length === 0) return;
@@ -292,10 +299,10 @@ export function seedVaultSkills(path: string): void {
 					{ id: "vault-skills-updated" },
 				);
 			}
-		})
-		.catch(() => {
+		} catch {
 			// Best-effort: opening the vault must not fail if seed is blocked.
-		});
+		}
+	})();
 }
 
 /** ⌥⌘R — reveal selected vault path in Finder / Explorer. */

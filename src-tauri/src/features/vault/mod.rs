@@ -381,8 +381,13 @@ fn seed_or_upgrade_bundled_file(
 /// Safe to call on every vault open after an app update so newly shipped skills
 /// and onboarding notes appear while customized files stay intact.
 pub fn ensure_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppError> {
+    // A moved or deleted vault must surface an error, never be re-scaffolded
+    // from scratch at the old path.
     if !path.exists() {
-        fs::create_dir_all(path)?;
+        return Err(AppError::message(format!(
+            "vault path not found: {}",
+            path.display()
+        )));
     }
     if !path.is_dir() {
         return Err(AppError::message(format!(
@@ -455,8 +460,12 @@ pub fn ensure_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppE
     })
 }
 
-/// Create Agentero vault skeleton (alias of [`ensure_vault`]).
+/// Create Agentero vault skeleton. Creates the root directory when missing;
+/// explicit creation is the only path allowed to scaffold a fresh location.
 pub fn create_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppError> {
+    if !path.exists() {
+        fs::create_dir_all(path)?;
+    }
     ensure_vault(path, locale)
 }
 
@@ -641,6 +650,27 @@ mod tests {
             .iter()
             .any(|c| c.starts_with(".agents/skills/deep-research/")));
         assert!(r2.updated.is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ensure_vault_refuses_missing_path_while_create_vault_scaffolds_it() {
+        let dir = env::temp_dir().join(format!(
+            "agentero-vault-ensure-missing-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+
+        // A moved/deleted vault must not be silently re-created on open.
+        let err = ensure_vault(&dir, "en").expect_err("missing path must fail");
+        assert!(err.to_string().contains("vault path not found"));
+        assert!(!dir.exists());
+
+        // Explicit creation still scaffolds a missing directory.
+        create_vault(&dir, "en").expect("create");
+        assert!(dir.join("papers").is_dir());
+        assert!(dir.join(".agentero/catalog.sqlite").is_file());
 
         let _ = fs::remove_dir_all(&dir);
     }

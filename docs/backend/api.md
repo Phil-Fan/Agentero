@@ -139,7 +139,9 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 #### `vault_ensure`（已实现）
 
-幂等脚手架 / 同步 bundled skills（Host `ensure_vault`，与 `vault_create` 同一实现）。**打开或恢复 Vault 时**前端调用，以便应用更新后补充新 Skill，并安全升级未定制的第一方 Skill。
+幂等脚手架 / 同步 bundled skills（Host `ensure_vault`）。**打开或恢复 Vault 时**前端调用，以便应用更新后补充新 Skill，并安全升级未定制的第一方 Skill。
+
+- **路径必须已存在**：目录不存在（被移动/删除）时直接报错 `vault path not found: …`，**不会**在旧路径静默重建空 Vault；新建目录只允许走 `vault_create`。前端 `seedVaultSkills` 在调用前会先检查路径存在性。
 
 - **参数**
 
@@ -2354,7 +2356,7 @@ CLI 对照：`agentero usage which|timeline|summary|clear`（见 [cli.md](cli.md
 | CLI | Host service / command 锚点 |
 |---|---|
 | `open` / `<PATH>` | 深链唤起桌面 App（`agentero://open?path=…`） |
-| `vault create` | `services::vault::create_vault` / `vault_create`（与 GUI `vault_ensure` 同幂等实现） |
+| `vault create` | `services::vault::create_vault` / `vault_create`（幂等脚手架；缺失根目录仅 `create` 会新建，`vault_ensure` 对缺失路径报错） |
 | `vault which\|info\|check\|use` | CLI 自管解析 + catalog `ensure_catalog` / `schema_version` |
 | `tree` | 磁盘扫描（非 Library 虚拟节点） |
 | `paper list\|get\|paths\|delete\|set-read\|tag list\|set\|add\|rm` | `catalog::papers::*`（含 `set_tags` / `list_all_tags`）/ `paper_*` |
