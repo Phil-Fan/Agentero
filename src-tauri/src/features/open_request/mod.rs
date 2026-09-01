@@ -5,6 +5,8 @@
 //! 2. **CLI request file** (`…/agentero/cli-open-request.json`) — reliable when
 //!    deep-link is unregistered (dev) or a second GUI process would miss the
 //!    window the user is looking at
+//! 3. **Bare directory argv** — OS shell integrations (Finder Quick Action,
+//!    Explorer context menu) pass the folder path directly
 //!
 //! Host validates the directory, extends fs scope, caches a pending path for
 //! startup races, and emits `vault:open-request` for the renderer.
@@ -188,16 +190,52 @@ pub fn handle_deep_link_urls<R: Runtime>(app: &AppHandle<R>, urls: &[String]) {
     }
 }
 
-/// Scan CLI argv for `agentero://` URLs (second instance / Windows / Linux).
+/// Collect open requests from argv: `agentero://` URLs plus at most one bare
+/// directory path. Skips argv[0] and flag-like args (`-` prefix, e.g. WebView2
+/// switches); a directory candidate must be an absolute existing directory, so
+/// stray args (e.g. the forwarded exe path on Windows) are ignored.
+pub fn collect_open_args(argv: &[String]) -> (Vec<String>, Option<PathBuf>) {
+    let mut urls = Vec::new();
+    let mut dir = None;
+    for (idx, arg) in argv.iter().enumerate() {
+        if idx == 0 {
+            continue;
+        }
+        if arg.starts_with("agentero://") || arg.starts_with("agentero:") {
+            urls.push(arg.clone());
+            continue;
+        }
+        if dir.is_none() && !arg.starts_with('-') {
+            let candidate = PathBuf::from(arg);
+            if candidate.is_absolute() && candidate.is_dir() {
+                dir = Some(candidate);
+            }
+        }
+    }
+    (urls, dir)
+}
+
+/// Handle CLI argv: `agentero://` URLs (second instance / Windows / Linux) and
+/// bare directory paths (shell integrations such as the Finder Quick Action or
+/// Explorer context menu pass the folder directly).
 #[cfg(feature = "desktop")]
 pub fn handle_argv_urls<R: Runtime>(app: &AppHandle<R>, argv: &[String]) {
-    let urls: Vec<String> = argv
-        .iter()
-        .filter(|a| a.starts_with("agentero://") || a.starts_with("agentero:"))
-        .cloned()
-        .collect();
+    let (urls, dir) = collect_open_args(argv);
     if !urls.is_empty() {
         handle_deep_link_urls(app, &urls);
+    }
+    if let Some(path) = dir {
+        if let Err(e) = handle_open_path(app, &path) {
+            log::warn!(
+                target: "agentero::op",
+                "op end vault_open_request ok=false argv_dir={} error={e}",
+                trunc(&path.to_string_lossy())
+            );
+            let _ = app.emit(
+                "vault:open-error",
+                serde_json::json!({ "message": e.to_string() }),
+            );
+        }
     }
 }
 
@@ -389,5 +427,68 @@ mod tests {
         let err = validate_open_dir(&file).unwrap_err();
         assert!(err.to_string().contains("not a directory"));
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn argv(args: &[&str]) -> Vec<String> {
+        args.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn collect_args_skips_argv0_even_if_dir() {
+        let dir = test_dir("argv0");
+        let (urls, picked) = collect_open_args(&argv(&[dir.to_str().unwrap()]));
+        assert!(urls.is_empty());
+        assert_eq!(picked, None);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn collect_args_skips_flags_and_missing_paths() {
+        let (urls, picked) = collect_open_args(&argv(&[
+            "/path/to/agentero",
+            "--some-flag",
+            "/nonexistent/vault/dir",
+        ]));
+        assert!(urls.is_empty());
+        assert_eq!(picked, None);
+    }
+
+    #[test]
+    fn collect_args_skips_file_path() {
+        let dir = test_dir("argfile");
+        let file = dir.join("paper.pdf");
+        fs::write(&file, "x").unwrap();
+        let (urls, picked) = collect_open_args(&argv(&["/bin/agentero", file.to_str().unwrap()]));
+        assert!(urls.is_empty());
+        assert_eq!(picked, None);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn collect_args_accepts_absolute_dir() {
+        let dir = test_dir("argdir");
+        let (urls, picked) = collect_open_args(&argv(&["/bin/agentero", dir.to_str().unwrap()]));
+        assert!(urls.is_empty());
+        assert_eq!(picked, Some(dir.clone()));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn collect_args_mixes_urls_and_dir_and_takes_first_dir() {
+        let dir_a = test_dir("mixa");
+        let dir_b = test_dir("mixb");
+        let (urls, picked) = collect_open_args(&argv(&[
+            "/bin/agentero",
+            "agentero://open?path=%2Ftmp%2Fresearch",
+            dir_a.to_str().unwrap(),
+            dir_b.to_str().unwrap(),
+        ]));
+        assert_eq!(
+            urls,
+            vec!["agentero://open?path=%2Ftmp%2Fresearch".to_string()]
+        );
+        assert_eq!(picked, Some(dir_a.clone()));
+        let _ = fs::remove_dir_all(&dir_a);
+        let _ = fs::remove_dir_all(&dir_b);
     }
 }
