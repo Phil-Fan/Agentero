@@ -639,10 +639,16 @@ function PdfViewerInner({
 
 	// ---- In-text citation / internal PDF links ----
 
+	// Sibling clear refs so citation ↔ crossref can dismiss each other without
+	// a circular hook dependency (Fix #430 overlay exclusivity).
+	const clearCrossrefPreviewRef = useRef<() => void>(() => {});
+	const clearCitationPreviewRef = useRef<() => void>(() => {});
+
 	const {
 		citationPreview,
-		cancelCitationHide,
 		scheduleCitationHide,
+		markCitationHoverEnter,
+		clearCitationPreview,
 		handleCitationLinkActivate,
 		handleCitationLinkHover,
 		citationImport,
@@ -655,6 +661,7 @@ function PdfViewerInner({
 		paperPath: paperRelPath,
 		paperAbsPath,
 		sourceBytes,
+		onPreviewShow: () => clearCrossrefPreviewRef.current(),
 	});
 
 	// Cross-reference (\ref) hover: preview the figure/table/equation crop.
@@ -663,8 +670,9 @@ function PdfViewerInner({
 	// on every link and at most one card shows.
 	const {
 		crossrefPreview,
-		cancelCrossrefHide,
 		scheduleCrossrefHide,
+		markCrossrefHoverEnter,
+		clearCrossrefPreview,
 		handleCrossrefLinkHover,
 	} = usePdfCrossrefPreview({
 		docId,
@@ -674,15 +682,11 @@ function PdfViewerInner({
 		sourceBytes,
 		engineRef,
 		docCapRef,
+		onPreviewShow: () => clearCitationPreviewRef.current(),
 	});
 
-	const handleLinkHover = useCallback(
-		(link: PdfLinkAnnoObject | null) => {
-			handleCitationLinkHover(link);
-			handleCrossrefLinkHover(link);
-		},
-		[handleCitationLinkHover, handleCrossrefLinkHover],
-	);
+	clearCitationPreviewRef.current = clearCitationPreview;
+	clearCrossrefPreviewRef.current = clearCrossrefPreview;
 
 	const { askPinAnchors, translatePinAnchors } = usePdfPinAnchors({
 		threads,
@@ -762,6 +766,37 @@ function PdfViewerInner({
 		scrollRef,
 		hostRef,
 	});
+
+	// Sticky overlays (selection menu / visual draft / pin card) suppress
+	// ephemeral link previews so the pointer cannot stack multiple cards (#430).
+	// Declared after visualDraftEditor is available from the layout cluster.
+	const suppressLinkPreviews =
+		Boolean(selectionMenu) || Boolean(visualDraftEditor) || Boolean(activeCard);
+
+	useEffect(() => {
+		if (!suppressLinkPreviews) return;
+		clearCitationPreview();
+		clearCrossrefPreview();
+	}, [suppressLinkPreviews, clearCitationPreview, clearCrossrefPreview]);
+
+	const handleLinkHover = useCallback(
+		(link: PdfLinkAnnoObject | null) => {
+			if (suppressLinkPreviews) {
+				clearCitationPreview();
+				clearCrossrefPreview();
+				return;
+			}
+			handleCitationLinkHover(link);
+			handleCrossrefLinkHover(link);
+		},
+		[
+			suppressLinkPreviews,
+			clearCitationPreview,
+			clearCrossrefPreview,
+			handleCitationLinkHover,
+			handleCrossrefLinkHover,
+		],
+	);
 
 	// ---- Region framing (⌘. marquee → crop) ----
 
@@ -1281,15 +1316,15 @@ function PdfViewerInner({
 								importingId: citationImport.importingId,
 								onImport: citationImport.importCitation,
 								onOpenChange: (open) =>
-									open ? cancelCitationHide() : scheduleCitationHide(),
+									open ? markCitationHoverEnter() : scheduleCitationHide(),
 							}
 						: undefined,
-					onHoverEnter: cancelCitationHide,
+					onHoverEnter: markCitationHoverEnter,
 					onHoverLeave: scheduleCitationHide,
 				}}
 				crossrefPreview={{
 					state: crossrefPreview,
-					onHoverEnter: cancelCrossrefHide,
+					onHoverEnter: markCrossrefHoverEnter,
 					onHoverLeave: scheduleCrossrefHide,
 				}}
 				cardScreen={cardScreen}
