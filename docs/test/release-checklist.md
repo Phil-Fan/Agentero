@@ -72,6 +72,8 @@ cargo test -p agentero-cli
 | 0.3.2 | 欢迎页 | 不打开 Vault，空看界面 | 同一行有 Create / Open / Open remote / Migrate from Zotero + Recent 列表；无大段说明文案 | ☐ |
 | 0.3.3 | 设置 → 关于 | 已安装旧版时检查已发布新版，点「安装并重启」 | 有新版提示、下载进度；重启后 About 显示新版本 | ☐ |
 | 0.3.4 | 主窗口 | 启动已安装旧版 | 首屏不阻塞；有新版时只出现一个「安装并重启」Toast；无更新或离线时不弹错误 | ☐ |
+| 0.3.5 | 访达（macOS） | 安装后启动一次，右键任意文件夹 → 快捷操作 | 出现 **Open with Agentero**；点击后打开为 Vault（运行中/未运行各测一次）；含空格/中文目录名正常；设置 → 关于 移除后菜单消失且重启不再自动恢复 | ☐ |
+| 0.3.6 | 资源管理器（Windows） | 安装后右键文件夹及文件夹空白处 | 均有 **Open with Agentero**（Win11 在「显示更多选项」）；含空格/`&`/中文的目录可打开；卸载后 `reg query` 无 `OpenWithAgentero` 残留 | ☐ |
 
 ---
 
@@ -453,6 +455,7 @@ agentero --vault /tmp/agentero-cli-vault paper list --json
 | Connector §6.4 | ☐ | ☐ | ☐ |
 | 远程 §12 | ☐ | ☐ | 12.9 拒绝 ☐ |
 | CLI §13 | ☐ | ☐ | ☐ |
+| 外壳右键集成 §0.3.5/0.3.6 | ☐ | N/A | ☐ |
 
 ---
 
