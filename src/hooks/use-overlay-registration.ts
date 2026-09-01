@@ -2,7 +2,7 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 
 import {
 	getOverlayStackSnapshot,
-	isAnyOverlayOpen,
+	isAnyModalOverlayOpen,
 	pushOverlay,
 	subscribeOverlayStack,
 } from "@/lib/core/overlay-stack";
@@ -10,11 +10,14 @@ import {
 /**
  * While `open` is true, register this overlay on the app stack so
  * Esc / ⌘W can dismiss it via {@link closeTopOverlay}.
+ * `modal` (default true) also gates workspace shortcuts while open;
+ * docked non-modal surfaces (agent ask/permission cards) pass false.
  */
 export function useOverlayRegistration(
 	id: string,
 	open: boolean,
 	close: () => void,
+	options?: { modal?: boolean },
 ): void {
 	const closeRef = useRef(close);
 	closeRef.current = close;
@@ -23,18 +26,23 @@ export function useOverlayRegistration(
 		if (!open) return;
 		return pushOverlay({
 			id,
+			modal: options?.modal ?? true,
 			close: () => {
 				closeRef.current();
 			},
 		});
-	}, [id, open]);
+	}, [id, open, options?.modal]);
 }
 
-/** True when any registered app overlay (settings, dialogs, palette…) is open. */
-export function useAnyOverlayOpen(): boolean {
+/**
+ * True when any *modal* registered overlay is open — used to gate
+ * workspace shortcuts. Non-modal surfaces (agent ask/permission cards)
+ * don't count, so the workspace stays operable while they are shown.
+ */
+export function useAnyModalOverlayOpen(): boolean {
 	return useSyncExternalStore(
 		subscribeOverlayStack,
-		isAnyOverlayOpen,
+		isAnyModalOverlayOpen,
 		() => false,
 	);
 }

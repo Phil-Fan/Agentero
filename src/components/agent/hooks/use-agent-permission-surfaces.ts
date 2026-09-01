@@ -48,12 +48,17 @@ export function useAgentPermissionSurfaces({
 
 	const permissionRequestRef = useRef(permissionRequest);
 	permissionRequestRef.current = permissionRequest;
-	useOverlayRegistration("agent-permission", permissionRequest !== null, () => {
-		const req = permissionRequestRef.current;
-		if (!req) return;
-		void respondPermission(req.requestId, null);
-		setPermissionRequest(null);
-	});
+	useOverlayRegistration(
+		"agent-permission",
+		permissionRequest !== null,
+		() => {
+			const req = permissionRequestRef.current;
+			if (!req) return;
+			void respondPermission(req.requestId, null);
+			setPermissionRequest(null);
+		},
+		{ modal: false },
+	);
 
 	const elicitationRequestRef = useRef(elicitationRequest);
 	elicitationRequestRef.current = elicitationRequest;
@@ -69,19 +74,25 @@ export function useAgentPermissionSurfaces({
 			});
 			setElicitationRequest(null);
 		},
+		{ modal: false },
 	);
 
 	const askUserRequestRef = useRef(askUserRequest);
 	askUserRequestRef.current = askUserRequest;
-	useOverlayRegistration("agent-ask-user", askUserRequest !== null, () => {
-		const req = askUserRequestRef.current;
-		if (!req) return;
-		void respondAskUser({
-			requestId: req.requestId,
-			action: "cancel",
-		});
-		setAskUserRequest(null);
-	});
+	useOverlayRegistration(
+		"agent-ask-user",
+		askUserRequest !== null,
+		() => {
+			const req = askUserRequestRef.current;
+			if (!req) return;
+			void respondAskUser({
+				requestId: req.requestId,
+				action: "cancel",
+			});
+			setAskUserRequest(null);
+		},
+		{ modal: false },
+	);
 
 	const toolAskUserRequestRef = useRef(toolAskUserRequest);
 	toolAskUserRequestRef.current = toolAskUserRequest;
@@ -91,6 +102,7 @@ export function useAgentPermissionSurfaces({
 		() => {
 			setToolAskUserRequest(null);
 		},
+		{ modal: false },
 	);
 
 	useTauriEvent<PermissionRequest>("agent:permission-request", (payload) =>

@@ -4,6 +4,7 @@ import {
 	closeOverlayById,
 	closeTopOverlay,
 	getOverlayStackSnapshot,
+	isAnyModalOverlayOpen,
 	isAnyOverlayOpen,
 	pushOverlay,
 } from "@/lib/core/overlay-stack";
@@ -53,5 +54,40 @@ describe("overlay-stack", () => {
 		expect(a).toHaveBeenCalledTimes(1);
 		expect(b).not.toHaveBeenCalled();
 		expect(getOverlayStackSnapshot().map((h) => h.id)).toEqual(["b"]);
+	});
+});
+
+describe("overlay-stack modal gating", () => {
+	it("non-modal surfaces do not count for modal gating", () => {
+		pushOverlay({ id: "agent-ask-user", close: () => {}, modal: false });
+
+		expect(isAnyOverlayOpen()).toBe(true);
+		expect(isAnyModalOverlayOpen()).toBe(false);
+	});
+
+	it("default (modal) overlays count for modal gating", () => {
+		pushOverlay({ id: "settings", close: () => {} });
+
+		expect(isAnyModalOverlayOpen()).toBe(true);
+	});
+
+	it("closeTopOverlay still dismisses non-modal surfaces (Esc / ⌘W)", () => {
+		const close = vi.fn();
+		pushOverlay({ id: "agent-ask-user", close, modal: false });
+
+		expect(closeTopOverlay()).toBe(true);
+		expect(close).toHaveBeenCalledTimes(1);
+		expect(isAnyOverlayOpen()).toBe(false);
+	});
+
+	it("modal gating reflects mixed stacks", () => {
+		pushOverlay({ id: "agent-ask-user", close: () => {}, modal: false });
+		pushOverlay({ id: "paper-search", close: () => {} });
+		expect(isAnyModalOverlayOpen()).toBe(true);
+
+		// Close the modal one; non-modal remains → gating clears.
+		closeOverlayById("paper-search");
+		expect(isAnyOverlayOpen()).toBe(true);
+		expect(isAnyModalOverlayOpen()).toBe(false);
 	});
 });

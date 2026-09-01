@@ -35,7 +35,7 @@ import { useFeatureTour } from "@/hooks/use-feature-tour";
 import { useLayoutModelPrefetch } from "@/hooks/use-layout-model-prefetch";
 import { useMcpSync } from "@/hooks/use-mcp-sync";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
-import { useAnyOverlayOpen } from "@/hooks/use-overlay-registration";
+import { useAnyModalOverlayOpen } from "@/hooks/use-overlay-registration";
 import { SIDEBAR_DEFAULT_PX, useShellLayout } from "@/hooks/use-shell-layout";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import {
@@ -298,7 +298,7 @@ export default function App() {
 		},
 	});
 
-	const anyOverlayOpen = useAnyOverlayOpen();
+	const anyOverlayOpen = useAnyModalOverlayOpen();
 	useAppShortcuts(anyOverlayOpen, {
 		settings: toggleSettingsWindow,
 		// Esc → dismiss top overlay (settings, palette, dialogs…)

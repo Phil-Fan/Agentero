@@ -10,6 +10,12 @@ export type OverlayHandle = {
 	id: string;
 	/** Dismiss this overlay (idempotent). */
 	close: () => void;
+	/**
+	 * Modal overlays (dialogs, sheets) gate workspace shortcuts while open.
+	 * Non-modal surfaces (e.g. docked agent ask/permission cards) only join
+	 * the Esc / ⌘W close path. Defaults to true.
+	 */
+	modal?: boolean;
 };
 
 type Listener = () => void;
@@ -35,6 +41,11 @@ export function getOverlayStackSnapshot(): readonly OverlayHandle[] {
 
 export function isAnyOverlayOpen(): boolean {
 	return stack.length > 0;
+}
+
+/** True when any *modal* overlay is open (non-modal surfaces don't count). */
+export function isAnyModalOverlayOpen(): boolean {
+	return stack.some((h) => h.modal !== false);
 }
 
 /**
