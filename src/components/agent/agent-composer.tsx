@@ -161,6 +161,8 @@ export function AgentComposer(props: AgentComposerProps) {
 						// Keep the same surface while any child is disabled or a run is
 						// in progress — never dim / recolor the composer for "processing".
 						"has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30",
+						// No focus ring / border flash while typing.
+						"has-[[data-slot=input-group-control]:focus-visible]:border-input has-[[data-slot=input-group-control]:focus-visible]:ring-0",
 						isFileDragOver && "bg-transparent dark:bg-transparent",
 					)}
 					accept={COMPOSER_IMAGE_ACCEPT}
