@@ -26,6 +26,12 @@ export type CitationPreviewImportMenu = {
 	onImport: (citation: Citation, folder: string) => void;
 	/** Lets the hover card stay open while the folder picker is up. */
 	onOpenChange: (open: boolean) => void;
+	/**
+	 * True for remote papers: every citation row shows an import button that
+	 * imports the current paper, because individual reference metadata is not
+	 * available until the paper is in the library.
+	 */
+	remotePaper?: boolean;
 };
 
 function citationMetaParts(citation: Citation): string[] {
@@ -54,7 +60,9 @@ function CitationPreviewRow({
 	const m = citation.metadata;
 	const metaParts = citationMetaParts(citation);
 	const inLibrary = Boolean(citation.localMatch);
-	const importable = !inLibrary && citationImportIdentifier(citation) != null;
+	const importable =
+		!inLibrary &&
+		(citationImportIdentifier(citation) != null || importMenu?.remotePaper);
 	const link = citationExternalUrl(citation);
 	const importing = importMenu?.importingId === citation.id;
 

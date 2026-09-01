@@ -305,6 +305,7 @@ export const DocView = memo(function DocView({
 							tab.paperMeta?.path ?? paperRelFromNotes(tab.notesPath, vaultPath)
 						}
 						vaultPath={vaultPath}
+						paperMeta={tab.paperMeta}
 						isActive={active}
 						isRemotePaper={isRemoteArxivPath(tab.path)}
 						importIdentifier={tab.paperMeta?.source_url ?? undefined}

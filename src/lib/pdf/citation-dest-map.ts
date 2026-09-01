@@ -158,8 +158,8 @@ export function clearCitationDestKeyMapCache(): void {
 }
 
 export type LoadPdfDestMapsOptions = {
-	/** Absolute paper folder of the open PDF. */
-	paperAbsPath: string;
+	/** Absolute paper folder of the open PDF. Null for remote papers. */
+	paperAbsPath?: string | null;
 	/**
 	 * PDF bytes the viewer already holds (`tab.pdfBytes`). When present (and
 	 * not detached) they are copied instead of re-reading the whole file from
@@ -167,38 +167,60 @@ export type LoadPdfDestMapsOptions = {
 	 * viewer's buffer is never detached.
 	 */
 	viewerBytes?: ArrayBuffer | null;
+	/**
+	 * Stable document id for remote-paper cache keys. Local papers fall back to
+	 * the resolved PDF path, so this is only required when `paperAbsPath` is null.
+	 */
+	documentId?: string | null;
 };
 
 /**
  * Resolve the paper's local PDF and build (or reuse) its destination maps
- * (citations + cross-references). Returns null when no local PDF exists.
- * Rejections propagate so the caller decides how loudly to fail.
+ * (citations + cross-references). Returns null when no local PDF exists and no
+ * viewer bytes were supplied. Rejections propagate so the caller decides how
+ * loudly to fail.
  */
 export async function loadPdfDestMaps({
 	paperAbsPath,
 	viewerBytes,
+	documentId,
 }: LoadPdfDestMapsOptions): Promise<PdfDestMaps | null> {
-	const pdfPath = await findLocalPdfPath(paperAbsPath);
-	if (!pdfPath) return null;
-
 	const reusable =
 		viewerBytes && viewerBytes.byteLength > 0 ? viewerBytes : null;
-	if (reusable) {
+
+	if (paperAbsPath) {
+		const pdfPath = await findLocalPdfPath(paperAbsPath);
+		if (!pdfPath && !reusable) return null;
+
+		if (reusable) {
+			return getPdfDestMapsCached(
+				`${pdfPath ?? paperAbsPath}:${reusable.byteLength}`,
+				"viewer-bytes",
+				// Copy before transferring so the worker cannot detach the viewer's
+				// buffer (a memcpy beats a second full disk read).
+				() => parsePdfDestMaps(reusable.slice(0)),
+			);
+		}
+
+		if (!pdfPath) return null;
+		const bytes = await localFileToArrayBuffer(pdfPath);
+		if (!bytes) return null;
 		return getPdfDestMapsCached(
-			`${pdfPath}:${reusable.byteLength}`,
-			"viewer-bytes",
-			// Copy before transferring so the worker cannot detach the viewer's
-			// buffer (a memcpy beats a second full disk read).
-			() => parsePdfDestMaps(reusable.slice(0)),
+			`${pdfPath}:${bytes.byteLength}`,
+			"disk",
+			// Freshly read, exclusively owned: transfer without copying.
+			() => parsePdfDestMaps(bytes),
 		);
 	}
 
-	const bytes = await localFileToArrayBuffer(pdfPath);
-	if (!bytes) return null;
+	if (!reusable) return null;
+	const key = documentId?.trim()
+		? `remote:${documentId}:${reusable.byteLength}`
+		: `remote:${reusable.byteLength}`;
 	return getPdfDestMapsCached(
-		`${pdfPath}:${bytes.byteLength}`,
-		"disk",
-		// Freshly read, exclusively owned: transfer without copying.
-		() => parsePdfDestMaps(bytes),
+		key,
+		"viewer-bytes",
+		// Copy before transferring so the worker cannot detach the viewer's buffer.
+		() => parsePdfDestMaps(reusable.slice(0)),
 	);
 }

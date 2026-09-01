@@ -5,6 +5,7 @@
 
 import type { FormattedSelection } from "@embedpdf/plugin-selection/react";
 import type { PromptImage } from "@/lib/agent/api";
+import type { PaperMetadata } from "@/lib/paper";
 import type { Citation } from "@/lib/paper/refs";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import type {
@@ -39,6 +40,8 @@ export type PdfViewerProps = {
 	paperRelPath?: string | null;
 	/** Current vault root for ACP cwd */
 	vaultPath?: string | null;
+	/** Paper metadata when already resolved by the workspace tab (remote papers). */
+	paperMeta?: PaperMetadata | null;
 	/** Open Translate settings from a translation error card. */
 	onOpenSettings?: () => void;
 	className?: string;

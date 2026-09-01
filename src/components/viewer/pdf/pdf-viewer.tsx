@@ -287,6 +287,7 @@ function PdfViewerInner({
 	paperAbsPath = null,
 	paperRelPath = null,
 	vaultPath = null,
+	paperMeta: paperMetaProp = null,
 	isActive = true,
 	isRemotePaper = false,
 	importIdentifier,
@@ -366,10 +367,11 @@ function PdfViewerInner({
 	// Catalog title + link for the ask card's external "open in chat" query.
 	const paperMetaByRelPath = useLibraryStore((s) => s.paperMetaByRelPath);
 	const paperMeta = useMemo(() => {
+		if (paperMetaProp) return paperMetaProp;
 		if (!paperRelPath) return undefined;
 		const key = paperRelPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
 		return paperMetaByRelPath.get(key);
-	}, [paperRelPath, paperMetaByRelPath]);
+	}, [paperMetaProp, paperRelPath, paperMetaByRelPath]);
 	const paperTitle = paperMeta?.title;
 	/** Resolvable wiki target for comment-rail copy-link/copy-embed. */
 	const commentWikiTarget = useMemo(() => {
@@ -676,6 +678,8 @@ function PdfViewerInner({
 		paperPath: paperRelPath,
 		paperAbsPath,
 		sourceBytes,
+		isRemotePaper,
+		importIdentifier,
 		onPreviewShow: () => clearCrossrefPreviewRef.current(),
 	});
 
@@ -1320,6 +1324,7 @@ function PdfViewerInner({
 								onImport: citationImport.importCitation,
 								onOpenChange: (open) =>
 									open ? markCitationHoverEnter() : scheduleCitationHide(),
+								remotePaper: isRemotePaper,
 							}
 						: undefined,
 					onHoverEnter: markCitationHoverEnter,
@@ -1365,6 +1370,7 @@ function PdfViewerInner({
 				onTogglePdfColorScheme={togglePdfColorScheme}
 				onFitWidth={() => zoom?.requestZoom(ZoomMode.FitWidth)}
 				onFitPage={() => zoom?.requestZoom(ZoomMode.FitPage)}
+				isRemotePaper={isRemotePaper}
 			/>
 		</div>
 	);
