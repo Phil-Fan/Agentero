@@ -6,6 +6,7 @@ import { HtmlViewer, ImageViewer } from "@/components/viewer";
 import { RecycleBinView } from "@/components/workspace/recycle-bin-view";
 import { useSettings } from "@/hooks/use-app-stores";
 import type { PaperMetadata } from "@/lib/paper";
+import { isRemoteArxivPath } from "@/lib/paper";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace/types";
 import type { PdfAskThread } from "@/lib/pdf/ask/types";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
@@ -305,6 +306,8 @@ export const DocView = memo(function DocView({
 						}
 						vaultPath={vaultPath}
 						isActive={active}
+						isRemotePaper={isRemoteArxivPath(tab.path)}
+						importIdentifier={tab.paperMeta?.source_url ?? undefined}
 						onOpenSettings={pdf.onOpenSettings}
 						className="h-full w-full"
 						onHandle={handlePdfHandle}

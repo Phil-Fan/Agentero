@@ -2,7 +2,8 @@
 	"labels": {
 		"agent": "Agent",
 		"notes": "笔记",
-		"untitled": "未命名"
+		"untitled": "未命名",
+		"remoteArxiv": "远程 arXiv"
 	},
 	"commandPalette": {
 		"title": "快速打开",
@@ -126,7 +127,8 @@
 		"openVaultForCreate": "请先打开知识库，再创建双链目标。",
 		"wikiLinkAmbiguous": "双链目标不明确：{{target}}。请选择更具体的路径。",
 		"wikiLinkInvalidFragment": "目标文件存在，但标题或块引用不可用：{{target}}。",
-		"dropPdfNeedsVault": "请先打开知识库，再拖入 PDF 导入。"
+		"dropPdfNeedsVault": "请先打开知识库，再拖入 PDF 导入。",
+		"remotePaperUnavailable": "该远程论文预览已不再可用。"
 	},
 	"vault": {
 		"openDesktopOnly": "打开知识库仅在 Tauri 应用中可用。",

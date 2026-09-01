@@ -15,8 +15,12 @@ import { lifecycle } from "@/lib/lifecycle";
 import {
 	detectPaperDirectory,
 	isPaperDirectory,
+	isRemoteArxivPath,
 	isUnderPaperAttachments,
 	paperDirFromPath,
+	type RemotePaperItem,
+	remoteArxivPath,
+	stageRemoteArxivPaper,
 } from "@/lib/paper";
 import {
 	isLibraryVirtualPath,
@@ -166,7 +170,11 @@ export function handleActivePanelChange(panelId: string | null): void {
 	}
 	const tab = activeTab;
 	if (!tab) return;
-	if (!isLibraryVirtualPath(tab.path) && !isTrashVirtualPath(tab.path)) {
+	if (
+		!isLibraryVirtualPath(tab.path) &&
+		!isTrashVirtualPath(tab.path) &&
+		!isRemoteArxivPath(tab.path)
+	) {
 		notePaperFocus(tab.path);
 	}
 
@@ -624,6 +632,12 @@ export function openPaper(paperDir: string): void {
 	const abs = paperDir.replace(/\\/g, "/").replace(/\/+$/, "");
 	setTreeSelectedPath(abs);
 	openTab(abs, { preferMode: "pdf" });
+}
+
+/** Open an arXiv Daily recommendation as a remote PDF preview (no local files). */
+export function openRemoteArxivPaper(item: RemotePaperItem): void {
+	stageRemoteArxivPaper(item);
+	openTab(remoteArxivPath(item.arxivId), { preferMode: "pdf" });
 }
 
 /** Open any path with the mode inferred from its extension. */

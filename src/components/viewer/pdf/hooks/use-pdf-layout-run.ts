@@ -79,6 +79,8 @@ export type UsePdfLayoutRunOptions = {
 	layoutCapRef: RefObject<LayoutCapability>;
 	docCap: DocumentManagerCapability;
 	docCapRef: RefObject<DocumentManagerCapability>;
+	/** True for remote papers with no local sidecar; disables layout analysis. */
+	isRemotePaper?: boolean;
 };
 
 export type PdfLayoutRun = {
@@ -100,6 +102,7 @@ export function usePdfLayoutRun({
 	layoutCapRef,
 	docCap,
 	docCapRef,
+	isRemotePaper = false,
 }: UsePdfLayoutRunOptions): PdfLayoutRun {
 	const { t } = useTranslation("viewer");
 	const layoutTaskRef = useRef<LayoutAnalysisTask | null>(null);
@@ -115,6 +118,7 @@ export function usePdfLayoutRun({
 	 */
 	const startLayoutAnalysis = useCallback(
 		(opts?: StartLayoutAnalysisOptions) => {
+			if (isRemotePaper) return;
 			const docs = docCapRef.current ?? docCap;
 			if (!docs?.isDocumentOpen(docId)) {
 				if (opts?.notifyOnError !== false) {
@@ -282,7 +286,16 @@ export function usePdfLayoutRun({
 				notifyError(t("pdf.layout.failed"), { description: message });
 			});
 		},
-		[docId, paperAbsPath, paperRelPath, t, layoutCapRef, docCap, docCapRef],
+		[
+			docId,
+			paperAbsPath,
+			paperRelPath,
+			t,
+			layoutCapRef,
+			docCap,
+			docCapRef,
+			isRemotePaper,
+		],
 	);
 	const startLayoutAnalysisRef = useRef(startLayoutAnalysis);
 	startLayoutAnalysisRef.current = startLayoutAnalysis;
@@ -291,15 +304,16 @@ export function usePdfLayoutRun({
 	// land in the background-tasks panel. Local ONNX stays serial (cap 1);
 	// the Paddle API backend is uncapped at JobCenter.
 	useEffect(() => {
-		if (!paperAbsPath) return;
+		if (isRemotePaper || !paperAbsPath) return;
 		enqueuePaperLayoutAnalysis({ paperAbsPath });
-	}, [paperAbsPath]);
+	}, [isRemotePaper, paperAbsPath]);
 
 	// Active viewer: pull layout into the tab store once sidecar exists.
 	// Headless may still be writing it for this paper (or a sibling tab).
 	// Loose PDFs (no paper folder) still analyze in-viewer.
 	const layoutAutoStartedForDocRef = useRef<string | null>(null);
 	useEffect(() => {
+		if (isRemotePaper) return;
 		if (!isActive) return;
 		if (!layoutCap || totalPages <= 0) return;
 		if (getLayoutDocumentResult(docId)) return;
@@ -397,6 +411,7 @@ export function usePdfLayoutRun({
 			}
 		};
 	}, [
+		isRemotePaper,
 		isActive,
 		layoutCap,
 		docCap,

@@ -172,6 +172,7 @@
 		"arxivRec": {
 			"label": "arXiv Daily",
 			"description": "结合你的论文库对当天 arXiv 新论文排序",
+			"read": "阅读",
 			"refresh": "重新计算推荐",
 			"translate": "翻译全部摘要",
 			"translating": "正在翻译…",

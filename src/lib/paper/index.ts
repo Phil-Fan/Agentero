@@ -48,6 +48,16 @@ export {
 	PAPER_INTERNAL_DIR_NAMES,
 } from "@/lib/paper/paths";
 export {
+	getRemoteArxivPaper,
+	getRemoteArxivPaperByPath,
+	isRemoteArxivPath,
+	REMOTE_ARXIV_PREFIX,
+	type RemotePaperItem,
+	remoteArxivIdFromPath,
+	remoteArxivPath,
+	stageRemoteArxivPaper,
+} from "@/lib/paper/remote-paper";
+export {
 	formatAuthorsShort,
 	formatPaperTreeLabel,
 	PAPER_TREE_LABEL_MODES,

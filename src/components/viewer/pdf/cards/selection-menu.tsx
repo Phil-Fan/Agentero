@@ -38,6 +38,8 @@ type SelectionMenuProps = {
 	onTranslate: () => void;
 	/** Dismiss the menu without acting */
 	onClose: () => void;
+	/** Hide annotation/ask/translate actions; copy-only for remote papers. */
+	readOnly?: boolean;
 };
 
 const BAR_W = 340;
@@ -58,6 +60,7 @@ export function SelectionMenu({
 	onAddToChat,
 	onTranslate,
 	onClose,
+	readOnly = false,
 }: SelectionMenuProps) {
 	const { t } = useTranslation("viewer");
 	const [copied, setCopied] = useState(false);
@@ -152,7 +155,36 @@ export function SelectionMenu({
 						<TooltipContent side="top">{colorLabel(c)}</TooltipContent>
 					</Tooltip>
 				))}
-				<div className="mx-1 h-5 w-px shrink-0 bg-border" />
+				{!readOnly ? (
+					<>
+						{HIGHLIGHT_COLORS.map((c) => (
+							<Tooltip key={c}>
+								<TooltipTrigger asChild>
+									{/*
+									 * 16px dot, 24px hit area (WCAG 2.5.8): the target is padded
+									 * out rather than the dot enlarged.
+									 */}
+									<button
+										type="button"
+										aria-label={colorLabel(c)}
+										className="group inline-flex size-6 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+										onClick={() => onHighlight(c)}
+									>
+										<span
+											className={cn(
+												"size-4 rounded-full ring-1 ring-black/15 transition-transform group-hover:scale-110 dark:ring-white/25",
+												swatchColorClass(c),
+											)}
+											aria-hidden
+										/>
+									</button>
+								</TooltipTrigger>
+								<TooltipContent side="top">{colorLabel(c)}</TooltipContent>
+							</Tooltip>
+						))}
+						<div className="mx-1 h-5 w-px shrink-0 bg-border" />
+					</>
+				) : null}
 				<div className="relative">
 					{copied ? (
 						<span
@@ -186,62 +218,70 @@ export function SelectionMenu({
 						) : null}
 					</Tooltip>
 				</div>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-sm"
-							aria-label={t("selection.note")}
-							onClick={handleNote}
-						>
-							<NotebookPen className="size-4" />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent side="top">{t("selection.note")}</TooltipContent>
-				</Tooltip>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-sm"
-							aria-label={t("selection.ask")}
-							onClick={onAsk}
-						>
-							<MessageSquare className="size-4" />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent side="top">{t("selection.ask")}</TooltipContent>
-				</Tooltip>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-sm"
-							aria-label={t("selection.addToChat")}
-							onClick={onAddToChat}
-						>
-							<MessageSquarePlus className="size-4" />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent side="top">{t("selection.addToChat")}</TooltipContent>
-				</Tooltip>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-sm"
-							aria-label={t("selection.translate")}
-							onClick={onTranslate}
-						>
-							<Languages className="size-4" />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent side="top">{t("selection.translate")}</TooltipContent>
-				</Tooltip>
+				{!readOnly ? (
+					<>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-sm"
+									aria-label={t("selection.note")}
+									onClick={handleNote}
+								>
+									<NotebookPen className="size-4" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="top">{t("selection.note")}</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-sm"
+									aria-label={t("selection.ask")}
+									onClick={onAsk}
+								>
+									<MessageSquare className="size-4" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="top">{t("selection.ask")}</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-sm"
+									aria-label={t("selection.addToChat")}
+									onClick={onAddToChat}
+								>
+									<MessageSquarePlus className="size-4" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="top">
+								{t("selection.addToChat")}
+							</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-sm"
+									aria-label={t("selection.translate")}
+									onClick={onTranslate}
+								>
+									<Languages className="size-4" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="top">
+								{t("selection.translate")}
+							</TooltipContent>
+						</Tooltip>
+					</>
+				) : null}
 			</TooltipProvider>
 		</div>
 	);

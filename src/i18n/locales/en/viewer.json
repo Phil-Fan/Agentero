@@ -21,6 +21,7 @@
 		"linkAria": "PDF link",
 		"useDarkMode": "Use dark mode",
 		"useLightMode": "Use light mode",
+		"importToLibrary": "Import to library",
 		"findPlaceholder": "Find in document",
 		"findPrev": "Previous match",
 		"findNext": "Next match",

@@ -8,7 +8,9 @@ import {
 	canAttemptPdfDownload,
 	detectPaperDirectory,
 	findLocalPdfPath,
+	getRemoteArxivPaperByPath,
 	isPaperDirectory,
+	isRemoteArxivPath,
 	loadPaperMetadata,
 	loadPaperOpenBundle,
 	localFileToArrayBuffer,
@@ -17,6 +19,7 @@ import {
 	type PaperMetadata,
 	paperDirFromPath,
 	paperRemoteAssetsFromMetadata,
+	REMOTE_ARXIV_PREFIX,
 	revokePdfViewerSource,
 } from "@/lib/paper";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
@@ -209,6 +212,43 @@ export async function loadTabResources(
 			paperMeta: null,
 			pdfUrl: null,
 			htmlUrl: plazaSourceForPath(path)?.url ?? null,
+			imageUrl: null,
+			notesPath: null,
+			notesSeed: "",
+			markdownSeed: "",
+			loaded: true,
+		};
+	}
+
+	// Remote arXiv preview: read from in-memory metadata, never touch disk.
+	if (isRemoteArxivPath(path)) {
+		const meta = getRemoteArxivPaperByPath(path);
+		if (!meta) {
+			return {
+				kind: "paper",
+				title: i18n.t("app:labels.remoteArxiv"),
+				mode: "markdown",
+				paperMeta: null,
+				pdfUrl: null,
+				htmlUrl: null,
+				imageUrl: null,
+				notesPath: null,
+				notesSeed: "",
+				markdownSeed: "",
+				loaded: true,
+				error: i18n.t("app:errors.remotePaperUnavailable"),
+			};
+		}
+		const { pdfUrl, htmlUrl } = paperRemoteAssetsFromMetadata(meta);
+		const mode: CenterViewMode = pdfUrl ? "pdf" : htmlUrl ? "html" : "markdown";
+		return {
+			kind: "paper",
+			title: meta.title || path.slice(REMOTE_ARXIV_PREFIX.length),
+			mode,
+			paperMeta: meta,
+			pdfUrl,
+			pdfBytes: null,
+			htmlUrl,
 			imageUrl: null,
 			notesPath: null,
 			notesSeed: "",

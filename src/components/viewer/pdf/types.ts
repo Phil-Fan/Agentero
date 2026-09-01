@@ -55,6 +55,16 @@ export type PdfViewerProps = {
 	 * only the active viewer should refresh marks/ (expensive base64 JSON list).
 	 */
 	isActive?: boolean;
+	/**
+	 * True for remote papers (e.g. arXiv Daily preview) that have no local
+	 * sidecar. Hides persistent annotation/ask/translate UI and offers import.
+	 */
+	isRemotePaper?: boolean;
+	/**
+	 * Identifier used by the "Import to library" action for remote papers.
+	 * Usually the arXiv abs/source URL.
+	 */
+	importIdentifier?: string;
 };
 
 export type PdfViewerInnerProps = PdfViewerProps & { docId: string };

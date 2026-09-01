@@ -231,7 +231,7 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 **页面**（`src/components/plaza/plaza-arxiv-rec-view.tsx`）
 
 - **header**：分类 chip 多选（默认 `ARXIV_FEED_CHIPS`，与订阅共用常量）+ 上次计算时间 + 刷新按钮。**不进 app settings** —— 分类就是页面状态，持久化在 `arxiv_rec_state`。
-- **body**：卡片列表（标题 / arXiv id / 分数 / 摘要三行截断），右上角外链 + 一键入库（走 `lookupSubmit`，与订阅同一条魔棒路线）。
+- **body**：卡片列表（标题 / arXiv id / 分数 / 摘要三行截断），右上角**阅读**（在应用内打开远程 PDF，不写盘）+ 外链 + 一键入库（走 `lookupSubmit`，与订阅同一条魔棒路线）。
 - **空态分三种**并给对应出路：未配置 embedding → 「打开 Agent 设置」按钮；库里没摘要 → 引导先导入论文；分类下无新论文 → 提示换分类。
 
 **取舍**

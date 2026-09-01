@@ -172,6 +172,7 @@
 		"arxivRec": {
 			"label": "arXiv Daily",
 			"description": "Today's arXiv papers ranked against your library",
+			"read": "Read",
 			"refresh": "Recompute recommendations",
 			"translate": "Translate all abstracts",
 			"translating": "Translating…",

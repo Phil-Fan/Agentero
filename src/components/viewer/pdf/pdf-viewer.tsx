@@ -44,7 +44,7 @@ import {
 	ZoomMode,
 	ZoomPluginPackage,
 } from "@embedpdf/plugin-zoom/react";
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
 import { PdfBottomBar } from "@/components/viewer/pdf/chrome/pdf-bottom-bar";
@@ -99,17 +99,20 @@ import type {
 	PageAnnotationComment,
 	PdfViewerInnerProps,
 	PdfViewerProps,
+	RailEditState,
 } from "@/components/viewer/pdf/types";
 import { ActiveCardScrollSync } from "@/components/viewer/pdf/viewport/active-card-scroll-sync";
 import { DockviewViewport } from "@/components/viewer/pdf/viewport/dockview-viewport";
 import { WheelZoomHandler } from "@/components/viewer/pdf/viewport/wheel-zoom-handler";
 import { useLibraryStore } from "@/hooks/use-app-stores";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { errorText } from "@/lib/core/error";
+import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
 import { arxivUrls } from "@/lib/paper/arxiv";
-import { isVisualMarkKind } from "@/lib/pdf/agent-trace";
+import { lookupSubmit } from "@/lib/paper/import-actions";
 import {
 	annotationWikilinkMarkdown,
 	wikiTargetForPaper,
@@ -285,6 +288,8 @@ function PdfViewerInner({
 	paperRelPath = null,
 	vaultPath = null,
 	isActive = true,
+	isRemotePaper = false,
+	importIdentifier,
 	onOpenSettings,
 	onHandle,
 	onHighlightsChange,
@@ -292,6 +297,7 @@ function PdfViewerInner({
 	onVisualTracesChange,
 }: PdfViewerInnerProps) {
 	const { t } = useTranslation("viewer");
+	const [importBusy, setImportBusy] = useState(false);
 	// Parent often passes inline lambdas; keep latest in refs so data effects
 	// do not re-fire every parent render (was Maximum update depth exceeded).
 	const onAsksChangeRef = useRef(onAsksChange);
@@ -375,6 +381,18 @@ function PdfViewerInner({
 		if (paperMeta.arxiv_id) return arxivUrls(paperMeta.arxiv_id)?.abs;
 		return paperMeta.source_url ?? paperMeta.html_url ?? paperMeta.pdf_url;
 	}, [paperMeta]);
+
+	const handleImportToLibrary = useCallback(async () => {
+		if (!importIdentifier || importBusy) return;
+		setImportBusy(true);
+		try {
+			await lookupSubmit([importIdentifier]);
+		} catch (error) {
+			notifyError(errorText(error));
+		} finally {
+			setImportBusy(false);
+		}
+	}, [importIdentifier, importBusy]);
 
 	const { pageField, setPageField, pageFocusedRef, goToPage, commitPageField } =
 		usePdfNavigation({
@@ -497,7 +515,6 @@ function PdfViewerInner({
 	const clearTranslateErrorRef = useRef<() => void>(() => undefined);
 	const clearAskErrorRef = useRef<() => void>(() => undefined);
 	const closeAskChromeRef = useRef<(threadId: string) => void>(() => undefined);
-	const resetVisualCardChromeRef = useRef<() => void>(() => undefined);
 	const closeEditorRef = useRef<() => void>(() => undefined);
 	const stopTranslateSession = useCallback(() => {
 		stopTranslateSessionRef.current();
@@ -514,7 +531,6 @@ function PdfViewerInner({
 		(card: ActiveSelectionCard | null) => {
 			if (card?.kind === "ask") closeAskChromeRef.current(card.id);
 			if (card?.kind === "translate") clearTranslateErrorRef.current();
-			if (isVisualMarkKind(card?.kind)) resetVisualCardChromeRef.current();
 			closeEditorRef.current();
 		},
 		[],
@@ -583,7 +599,6 @@ function PdfViewerInner({
 		askError,
 		openThread,
 		startFromAnchor,
-		resolvePdfAskAgent,
 		sendAskQuestion,
 		resendAskQuestion,
 		hideAskThread,
@@ -738,9 +753,6 @@ function PdfViewerInner({
 		handleAnalyzeLayout,
 		handleJumpToLayoutRegion,
 		handleRenderLayoutThumb,
-		visualDraftEditor,
-		openVisualDraftEditor,
-		closeVisualDraftEditor,
 		screenPointForRegion,
 		layoutTranslateItemsByPage,
 		layoutTranslatePageStateByPage,
@@ -749,7 +761,6 @@ function PdfViewerInner({
 		layoutTranslateLabel,
 		toggleLayoutTranslate,
 		togglePageLayoutTranslate,
-		visualDraftRegion,
 	} = usePdfLayoutCluster({
 		docId,
 		totalPages,
@@ -765,13 +776,13 @@ function PdfViewerInner({
 		engineRef,
 		scrollRef,
 		hostRef,
+		isRemotePaper,
 	});
 
 	// Sticky overlays (selection menu / visual draft / pin card) suppress
 	// ephemeral link previews so the pointer cannot stack multiple cards (#430).
 	// Declared after visualDraftEditor is available from the layout cluster.
-	const suppressLinkPreviews =
-		Boolean(selectionMenu) || Boolean(visualDraftEditor) || Boolean(activeCard);
+	const suppressLinkPreviews = Boolean(selectionMenu) || Boolean(activeCard);
 
 	useEffect(() => {
 		if (!suppressLinkPreviews) return;
@@ -798,60 +809,24 @@ function PdfViewerInner({
 		],
 	);
 
-	// ---- Region framing (⌘. marquee → crop) ----
-
-	const {
-		regionSelecting,
-		visualCropPending,
-		visualCropRegion,
-		toggleRegionSelect,
-		beginVisualAnnotation,
-		handleVisualRegionSelect,
-	} = usePdfRegionFraming({
-		docId,
-		engine,
-		docCap,
-		selectionCap,
-		interactionCap,
-		setSelectionMenu,
-		openVisualDraftEditor,
-		closeVisualDraftEditor,
-		screenPointForRegion,
-	});
-
 	// ---- Visual marks (draft save, agent turns, existing pins) ----
 
+	const beginRailEditRef = useRef<(state: RailEditState) => void>(
+		() => undefined,
+	);
 	const {
-		visualError,
-		visualCardExpanded,
-		handleVisualDraftSave,
-		handleVisualAddToChat,
-		handleVisualSendNow,
-		handleVisualSaveComment,
+		handleVisualDraft,
 		updateVisualComment,
-		handleVisualAddToChatFromMark,
-		handleVisualContinue,
-		handleDeleteVisualTrace,
-		handleOpenActiveVisualSession,
-		handleStopVisualSession,
+		handleVisualAddToChatById,
 		deleteVisualTraceById,
-		resetVisualCardChrome,
 	} = usePdfVisualMarks({
 		paperAbsPath,
 		paperRelPath,
 		visualTracesRef,
 		setVisualTraces,
 		upsertVisualTrace,
-		openCard,
-		hideActiveCard,
-		activeCardRef,
-		cardScreenRef,
-		setCardScreen,
-		resolvePdfAskAgent,
-		visualDraftEditor,
-		closeVisualDraftEditor,
+		beginRailEditRef,
 	});
-	resetVisualCardChromeRef.current = resetVisualCardChrome;
 
 	const anchorYForHighlight = useCallback(
 		(id: string) => highlightAnchors.get(id)?.y ?? 0,
@@ -884,6 +859,7 @@ function PdfViewerInner({
 	closeEditorRef.current = () => {
 		closeRailEdit();
 	};
+	beginRailEditRef.current = beginRailEdit;
 
 	const commentsByPage = useMemo(() => {
 		if (!railEdit) return commentsByPageBase;
@@ -927,10 +903,31 @@ function PdfViewerInner({
 		openThread,
 		openCard,
 		openEditorForAnnotation,
+		beginRailEdit,
 		annotationCap,
 		docId,
 		deleteHighlightAnnotation,
 		updateHighlightColor,
+	});
+
+	// ---- Region framing (⌘. marquee → crop) ----
+
+	const {
+		regionSelecting,
+		visualCropPending,
+		visualCropRegion,
+		toggleRegionSelect,
+		beginVisualAnnotation,
+		handleVisualRegionSelect,
+	} = usePdfRegionFraming({
+		docId,
+		engine,
+		docCap,
+		selectionCap,
+		interactionCap,
+		setSelectionMenu,
+		onVisualDraft: handleVisualDraft,
+		screenPointForRegion,
 	});
 
 	// ---- Selection action menu ----
@@ -1018,7 +1015,7 @@ function PdfViewerInner({
 			activeAskAnchor,
 			activeTranslateAnchor,
 			activeVisualTrace,
-			visualDraftRegion,
+			visualDraftRegion: null,
 			visualCropRegion,
 			focusedLayoutRegion,
 			pinsByPage,
@@ -1035,7 +1032,6 @@ function PdfViewerInner({
 			activeAskAnchor,
 			activeTranslateAnchor,
 			activeVisualTrace,
-			visualDraftRegion,
 			visualCropRegion,
 			focusedLayoutRegion,
 			pinsByPage,
@@ -1071,9 +1067,9 @@ function PdfViewerInner({
 		() => ({
 			regionSelecting,
 			visualCropPending,
-			visualDraftOpen: Boolean(visualDraftEditor),
+			visualDraftOpen: false,
 		}),
-		[regionSelecting, visualCropPending, visualDraftEditor],
+		[regionSelecting, visualCropPending],
 	);
 
 	const handleLayoutRegionClick = useCallback(
@@ -1114,6 +1110,14 @@ function PdfViewerInner({
 		[commentWikiTarget, t],
 	);
 
+	const handleAddCommentToChat = useCallback(
+		(comment: PageAnnotationComment) => {
+			if (comment.kind !== "visual") return;
+			handleVisualAddToChatById(comment.id);
+		},
+		[handleVisualAddToChatById],
+	);
+
 	const pageHandlers = useMemo<PdfPageHandlers>(
 		() => ({
 			onOpenPin: handleOpenPin,
@@ -1134,6 +1138,7 @@ function PdfViewerInner({
 			onDeleteComment: deleteRailComment,
 			onCopyCommentLink: handleCopyCommentLink,
 			onCopyCommentEmbed: handleCopyCommentEmbed,
+			onAddCommentToChat: handleAddCommentToChat,
 			onHoverComment: (comment) => setHoveredCommentId(comment.id),
 			onLeaveComment: () => setHoveredCommentId(null),
 		}),
@@ -1155,6 +1160,7 @@ function PdfViewerInner({
 			deleteRailComment,
 			handleCopyCommentLink,
 			handleCopyCommentEmbed,
+			handleAddCommentToChat,
 			setHoveredCommentId,
 		],
 	);
@@ -1217,6 +1223,7 @@ function PdfViewerInner({
 				showFigures={showFigures}
 				onToggleFigures={handleToggleFigures}
 				visible={topChromeVisible}
+				isRemotePaper={isRemotePaper}
 			/>
 			<PdfOutlinePanel
 				outline={outline}
@@ -1264,6 +1271,9 @@ function PdfViewerInner({
 				layoutTranslateLabel={layoutTranslateLabel}
 				onToggleLayoutTranslate={toggleLayoutTranslate}
 				visible={topChromeVisible}
+				isRemotePaper={isRemotePaper}
+				onImportToLibrary={handleImportToLibrary}
+				importBusy={importBusy}
 			/>
 
 			<DockviewViewport
@@ -1298,14 +1308,7 @@ function PdfViewerInner({
 					onAddToChat: handleMenuAddToChat,
 					onTranslate: handleMenuTranslate,
 					onClose: closeSelectionMenu,
-				}}
-				visualDraft={{
-					state: visualDraftEditor,
-					onSave: handleVisualDraftSave,
-					onAddToChat: handleVisualAddToChat,
-					onSendNow: handleVisualSendNow,
-					onDelete: closeVisualDraftEditor,
-					onClose: closeVisualDraftEditor,
+					readOnly: isRemotePaper,
 				}}
 				citationPreview={{
 					state: citationPreview,
@@ -1341,18 +1344,6 @@ function PdfViewerInner({
 					onHide: hideAskThread,
 					onDelete: deleteAskThread,
 					onStop: stopAskStreaming,
-				}}
-				visualTrace={{
-					trace: activeVisualTrace,
-					error: visualError,
-					initialExpanded: visualCardExpanded,
-					onOpenSession: handleOpenActiveVisualSession,
-					onAddToChat: handleVisualAddToChatFromMark,
-					onSaveComment: handleVisualSaveComment,
-					onSend: handleVisualContinue,
-					onDelete: handleDeleteVisualTrace,
-					onHide: hideActiveCard,
-					onStop: handleStopVisualSession,
 				}}
 				translate={{
 					record: activeTranslate,

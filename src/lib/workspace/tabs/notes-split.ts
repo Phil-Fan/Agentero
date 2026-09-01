@@ -1,5 +1,5 @@
 import i18n from "@/i18n";
-import { notesPathForPaper } from "@/lib/paper";
+import { isRemoteArxivPath, notesPathForPaper } from "@/lib/paper";
 import {
 	createPlaceholderTab,
 	isCanonicalTabIdForPath,
@@ -12,6 +12,7 @@ export function tabNotesEligible(tab: DocTab | null): boolean {
 	if (!tab) return false;
 	return (
 		tab.kind !== "library" &&
+		!isRemoteArxivPath(tab.path) &&
 		Boolean(tab.paperMeta) &&
 		(tab.mode === "pdf" || tab.mode === "html")
 	);

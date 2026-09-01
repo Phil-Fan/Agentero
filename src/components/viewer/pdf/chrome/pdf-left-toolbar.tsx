@@ -22,6 +22,8 @@ type PdfLeftToolbarProps = {
 	analyzing?: boolean;
 	/** Auto show/hide driven by scroll + pointer proximity (issue #400). */
 	visible: boolean;
+	/** True for remote papers with no local sidecar. */
+	isRemotePaper?: boolean;
 };
 
 /** Top-left toggle group: outline, references, figures. Buttons are only
@@ -38,6 +40,7 @@ export function PdfLeftToolbar({
 	onToggleFigures,
 	analyzing,
 	visible,
+	isRemotePaper = false,
 }: PdfLeftToolbarProps) {
 	const { t } = useTranslation("viewer");
 	const hasOutline = outline.length > 0;
@@ -100,7 +103,7 @@ export function PdfLeftToolbar({
 								variant={showFigures ? "secondary" : "ghost"}
 								aria-label={t("figures.title")}
 								aria-pressed={showFigures}
-								disabled={analyzing}
+								disabled={analyzing || isRemotePaper}
 								onClick={onToggleFigures}
 							>
 								<Boxes className="size-3.5" />

@@ -2,7 +2,8 @@
 	"labels": {
 		"agent": "Agent",
 		"notes": "Notes",
-		"untitled": "Untitled"
+		"untitled": "Untitled",
+		"remoteArxiv": "Remote arXiv"
 	},
 	"commandPalette": {
 		"title": "Quick open",
@@ -126,7 +127,8 @@
 		"openVaultForCreate": "Open a vault before creating wikilink targets.",
 		"wikiLinkAmbiguous": "The internal link target is ambiguous: {{target}}. Choose a more specific path.",
 		"wikiLinkInvalidFragment": "The target exists, but its heading or block is unavailable: {{target}}.",
-		"dropPdfNeedsVault": "Open a vault before importing dropped PDFs."
+		"dropPdfNeedsVault": "Open a vault before importing dropped PDFs.",
+		"remotePaperUnavailable": "This remote paper preview is no longer available."
 	},
 	"vault": {
 		"openDesktopOnly": "Open vault is only available in the Tauri app.",

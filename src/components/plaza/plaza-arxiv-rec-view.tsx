@@ -11,6 +11,7 @@
  */
 
 import {
+	BookOpen,
 	Check,
 	Download,
 	ExternalLink,
@@ -62,6 +63,7 @@ import { loadSettings, subscribeSettings } from "@/lib/settings/store";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { runTranslate } from "@/lib/translate";
 import { getVaultPath } from "@/lib/vault/store";
+import { openRemoteArxivPaper } from "@/lib/workspace/actions";
 
 const CATEGORIES_STORAGE_KEY = "plaza:arxiv-rec:categories";
 
@@ -547,6 +549,20 @@ function RecommendCard({
 				{translation ?? item.abstract}
 			</p>
 			<div className="absolute top-2 right-2 flex items-center gap-0.5">
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							aria-label={t("plaza.arxivRec.read")}
+							onClick={() => openRemoteArxivPaper(item)}
+						>
+							<BookOpen className="size-3.5" aria-hidden />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent>{t("plaza.arxivRec.read")}</TooltipContent>
+				</Tooltip>
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<Button

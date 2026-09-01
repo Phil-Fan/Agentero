@@ -3,6 +3,7 @@ import {
 	removeStorageKey,
 	writeJsonStorage,
 } from "@/lib/core/storage";
+import { isRemoteArxivPath } from "@/lib/paper";
 import { tabIdForPath } from "@/lib/workspace/tabs/model";
 import type {
 	DocTab,
@@ -94,6 +95,7 @@ export function extractTabsFromLayout(layout: unknown): {
 			typeof panel.params?.path === "string" && panel.params.path
 				? panel.params.path
 				: id;
+		if (isRemoteArxivPath(path)) continue;
 		const mode = isCenterViewMode(panel.params?.mode)
 			? panel.params.mode
 			: "markdown";
@@ -149,6 +151,7 @@ export function loadPersistedTabs(): PersistedTabs | null {
 	const seen = new Set<string>();
 	for (const pt of parsed.tabs) {
 		if (!pt || typeof pt.path !== "string" || !pt.path) continue;
+		if (isRemoteArxivPath(pt.path)) continue;
 		const id = tabIdForPath(pt.path);
 		if (seen.has(id)) continue;
 		seen.add(id);
