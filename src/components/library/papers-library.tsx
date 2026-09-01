@@ -309,141 +309,137 @@ export function PapersLibrary({
 			</div>
 		);
 	} else {
+		const empty = rows.length === 0;
 		body = (
-			<div
-				ref={scrollRef}
-				className="agentero-scroll-both min-h-0 min-w-0 flex-1"
-			>
-				{/* Fixed weights keep the table stable while content and rows change. */}
-				<table className="h-full w-full min-w-[900px] table-fixed border-collapse text-left text-sm">
-					<colgroup>
-						{visibleColumns.map((col) => (
-							<col
-								key={col.key}
-								style={{
-									width: `${(COLUMN_META[col.key].widthWeight / visibleColumnWeight) * 100}%`,
-								}}
-							/>
-						))}
-					</colgroup>
-					<LibraryTableHeader
-						t={t}
-						columns={columns}
-						visibleColumns={visibleColumns}
-						sortKey={sortKey}
-						sortDir={sortDir}
-						onSort={handleSort}
-						searchEnabled={Boolean(onQueryChange)}
-						inputValue={inputValue}
-						onInputChange={onSearchInputChange}
-						canRefreshMetadata={canRefreshMetadata}
-						onRefreshMetadata={handleRefreshMetadata}
-						availableTags={availableTags}
-						tagFilterSet={tagFilterSet}
-						tagFilterActive={tagFilterActive}
-						onToggleTagFilter={toggleTagFilter}
-						onClearTagFilter={() => setTagFilter([])}
-						canCustomizeColumns={Boolean(onColumnsChange)}
-						onToggleColumn={toggleColumn}
-						onResetColumns={resetColumns}
-						onColumnReorder={handleColumnReorder}
-					/>
-					{/* key={reorderKey} remounts the tbody to replay the fade animation. */}
-					<tbody
-						key={reorderKey}
-						className="h-full animate-in fade-in-0 duration-150"
-					>
-						{!rows.length ? (
-							<tr className="h-full">
-								<td colSpan={visibleColumns.length} className="h-full p-0">
-									<div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 p-8 text-center">
-										<p className="font-medium text-sm">
-											{filtering
-												? t("papersLibrary.noMatch")
-												: t("papersLibrary.emptyTitle")}
-										</p>
-										{filtering ? null : (
-											<p className="max-w-sm text-muted-foreground text-xs">
-												{t("papersLibrary.emptyHint")}
-											</p>
-										)}
-										{!filtering && onRescan ? (
-											<Button
-												type="button"
-												variant="outline"
-												size="sm"
-												className="mt-1"
-												disabled={rescanning}
-												onClick={onRescan}
-											>
-												<RefreshCw
-													className={cn(
-														"size-3.5",
-														rescanning && "animate-spin",
-													)}
-												/>
-												{t("papersLibrary.rescan")}
-											</Button>
-										) : null}
-									</div>
-								</td>
-							</tr>
-						) : (
-							<>
-								{paddingTop > 0 ? (
-									<tr aria-hidden>
-										<td
-											colSpan={visibleColumns.length}
-											style={{ height: paddingTop }}
-										/>
-									</tr>
-								) : null}
-								{virtualRows.map((vr) => {
-									const row = rows[vr.index];
-									const p = row.paper;
-									return (
-										<LibraryPaperRow
-											key={p.path ?? p.id}
-											index={vr.index}
-											row={row}
-											heat={heatmaps.get(heatmapCacheKey(p))}
-											visibleColumns={visibleColumns}
-											ctx={cellCtx}
-											paperAbsPath={
-												p.path && vaultPath
-													? joinVaultPath(vaultPath, p.path)
-													: null
-											}
-											canEditMeta={canEditMeta}
-											onOpenPaper={openPaperFromRow}
-											onRefreshMetadata={handleRefreshPaperMetadata}
-											measureRef={rowVirtualizer.measureElement}
-										/>
-									);
-								})}
-								{paddingBottom > 0 ? (
-									<tr aria-hidden>
-										<td
-											colSpan={visibleColumns.length}
-											style={{ height: paddingBottom }}
-										/>
-									</tr>
-								) : null}
-							</>
+			<>
+				<div
+					ref={scrollRef}
+					className={cn(
+						"agentero-scroll-both min-w-0",
+						empty ? "h-auto" : "min-h-0 flex-1",
+					)}
+				>
+					{/* Fixed weights keep the table stable while content and rows change. */}
+					<table className="w-full min-w-[900px] table-fixed border-collapse text-left text-sm">
+						<colgroup>
+							{visibleColumns.map((col) => (
+								<col
+									key={col.key}
+									style={{
+										width: `${(COLUMN_META[col.key].widthWeight / visibleColumnWeight) * 100}%`,
+									}}
+								/>
+							))}
+						</colgroup>
+						<LibraryTableHeader
+							t={t}
+							columns={columns}
+							visibleColumns={visibleColumns}
+							sortKey={sortKey}
+							sortDir={sortDir}
+							onSort={handleSort}
+							searchEnabled={Boolean(onQueryChange)}
+							inputValue={inputValue}
+							onInputChange={onSearchInputChange}
+							canRefreshMetadata={canRefreshMetadata}
+							onRefreshMetadata={handleRefreshMetadata}
+							availableTags={availableTags}
+							tagFilterSet={tagFilterSet}
+							tagFilterActive={tagFilterActive}
+							onToggleTagFilter={toggleTagFilter}
+							onClearTagFilter={() => setTagFilter([])}
+							canCustomizeColumns={Boolean(onColumnsChange)}
+							onToggleColumn={toggleColumn}
+							onResetColumns={resetColumns}
+							onColumnReorder={handleColumnReorder}
+						/>
+						{/* key={reorderKey} remounts the tbody to replay the fade animation. */}
+						<tbody
+							key={reorderKey}
+							className="animate-in fade-in-0 duration-150"
+						>
+							{paddingTop > 0 ? (
+								<tr aria-hidden>
+									<td
+										colSpan={visibleColumns.length}
+										style={{ height: paddingTop }}
+									/>
+								</tr>
+							) : null}
+							{virtualRows.map((vr) => {
+								const row = rows[vr.index];
+								const p = row.paper;
+								return (
+									<LibraryPaperRow
+										key={p.path ?? p.id}
+										index={vr.index}
+										row={row}
+										heat={heatmaps.get(heatmapCacheKey(p))}
+										visibleColumns={visibleColumns}
+										ctx={cellCtx}
+										paperAbsPath={
+											p.path && vaultPath
+												? joinVaultPath(vaultPath, p.path)
+												: null
+										}
+										canEditMeta={canEditMeta}
+										onOpenPaper={openPaperFromRow}
+										onRefreshMetadata={handleRefreshPaperMetadata}
+										measureRef={rowVirtualizer.measureElement}
+									/>
+								);
+							})}
+							{paddingBottom > 0 ? (
+								<tr aria-hidden>
+									<td
+										colSpan={visibleColumns.length}
+										style={{ height: paddingBottom }}
+									/>
+								</tr>
+							) : null}
+						</tbody>
+					</table>
+					{!empty ? (
+						<p className="sticky left-0 px-3 py-2 text-muted-foreground text-xs">
+							{t("papersLibrary.count", {
+								count: rows.length,
+								formatted: new Intl.NumberFormat(i18n.language).format(
+									rows.length,
+								),
+							})}
+						</p>
+					) : null}
+				</div>
+				{empty ? (
+					<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+						<p className="font-medium text-sm">
+							{filtering
+								? t("papersLibrary.noMatch")
+								: t("papersLibrary.emptyTitle")}
+						</p>
+						{filtering ? null : (
+							<p className="max-w-sm text-muted-foreground text-xs">
+								{t("papersLibrary.emptyHint")}
+							</p>
 						)}
-					</tbody>
-				</table>
-				{rows.length > 0 ? (
-					<p className="sticky left-0 px-3 py-2 text-muted-foreground text-xs">
-						{t("papersLibrary.count", {
-							count: rows.length,
-							formatted: new Intl.NumberFormat(i18n.language).format(
-								rows.length,
-							),
-						})}
-					</p>
+						{!filtering && onRescan ? (
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								className="mt-1"
+								disabled={rescanning}
+								onClick={onRescan}
+							>
+								<RefreshCw
+									className={cn("size-3.5", rescanning && "animate-spin")}
+								/>
+								{t("papersLibrary.rescan")}
+							</Button>
+						) : null}
+					</div>
 				) : null}
-			</div>
+			</>
 		);
 	}
 
