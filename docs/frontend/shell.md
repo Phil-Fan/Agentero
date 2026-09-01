@@ -40,6 +40,7 @@
 ## 弹层栈
 
 - `overlay-stack`：`Esc` / `⌘W` 先关最顶层 sheet/Dialog，再关 active panel。
+- 弹层可标记为 `modal: false`（如 Agent 面板底部 ask-user 表单），保留 `Esc` 关闭能力，但不阻塞 `whenSettingsClosed` 类的全局快捷键（如 `⌘B` / `⌥⌘S` 切换侧边栏）。
 - 仅剩全库 Library 且无弹层时，`⌘W` 关窗。
 
 ## 快捷键（壳层）
