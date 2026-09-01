@@ -103,7 +103,7 @@ LayoutAnalysisPluginPackage: {
 
 ### 后端选择（本地 ONNX / 远程 Provider）
 
-设置 →「版面解析」可选择检测后端（`settings.layout.backend`），选项由前端注册表 `LAYOUT_PROVIDERS`（`src/lib/pdf/layout/providers.ts`）驱动：
+设置 →「版面解析」可选择检测后端（`settings.layout.backend`），选项由前端注册表 `LAYOUT_PROVIDERS`（`src/lib/pdf/layout/providers.ts`）驱动；下拉只列出本地 + 已配置（apiKey 非空）的 provider，可选项 ≤1 时改为只读文本（正文解析引擎 `parserBackend` 同理）：
 
 | 后端 | 值 | 说明 |
 |---|---|---|

@@ -120,6 +120,19 @@ export function LayoutPane({
 		),
 		...Object.values(PARSER_PROVIDERS),
 	]);
+	const backendOptions = Object.values(LAYOUT_PROVIDERS).filter(
+		(descriptor) => {
+			if (!isRemoteLayoutProvider(descriptor)) return true;
+			if (descriptor.id === layout.backend) return true;
+			return isProviderConfigured(descriptor.id);
+		},
+	);
+	const parserBackendOptions = PARSER_BACKENDS.filter(
+		(backend) =>
+			backend === "local" ||
+			backend === layout.parserBackend ||
+			isProviderConfigured(backend),
+	);
 
 	return (
 		<div className="space-y-6">
@@ -127,72 +140,75 @@ export function LayoutPane({
 
 			<SettingsGroup>
 				<SettingsRow label={t("layout.backend.label")} htmlFor="layout-backend">
-					<Select
-						value={layout.backend}
-						onValueChange={(value) => {
-							if (isLayoutBackend(value)) {
-								patch({ layout: { ...layout, backend: value } });
-							}
-						}}
-					>
-						<SelectTrigger
-							id="layout-backend"
-							size="sm"
-							className="min-w-[200px] max-w-[280px]"
+					{backendOptions.length <= 1 ? (
+						<span id="layout-backend" className="text-sm">
+							{t(`layout.backend.${layout.backend}` as "layout.backend.local")}
+						</span>
+					) : (
+						<Select
+							value={layout.backend}
+							onValueChange={(value) => {
+								if (isLayoutBackend(value)) {
+									patch({ layout: { ...layout, backend: value } });
+								}
+							}}
 						>
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent className="max-h-72">
-							{Object.values(LAYOUT_PROVIDERS)
-								.filter((descriptor) => {
-									if (!isRemoteLayoutProvider(descriptor)) return true;
-									if (descriptor.id === layout.backend) return true;
-									return isProviderConfigured(descriptor.id);
-								})
-								.map((descriptor) => (
+							<SelectTrigger
+								id="layout-backend"
+								size="sm"
+								className="min-w-[200px] max-w-[280px]"
+							>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent className="max-h-72">
+								{backendOptions.map((descriptor) => (
 									<SelectItem key={descriptor.id} value={descriptor.id}>
 										{t(
 											`layout.backend.${descriptor.id}` as "layout.backend.local",
 										)}
 									</SelectItem>
 								))}
-						</SelectContent>
-					</Select>
+							</SelectContent>
+						</Select>
+					)}
 				</SettingsRow>
 				<SettingsRow
 					label={t("layout.parserBackend.label")}
 					htmlFor="layout-parser-backend"
 				>
-					<Select
-						value={layout.parserBackend}
-						onValueChange={(value) => {
-							if (isParserBackend(value)) {
-								patch({ layout: { ...layout, parserBackend: value } });
-							}
-						}}
-					>
-						<SelectTrigger
-							id="layout-parser-backend"
-							size="sm"
-							className="min-w-[200px] max-w-[280px]"
+					{parserBackendOptions.length <= 1 ? (
+						<span id="layout-parser-backend" className="text-sm">
+							{t(
+								`layout.parserBackend.${layout.parserBackend}` as "layout.parserBackend.local",
+							)}
+						</span>
+					) : (
+						<Select
+							value={layout.parserBackend}
+							onValueChange={(value) => {
+								if (isParserBackend(value)) {
+									patch({ layout: { ...layout, parserBackend: value } });
+								}
+							}}
 						>
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent className="max-h-72">
-							{PARSER_BACKENDS.filter(
-								(backend) =>
-									backend === "local" ||
-									backend === layout.parserBackend ||
-									isProviderConfigured(backend),
-							).map((backend) => (
-								<SelectItem key={backend} value={backend}>
-									{t(
-										`layout.parserBackend.${backend}` as "layout.parserBackend.local",
-									)}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+							<SelectTrigger
+								id="layout-parser-backend"
+								size="sm"
+								className="min-w-[200px] max-w-[280px]"
+							>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent className="max-h-72">
+								{parserBackendOptions.map((backend) => (
+									<SelectItem key={backend} value={backend}>
+										{t(
+											`layout.parserBackend.${backend}` as "layout.parserBackend.local",
+										)}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					)}
 				</SettingsRow>
 			</SettingsGroup>
 
