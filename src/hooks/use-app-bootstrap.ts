@@ -9,7 +9,7 @@ import { useTheme } from "next-themes";
 import { useEffect } from "react";
 import { useSettings, useVaultStore } from "@/hooks/use-app-stores";
 import { useVaultOpenRequest } from "@/hooks/use-vault-open-request";
-import i18n, { resolveLocale } from "@/i18n";
+import { applyLocale } from "@/i18n";
 import { startActivityTracking } from "@/lib/activity";
 import { isTauri } from "@/lib/core/tauri";
 import { initLifecycleBridge, lifecycle } from "@/lib/lifecycle";
@@ -38,11 +38,7 @@ export function useAppBootstrap(): void {
 	}, [theme, setTheme]);
 
 	useEffect(() => {
-		const resolved = resolveLocale(locale);
-		void i18n.changeLanguage(resolved);
-		if (typeof document !== "undefined") {
-			document.documentElement.lang = resolved;
-		}
+		const resolved = applyLocale(locale);
 		if (!isTauri()) return;
 		void (async () => {
 			try {

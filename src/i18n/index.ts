@@ -69,6 +69,20 @@ export function resolveLocale(pref: LocalePreference): Locale {
 	return nav.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
 }
 
+/**
+ * Apply a locale preference to i18n + `<html lang>`.
+ * Used at boot and whenever settings.locale changes (including the
+ * lightweight settings window, which does not mount `useAppBootstrap`).
+ */
+export function applyLocale(pref: LocalePreference): Locale {
+	const resolved = resolveLocale(pref);
+	void i18n.changeLanguage(resolved);
+	if (typeof document !== "undefined") {
+		document.documentElement.lang = resolved;
+	}
+	return resolved;
+}
+
 // Locale is applied in `main.tsx` after `ensureSettingsLoaded()` (XDG file).
 // Boot with English until then to avoid a flash of the wrong language on first paint.
 i18n.use(initReactI18next).init({

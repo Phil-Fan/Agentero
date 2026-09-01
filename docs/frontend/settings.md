@@ -74,6 +74,7 @@
 
 - 用户文案一律 `t()` / `react-i18next`；en 源语言，同步 `zh-CN`。
 - 词条：`src/i18n/locales/`。
+- Appearance → Language：`applyLocale` 在设置窗本地立即切语种（设置 webview 不挂 `useAppBootstrap`）；`settings:changed` 广播时各窗口 `subscribeSettings` 也会再应用一次，主窗另经 bootstrap 同步原生菜单。
 
 ## 代码
 

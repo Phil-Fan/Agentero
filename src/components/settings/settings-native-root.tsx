@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SettingsSection } from "@/components/settings/types";
+import { applyLocale } from "@/i18n";
 import { isMacOS, isTauri } from "@/lib/core/tauri";
 import {
 	applyDocumentChrome,
@@ -64,6 +65,21 @@ export function SettingsNativeRoot() {
 			monoFontFamily: settings.monoFontFamily,
 		});
 	}, [settings.uiScale, settings.interfaceFontFamily, settings.monoFontFamily]);
+
+	// Settings webview does not mount `useAppBootstrap`; apply locale here so
+	// Appearance → Language switches the settings UI immediately (Fix #437).
+	useEffect(() => {
+		const resolved = applyLocale(settings.locale);
+		if (!isTauri()) return;
+		void (async () => {
+			try {
+				const { invoke } = await import("@tauri-apps/api/core");
+				await invoke("set_locale", { locale: resolved });
+			} catch {
+				// Native menu keeps its previous locale; non-fatal.
+			}
+		})();
+	}, [settings.locale]);
 
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {

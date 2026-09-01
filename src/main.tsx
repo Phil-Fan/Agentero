@@ -21,7 +21,7 @@ import { applyUiTheme } from "@/lib/ui/theme";
 import { checkForUpdate, installAvailableUpdate } from "@/lib/update";
 import { initVaultStore } from "@/lib/vault/store";
 import { initWorkspaceStore } from "@/lib/workspace/store";
-import i18n, { resolveLocale } from "./i18n";
+import i18n, { applyLocale } from "./i18n";
 import "./index.css";
 
 const searchParams = new URLSearchParams(window.location.search);
@@ -67,14 +67,14 @@ async function boot() {
 			interfaceFontFamily: s.interfaceFontFamily,
 			monoFontFamily: s.monoFontFamily,
 		});
+		// Keep every window (settings / feature / doc / main) in sync when
+		// locale changes elsewhere. SettingsNativeRoot also applies locally
+		// for an immediate switch before the Host round-trip.
+		applyLocale(s.locale);
 	});
 	initAutoHideScrollbars();
-	const locale = resolveLocale(initialSettings.locale);
-	await i18n.changeLanguage(locale);
+	applyLocale(initialSettings.locale);
 	bootStage("i18n");
-	if (typeof document !== "undefined") {
-		document.documentElement.lang = locale;
-	}
 
 	const root = document.getElementById("root") as HTMLElement;
 	if (isSettingsWindow) {
