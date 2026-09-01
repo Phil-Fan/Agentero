@@ -141,75 +141,73 @@ export function LayoutPane({
 
 			<SettingsGroup>
 				<SettingsRow label={t("layout.backend.label")} htmlFor="layout-backend">
-					{backendOptions.length <= 1 ? (
-						<span id="layout-backend" className="text-sm">
-							{t(`layout.backend.${layout.backend}` as "layout.backend.local")}
-						</span>
-					) : (
-						<Select
-							value={layout.backend}
-							onValueChange={(value) => {
-								if (isLayoutBackend(value)) {
-									patch({ layout: { ...layout, backend: value } });
-								}
-							}}
+					<Select
+						value={layout.backend}
+						disabled={backendOptions.length <= 1}
+						onValueChange={(value) => {
+							if (isLayoutBackend(value)) {
+								patch({ layout: { ...layout, backend: value } });
+							}
+						}}
+					>
+						<SelectTrigger
+							id="layout-backend"
+							size="sm"
+							className={cn(
+								"min-w-[200px] max-w-[280px]",
+								// Keep full opacity when the sole option is locked — avoids
+								// a washed-out look and width jump vs plain text.
+								backendOptions.length <= 1 &&
+									"disabled:cursor-default disabled:opacity-100",
+							)}
 						>
-							<SelectTrigger
-								id="layout-backend"
-								size="sm"
-								className="min-w-[200px] max-w-[280px]"
-							>
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent className="max-h-72">
-								{backendOptions.map((descriptor) => (
-									<SelectItem key={descriptor.id} value={descriptor.id}>
-										{t(
-											`layout.backend.${descriptor.id}` as "layout.backend.local",
-										)}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-					)}
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent className="max-h-72">
+							{backendOptions.map((descriptor) => (
+								<SelectItem key={descriptor.id} value={descriptor.id}>
+									{t(
+										`layout.backend.${descriptor.id}` as "layout.backend.local",
+									)}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
 				</SettingsRow>
 				<SettingsRow
 					label={t("layout.parserBackend.label")}
 					htmlFor="layout-parser-backend"
 				>
-					{parserBackendOptions.length <= 1 ? (
-						<span id="layout-parser-backend" className="text-sm">
-							{t(
-								`layout.parserBackend.${layout.parserBackend}` as "layout.parserBackend.local",
+					<Select
+						value={layout.parserBackend}
+						disabled={parserBackendOptions.length <= 1}
+						onValueChange={(value) => {
+							if (isParserBackend(value)) {
+								patch({ layout: { ...layout, parserBackend: value } });
+							}
+						}}
+					>
+						<SelectTrigger
+							id="layout-parser-backend"
+							size="sm"
+							className={cn(
+								"min-w-[200px] max-w-[280px]",
+								parserBackendOptions.length <= 1 &&
+									"disabled:cursor-default disabled:opacity-100",
 							)}
-						</span>
-					) : (
-						<Select
-							value={layout.parserBackend}
-							onValueChange={(value) => {
-								if (isParserBackend(value)) {
-									patch({ layout: { ...layout, parserBackend: value } });
-								}
-							}}
 						>
-							<SelectTrigger
-								id="layout-parser-backend"
-								size="sm"
-								className="min-w-[200px] max-w-[280px]"
-							>
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent className="max-h-72">
-								{parserBackendOptions.map((backend) => (
-									<SelectItem key={backend} value={backend}>
-										{t(
-											`layout.parserBackend.${backend}` as "layout.parserBackend.local",
-										)}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-					)}
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent className="max-h-72">
+							{parserBackendOptions.map((backend) => (
+								<SelectItem key={backend} value={backend}>
+									{t(
+										`layout.parserBackend.${backend}` as "layout.parserBackend.local",
+									)}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
 				</SettingsRow>
 			</SettingsGroup>
 
