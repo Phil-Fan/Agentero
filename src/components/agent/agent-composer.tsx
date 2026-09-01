@@ -28,7 +28,6 @@ import {
 	PromptInputTextarea,
 	PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
-import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import { Popover, PopoverAnchor } from "@/components/ui/popover";
 import type {
 	AgentEffortChoice,
@@ -37,7 +36,6 @@ import type {
 	AgentSkill,
 	PromptImage,
 } from "@/lib/agent";
-import { SUGGESTION_KEYS, SUGGESTION_WORKFLOW } from "@/lib/agent/chat-state";
 import { AGENT_COMPOSER_INPUT_ATTR } from "@/lib/agent/composer-focus";
 import {
 	COMPOSER_IMAGE_ACCEPT,
@@ -55,7 +53,6 @@ export type AgentComposerProps = {
 	autoFocus: boolean;
 	heightPx?: number;
 	compact?: boolean;
-	linesLength: number;
 	activeTabIsRunning: boolean;
 	switching: boolean;
 	submitting: boolean;
@@ -123,7 +120,6 @@ export type AgentComposerProps = {
 	fastEnabled: boolean;
 	onFastEnabledToggle: () => void;
 	onCancelRun: () => void;
-	onSendSuggestion: (label: string, workflow?: string) => void;
 };
 
 export function AgentComposer(props: AgentComposerProps) {
@@ -131,7 +127,6 @@ export function AgentComposer(props: AgentComposerProps) {
 		autoFocus,
 		heightPx,
 		compact = false,
-		linesLength,
 		activeTabIsRunning,
 		switching,
 		submitting,
@@ -150,7 +145,6 @@ export function AgentComposer(props: AgentComposerProps) {
 		skillActiveIndex,
 		slashActiveIndex,
 		onCancelRun,
-		onSendSuggestion,
 	} = props;
 	const { t } = useTranslation("agent");
 	const hasComposerText = Boolean(composerText.trim());
@@ -176,21 +170,6 @@ export function AgentComposer(props: AgentComposerProps) {
 			)}
 			style={heightPx ? { height: heightPx } : undefined}
 		>
-			{linesLength > 0 && !activeTabIsRunning && !compact ? (
-				<Suggestions>
-					{SUGGESTION_KEYS.map((key) => {
-						const label = t(`suggestions.${key}`);
-						return (
-							<Suggestion
-								key={key}
-								suggestion={label}
-								onClick={(v) => onSendSuggestion(v, SUGGESTION_WORKFLOW[key])}
-								disabled={activeTabIsRunning || switching}
-							/>
-						);
-					})}
-				</Suggestions>
-			) : null}
 			<ComposerQueue
 				messageQueue={props.messageQueue}
 				onRemoveQueuedMessage={props.onRemoveQueuedMessage}

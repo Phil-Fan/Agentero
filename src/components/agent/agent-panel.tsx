@@ -339,7 +339,6 @@ export const AgentPanel = memo(function AgentPanel({
 								autoFocus={autoFocus}
 								heightPx={composerHeightPx}
 								compact={composerCompact}
-								linesLength={lines.length}
 								activeTabIsRunning={activeTabIsRunning}
 								switching={switching}
 								submitting={submitting}
@@ -429,7 +428,6 @@ export const AgentPanel = memo(function AgentPanel({
 									setFastEnabled((current) => !current)
 								}
 								onCancelRun={() => void cancelCurrentRun()}
-								onSendSuggestion={sendSuggestion}
 							/>
 						</>
 					) : null}

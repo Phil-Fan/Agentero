@@ -24,7 +24,7 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 - ACP `plan` 事件使用 AI Elements `Plan` / `PlanStep` 展示，可折叠查看步骤；步骤状态由图标、完成态和无障碍文案表达。
 - ACP 结构化提问工具会解析为 AI Elements `Tool` 内的可选回答；完成选择后以正常的下一用户轮提交，并继续同一 ACP 会话。支持多 harness 的 rawInput 形状（见下表）。
 - 运行中可继续输入 → Queue waitlist；标题保持简洁，条目等宽并可单独移除；Esc / 停止中止。
-- 右侧栏 composer 顶部有竖向拖拽分隔条，可压低输入区高度；低于紧凑阈值后，当前文件 / `@` 提及 / 选区 / 视觉草稿 / skill / 图片附件都变为图标圆片，隐藏建议 prompts 与模型、推理强度、上下文用量、Fast 等常驻工具，只保留输入、图片附件和发送。
+- 右侧栏 composer 顶部有竖向拖拽分隔条，可压低输入区高度；低于紧凑阈值后，当前文件 / `@` 提及 / 选区 / 视觉草稿 / skill / 图片附件都变为图标圆片，隐藏模型、推理强度、上下文用量、Fast 等常驻工具，只保留输入、图片附件和发送。
 - 会话空闲时 hover 用户消息可 **Edit** 后重发。
 - **长会话虚拟化**：transcript 行数 ≥ 80（`use-transcript-virtualizer` 的 `VIRTUALIZE_MIN_LINES`）时切换 `@tanstack/react-virtual` 窗口化渲染，复用 use-stick-to-bottom 的 scrollRef（贴底与滚动按钮行为不变）；Reasoning / Tool / Plan 折叠态提升到 `ChatTranscript` 统一管理，行卸载不丢。
 - **新建对话 / 历史恢复**：新建草稿不会清空刚离开的本地 transcript；历史项同时存在 Agentero runtime id 与 ACP provider id 时，`session/load` / 后续续聊只使用 `providerSessionId`；连续续聊产生的新 runtime 行会按 provider id 合并回同一个历史项；加载结果通过一次原子 store 更新写入并激活，避免列表刷新后出现空白会话。详见 [Codex 历史恢复误用 runtime id](../bug_fix/codex-history-runtime-session-id.md)。会话标题优先用 ACP `session/list` / `session/load` 返回的 title，缺失时回退首条用户消息；运行中 Agent 经 `session_info_update` 推送的新标题由 `agent:session-info` 事件实时写回历史项（按 runtime id 或 providerSessionId 匹配；视觉批注会话标题不被覆盖）。
