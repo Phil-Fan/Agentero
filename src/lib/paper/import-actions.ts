@@ -80,6 +80,7 @@ export async function lookupSubmit(
 	const settings = getSettings();
 	const parentDir = opts.parentDir ?? currentLookupParentDir();
 
+	const promises: Promise<void>[] = [];
 	for (const text of texts) {
 		const input = text.trim();
 		if (!input) continue;
@@ -91,161 +92,164 @@ export async function lookupSubmit(
 				{ query: input, candidates: [], parentDir, pending: true },
 			]);
 		}
-		void enqueueBackgroundTask(
-			{
-				kind: "lookup",
-				title: i18n.t("app:tasks.lookupImport"),
-				detail: input.slice(0, 80),
-			},
-			async ({ id, setDetail }) => {
-				setDetail(i18n.t("app:tasks.lookupFetching", { id: input }));
-				const result = await addPapersByIdentifiers({
-					vaultRoot: vaultPath,
-					parentDir,
-					texts: [input],
-					settings,
-					progressTaskId: id,
-				});
+		promises.push(
+			enqueueBackgroundTask(
+				{
+					kind: "lookup",
+					title: i18n.t("app:tasks.lookupImport"),
+					detail: input.slice(0, 80),
+				},
+				async ({ id, setDetail }) => {
+					setDetail(i18n.t("app:tasks.lookupFetching", { id: input }));
+					const result = await addPapersByIdentifiers({
+						vaultRoot: vaultPath,
+						parentDir,
+						texts: [input],
+						settings,
+						progressTaskId: id,
+					});
 
-				// Tree / wiki / library refresh runs via the paper:imported handler.
-				if (result.skillCandidates.length > 0) {
-					setSkillImportDraft(result.skillCandidates);
-					setDetail(
-						i18n.t("sidebar:lookup.skillCandidatesFound", {
-							count: result.skillCandidates.reduce(
-								(total: number, discovery) =>
-									total + discovery.candidates.length,
-								0,
-							),
-						}),
-					);
-				}
+					// Tree / wiki / library refresh runs via the paper:imported handler.
+					if (result.skillCandidates.length > 0) {
+						setSkillImportDraft(result.skillCandidates);
+						setDetail(
+							i18n.t("sidebar:lookup.skillCandidatesFound", {
+								count: result.skillCandidates.reduce(
+									(total: number, discovery) =>
+										total + discovery.candidates.length,
+									0,
+								),
+							}),
+						);
+					}
 
-				if (expectTitleSearch) {
-					const matched =
-						result.searchCandidates.find((group) => group.query === input) ??
-						result.searchCandidates[0] ??
-						null;
-					settlePaperSearchDraft(
-						input,
-						matched ? { ...matched, parentDir, pending: false } : null,
-					);
-					if (matched) {
+					if (expectTitleSearch) {
+						const matched =
+							result.searchCandidates.find((group) => group.query === input) ??
+							result.searchCandidates[0] ??
+							null;
+						settlePaperSearchDraft(
+							input,
+							matched ? { ...matched, parentDir, pending: false } : null,
+						);
+						if (matched) {
+							setDetail(
+								i18n.t("sidebar:lookup.searchCandidatesFound", {
+									count: matched.candidates.length,
+								}),
+							);
+						}
+					} else if (result.searchCandidates.length > 0) {
+						addPaperSearchDraft(
+							result.searchCandidates.map((group) => ({ ...group, parentDir })),
+						);
 						setDetail(
 							i18n.t("sidebar:lookup.searchCandidatesFound", {
-								count: matched.candidates.length,
+								count: result.searchCandidates.reduce(
+									(total: number, group) => total + group.candidates.length,
+									0,
+								),
 							}),
 						);
 					}
-				} else if (result.searchCandidates.length > 0) {
-					addPaperSearchDraft(
-						result.searchCandidates.map((group) => ({ ...group, parentDir })),
-					);
-					setDetail(
-						i18n.t("sidebar:lookup.searchCandidatesFound", {
-							count: result.searchCandidates.reduce(
-								(total: number, group) => total + group.candidates.length,
-								0,
-							),
-						}),
-					);
-				}
 
-				for (const paper of result.imported) {
-					const rel = (paper.path || "")
-						.replace(/\\/g, "/")
-						.replace(/^\/+|\/+$/g, "");
-					if (rel) {
-						track("paper.import", {
-							path: rel,
-							extra: { source: inferLookupSource(input) },
-						});
-					}
-				}
-				// Papers that already have a PDF after import: start layout now.
-				// Those still downloading enqueue layout after download completes.
-				for (const paper of result.imported) {
-					const abs = paper.paperDir
-						? paper.paperDir.replace(/[\\/]+$/, "")
-						: joinVaultPath(
-								vaultPath,
-								(paper.path || "")
-									.replace(/\\/g, "/")
-									.replace(/^\/+|\/+$/g, ""),
-							);
-					if (abs) {
-						const rel = toVaultRelative(vaultPath, abs)
+					for (const paper of result.imported) {
+						const rel = (paper.path || "")
 							.replace(/\\/g, "/")
 							.replace(/^\/+|\/+$/g, "");
-						void invokeApi(
-							"job_layout_analyze_enqueue",
-							{
-								args: {
+						if (rel) {
+							track("paper.import", {
+								path: rel,
+								extra: { source: inferLookupSource(input) },
+							});
+						}
+					}
+					// Papers that already have a PDF after import: start layout now.
+					// Those still downloading enqueue layout after download completes.
+					for (const paper of result.imported) {
+						const abs = paper.paperDir
+							? paper.paperDir.replace(/[\\/]+$/, "")
+							: joinVaultPath(
 									vaultPath,
-									path: rel,
-									force: false,
+									(paper.path || "")
+										.replace(/\\/g, "/")
+										.replace(/^\/+|\/+$/g, ""),
+								);
+						if (abs) {
+							const rel = toVaultRelative(vaultPath, abs)
+								.replace(/\\/g, "/")
+								.replace(/^\/+|\/+$/g, "");
+							void invokeApi(
+								"job_layout_analyze_enqueue",
+								{
+									args: {
+										vaultPath,
+										path: rel,
+										force: false,
+									},
 								},
-							},
-							{ fallback: "layout analysis enqueue failed" },
-						);
+								{ fallback: "layout analysis enqueue failed" },
+							);
+						}
 					}
-				}
 
-				if (result.errors.length > 0) {
-					notifyError(result.errors.join("; "));
-				}
-				await opts.onComplete?.(result);
-
-				// Enqueue a DownloadAssets job for each newly imported paper that
-				// still lacks assets. Uses the CapsCache-backed query (§8.4) instead
-				// of the frontend tree walk; the runner is idempotent and backfills
-				// PAPER.md + layout.
-				const newPaths = result.imported
-					.map((r) =>
-						(r.path || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""),
-					)
-					.filter(Boolean);
-				if (newPaths.length > 0) {
-					let needingAssets: string[] = [];
-					try {
-						needingAssets = await invokeApi<string[]>(
-							"job_papers_needing_assets",
-							{ args: { vaultPath } },
-							{ fallback: "collect papers needing assets failed" },
-						);
-					} catch (e) {
-						logger.warn("post-import asset check failed", {
-							error: errorText(e),
-						});
+					if (result.errors.length > 0) {
+						notifyError(result.errors.join("; "));
 					}
-					const needingSet = new Set(
-						needingAssets.map((p) =>
-							p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""),
-						),
-					);
-					for (const rel of newPaths) {
-						if (!needingSet.has(rel)) continue;
-						void invokeApi(
-							"job_download_assets_enqueue",
-							{
-								args: { vaultPath, path: rel, lane: "normal", force: false },
-							},
-							{ fallback: "download enqueue failed" },
-						).catch((e) =>
-							logger.warn("post-import download enqueue failed", {
-								rel,
+					await opts.onComplete?.(result);
+
+					// Enqueue a DownloadAssets job for each newly imported paper that
+					// still lacks assets. Uses the CapsCache-backed query (§8.4) instead
+					// of the frontend tree walk; the runner is idempotent and backfills
+					// PAPER.md + layout.
+					const newPaths = result.imported
+						.map((r) =>
+							(r.path || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""),
+						)
+						.filter(Boolean);
+					if (newPaths.length > 0) {
+						let needingAssets: string[] = [];
+						try {
+							needingAssets = await invokeApi<string[]>(
+								"job_papers_needing_assets",
+								{ args: { vaultPath } },
+								{ fallback: "collect papers needing assets failed" },
+							);
+						} catch (e) {
+							logger.warn("post-import asset check failed", {
 								error: errorText(e),
-							}),
+							});
+						}
+						const needingSet = new Set(
+							needingAssets.map((p) =>
+								p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""),
+							),
 						);
+						for (const rel of newPaths) {
+							if (!needingSet.has(rel)) continue;
+							void invokeApi(
+								"job_download_assets_enqueue",
+								{
+									args: { vaultPath, path: rel, lane: "normal", force: false },
+								},
+								{ fallback: "download enqueue failed" },
+							).catch((e) =>
+								logger.warn("post-import download enqueue failed", {
+									rel,
+									error: errorText(e),
+								}),
+							);
+						}
 					}
-				}
-			},
-			{ concurrency: settings.batchImportConcurrency },
-		).catch((e) => {
-			if (isBackgroundTaskCancelledError(e)) return;
-			notifyError(`${input}: ${errorText(e)}`);
-		});
+				},
+				{ concurrency: settings.batchImportConcurrency },
+			).catch((e) => {
+				if (isBackgroundTaskCancelledError(e)) return;
+				notifyError(`${input}: ${errorText(e)}`);
+			}),
+		);
 	}
+	await Promise.all(promises);
 }
 
 /** Picked a title-search candidate → import it as a normal identifier. */

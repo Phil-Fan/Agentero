@@ -95,8 +95,9 @@ function CitationPreviewRow({
 						>
 							<button
 								type="button"
-								className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+								className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
 								aria-label={t("references.import")}
+								disabled={importing}
 								onClick={(e) => e.stopPropagation()}
 							>
 								{importIcon}
