@@ -1,7 +1,8 @@
-import { CheckIcon, ChevronDown } from "lucide-react";
+import { CheckIcon, ChevronDown, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ComposerModelSelector } from "@/components/agent/composer/composer-model-selector";
 import type { GroupedModel } from "@/components/agent/hooks/use-agent-config";
+import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -40,9 +41,12 @@ export type AgentConfigBarProps = {
 	reasoningEffort: string | null;
 	onReasoningEffortChange: (id: string) => void;
 	formatEffort: (value: string) => string;
+	fastAvailable: boolean;
+	fastEnabled: boolean;
+	onFastEnabledToggle: () => void;
 };
 
-/** Session config row under the pane header: model, collaboration, reasoning effort. */
+/** Session config row under the pane header: model, collaboration, effort, fast. */
 export function AgentConfigBar({
 	modelSelectorOpen,
 	onModelSelectorOpenChange,
@@ -62,6 +66,9 @@ export function AgentConfigBar({
 	reasoningEffort,
 	onReasoningEffortChange,
 	formatEffort,
+	fastAvailable,
+	fastEnabled,
+	onFastEnabledToggle,
 }: AgentConfigBarProps) {
 	const { t } = useTranslation("agent");
 
@@ -169,6 +176,29 @@ export function AgentConfigBar({
 							))}
 						</DropdownMenuContent>
 					</DropdownMenu>
+				) : null}
+				{fastAvailable ? (
+					<PromptInputButton
+						type="button"
+						className={cn(
+							"size-7 text-foreground",
+							fastEnabled && "text-amber-500 hover:text-amber-500",
+						)}
+						aria-pressed={fastEnabled}
+						onClick={onFastEnabledToggle}
+						tooltip={{
+							content: t("composer.fastToggle"),
+							side: "bottom",
+						}}
+					>
+						<Zap
+							className={cn(
+								"size-3.5",
+								fastEnabled &&
+									"fill-amber-400 text-amber-500 dark:fill-amber-300 dark:text-amber-300",
+							)}
+						/>
+					</PromptInputButton>
 				) : null}
 			</div>
 		</div>

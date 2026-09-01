@@ -90,9 +90,6 @@ export type AgentComposerProps = {
 	onAttachSlashCommand: (command: AcpCommand) => void;
 	onSlashActiveIndexChange: (index: number) => void;
 	activeUsage: { used: number; size: number } | null;
-	fastAvailable: boolean;
-	fastEnabled: boolean;
-	onFastEnabledToggle: () => void;
 	onCancelRun: () => void;
 };
 
@@ -323,9 +320,6 @@ export function AgentComposer(props: AgentComposerProps) {
 								compact={compact}
 								switching={switching}
 								activeUsage={props.activeUsage}
-								fastAvailable={props.fastAvailable}
-								fastEnabled={props.fastEnabled}
-								onFastEnabledToggle={props.onFastEnabledToggle}
 							/>
 						</PromptInputTools>
 						<ComposerSubmitControl

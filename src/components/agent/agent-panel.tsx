@@ -308,6 +308,9 @@ export const AgentPanel = memo(function AgentPanel({
 					reasoningEffort={reasoningEffort}
 					onReasoningEffortChange={setReasoningEffort}
 					formatEffort={formatEffort}
+					fastAvailable={fastAvailable}
+					fastEnabled={fastEnabled}
+					onFastEnabledToggle={() => setFastEnabled((current) => !current)}
 				/>
 
 				<div ref={bodyRef} className="flex min-h-0 flex-1 flex-col">
@@ -426,11 +429,6 @@ export const AgentPanel = memo(function AgentPanel({
 								onAttachSlashCommand={attachSlashCommand}
 								onSlashActiveIndexChange={setSlashActiveIndex}
 								activeUsage={activeUsage}
-								fastAvailable={fastAvailable}
-								fastEnabled={fastEnabled}
-								onFastEnabledToggle={() =>
-									setFastEnabled((current) => !current)
-								}
 								onCancelRun={() => void cancelCurrentRun()}
 							/>
 						</>
