@@ -11,14 +11,12 @@ import {
 } from "@/components/agent/composer/composer-context-chips";
 import { ComposerDropTarget } from "@/components/agent/composer/composer-drop-target";
 import { ComposerMentionMenu } from "@/components/agent/composer/composer-mention-menu";
-import { ComposerModelSelector } from "@/components/agent/composer/composer-model-selector";
 import { ComposerQueue } from "@/components/agent/composer/composer-queue";
 import {
 	ComposerSkillMenu,
 	ComposerSlashMenu,
 } from "@/components/agent/composer/composer-quick-menus";
 import { ComposerToolbar } from "@/components/agent/composer/composer-toolbar";
-import type { GroupedModel } from "@/components/agent/hooks/use-agent-config";
 import { useComposerFileDrag } from "@/components/agent/hooks/use-composer-file-drag";
 import type { QueuedPrompt } from "@/components/agent/types";
 import {
@@ -29,13 +27,7 @@ import {
 	PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
 import { Popover, PopoverAnchor } from "@/components/ui/popover";
-import type {
-	AgentEffortChoice,
-	AgentModeChoice,
-	AgentModelChoice,
-	AgentSkill,
-	PromptImage,
-} from "@/lib/agent";
+import type { AgentSkill, PromptImage } from "@/lib/agent";
 import { AGENT_COMPOSER_INPUT_ATTR } from "@/lib/agent/composer-focus";
 import {
 	COMPOSER_IMAGE_ACCEPT,
@@ -97,24 +89,6 @@ export type AgentComposerProps = {
 	slashActiveIndex: number;
 	onAttachSlashCommand: (command: AcpCommand) => void;
 	onSlashActiveIndexChange: (index: number) => void;
-	modelSelectorOpen: boolean;
-	onModelSelectorOpenChange: (open: boolean) => void;
-	models: AgentModelChoice[];
-	groupedModels: GroupedModel[];
-	modelId: string | null;
-	selectedModelName: string | null;
-	favoriteIds: string[];
-	warming: boolean;
-	onPickModel: (id: string) => void;
-	onToggleFavorite: (id: string) => void;
-	collaborationOptions: AgentModeChoice[];
-	collaborationModeId: string | null;
-	selectedCollaborationName: string | null;
-	onPickCollaborationMode: (id: string) => void;
-	effortOptionsInDisplayOrder: AgentEffortChoice[];
-	reasoningEffort: string | null;
-	onReasoningEffortChange: (id: string) => void;
-	formatEffort: (value: string) => string;
 	activeUsage: { used: number; size: number } | null;
 	fastAvailable: boolean;
 	fastEnabled: boolean;
@@ -345,31 +319,9 @@ export function AgentComposer(props: AgentComposerProps) {
 								compact && "flex-none",
 							)}
 						>
-							{compact ? null : (
-								<ComposerModelSelector
-									open={props.modelSelectorOpen}
-									onOpenChange={props.onModelSelectorOpenChange}
-									models={props.models}
-									groupedModels={props.groupedModels}
-									modelId={props.modelId}
-									selectedModelName={props.selectedModelName}
-									favoriteIds={props.favoriteIds}
-									warming={props.warming}
-									onPickModel={props.onPickModel}
-									onToggleFavorite={props.onToggleFavorite}
-								/>
-							)}
 							<ComposerToolbar
 								compact={compact}
 								switching={switching}
-								collaborationOptions={props.collaborationOptions}
-								collaborationModeId={props.collaborationModeId}
-								selectedCollaborationName={props.selectedCollaborationName}
-								onPickCollaborationMode={props.onPickCollaborationMode}
-								effortOptionsInDisplayOrder={props.effortOptionsInDisplayOrder}
-								reasoningEffort={props.reasoningEffort}
-								onReasoningEffortChange={props.onReasoningEffortChange}
-								formatEffort={props.formatEffort}
 								activeUsage={props.activeUsage}
 								fastAvailable={props.fastAvailable}
 								fastEnabled={props.fastEnabled}

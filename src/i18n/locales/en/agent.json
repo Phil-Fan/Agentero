@@ -24,6 +24,9 @@
 	},
 	"missing": " (missing)",
 	"switchAgent": "Switch ACP agent",
+	"configBar": {
+		"label": "Model and session options"
+	},
 	"suggestions": {
 		"summarizePaper": "Summarize the open paper",
 		"askLibrary": "Ask a question across my library",

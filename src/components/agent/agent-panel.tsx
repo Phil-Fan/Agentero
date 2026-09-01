@@ -8,6 +8,7 @@ import {
 	isAskUserSurfaceActive,
 } from "@/components/agent/agent-ask-user-surface";
 import { AgentComposer } from "@/components/agent/agent-composer";
+import { AgentConfigBar } from "@/components/agent/agent-config-bar";
 import { SidebarHistoryTrailing } from "@/components/agent/agent-history";
 import { AgentPermissionDialog } from "@/components/agent/agent-permission-dialog";
 import { AgentSwitcher } from "@/components/agent/agent-switcher";
@@ -288,6 +289,27 @@ export const AgentPanel = memo(function AgentPanel({
 					/>
 				</PaneHeader>
 
+				<AgentConfigBar
+					modelSelectorOpen={modelSelectorOpen}
+					onModelSelectorOpenChange={setModelSelectorOpen}
+					models={models}
+					groupedModels={groupedModels}
+					modelId={modelId}
+					selectedModelName={selectedModelName}
+					favoriteIds={favoriteIds}
+					warming={warming}
+					onPickModel={pickModel}
+					onToggleFavorite={toggleFavorite}
+					collaborationOptions={collaborationOptions}
+					collaborationModeId={collaborationModeId}
+					selectedCollaborationName={selectedCollaborationName}
+					onPickCollaborationMode={pickCollaborationMode}
+					effortOptionsInDisplayOrder={effortOptionsInDisplayOrder}
+					reasoningEffort={reasoningEffort}
+					onReasoningEffortChange={setReasoningEffort}
+					formatEffort={formatEffort}
+				/>
+
 				<div ref={bodyRef} className="flex min-h-0 flex-1 flex-col">
 					<ChatTranscript
 						lines={lines}
@@ -403,24 +425,6 @@ export const AgentPanel = memo(function AgentPanel({
 								slashActiveIndex={slashActiveIndex}
 								onAttachSlashCommand={attachSlashCommand}
 								onSlashActiveIndexChange={setSlashActiveIndex}
-								modelSelectorOpen={modelSelectorOpen}
-								onModelSelectorOpenChange={setModelSelectorOpen}
-								models={models}
-								groupedModels={groupedModels}
-								modelId={modelId}
-								selectedModelName={selectedModelName}
-								favoriteIds={favoriteIds}
-								warming={warming}
-								onPickModel={pickModel}
-								onToggleFavorite={toggleFavorite}
-								collaborationOptions={collaborationOptions}
-								collaborationModeId={collaborationModeId}
-								selectedCollaborationName={selectedCollaborationName}
-								onPickCollaborationMode={pickCollaborationMode}
-								effortOptionsInDisplayOrder={effortOptionsInDisplayOrder}
-								reasoningEffort={reasoningEffort}
-								onReasoningEffortChange={setReasoningEffort}
-								formatEffort={formatEffort}
 								activeUsage={activeUsage}
 								fastAvailable={fastAvailable}
 								fastEnabled={fastEnabled}

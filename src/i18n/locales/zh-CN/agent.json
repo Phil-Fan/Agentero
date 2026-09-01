@@ -24,6 +24,9 @@
 	},
 	"missing": "（缺失）",
 	"switchAgent": "切换 ACP Agent",
+	"configBar": {
+		"label": "模型与会话选项"
+	},
 	"suggestions": {
 		"summarizePaper": "总结当前论文",
 		"askLibrary": "就我的文献库提问",
