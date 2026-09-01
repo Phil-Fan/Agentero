@@ -470,9 +470,9 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 				onPointerEnter?.();
 			}}
 			onPointerLeave={() => {
-				// Collapse compact preview only; parent scheduleHoverHide handles close.
-				// Keep calling onPointerLeave so pin→gap→card timers still work.
-				if (!streaming) setExpanded(false);
+				// Keep expanded while the card is merely bridging pin↔card; parent
+				// scheduleHoverHide closes the whole card. Collapsing here made the
+				// chat body vanish as soon as the pointer left (#430).
 				onPointerLeave?.();
 			}}
 			bodyClassName="min-h-0 overflow-hidden p-0"
