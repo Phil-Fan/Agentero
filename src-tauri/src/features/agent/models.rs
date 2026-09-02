@@ -50,6 +50,14 @@ impl AgentTemplate {
             Self::Custom => "custom",
         }
     }
+
+    /// Templates that launch through a community ACP adapter (rather than a
+    /// native ACP mode) may ignore the `NewSessionRequest` cwd and fall back to
+    /// the process cwd. For these agents we wrap the local spawn in a shell
+    /// `cd` so the OS-level working directory matches the vault.
+    pub fn needs_local_cwd_shell_wrap(&self) -> bool {
+        matches!(self, Self::Pi)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

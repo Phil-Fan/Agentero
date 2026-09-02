@@ -54,7 +54,84 @@ fn client_initialize_request() -> InitializeRequest {
     )
 }
 
-fn to_acp_agent_local(desc: &AgentDescriptor) -> Result<AcpAgent, AppError> {
+/// Quote a string for a POSIX `sh -c` command so spaces/special characters are
+/// preserved. Wraps in single quotes and escapes embedded single quotes.
+#[cfg(not(windows))]
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\"'\"'"))
+}
+
+/// Wrap a local agent command in a shell that changes to `cwd` before exec'ing
+/// the real agent. The ACP stdio transport has no `cwd` field, so this ensures
+/// agents like the Pi adapter start with the vault as their OS-level working
+/// directory.
+#[cfg(not(windows))]
+fn wrap_local_command_with_cwd(
+    command: &Path,
+    args: &[String],
+    _env: &mut HashMap<String, String>,
+    cwd: &Path,
+) -> (PathBuf, Vec<String>) {
+    let mut script = format!(
+        "cd {} && exec {}",
+        shell_quote(&cwd.to_string_lossy()),
+        shell_quote(&command.to_string_lossy())
+    );
+    for arg in args {
+        script.push(' ');
+        script.push_str(&shell_quote(arg));
+    }
+    (PathBuf::from("/bin/sh"), vec!["-c".to_string(), script])
+}
+
+/// Quote a token for a Windows `cmd /C` command. Empty strings, spaces, and
+/// most cmd metacharacters trigger double-quote wrapping; internal double
+/// quotes are backslash-escaped.
+#[cfg(windows)]
+fn windows_shell_quote(s: &str) -> String {
+    if s.is_empty()
+        || s.contains(' ')
+        || s.contains('"')
+        || s.contains('&')
+        || s.contains('|')
+        || s.contains('<')
+        || s.contains('>')
+        || s.contains('^')
+        || s.contains('%')
+    {
+        format!("\"{}\"", s.replace('"', "\\\""))
+    } else {
+        s.to_string()
+    }
+}
+
+/// Windows variant of [`wrap_local_command_with_cwd`]. Uses `cmd /D /C` and an
+/// environment variable for the cwd so spaces in the vault path do not need to
+/// be quoted inside the command string.
+#[cfg(windows)]
+fn wrap_local_command_with_cwd(
+    command: &Path,
+    args: &[String],
+    env: &mut HashMap<String, String>,
+    cwd: &Path,
+) -> (PathBuf, Vec<String>) {
+    env.insert(
+        "AGENTERO_AGENT_CWD".to_string(),
+        cwd.to_string_lossy().to_string(),
+    );
+    let mut script = r#"cd /d "%AGENTERO_AGENT_CWD%" && "#.to_string();
+    script.push_str(&windows_shell_quote(&command.to_string_lossy()));
+    for arg in args {
+        script.push(' ');
+        script.push_str(&windows_shell_quote(arg));
+    }
+    (
+        PathBuf::from("cmd"),
+        vec!["/D".to_string(), "/C".to_string(), script],
+    )
+}
+
+fn to_acp_agent_local(desc: &AgentDescriptor, cwd: Option<&Path>) -> Result<AcpAgent, AppError> {
     let command = resolve_command(&desc.command).unwrap_or_else(|| PathBuf::from(&desc.command));
     let mut child_env: HashMap<String, String> = desc.env.clone();
     if !child_env.contains_key("PATH") {
@@ -69,13 +146,21 @@ fn to_acp_agent_local(desc: &AgentDescriptor) -> Result<AcpAgent, AppError> {
     if matches!(desc.template, AgentTemplate::Gemini) && !child_env.contains_key("NO_BROWSER") {
         child_env.insert("NO_BROWSER".to_string(), "true".to_string());
     }
+
+    let (command, args) =
+        if let Some(cwd) = cwd.filter(|_| desc.template.needs_local_cwd_shell_wrap()) {
+            wrap_local_command_with_cwd(&command, &desc.args, &mut child_env, cwd)
+        } else {
+            (command, desc.args.clone())
+        };
+
     let env: Vec<EnvVariable> = child_env
         .into_iter()
         .map(|(k, v)| EnvVariable::new(k.clone(), v.clone()))
         .collect();
 
     let stdio = McpServerStdio::new(desc.name.clone(), command)
-        .args(desc.args.clone())
+        .args(args)
         .env(env);
     Ok(AcpAgent::new(McpServer::Stdio(stdio)))
 }
@@ -84,6 +169,7 @@ fn to_acp_agent_local(desc: &AgentDescriptor) -> Result<AcpAgent, AppError> {
 /// Local-sim remotes use a normal local process with cwd = remote vault path.
 fn to_acp_agent(
     desc: &AgentDescriptor,
+    cwd: Option<&Path>,
     remote: Option<&crate::features::remote::RemoteAgentTarget>,
 ) -> Result<AcpAgent, AppError> {
     if let Some(r) = remote {
@@ -113,7 +199,7 @@ fn to_acp_agent(
         }
         // local-sim: local binary, cwd set via NewSessionRequest to remote_cwd
     }
-    to_acp_agent_local(desc)
+    to_acp_agent_local(desc, cwd)
 }
 
 fn text_from_content_block(block: &ContentBlock) -> Option<String> {
@@ -1179,7 +1265,7 @@ pub async fn probe_agent(
     remote: Option<&crate::features::remote::RemoteAgentTarget>,
 ) -> ProbeResult {
     let agent_id = desc.id.clone();
-    let acp = match to_acp_agent(desc, remote) {
+    let acp = match to_acp_agent(desc, None, remote) {
         Ok(a) => a,
         Err(e) => {
             return ProbeResult {
@@ -2068,7 +2154,7 @@ pub async fn run_once(params: RunOnceParams) -> Result<AgentResultPayload, AppEr
     let prep = prepare_run_turn(&params).await?;
 
     // Phase 2 — spawn the ACP agent process (local, or SSH wrapper for remote).
-    let acp = match to_acp_agent(&params.desc, params.remote.as_ref()) {
+    let acp = match to_acp_agent(&params.desc, Some(&prep.cwd), params.remote.as_ref()) {
         Ok(agent) => agent,
         Err(error) => {
             emit_run_failed(&params.app, &params.session_id, &error);
@@ -2116,7 +2202,7 @@ pub async fn warm_agent(
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
     };
 
-    let acp = match to_acp_agent(&desc, remote.as_ref()) {
+    let acp = match to_acp_agent(&desc, Some(&cwd), remote.as_ref()) {
         Ok(a) => a,
         Err(e) => {
             return WarmResult {
@@ -2366,7 +2452,7 @@ pub async fn list_acp_sessions(
     cursor: Option<String>,
     remote: Option<&crate::features::remote::RemoteAgentTarget>,
 ) -> Result<AcpListSessionsResult, AppError> {
-    let acp = to_acp_agent(desc, remote)?;
+    let acp = to_acp_agent(desc, Some(&cwd), remote)?;
     let terminals = Arc::new(tokio::sync::Mutex::new(AcpTerminalManager::new()));
 
     let result = agent_client_protocol::Client
@@ -2695,7 +2781,7 @@ pub async fn load_acp_session(
     cwd: PathBuf,
     remote: Option<&crate::features::remote::RemoteAgentTarget>,
 ) -> Result<AcpLoadSessionResult, AppError> {
-    let acp = to_acp_agent(desc, remote)?;
+    let acp = to_acp_agent(desc, Some(&cwd), remote)?;
 
     let builder: Arc<Mutex<ReplayBuilder>> = Arc::new(Mutex::new(ReplayBuilder::default()));
     let builder_for_notif = builder.clone();
@@ -3297,5 +3383,71 @@ mod replay_builder_tests {
         ));
         assert!(matches!(lines[0].parts[1], AcpHistoryPart::Tool { .. }));
         assert!(lines[0].text.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod cwd_shell_wrap_tests {
+    use super::*;
+
+    #[test]
+    #[cfg(not(windows))]
+    fn shell_quote_wraps_and_escapes_single_quotes() {
+        assert_eq!(shell_quote("hello"), "'hello'");
+        assert_eq!(shell_quote("it's ok"), "'it'\"'\"'s ok'");
+        assert_eq!(shell_quote(""), "''");
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn wrap_unix_builds_sh_cd_exec_script() {
+        let mut env = HashMap::new();
+        let (cmd, args) = wrap_local_command_with_cwd(
+            Path::new("/usr/bin/pi-acp"),
+            &["--foo".to_string(), "bar baz".to_string()],
+            &mut env,
+            Path::new("/path/with spaces"),
+        );
+        assert_eq!(cmd, PathBuf::from("/bin/sh"));
+        assert_eq!(args.len(), 2);
+        assert_eq!(args[0], "-c");
+        assert!(args[1]
+            .starts_with("cd '/path/with spaces' && exec '/usr/bin/pi-acp' '--foo' 'bar baz'"));
+        assert!(env.is_empty());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_shell_quote_wraps_metacharacters() {
+        assert_eq!(windows_shell_quote("plain"), "plain");
+        assert_eq!(windows_shell_quote("with space"), "\"with space\"");
+        assert_eq!(windows_shell_quote("a\"b"), "\"a\\\"b\"");
+        assert_eq!(windows_shell_quote(""), "\"\"");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn wrap_windows_builds_cmd_cd_script() {
+        let mut env = HashMap::new();
+        let (cmd, args) = wrap_local_command_with_cwd(
+            Path::new(r"C:\Users\name\pi-acp.cmd"),
+            &["--foo".to_string(), "bar baz".to_string()],
+            &mut env,
+            Path::new(r"C:\My Vault"),
+        );
+        assert_eq!(cmd, PathBuf::from("cmd"));
+        assert_eq!(
+            args,
+            vec![
+                "/D".to_string(),
+                "/C".to_string(),
+                r#"cd /d "%AGENTERO_AGENT_CWD%" && "C:\Users\name\pi-acp.cmd" --foo "bar baz""#
+                    .to_string(),
+            ]
+        );
+        assert_eq!(
+            env.get("AGENTERO_AGENT_CWD"),
+            Some(&r"C:\My Vault".to_string())
+        );
     }
 }
