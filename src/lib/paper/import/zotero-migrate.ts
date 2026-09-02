@@ -58,6 +58,27 @@ export async function pickZoteroDir(): Promise<string | null> {
 	return Array.isArray(selected) ? (selected[0] ?? null) : selected;
 }
 
+/** Backend scan error when the picked folder holds no zotero.sqlite. */
+export function isSqliteMissingError(e: unknown): boolean {
+	return e instanceof Error && e.message.includes("zotero.sqlite not found");
+}
+
+/** If `picked` holds no zotero.sqlite but its parent does, return the parent. */
+export async function suggestZoteroParentDir(
+	picked: string,
+): Promise<string | null> {
+	if (!isTauri()) return null;
+	try {
+		const { dirname, join } = await import("@tauri-apps/api/path");
+		const { exists } = await import("@tauri-apps/plugin-fs");
+		const parent = await dirname(picked);
+		if (parent === picked) return null;
+		return (await exists(await join(parent, "zotero.sqlite"))) ? parent : null;
+	} catch {
+		return null;
+	}
+}
+
 /** Read-only preview: how many references, and how many have a local PDF. */
 export async function scanZotero(zoteroDir: string): Promise<ZoteroScan> {
 	if (!isTauri()) {

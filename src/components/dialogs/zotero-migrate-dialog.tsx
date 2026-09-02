@@ -7,6 +7,7 @@ import {
 	Import,
 	Loader2,
 	Search,
+	TriangleAlert,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -37,9 +38,11 @@ import { errorText } from "@/lib/core/error";
 import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { isTauri } from "@/lib/core/tauri";
 import {
+	isSqliteMissingError,
 	migrateZotero,
 	pickZoteroDir,
 	scanZotero,
+	suggestZoteroParentDir,
 	type ZoteroMigrateResult,
 	type ZoteroScan,
 } from "@/lib/paper/import/zotero-migrate";
@@ -114,6 +117,7 @@ export function ZoteroMigrateDialog({
 	const [dir, setDir] = useState<string | null>(null);
 	const [scan, setScan] = useState<ZoteroScan | null>(null);
 	const [scanning, setScanning] = useState(false);
+	const [suggestedDir, setSuggestedDir] = useState<string | null>(null);
 	const [detecting, setDetecting] = useState(false);
 	const [copyPdfs, setCopyPdfs] = useState(saved.copyPdfs);
 	const [preserveCollections, setPreserveCollections] = useState(
@@ -145,6 +149,7 @@ export function ZoteroMigrateDialog({
 		setCollFilter("all");
 		setProgress(null);
 		setScanning(false);
+		setSuggestedDir(null);
 		setError(null);
 		setBusy(false);
 		setResult(null);
@@ -161,20 +166,32 @@ export function ZoteroMigrateDialog({
 		setSelectedItems(new Set(r.items.map((i) => i.id)));
 	};
 
-	const chooseFolder = async () => {
-		setError(null);
-		const picked = await pickZoteroDir();
-		if (!picked) return;
+	const scanDir = async (picked: string) => {
 		setDir(picked);
 		setScan(null);
+		setSuggestedDir(null);
 		setScanning(true);
 		try {
 			applyScan(picked, await scanZotero(picked));
 		} catch (e) {
-			setError(errorText(e));
+			if (isSqliteMissingError(e)) {
+				// Common wrong pick (e.g. storage/): the parent is the data dir.
+				const parent = await suggestZoteroParentDir(picked);
+				if (parent) setSuggestedDir(parent);
+				else setError(t("sidebar:zoteroMigrate.sqliteMissing"));
+			} else {
+				setError(errorText(e));
+			}
 		} finally {
 			setScanning(false);
 		}
+	};
+
+	const chooseFolder = async () => {
+		setError(null);
+		const picked = await pickZoteroDir();
+		if (!picked) return;
+		await scanDir(picked);
 	};
 
 	// On open, try the default ~/Zotero folder so most users skip browsing.
@@ -441,6 +458,28 @@ export function ZoteroMigrateDialog({
 										? t("sidebar:zoteroMigrate.detecting")
 										: t("sidebar:zoteroMigrate.scanning")}
 								</p>
+							) : null}
+
+							{suggestedDir && !scanning ? (
+								<div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
+									<TriangleAlert className="size-4 shrink-0 text-amber-500" />
+									<span
+										className="min-w-0 flex-1 truncate text-muted-foreground"
+										title={suggestedDir}
+									>
+										{t("sidebar:zoteroMigrate.parentFound")}
+									</span>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="h-7 shrink-0 px-2 text-xs"
+										disabled={busy}
+										onClick={() => void scanDir(suggestedDir)}
+									>
+										{t("sidebar:zoteroMigrate.useParent")}
+									</Button>
+								</div>
 							) : null}
 
 							{scan ? (
