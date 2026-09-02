@@ -9,6 +9,7 @@ Agentero 使用 **BYOA**（Bring Your Own Agent）：Agent 由你安装和登录
 - Claude ACP
 - Codex（经 ACP 适配器）
 - OpenCode、Gemini、Qoder、Grok、Kimi Code 等兼容 ACP 的 CLI
+- [GenericAgent ACP](genericagent-acp.md)
 - 自定义 `command` / `args` / `env`
 
 请先按对应 Agent 的官方说明完成安装和登录。
