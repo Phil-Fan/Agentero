@@ -154,6 +154,12 @@ impl From<std::io::Error> for CliError {
     }
 }
 
+impl From<agentero_node::NodeError> for CliError {
+    fn from(err: agentero_node::NodeError) -> Self {
+        Self::new("node", err.to_string(), ExitCode::Business)
+    }
+}
+
 impl From<serde_json::Error> for CliError {
     fn from(err: serde_json::Error) -> Self {
         Self::new("json", err.to_string(), ExitCode::Business)

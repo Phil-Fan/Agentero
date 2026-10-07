@@ -239,6 +239,11 @@ enum Commands {
         #[arg(value_hint = ValueHint::DirPath)]
         path: PathBuf,
     },
+    /// Discover, pair with, and call remote Agentero nodes.
+    Node {
+        #[command(subcommand)]
+        cmd: commands::node::NodeCmd,
+    },
 }
 
 fn init_logging() {
@@ -373,6 +378,7 @@ fn command_label(cmd: &Commands) -> &'static str {
         Commands::Mark { .. } => "cli.mark",
         Commands::Translate { .. } => "cli.translate",
         Commands::Open { .. } => "cli.open",
+        Commands::Node { .. } => "cli.node",
     }
 }
 
@@ -411,5 +417,6 @@ async fn run(command: Commands, globals: &GlobalOpts) -> Result<serde_json::Valu
             provider,
         } => commands::translate::run(&text, &to, &from, provider.as_deref(), globals).await,
         Commands::Open { path } => commands::open::run(&path, globals),
+        Commands::Node { cmd } => commands::node::run(cmd, globals).await,
     }
 }

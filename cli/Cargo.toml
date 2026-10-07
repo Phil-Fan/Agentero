@@ -17,6 +17,8 @@ path = "src/main.rs"
 [dependencies]
 # Tauri-free domain services (catalog, vault, import, wiki, feeds, zotero, …).
 agentero-core = { path = "../crates/agentero-core" }
+# Remote-node client ops (probe / pair / call / run / tasks / batch).
+agentero-node = { path = "../crates/agentero-node" }
 clap = { version = "4", features = ["derive", "env"] }
 serde = { workspace = true }
 serde_json = { workspace = true }

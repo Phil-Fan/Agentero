@@ -26,6 +26,7 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 | `layout` | 侧栏同构版面索引：`list` / `get`（figure / table / algorithm / formula / section） |
 | `mark` | 阅读标注：`list` / `get` / `add`（`--quote` 文字锚点或 `--region` 区域锚点）/ `update` / `delete` |
 | `translate` | 免费机器翻译纯文本（无需 API Key，不读桌面 settings） |
+| `node` | 远端节点：`probe` / `add` / `list` / `remove` / `pair` / `call` / `run` / `tasks` / `batch` |
 
 稳定 `--json` 输出，供脚本与外部 Agent 组合。JSON 默认 **compact 单行**（省 token），`--pretty` 恢复缩进美化（[#367](https://github.com/poco-ai/Agentero/issues/367)）。
 
@@ -290,3 +291,19 @@ CLI 通过 `agentero://open?path=…` 深链唤起已安装的桌面 App；无�
 `agentero doctor fix visual-marks -y` 将旧版 `kind: agent-trace`（扁平 agent 字段）迁移为 `kind: visual` v2（可选嵌套 `agent`），幂等；不改 id 与裁剪图路径。详见 [doctor.md](doctor.md)。
 
 Skill 种子：`templates/vault/.agents/skills/agentero-cli/`，含两个平台变体——`SKILL.md`（POSIX，命令 `agentero`）与 `SKILL-windows.md`（Windows，命令 `agentero-cli`、PowerShell/cmd 语法）。播种时按宿主平台选择变体写入同一个 skill id，skill 目录不随平台变化。
+
+## 远端节点（`node`）
+
+`agentero node` 复用 headless 节点（`crates/agentero-node`）的客户端能力，用于发现、配对与调用远端节点
+（协议与节点形态见 [../development/remote-node.md](../development/remote-node.md)）：
+
+- `node probe <target>`：拉取对端 Agent Card。
+- `node add <target> [--name N]` / `node list` / `node remove <id>`：本机节点登记表。
+- `node pair <target> <code> [--name N]`：用配对码换取 Bearer token 并保存到登记表。
+- `node call <target> [--method M] [--params JSON]`：原始 A2A JSON-RPC。
+- `node run <target> <command> [--skill S] [--cwd DIR]`：提交任务并轮询到终态。
+- `node tasks <target> [--limit N] [--context ID]`：任务列表（可按 context 过滤）。
+- `node batch <target> --template "..." --values "a,b,c" [--wait]`：参数扫描（共享 context）。
+
+`target` 为基址（`http://host:8766`）或完整 Card URL；已配对节点自动附带 token。`run` / `batch`
+在 stdout 流式输出文本进度。同一套命令也在 `agentero-node` 二进制中提供。

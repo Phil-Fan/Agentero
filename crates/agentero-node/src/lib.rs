@@ -22,6 +22,7 @@ pub mod client;
 pub mod error;
 pub mod executor;
 pub mod identity;
+pub mod ops;
 pub mod paths;
 pub mod probe;
 pub mod queue;

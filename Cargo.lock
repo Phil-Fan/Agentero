@@ -156,6 +156,7 @@ name = "agentero-cli"
 version = "0.11.6"
 dependencies = [
  "agentero-core",
+ "agentero-node",
  "assert_cmd",
  "clap",
  "dirs",
@@ -212,6 +213,7 @@ dependencies = [
 name = "agentero-node"
 version = "0.11.6"
 dependencies = [
+ "agent-client-protocol",
  "async-trait",
  "axum",
  "chrono",
