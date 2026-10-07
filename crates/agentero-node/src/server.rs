@@ -48,8 +48,15 @@ pub async fn serve(options: ServeOptions, executors: ExecutorRegistry) -> Result
         .unwrap_or_else(|| format!("http://{}/a2a", options.listen));
     let card = card::build(Some(advertised.as_str()), skills)?;
     let security = Arc::new(Security::load(options.require_auth)?);
+    let store = match TaskStore::persisted(crate::paths::tasks_dir()) {
+        Ok(store) => store,
+        Err(error) => {
+            log::warn!(target: "agentero_node", "task persistence disabled: {error}");
+            TaskStore::new()
+        }
+    };
     let state = Arc::new(ServerState {
-        store: TaskStore::new(),
+        store,
         executors,
         card,
         security,

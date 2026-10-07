@@ -163,6 +163,28 @@ pub struct Task {
     pub artifacts: Vec<Artifact>,
 }
 
+/// Compact task view for `tasks/list`.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskSummary {
+    pub id: String,
+    pub context_id: String,
+    pub state: TaskState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+}
+
+impl TaskSummary {
+    pub fn from_task(task: &Task) -> Self {
+        Self {
+            id: task.id.clone(),
+            context_id: task.context_id.clone(),
+            state: task.status.state,
+            timestamp: task.status.timestamp.clone(),
+        }
+    }
+}
+
 /// Events delivered on a task stream (`message/stream`, SSE).
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(

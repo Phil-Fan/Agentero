@@ -1,10 +1,10 @@
 # 远端 Node（Headless Agentero Node）
 
-> 状态：**M1 + M2 + 配对鉴权 + 远端 Agent 执行器 已落地** —— `crates/agentero-node` 提供身份 /
-> Agent Card / 发现登记表 / 节点服务器、**A2A JSON-RPC + SSE 任务端点**（`message/send` /
-> `message/stream` / `tasks/get` / `tasks/cancel`）、**配对码 + Bearer token 鉴权**，以及
-> **`agent` 技能**（拉起配置的 CLI Agent 执行任务）。
-> 持久队列 / RunSet 与桌面 / CLI 集成为后续（见 §10）。
+> 状态：**M1 + M2 + 配对鉴权 + 远端 Agent 执行器 + 任务持久化 已落地** —— `crates/agentero-node`
+> 提供身份 / Agent Card / 发现登记表 / 节点服务器、**A2A JSON-RPC + SSE 任务端点**（`message/send` /
+> `message/stream` / `tasks/get` / `tasks/cancel` / `tasks/list`）、**配对码 + Bearer token 鉴权**、
+> **`agent` 技能**，以及**任务落盘 + 重启恢复**。
+> RunSet 编排与桌面 / CLI 集成为后续（见 §10）。
 
 ## 1. 背景
 
@@ -34,7 +34,7 @@
 | `registry` | 本机「已发现节点」登记表 + 已配对 token（JSON，`0600`） |
 | `auth` | 配对码（一次性、10 分钟）+ 长期 Bearer token（节点侧**只存哈希**） |
 | `task` | A2A 任务模型：Message / Part / Task / Artifact / StreamEvent |
-| `store` | 内存任务存储 + 每任务广播 + 取消令牌；`tasks/get` 与 SSE 共享一致视图 |
+| `store` | 任务存储 + 每任务广播 + 取消令牌；可选落盘（`tasks/<id>.json`），重启恢复并把中断任务标记为 failed |
 | `executor` | `Executor` trait + `echo`（协议冒烟）+ `run`（执行命令）+ `agent`（配置的 CLI Agent，`{prompt}` 模板） |
 | `rpc` | JSON-RPC 2.0 方法分发（同时接受 v0.3 `message/send` 与 v1 `SendMessage` 别名） |
 | `client` | 极小 A2A 客户端（CLI `call` / `run` / `pair` 用，自动附带 token） |
@@ -59,6 +59,7 @@ agentero-node remove <node-id>                # 忘记节点
 agentero-node pair <target> <code> [--name N] # 用配对码换取并保存 token
 agentero-node call <target> [--method M] [--params JSON]
 agentero-node run <target> <command> [--skill S] [--cwd DIR]
+agentero-node tasks <target> [--limit N]        # 列出节点上的最近任务
 ```
 
 ## 5. 鉴权（可选，`--require-auth`）
@@ -81,6 +82,7 @@ agentero-node run <target> <command> [--skill S] [--cwd DIR]
 | `message/stream` / `SendStreamingMessage` | 同上，但以 **SSE** 推 `task` → `status-update` / `artifact-update` → 终态后关流 |
 | `tasks/get` / `GetTask` | 按 `{id}` / `{taskId}` 取 Task |
 | `tasks/cancel` / `CancelTask` | 取消任务（幂等） |
+| `tasks/list` / `ListTasks` | 列出任务摘要（按时间倒序） |
 
 - **技能路由**：请求 `metadata.skill`（或 message 的 `data.skill`）选择执行器，缺省 `echo`。
   Card 的 `skills` 由执行器注册表自动生成。
@@ -99,6 +101,7 @@ agentero-node run <target> <command> [--skill S] [--cwd DIR]
 |---|---|
 | `$XDG_CONFIG_HOME/agentero/node/identity.json` | 本机节点身份（私钥 `0600`） |
 | `$XDG_CONFIG_HOME/agentero/node/tokens.json` | 已配对客户端的 token 哈希（`0600`） |
+| `$XDG_CONFIG_HOME/agentero/node/tasks/<id>.json` | 持久化的 A2A 任务（重启恢复） |
 | `$XDG_CONFIG_HOME/agentero/nodes.json` | 已发现节点 + token 登记表（`0600`） |
 
 ## 8. 发现 / 安装 / 通信
@@ -112,15 +115,16 @@ agentero-node run <target> <command> [--skill S] [--cwd DIR]
 
 | 主机 | 架构 | 结果 |
 |---|---|---|
-| 本机 macOS | aarch64 | 19 单测通过；send / stream / run / cancel / 配对鉴权 / agent 全通过 |
-| `dgx-remote` | aarch64 | 配对后 `run` → `spark` / `NVIDIA GB10`；`agent` → mock agent 回显 prompt |
-| `a1` | x86_64 | 配对后 `run` → `instance-mmztii7i` / 4×`A100-PCIE-40GB`；`agent` 同上 |
+| 本机 macOS | aarch64 | 20 单测通过；send / stream / run / cancel / 配对鉴权 / agent / 落盘恢复全通过 |
+| `dgx-remote` | aarch64 | 配对后 `run` → `spark` / `NVIDIA GB10`；重启后任务仍在、token 仍有效 |
+| `a1` | x86_64 | 配对后 `run` → `instance-mmztii7i` / 4×`A100-PCIE-40GB`；重启后任务仍在 |
 
 本机经 SSH 隧道对两个节点完成：探测 → 配对换 token → 带 token 提交 A2A 任务 → 取回产物。
 
 ## 10. 后续
 
-1. **持久队列**：任务落盘 + 重启恢复 + worker 拉取（见 [A2A.md](A2A.md)）。
+1. **队列化执行**：提交即入队、worker 拉取、可选自动重跑（当前 `message/send` 立即执行，
+   落盘仅用于历史与恢复）。
 2. **编排**：RunSet / Run 队列 + 并行调度。
 3. **集成**：桌面 / `agentero-cli` 加 `node` 子命令与「远端会话」面板。
 4. **鉴权增强**：Keychain、公钥 pinning、token 分级/吊销。

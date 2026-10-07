@@ -51,6 +51,7 @@ enum Method {
     Stream,
     Get,
     Cancel,
+    List,
     Unknown,
 }
 
@@ -60,6 +61,7 @@ fn normalize(method: &str) -> Method {
         "message/stream" | "SendStreamingMessage" | "sendStreamingMessage" => Method::Stream,
         "tasks/get" | "GetTask" | "getTask" => Method::Get,
         "tasks/cancel" | "CancelTask" | "cancelTask" => Method::Cancel,
+        "tasks/list" | "ListTasks" | "listTasks" => Method::List,
         _ => Method::Unknown,
     }
 }
@@ -103,6 +105,10 @@ pub async fn dispatch(state: &Arc<ServerState>, request: RpcRequest) -> RpcOutco
             },
             None => error(id, -32602, "missing task id"),
         }),
+        Method::List => {
+            let tasks = state.store.list();
+            RpcOutcome::Json(ok(id, serde_json::json!({ "tasks": tasks })))
+        }
         Method::Unknown => RpcOutcome::Json(error(
             id,
             -32601,
@@ -212,6 +218,7 @@ mod tests {
         assert_eq!(normalize("SendStreamingMessage"), Method::Stream);
         assert_eq!(normalize("tasks/get"), Method::Get);
         assert_eq!(normalize("CancelTask"), Method::Cancel);
+        assert_eq!(normalize("tasks/list"), Method::List);
         assert_eq!(normalize("nope"), Method::Unknown);
     }
 

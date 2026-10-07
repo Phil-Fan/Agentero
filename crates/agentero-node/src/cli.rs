@@ -101,4 +101,11 @@ pub enum Cmd {
         #[arg(long, value_name = "DIR")]
         cwd: Option<String>,
     },
+    /// List recent tasks on a node.
+    Tasks {
+        target: String,
+        /// Maximum rows to print.
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
 }

@@ -1,16 +1,24 @@
-//! In-memory task store with per-task broadcast for streaming.
+//! Task store with per-task broadcast, cancellation, and optional on-disk
+//! persistence.
 //!
 //! A store owns every task's state, its stream broadcaster, and its cancellation
 //! token. Executors mutate tasks through the store so `tasks/get` and
-//! `message/stream` always observe a consistent view.
+//! `message/stream` always observe a consistent view. When constructed with a
+//! directory, tasks are written to `<dir>/<id>.json` on every mutation and
+//! reloaded on startup; tasks that were in flight across a restart are marked
+//! failed ("interrupted by node restart").
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 
-use crate::task::{new_id, Artifact, Message, StreamEvent, Task, TaskState, TaskStatus};
+use crate::task::{
+    new_id, Artifact, Message, StreamEvent, Task, TaskState, TaskStatus, TaskSummary,
+};
+use crate::Result;
 
 const CHANNEL_CAPACITY: usize = 512;
 
@@ -18,6 +26,7 @@ pub struct TaskStore {
     tasks: RwLock<HashMap<String, Task>>,
     senders: RwLock<HashMap<String, broadcast::Sender<StreamEvent>>>,
     cancels: RwLock<HashMap<String, CancellationToken>>,
+    dir: Option<PathBuf>,
 }
 
 /// Everything the caller needs to drive and observe a freshly created task.
@@ -28,12 +37,72 @@ pub struct CreatedTask {
 }
 
 impl TaskStore {
+    /// In-memory store (no persistence).
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             tasks: RwLock::new(HashMap::new()),
             senders: RwLock::new(HashMap::new()),
             cancels: RwLock::new(HashMap::new()),
+            dir: None,
         })
+    }
+
+    /// Persisted store: load existing tasks, then mark interrupted ones failed.
+    pub fn persisted(dir: PathBuf) -> Result<Arc<Self>> {
+        let store = Arc::new(Self {
+            tasks: RwLock::new(HashMap::new()),
+            senders: RwLock::new(HashMap::new()),
+            cancels: RwLock::new(HashMap::new()),
+            dir: Some(dir),
+        });
+        store.load_from_disk()?;
+        store.mark_interrupted();
+        Ok(store)
+    }
+
+    fn load_from_disk(&self) -> Result<()> {
+        let Some(dir) = &self.dir else {
+            return Ok(());
+        };
+        if !dir.is_dir() {
+            return Ok(());
+        }
+        let mut tasks = self.tasks.write().unwrap();
+        for entry in std::fs::read_dir(dir)? {
+            let path = entry?.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            if let Ok(task) = serde_json::from_str::<Task>(&text) {
+                tasks.insert(task.id.clone(), task);
+            }
+        }
+        Ok(())
+    }
+
+    /// Mark any non-terminal task as failed (a restart cannot resume it).
+    fn mark_interrupted(&self) {
+        let pending: Vec<String> = {
+            let tasks = self.tasks.read().unwrap();
+            tasks
+                .values()
+                .filter(|task| !task.status.state.is_terminal())
+                .map(|task| task.id.clone())
+                .collect()
+        };
+        for id in pending {
+            self.set_status(
+                &id,
+                TaskStatus::with_message(
+                    TaskState::Failed,
+                    Message::agent("interrupted by node restart"),
+                ),
+                true,
+            );
+        }
     }
 
     /// Create a task from an incoming user message.
@@ -59,6 +128,7 @@ impl TaskStore {
             .write()
             .unwrap()
             .insert(id.clone(), cancel.clone());
+        self.persist(&task);
         CreatedTask {
             task,
             receiver: rx,
@@ -68,6 +138,14 @@ impl TaskStore {
 
     pub fn get(&self, id: &str) -> Option<Task> {
         self.tasks.read().unwrap().get(id).cloned()
+    }
+
+    /// Summaries of all tasks, newest first.
+    pub fn list(&self) -> Vec<TaskSummary> {
+        let tasks = self.tasks.read().unwrap();
+        let mut items: Vec<TaskSummary> = tasks.values().map(TaskSummary::from_task).collect();
+        items.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        items
     }
 
     pub fn subscribe(&self, id: &str) -> Option<broadcast::Receiver<StreamEvent>> {
@@ -113,6 +191,7 @@ impl TaskStore {
             task.status = status.clone();
             (task.clone(), task.context_id.clone())
         };
+        self.persist(&snapshot);
         self.broadcast(StreamEvent::StatusUpdate {
             task_id: id.to_string(),
             context_id,
@@ -130,6 +209,7 @@ impl TaskStore {
             task.artifacts.push(artifact.clone());
             (task.clone(), task.context_id.clone())
         };
+        self.persist(&snapshot);
         self.broadcast(StreamEvent::ArtifactUpdate {
             task_id: id.to_string(),
             context_id,
@@ -152,6 +232,19 @@ impl TaskStore {
             TaskStatus::with_message(TaskState::Failed, Message::agent(message)),
             true,
         );
+    }
+
+    fn persist(&self, task: &Task) {
+        let Some(dir) = &self.dir else {
+            return;
+        };
+        if std::fs::create_dir_all(dir).is_err() {
+            return;
+        }
+        let path = dir.join(format!("{}.json", task.id));
+        if let Ok(text) = serde_json::to_string(task) {
+            let _ = std::fs::write(path, text);
+        }
     }
 
     fn broadcast(&self, event: StreamEvent) {
@@ -191,5 +284,25 @@ mod tests {
         let canceled = store.cancel(&id).unwrap();
         assert_eq!(canceled.status.state, TaskState::Canceled);
         assert!(store.is_cancelled(&id));
+    }
+
+    #[test]
+    fn persisted_store_reloads_and_fails_interrupted() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("tasks");
+        let id = {
+            let store = TaskStore::persisted(path.clone()).unwrap();
+            let created = store.create(new_id(), Message::user("work"));
+            let id = created.task.id.clone();
+            // Leave it non-terminal; a completed sibling survives as-is.
+            let done = store.create(new_id(), Message::user("done"));
+            store.finish_ok(&done.task.id);
+            id
+        };
+
+        let reloaded = TaskStore::persisted(path).unwrap();
+        let task = reloaded.get(&id).expect("task persisted");
+        assert_eq!(task.status.state, TaskState::Failed);
+        assert_eq!(reloaded.list().len(), 2);
     }
 }

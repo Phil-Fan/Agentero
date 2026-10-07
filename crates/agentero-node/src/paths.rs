@@ -57,6 +57,11 @@ pub fn tokens_path() -> PathBuf {
     node_dir().join("tokens.json")
 }
 
+/// `…/agentero/node/tasks` — persisted A2A tasks (one JSON file each).
+pub fn tasks_dir() -> PathBuf {
+    node_dir().join("tasks")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

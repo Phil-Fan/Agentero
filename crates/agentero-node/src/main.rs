@@ -128,6 +128,7 @@ async fn run(cli: Cli) -> Result<()> {
             skill,
             cwd,
         } => run_command(&target, &command, &skill, cwd).await,
+        Cmd::Tasks { target, limit } => list_tasks(&target, limit).await,
     }
 }
 
@@ -303,4 +304,18 @@ async fn run_command(target: &str, command: &str, skill: &str, cwd: Option<Strin
         }
         tokio::time::sleep(Duration::from_millis(400)).await;
     }
+}
+
+/// Fetch and print recent task summaries from a node.
+async fn list_tasks(target: &str, limit: usize) -> Result<()> {
+    let token = token_for(target);
+    let got = client::call(target, "tasks/list", json!({}), token.as_deref()).await?;
+    let items = got
+        .pointer("/result/tasks")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let rows: Vec<Value> = items.into_iter().take(limit).collect();
+    println!("{}", serde_json::to_string_pretty(&rows)?);
+    Ok(())
 }
