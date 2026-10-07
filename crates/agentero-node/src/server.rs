@@ -17,16 +17,19 @@ use tokio::sync::broadcast;
 
 use crate::auth::Security;
 use crate::card::{self, AgentCard, AgentSkill};
-use crate::executor::ExecutorRegistry;
+use crate::executor::{ExecutorRegistry, TaskContext};
+use crate::queue::{Job, JobQueue};
 use crate::rpc::{self, RpcOutcome, RpcRequest, ServerState};
 use crate::store::TaskStore;
-use crate::task::{StreamEvent, Task};
+use crate::task::{Message, StreamEvent, Task, TaskState};
 use crate::Result;
 
 pub struct ServeOptions {
     pub listen: SocketAddr,
     pub card_url: Option<String>,
     pub require_auth: bool,
+    /// Maximum number of tasks executed concurrently (worker pool size).
+    pub max_parallel: usize,
 }
 
 /// Serve the node endpoints until Ctrl-C.
@@ -58,9 +61,17 @@ pub async fn serve(options: ServeOptions, executors: ExecutorRegistry) -> Result
     let state = Arc::new(ServerState {
         store,
         executors,
+        queue: JobQueue::new(),
         card,
         security,
     });
+
+    // Worker pool + re-enqueue tasks that were queued before a restart.
+    let worker_count = options.max_parallel.max(1);
+    for _ in 0..worker_count {
+        tokio::spawn(worker(state.clone()));
+    }
+    requeue(&state);
 
     let app = Router::new()
         .route("/healthz", get(healthz))
@@ -100,6 +111,7 @@ async fn healthz(State(state): State<Arc<ServerState>>) -> Json<Value> {
         "version": state.card.version,
         "requireAuth": state.security.require_auth(),
         "pairedClients": state.security.token_count(),
+        "queued": state.queue.depth(),
     }))
 }
 
@@ -208,6 +220,61 @@ fn stream_response(id: Value, task: Task, receiver: broadcast::Receiver<StreamEv
 fn sse_event(event: &StreamEvent, id: &Value) -> Event {
     let payload = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": event });
     Event::default().data(payload.to_string())
+}
+
+/// A worker pulls one job at a time and executes it. Cancelled-while-queued jobs
+/// are skipped (the store already marked them terminal).
+async fn worker(state: Arc<ServerState>) {
+    loop {
+        let job = state.queue.pop().await;
+        if job.cancel.is_cancelled() {
+            continue;
+        }
+        let task_id = job.task_id.clone();
+        let ctx = TaskContext {
+            store: state.store.clone(),
+            task_id: task_id.clone(),
+            context_id: job.context_id,
+            message: job.message,
+            cancel: job.cancel,
+        };
+        match job.executor.execute(ctx).await {
+            Ok(()) => state.store.finish_ok(&task_id),
+            Err(error) => state.store.finish_err(&task_id, error.to_string()),
+        }
+    }
+}
+
+/// Re-enqueue `Submitted` tasks loaded from disk, re-resolving their executor
+/// from the recorded skill.
+fn requeue(state: &Arc<ServerState>) {
+    for id in state.store.task_ids_in_state(TaskState::Submitted) {
+        let Some(task) = state.store.get(&id) else {
+            continue;
+        };
+        let executor = match state.executors.resolve(task.skill().as_deref()) {
+            Ok(executor) => executor,
+            Err(error) => {
+                state
+                    .store
+                    .finish_err(&id, format!("cannot resume after restart: {error}"));
+                continue;
+            }
+        };
+        let message = task
+            .history
+            .first()
+            .cloned()
+            .unwrap_or_else(|| Message::user(""));
+        let cancel = state.store.ensure_cancel(&id);
+        state.queue.push(Job {
+            task_id: id,
+            context_id: task.context_id.clone(),
+            message,
+            executor,
+            cancel,
+        });
+    }
 }
 
 async fn shutdown_signal() {

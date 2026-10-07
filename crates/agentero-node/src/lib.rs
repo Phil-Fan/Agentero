@@ -23,6 +23,7 @@ pub mod executor;
 pub mod identity;
 pub mod paths;
 pub mod probe;
+pub mod queue;
 pub mod registry;
 pub mod rpc;
 pub mod server;

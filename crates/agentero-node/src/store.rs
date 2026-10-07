@@ -15,6 +15,8 @@ use std::sync::{Arc, RwLock};
 use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 
+use serde_json::Value;
+
 use crate::task::{
     new_id, Artifact, Message, StreamEvent, Task, TaskState, TaskStatus, TaskSummary,
 };
@@ -56,7 +58,7 @@ impl TaskStore {
             dir: Some(dir),
         });
         store.load_from_disk()?;
-        store.mark_interrupted();
+        store.fail_in_flight();
         Ok(store)
     }
 
@@ -83,13 +85,21 @@ impl TaskStore {
         Ok(())
     }
 
-    /// Mark any non-terminal task as failed (a restart cannot resume it).
-    fn mark_interrupted(&self) {
+    /// Mark tasks that were actually in flight across the restart as failed.
+    ///
+    /// `Submitted` tasks are left alone: the server re-enqueues them (a queued
+    /// task that never started is safe to run again).
+    fn fail_in_flight(&self) {
         let pending: Vec<String> = {
             let tasks = self.tasks.read().unwrap();
             tasks
                 .values()
-                .filter(|task| !task.status.state.is_terminal())
+                .filter(|task| {
+                    matches!(
+                        task.status.state,
+                        TaskState::Working | TaskState::InputRequired
+                    )
+                })
                 .map(|task| task.id.clone())
                 .collect()
         };
@@ -106,7 +116,12 @@ impl TaskStore {
     }
 
     /// Create a task from an incoming user message.
-    pub fn create(&self, context_id: String, user: Message) -> CreatedTask {
+    pub fn create(
+        &self,
+        context_id: String,
+        user: Message,
+        metadata: Option<Value>,
+    ) -> CreatedTask {
         let id = new_id();
         let user = Message {
             task_id: Some(id.clone()),
@@ -117,6 +132,7 @@ impl TaskStore {
             id: id.clone(),
             context_id,
             status: TaskStatus::new(TaskState::Submitted),
+            metadata,
             history: vec![user],
             artifacts: Vec::new(),
         };
@@ -150,6 +166,28 @@ impl TaskStore {
 
     pub fn subscribe(&self, id: &str) -> Option<broadcast::Receiver<StreamEvent>> {
         self.senders.read().unwrap().get(id).map(|s| s.subscribe())
+    }
+
+    /// Ids of tasks currently in `state`.
+    pub fn task_ids_in_state(&self, state: TaskState) -> Vec<String> {
+        let tasks = self.tasks.read().unwrap();
+        tasks
+            .values()
+            .filter(|task| task.status.state == state)
+            .map(|task| task.id.clone())
+            .collect()
+    }
+
+    /// Return the task's cancellation token, creating one if the task was
+    /// reloaded from disk (tokens are process-local and not persisted).
+    pub fn ensure_cancel(&self, id: &str) -> CancellationToken {
+        let mut cancels = self.cancels.write().unwrap();
+        if let Some(token) = cancels.get(id) {
+            return token.clone();
+        }
+        let token = CancellationToken::new();
+        cancels.insert(id.to_string(), token.clone());
+        token
     }
 
     pub fn is_cancelled(&self, id: &str) -> bool {
@@ -266,7 +304,7 @@ mod tests {
     #[test]
     fn create_get_and_finish() {
         let store = TaskStore::new();
-        let created = store.create(new_id(), Message::user("hi"));
+        let created = store.create(new_id(), Message::user("hi"), None);
         let id = created.task.id.clone();
         assert_eq!(store.get(&id).unwrap().status.state, TaskState::Submitted);
         store.finish_ok(&id);
@@ -279,7 +317,7 @@ mod tests {
     #[test]
     fn cancel_sets_terminal_and_token() {
         let store = TaskStore::new();
-        let created = store.create(new_id(), Message::user("hi"));
+        let created = store.create(new_id(), Message::user("hi"), None);
         let id = created.task.id.clone();
         let canceled = store.cancel(&id).unwrap();
         assert_eq!(canceled.status.state, TaskState::Canceled);
@@ -287,22 +325,31 @@ mod tests {
     }
 
     #[test]
-    fn persisted_store_reloads_and_fails_interrupted() {
+    fn persisted_store_reloads_and_fails_only_in_flight() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("tasks");
-        let id = {
+        let (in_flight, queued) = {
             let store = TaskStore::persisted(path.clone()).unwrap();
-            let created = store.create(new_id(), Message::user("work"));
-            let id = created.task.id.clone();
-            // Leave it non-terminal; a completed sibling survives as-is.
-            let done = store.create(new_id(), Message::user("done"));
-            store.finish_ok(&done.task.id);
-            id
+            // A task that started executing.
+            let running = store.create(new_id(), Message::user("work"), None);
+            store.set_status(&running.task.id, TaskStatus::new(TaskState::Working), false);
+            // A queued task that never started.
+            let queued = store.create(new_id(), Message::user("queued"), None);
+            (running.task.id, queued.task.id)
         };
 
         let reloaded = TaskStore::persisted(path).unwrap();
-        let task = reloaded.get(&id).expect("task persisted");
-        assert_eq!(task.status.state, TaskState::Failed);
-        assert_eq!(reloaded.list().len(), 2);
+        assert_eq!(
+            reloaded.get(&in_flight).unwrap().status.state,
+            TaskState::Failed
+        );
+        assert_eq!(
+            reloaded.get(&queued).unwrap().status.state,
+            TaskState::Submitted
+        );
+        assert_eq!(
+            reloaded.task_ids_in_state(TaskState::Submitted),
+            vec![queued]
+        );
     }
 }

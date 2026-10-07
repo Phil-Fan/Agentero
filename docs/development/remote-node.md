@@ -1,9 +1,10 @@
 # 远端 Node（Headless Agentero Node）
 
-> 状态：**M1 + M2 + 配对鉴权 + 远端 Agent 执行器 + 任务持久化 已落地** —— `crates/agentero-node`
-> 提供身份 / Agent Card / 发现登记表 / 节点服务器、**A2A JSON-RPC + SSE 任务端点**（`message/send` /
-> `message/stream` / `tasks/get` / `tasks/cancel` / `tasks/list`）、**配对码 + Bearer token 鉴权**、
-> **`agent` 技能**，以及**任务落盘 + 重启恢复**。
+> 状态：**M1 + M2 + 配对鉴权 + 远端 Agent 执行器 + 任务持久化 + 队列化执行 已落地** ——
+> `crates/agentero-node` 提供身份 / Agent Card / 发现登记表 / 节点服务器、**A2A JSON-RPC + SSE 任务端点**
+> （`message/send` / `message/stream` / `tasks/get` / `tasks/cancel` / `tasks/list`）、
+> **配对码 + Bearer token 鉴权**、**`agent` 技能**、**任务落盘 + 重启恢复**，以及
+> **worker 池 + 队列（`--max-parallel` 并发上限）**。
 > RunSet 编排与桌面 / CLI 集成为后续（见 §10）。
 
 ## 1. 背景
@@ -34,7 +35,8 @@
 | `registry` | 本机「已发现节点」登记表 + 已配对 token（JSON，`0600`） |
 | `auth` | 配对码（一次性、10 分钟）+ 长期 Bearer token（节点侧**只存哈希**） |
 | `task` | A2A 任务模型：Message / Part / Task / Artifact / StreamEvent |
-| `store` | 任务存储 + 每任务广播 + 取消令牌；可选落盘（`tasks/<id>.json`），重启恢复并把中断任务标记为 failed |
+| `store` | 任务存储 + 每任务广播 + 取消令牌；可选落盘（`tasks/<id>.json`），重启恢复 |
+| `queue` | 内存作业队列 + 唤醒；`message/send` 入队即返回，worker 池拉取执行 |
 | `executor` | `Executor` trait + `echo`（协议冒烟）+ `run`（执行命令）+ `agent`（配置的 CLI Agent，`{prompt}` 模板） |
 | `rpc` | JSON-RPC 2.0 方法分发（同时接受 v0.3 `message/send` 与 v1 `SendMessage` 别名） |
 | `client` | 极小 A2A 客户端（CLI `call` / `run` / `pair` 用，自动附带 token） |
@@ -50,7 +52,7 @@
 ```text
 agentero-node init [--name N]                 # 生成节点身份
 agentero-node card [--url URL]                # 打印本机 Agent Card
-agentero-node serve [--listen A] [--allow-run] [--require-auth] [--workdir DIR] [--agent-command CMD]
+agentero-node serve [--listen A] [--allow-run] [--require-auth] [--workdir DIR] [--agent-command CMD] [--max-parallel N]
                                               # card + /healthz + /pair + /a2a
 agentero-node probe <target>                  # 拉取对端 Agent Card
 agentero-node add <target>                    # probe 并登记到本机 registry
@@ -93,6 +95,11 @@ agentero-node tasks <target> [--limit N]        # 列出节点上的最近任务
   {prompt}`）；模板中的 `{prompt}` 被 shell 引号包裹后替换，缺省追加。prompt 取自 `data`
   part 的 `prompt`，回退到 message 文本。以 `sh -c` 执行，输出流式回报，产出 `output.txt`。
   仅在配置了 `--agent-command` 时出现在 Card 的 `skills` 中。
+- **队列 + worker 池**：`message/send` / `message/stream` 只**入队即返回**（任务为 `submitted`），
+  由 `--max-parallel` 个 worker 拉取执行（`working`）。排队中的任务可被 `tasks/cancel` 取消且不会执行；
+  `/healthz` 报 `queued` 深度。默认 `--max-parallel 4`。
+- **重启恢复**：`working` / `input-required` 的任务标记 `failed`；`submitted`（从未启动）的任务
+  按记录的 skill 重新入队执行（`task.metadata.skill`）。
 - 任务状态为 `kebab-case`（`input-required` 等），任务事件字段为 `camelCase`（对齐 A2A）。
 
 ## 7. 路径约定
@@ -109,22 +116,21 @@ agentero-node tasks <target> [--limit N]        # 列出节点上的最近任务
 - **发现**：v1 手动 `add` + 从 `~/.ssh/config` 导入 + 配对码 TOFU；后续 mDNS、中心 registry。
 - **安装**：形态 B 只需一个二进制；预编译分发 + 安装脚本 + systemd 为后续。
 - **通信**：v1 用 **SSH 端口转发 + A2A over loopback**，复用 SSH 密钥鉴权、无需暴露端口；
-  云 / NAT 场景后续走 outbound tunnel。任务队列当前在节点内存中，持久化队列为后续。
+  云 / NAT 场景后续走 outbound tunnel。任务在内存队列中执行并落盘，重启后重新入队。
 
 ## 9. 验证（实测）
 
 | 主机 | 架构 | 结果 |
 |---|---|---|
-| 本机 macOS | aarch64 | 20 单测通过；send / stream / run / cancel / 配对鉴权 / agent / 落盘恢复全通过 |
-| `dgx-remote` | aarch64 | 配对后 `run` → `spark` / `NVIDIA GB10`；重启后任务仍在、token 仍有效 |
-| `a1` | x86_64 | 配对后 `run` → `instance-mmztii7i` / 4×`A100-PCIE-40GB`；重启后任务仍在 |
+| 本机 macOS | aarch64 | 20 单测通过；send / stream / run / cancel / 配对 / agent / 落盘恢复 / 队列并发全通过 |
+| `dgx-remote` | aarch64 | 并发提交 5 任务（`--max-parallel 2`）→ 2 运行 + 3 排队 → 全部完成；重启后任务仍在、token 仍有效 |
+| `a1` | x86_64 | `run` → 4×`A100`；`agent` → mock 回显；重启后任务仍在 |
 
 本机经 SSH 隧道对两个节点完成：探测 → 配对换 token → 带 token 提交 A2A 任务 → 取回产物。
 
 ## 10. 后续
 
-1. **队列化执行**：提交即入队、worker 拉取、可选自动重跑（当前 `message/send` 立即执行，
-   落盘仅用于历史与恢复）。
+1. **队列增强**：优先级、资源画像（GPU/内存）、自动重跑策略。
 2. **编排**：RunSet / Run 队列 + 并行调度。
 3. **集成**：桌面 / `agentero-cli` 加 `node` 子命令与「远端会话」面板。
 4. **鉴权增强**：Keychain、公钥 pinning、token 分级/吊销。

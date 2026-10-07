@@ -12,13 +12,15 @@ use tokio::sync::broadcast;
 
 use crate::auth::Security;
 use crate::card::AgentCard;
-use crate::executor::{Executor, ExecutorRegistry, TaskContext};
+use crate::executor::ExecutorRegistry;
+use crate::queue::{Job, JobQueue};
 use crate::store::{CreatedTask, TaskStore};
 use crate::task::{new_id, Message, StreamEvent, Task};
 
 pub struct ServerState {
     pub store: Arc<TaskStore>,
     pub executors: ExecutorRegistry,
+    pub queue: Arc<JobQueue>,
     pub card: AgentCard,
     pub security: Arc<Security>,
 }
@@ -70,19 +72,15 @@ pub async fn dispatch(state: &Arc<ServerState>, request: RpcRequest) -> RpcOutco
     let id = request.id.clone().unwrap_or(Value::Null);
     match normalize(&request.method) {
         Method::Send => match start_task(state, request.params.as_ref()) {
-            Ok((created, executor, message)) => {
-                spawn_task(state, &created, executor, message);
-                RpcOutcome::Json(ok(
-                    id,
-                    serde_json::to_value(created.task).unwrap_or(Value::Null),
-                ))
-            }
+            Ok(created) => RpcOutcome::Json(ok(
+                id,
+                serde_json::to_value(created.task).unwrap_or(Value::Null),
+            )),
             Err(error) => RpcOutcome::Json(fail(id, error)),
         },
         Method::Stream => match start_task(state, request.params.as_ref()) {
-            Ok((created, executor, message)) => {
+            Ok(created) => {
                 let task = created.task.clone();
-                spawn_task(state, &created, executor, message);
                 RpcOutcome::Stream(Box::new(StreamPayload {
                     id,
                     task,
@@ -117,11 +115,8 @@ pub async fn dispatch(state: &Arc<ServerState>, request: RpcRequest) -> RpcOutco
     }
 }
 
-/// Validate params, resolve the executor, and create the task.
-fn start_task(
-    state: &Arc<ServerState>,
-    params: Option<&Value>,
-) -> Result<(CreatedTask, Arc<dyn Executor>, Message), String> {
+/// Validate params, resolve the executor, create the task, and enqueue it.
+fn start_task(state: &Arc<ServerState>, params: Option<&Value>) -> Result<CreatedTask, String> {
     let params = params.ok_or("missing params")?;
     let message_value = params.get("message").ok_or("missing 'message'")?;
     let message: Message = serde_json::from_value(message_value.clone())
@@ -137,33 +132,18 @@ fn start_task(
         .map(str::to_string)
         .or_else(|| message.context_id.clone())
         .unwrap_or_else(new_id);
-    let created = state.store.create(context_id, message.clone());
-    Ok((created, executor, message))
-}
-
-fn spawn_task(
-    state: &Arc<ServerState>,
-    created: &CreatedTask,
-    executor: Arc<dyn Executor>,
-    message: Message,
-) {
-    let store = state.store.clone();
-    let task_id = created.task.id.clone();
-    let context_id = created.task.context_id.clone();
-    let cancel = created.cancel.clone();
-    tokio::spawn(async move {
-        let ctx = TaskContext {
-            store: store.clone(),
-            task_id: task_id.clone(),
-            context_id,
-            message,
-            cancel,
-        };
-        match executor.execute(ctx).await {
-            Ok(()) => store.finish_ok(&task_id),
-            Err(error) => store.finish_err(&task_id, error.to_string()),
-        }
+    let metadata = skill
+        .as_ref()
+        .map(|skill| serde_json::json!({ "skill": skill }));
+    let created = state.store.create(context_id, message.clone(), metadata);
+    state.queue.push(Job {
+        task_id: created.task.id.clone(),
+        context_id: created.task.context_id.clone(),
+        message,
+        executor,
+        cancel: created.cancel.clone(),
     });
+    Ok(created)
 }
 
 fn skill_of(params: &Value, message: &Message) -> Option<String> {

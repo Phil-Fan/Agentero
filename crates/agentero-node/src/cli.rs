@@ -53,6 +53,9 @@ pub enum Cmd {
         /// Enabling this advertises the `agent` skill.
         #[arg(long, value_name = "CMD")]
         agent_command: Option<String>,
+        /// Maximum number of tasks executed concurrently (worker pool size).
+        #[arg(long, default_value_t = 4)]
+        max_parallel: usize,
     },
     /// Fetch and print another node's Agent Card.
     Probe {

@@ -57,6 +57,7 @@ async fn run(cli: Cli) -> Result<()> {
             workdir,
             require_auth,
             agent_command,
+            max_parallel,
         } => {
             let addr: std::net::SocketAddr = listen
                 .parse()
@@ -80,6 +81,7 @@ async fn run(cli: Cli) -> Result<()> {
                     listen: addr,
                     card_url: url,
                     require_auth,
+                    max_parallel,
                 },
                 registry,
             )

@@ -27,7 +27,7 @@
 | [rust-arch-refactor.md](rust-arch-refactor.md) | Rust 架构重构计划（2026-09-25 更新）：共享业务用例、提交与恢复、Vault 派生状态、论文准备/共享提取、任务生命周期、Agent 上下文六条主线；含前置正确性修复、依赖与验收、旧任务归并及历史裁决。R1 WAL 一致快照、R2 字段原子更新、R3 sync 占用 RAII、A1 共享移动用例已完成，其余按计划推进 |
 | [zhihu.md](zhihu.md) | 知乎开放平台集成：统一 CLI 后端（探测/一键安装/Keychain 凭证）+ 知乎虚拟 Agent（builtin ACP 适配 + 直答大脑）+ 广场知乎面板 + 论文找讨论 / 划词插引用。设计稿，实施未开始 |
 | [A2A.md](A2A.md) | 本机桌面与远端 headless 之间的薄 A2A 任务层：Agent Card + Task，把算力和数据留在服务器。设计草稿，实施未开始 |
-| [remote-node.md](remote-node.md) | 远端 Node（headless `crates/agentero-node`）：身份 / Agent Card / 发现登记表 / 节点服务器 / A2A 任务端点 / 配对鉴权 / `agent` 技能 / 任务持久化。**M1 + M2 + 鉴权 + agent + 持久化已落地**；队列化、编排、集成为后续 |
+| [remote-node.md](remote-node.md) | 远端 Node（headless `crates/agentero-node`）：身份 / Agent Card / 发现登记表 / 节点服务器 / A2A 任务端点 / 配对鉴权 / `agent` 技能 / 任务持久化 / 队列化执行。**M1 + M2 + 鉴权 + agent + 持久化 + 队列已落地**；编排、集成为后续 |
 | [translate-sentence-anchor.md](translate-sentence-anchor.md) | 全文译文划选按句锚回英文。**已落地**（见 [../frontend/translate.md](../frontend/translate.md)、[../frontend/wiki.md](../frontend/wiki.md)），保留为设计记录。侧栏译文面板不给英文高亮加淡底 |
 
 macOS 签名与公证（已实现流程说明）在 [`../bug_fix/macos-signing.md`](../bug_fix/macos-signing.md)。
