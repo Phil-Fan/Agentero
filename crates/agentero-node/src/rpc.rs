@@ -104,7 +104,17 @@ pub async fn dispatch(state: &Arc<ServerState>, request: RpcRequest) -> RpcOutco
             None => error(id, -32602, "missing task id"),
         }),
         Method::List => {
-            let tasks = state.store.list();
+            let context = request
+                .params
+                .as_ref()
+                .and_then(|params| params.get("contextId"))
+                .and_then(Value::as_str);
+            let tasks: Vec<_> = state
+                .store
+                .list()
+                .into_iter()
+                .filter(|task| context.map(|c| task.context_id == c).unwrap_or(true))
+                .collect();
             RpcOutcome::Json(ok(id, serde_json::json!({ "tasks": tasks })))
         }
         Method::Unknown => RpcOutcome::Json(error(

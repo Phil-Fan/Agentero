@@ -130,7 +130,33 @@ async fn run(cli: Cli) -> Result<()> {
             skill,
             cwd,
         } => run_command(&target, &command, &skill, cwd).await,
-        Cmd::Tasks { target, limit } => list_tasks(&target, limit).await,
+        Cmd::Tasks {
+            target,
+            limit,
+            context,
+        } => list_tasks(&target, limit, context).await,
+        Cmd::Batch {
+            target,
+            skill,
+            template,
+            values,
+            values_file,
+            context,
+            cwd,
+            wait,
+        } => {
+            batch(
+                &target,
+                &skill,
+                &template,
+                values,
+                values_file,
+                context,
+                cwd,
+                wait,
+            )
+            .await
+        }
     }
 }
 
@@ -309,9 +335,13 @@ async fn run_command(target: &str, command: &str, skill: &str, cwd: Option<Strin
 }
 
 /// Fetch and print recent task summaries from a node.
-async fn list_tasks(target: &str, limit: usize) -> Result<()> {
+async fn list_tasks(target: &str, limit: usize, context: Option<String>) -> Result<()> {
     let token = token_for(target);
-    let got = client::call(target, "tasks/list", json!({}), token.as_deref()).await?;
+    let params = match context {
+        Some(context) => json!({ "contextId": context }),
+        None => json!({}),
+    };
+    let got = client::call(target, "tasks/list", params, token.as_deref()).await?;
     let items = got
         .pointer("/result/tasks")
         .and_then(Value::as_array)
@@ -320,4 +350,124 @@ async fn list_tasks(target: &str, limit: usize) -> Result<()> {
     let rows: Vec<Value> = items.into_iter().take(limit).collect();
     println!("{}", serde_json::to_string_pretty(&rows)?);
     Ok(())
+}
+
+/// Submit one task per value (a parameter sweep sharing a context id).
+#[allow(clippy::too_many_arguments)]
+async fn batch(
+    target: &str,
+    skill: &str,
+    template: &str,
+    values: Option<String>,
+    values_file: Option<std::path::PathBuf>,
+    context: Option<String>,
+    cwd: Option<String>,
+    wait: bool,
+) -> Result<()> {
+    let values = collect_values(values, values_file)?;
+    if values.is_empty() {
+        return Err(NodeError::msg(
+            "no values provided (use --values or --values-file)",
+        ));
+    }
+    let token = token_for(target);
+    let context_id = context.unwrap_or_else(|| format!("sweep-{}", agentero_node::task::new_id()));
+
+    let mut ids = Vec::new();
+    for value in &values {
+        let rendered = template.replace("{value}", value);
+        let mut data = serde_json::Map::new();
+        // `run` reads `command`, `agent` reads `prompt`; provide both.
+        data.insert("command".to_string(), json!(rendered));
+        data.insert("prompt".to_string(), json!(rendered));
+        if let Some(cwd) = &cwd {
+            data.insert("cwd".to_string(), json!(cwd));
+        }
+        let params = json!({
+            "contextId": context_id,
+            "message": {
+                "role": "user",
+                "parts": [
+                    { "kind": "text", "text": rendered },
+                    { "kind": "data", "data": data }
+                ]
+            },
+            "metadata": { "skill": skill }
+        });
+        let response = client::call(target, "message/send", params, token.as_deref()).await?;
+        let id = response
+            .pointer("/result/id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        ids.push(id);
+    }
+
+    println!("context {context_id}: submitted {} tasks", ids.len());
+    for (value, id) in values.iter().zip(ids.iter()) {
+        println!("  {value} -> {}", short_id(id));
+    }
+    if wait {
+        poll_all(target, token.as_deref(), &ids).await?;
+    }
+    Ok(())
+}
+
+/// Poll every task until terminal and print a summary.
+async fn poll_all(target: &str, token: Option<&str>, ids: &[String]) -> Result<()> {
+    loop {
+        let mut done = true;
+        let mut states = Vec::new();
+        for id in ids {
+            let got = client::call(target, "tasks/get", json!({ "id": id }), token).await?;
+            let state = got
+                .pointer("/result/status/state")
+                .and_then(Value::as_str)
+                .unwrap_or("?")
+                .to_string();
+            if !matches!(
+                state.as_str(),
+                "completed" | "failed" | "canceled" | "rejected"
+            ) {
+                done = false;
+            }
+            states.push((short_id(id), state));
+        }
+        if done {
+            for (id, state) in states {
+                println!("  {id} {state}");
+            }
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+}
+
+fn collect_values(
+    values: Option<String>,
+    values_file: Option<std::path::PathBuf>,
+) -> Result<Vec<String>> {
+    let mut out = Vec::new();
+    if let Some(list) = values {
+        out.extend(
+            list.split(',')
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(str::to_string),
+        );
+    }
+    if let Some(path) = values_file {
+        let text = std::fs::read_to_string(&path)?;
+        out.extend(
+            text.lines()
+                .map(str::trim)
+                .filter(|v| !v.is_empty() && !v.starts_with('#'))
+                .map(str::to_string),
+        );
+    }
+    Ok(out)
+}
+
+fn short_id(id: &str) -> String {
+    id.chars().take(8).collect()
 }

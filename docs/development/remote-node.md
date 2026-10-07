@@ -61,7 +61,8 @@ agentero-node remove <node-id>                # 忘记节点
 agentero-node pair <target> <code> [--name N] # 用配对码换取并保存 token
 agentero-node call <target> [--method M] [--params JSON]
 agentero-node run <target> <command> [--skill S] [--cwd DIR]
-agentero-node tasks <target> [--limit N]        # 列出节点上的最近任务
+agentero-node tasks <target> [--limit N] [--context ID]
+agentero-node batch <target> --template "..." --values "a,b,c" [--skill S] [--context ID] [--wait]
 ```
 
 ## 5. 鉴权（可选，`--require-auth`）
@@ -100,6 +101,9 @@ agentero-node tasks <target> [--limit N]        # 列出节点上的最近任务
   `/healthz` 报 `queued` 深度。默认 `--max-parallel 4`。
 - **重启恢复**：`working` / `input-required` 的任务标记 `failed`；`submitted`（从未启动）的任务
   按记录的 skill 重新入队执行（`task.metadata.skill`）。
+- **`batch` 扫描**：一个模板 + 多个 value（`--values a,b,c` 或 `--values-file`）→ 每条提交一个任务，
+  共享一个 `contextId`（可用 `tasks --context` 按组查询）；`--wait` 轮询到全部终态并汇总。
+  这是并行实验的最小原语（更完整的 RunSet 编排见后续）。
 - 任务状态为 `kebab-case`（`input-required` 等），任务事件字段为 `camelCase`（对齐 A2A）。
 
 ## 7. 路径约定
@@ -122,8 +126,8 @@ agentero-node tasks <target> [--limit N]        # 列出节点上的最近任务
 
 | 主机 | 架构 | 结果 |
 |---|---|---|
-| 本机 macOS | aarch64 | 20 单测通过；send / stream / run / cancel / 配对 / agent / 落盘恢复 / 队列并发全通过 |
-| `dgx-remote` | aarch64 | 并发提交 5 任务（`--max-parallel 2`）→ 2 运行 + 3 排队 → 全部完成；重启后任务仍在、token 仍有效 |
+| 本机 macOS | aarch64 | 20 单测通过；send / stream / run / cancel / 配对 / agent / 落盘恢复 / 队列并发 / batch 扫描全通过 |
+| `dgx-remote` | aarch64 | `batch` 4 值扫描（`--max-parallel 2`）全部完成；重启后任务仍在、token 仍有效 |
 | `a1` | x86_64 | `run` → 4×`A100`；`agent` → mock 回显；重启后任务仍在 |
 
 本机经 SSH 隧道对两个节点完成：探测 → 配对换 token → 带 token 提交 A2A 任务 → 取回产物。
@@ -131,7 +135,7 @@ agentero-node tasks <target> [--limit N]        # 列出节点上的最近任务
 ## 10. 后续
 
 1. **队列增强**：优先级、资源画像（GPU/内存）、自动重跑策略。
-2. **编排**：RunSet / Run 队列 + 并行调度。
+2. **编排**：RunSet 模型（父子分组 / 聚合 / 早停 / 晋升）——当前 `batch` 只是最小扫描原语。
 3. **集成**：桌面 / `agentero-cli` 加 `node` 子命令与「远端会话」面板。
 4. **鉴权增强**：Keychain、公钥 pinning、token 分级/吊销。
 5. **ACP 原生宿主**：`agent` 技能从「一次性命令」升级为 ACP 会话（工具调用、权限、产物）。

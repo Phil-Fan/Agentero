@@ -110,5 +110,33 @@ pub enum Cmd {
         /// Maximum rows to print.
         #[arg(long, default_value_t = 20)]
         limit: usize,
+        /// Only tasks in this A2A context id.
+        #[arg(long, value_name = "ID")]
+        context: Option<String>,
+    },
+    /// Submit a parameter sweep: one task per value, sharing a context id.
+    Batch {
+        target: String,
+        /// Skill to invoke (default: run).
+        #[arg(long, default_value = "run")]
+        skill: String,
+        /// Template; `{value}` is replaced for each value.
+        #[arg(long, value_name = "TEMPLATE")]
+        template: String,
+        /// Comma-separated values.
+        #[arg(long, value_name = "LIST")]
+        values: Option<String>,
+        /// File with one value per line (alternative to --values).
+        #[arg(long, value_name = "FILE")]
+        values_file: Option<std::path::PathBuf>,
+        /// Shared context id (default: generated).
+        #[arg(long, value_name = "ID")]
+        context: Option<String>,
+        /// Working directory on the node.
+        #[arg(long, value_name = "DIR")]
+        cwd: Option<String>,
+        /// Wait for all tasks to finish and print a summary.
+        #[arg(long)]
+        wait: bool,
     },
 }
