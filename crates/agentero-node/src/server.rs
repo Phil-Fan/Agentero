@@ -1,18 +1,21 @@
-//! Loopback HTTP server: Agent Card, health, and the A2A JSON-RPC endpoint.
+//! Loopback HTTP server: Agent Card, health, pairing, and the A2A endpoint.
 
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::extract::State;
+use axum::http::{header::AUTHORIZATION, HeaderMap, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures_util::stream::{self, StreamExt as _};
+use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::broadcast;
 
+use crate::auth::Security;
 use crate::card::{self, AgentCard, AgentSkill};
 use crate::executor::ExecutorRegistry;
 use crate::rpc::{self, RpcOutcome, RpcRequest, ServerState};
@@ -20,12 +23,14 @@ use crate::store::TaskStore;
 use crate::task::{StreamEvent, Task};
 use crate::Result;
 
+pub struct ServeOptions {
+    pub listen: SocketAddr,
+    pub card_url: Option<String>,
+    pub require_auth: bool,
+}
+
 /// Serve the node endpoints until Ctrl-C.
-pub async fn serve(
-    listen: SocketAddr,
-    card_url: Option<String>,
-    executors: ExecutorRegistry,
-) -> Result<()> {
+pub async fn serve(options: ServeOptions, executors: ExecutorRegistry) -> Result<()> {
     let skills = executors
         .ids()
         .into_iter()
@@ -38,26 +43,40 @@ pub async fn serve(
         })
         .collect();
 
-    let advertised = card_url.unwrap_or_else(|| format!("http://{listen}/a2a"));
+    let advertised = options
+        .card_url
+        .unwrap_or_else(|| format!("http://{}/a2a", options.listen));
     let card = card::build(Some(advertised.as_str()), skills)?;
+    let security = Arc::new(Security::load(options.require_auth)?);
     let state = Arc::new(ServerState {
         store: TaskStore::new(),
         executors,
         card,
+        security,
     });
 
     let app = Router::new()
         .route("/healthz", get(healthz))
         .route(card::CARD_PATH, get(agent_card))
+        .route("/pair", post(pair))
         .route("/a2a", post(a2a))
-        .with_state(state);
+        .with_state(state.clone());
 
-    let listener = tokio::net::TcpListener::bind(listen)
+    let listener = tokio::net::TcpListener::bind(options.listen)
         .await
-        .map_err(|e| crate::NodeError::msg(format!("cannot bind {listen}: {e}")))?;
+        .map_err(|e| crate::NodeError::msg(format!("cannot bind {}: {e}", options.listen)))?;
 
-    log::info!(target: "agentero_node", "listening on http://{listen}");
-    println!("agentero-node listening on http://{listen}");
+    log::info!(target: "agentero_node", "listening on http://{}", options.listen);
+    println!("agentero-node listening on http://{}", options.listen);
+    if options.require_auth {
+        if let Some(code) = state.security.ensure_pairing_code() {
+            println!("pairing code: {code}");
+            println!(
+                "  pair a client with: agentero-node pair http://<host>:{} {code}",
+                options.listen.port()
+            );
+        }
+    }
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
@@ -72,6 +91,8 @@ async fn healthz(State(state): State<Arc<ServerState>>) -> Json<Value> {
         "nodeId": state.card.agentero.node_id,
         "name": state.card.name,
         "version": state.card.version,
+        "requireAuth": state.security.require_auth(),
+        "pairedClients": state.security.token_count(),
     }))
 }
 
@@ -79,7 +100,41 @@ async fn agent_card(State(state): State<Arc<ServerState>>) -> Json<AgentCard> {
     Json(state.card.clone())
 }
 
-async fn a2a(State(state): State<Arc<ServerState>>, body: String) -> Response {
+#[derive(Deserialize)]
+struct PairRequest {
+    code: String,
+    #[serde(default)]
+    name: Option<String>,
+}
+
+async fn pair(State(state): State<Arc<ServerState>>, Json(request): Json<PairRequest>) -> Response {
+    let name = request.name.unwrap_or_default();
+    match state.security.pair(&request.code, &name) {
+        Ok(token) => Json(serde_json::json!({
+            "token": token,
+            "nodeId": state.card.agentero.node_id,
+        }))
+        .into_response(),
+        Err(error) => (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": error.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+async fn a2a(State(state): State<Arc<ServerState>>, headers: HeaderMap, body: String) -> Response {
+    let bearer = headers
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok());
+    if !state.security.verify(bearer) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "unauthorized" })),
+        )
+            .into_response();
+    }
+
     let request: RpcRequest = match serde_json::from_str(&body) {
         Ok(request) => request,
         Err(error) => {

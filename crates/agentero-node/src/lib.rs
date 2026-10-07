@@ -15,6 +15,7 @@
 //! to be copied to a bare server and built standalone, so the remote build does
 //! not drag in the desktop dependency tree (rusqlite / PDFium / …).
 
+pub mod auth;
 pub mod card;
 pub mod client;
 pub mod error;

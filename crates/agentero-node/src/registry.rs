@@ -39,6 +39,9 @@ pub struct RegisteredNode {
     pub ssh_host: Option<String>,
     pub public_key: Option<String>,
     pub last_seen: String,
+    /// Long-lived bearer token (paired). Sensitive; registry file is `0600`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
     /// Raw card as fetched, kept verbatim for forward compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub card: Option<Value>,
@@ -78,6 +81,7 @@ impl RegisteredNode {
             ssh_host: None,
             public_key,
             last_seen: chrono::Utc::now().to_rfc3339(),
+            token: None,
             card: Some(card.clone()),
         }
     }
@@ -109,7 +113,23 @@ impl NodeRegistry {
         }
         let text = serde_json::to_string_pretty(self)?;
         std::fs::write(&path, text)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+        }
         Ok(())
+    }
+
+    /// Find a remembered node by its base URL (trailing slash insensitive).
+    pub fn find_by_url(&self, target: &str) -> Option<&RegisteredNode> {
+        let normalized = target.trim().trim_end_matches('/');
+        self.nodes.iter().find(|node| {
+            node.url
+                .as_deref()
+                .map(|url| url.trim_end_matches('/') == normalized)
+                .unwrap_or(false)
+        })
     }
 
     /// Insert or replace a node by id.

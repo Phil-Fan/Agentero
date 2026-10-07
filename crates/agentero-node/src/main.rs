@@ -22,6 +22,7 @@ use std::time::Duration;
 
 use agentero_node::client;
 use agentero_node::executor::{EchoExecutor, Executor, ExecutorRegistry, RunExecutor};
+use agentero_node::server::ServeOptions;
 use agentero_node::{card, identity, paths, registry, server, NodeError, Result};
 use clap::Parser;
 use cli::{Cli, Cmd};
@@ -52,6 +53,7 @@ async fn run(cli: Cli) -> Result<()> {
             url,
             allow_run,
             workdir,
+            require_auth,
         } => {
             let addr: std::net::SocketAddr = listen
                 .parse()
@@ -62,7 +64,15 @@ async fn run(cli: Cli) -> Result<()> {
                 workdir,
             });
             let executors = ExecutorRegistry::new(vec![echo, run], "echo");
-            server::serve(addr, url, executors).await
+            server::serve(
+                ServeOptions {
+                    listen: addr,
+                    card_url: url,
+                    require_auth,
+                },
+                executors,
+            )
+            .await
         }
         Cmd::Probe { target } => {
             let value = card::fetch(&target).await?;
@@ -85,6 +95,7 @@ async fn run(cli: Cli) -> Result<()> {
             );
             Ok(())
         }
+        Cmd::Pair { target, code, name } => pair(&target, &code, name).await,
         Cmd::Call {
             target,
             method,
@@ -95,7 +106,8 @@ async fn run(cli: Cli) -> Result<()> {
                     .map_err(|e| NodeError::msg(format!("invalid --params JSON: {e}")))?,
                 None => json!({}),
             };
-            let response = client::call(&target, &method, params).await?;
+            let response =
+                client::call(&target, &method, params, token_for(&target).as_deref()).await?;
             println!("{}", serde_json::to_string_pretty(&response)?);
             Ok(())
         }
@@ -153,8 +165,56 @@ async fn add(target: &str, name: Option<String>) -> Result<()> {
     Ok(())
 }
 
+/// Look up a stored bearer token for a target URL.
+fn token_for(target: &str) -> Option<String> {
+    let reg = registry::load().ok()?;
+    reg.find_by_url(target).and_then(|node| node.token.clone())
+}
+
+/// Exchange a pairing code for a token and persist it for this node.
+async fn pair(target: &str, code: &str, name: Option<String>) -> Result<()> {
+    let client_name = name.unwrap_or_else(|| "agentero-node".to_string());
+    let response = client::pair(target, code, &client_name).await?;
+    let token = response
+        .get("token")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    if token.is_empty() {
+        return Err(NodeError::msg("pairing response missing token"));
+    }
+    let mut reg = registry::load()?;
+    let node = match reg.find_by_url(target).cloned() {
+        Some(mut node) => {
+            node.token = Some(token);
+            node.last_seen = chrono::Utc::now().to_rfc3339();
+            node
+        }
+        None => {
+            let card = card::fetch(target).await.unwrap_or(Value::Null);
+            let mut node =
+                registry::RegisteredNode::from_card(target, &card, Some(client_name.clone()));
+            node.token = Some(token);
+            node
+        }
+    };
+    let node_id = node.node_id.clone();
+    reg.upsert(node);
+    reg.save()?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!({
+            "paired": node_id,
+            "name": client_name,
+            "registryPath": paths::registry_path().display().to_string(),
+        }))?
+    );
+    Ok(())
+}
+
 /// Submit a `run` task and poll `tasks/get` until it reaches a terminal state.
 async fn run_command(target: &str, command: &str, skill: &str, cwd: Option<String>) -> Result<()> {
+    let token = token_for(target);
     let mut data = serde_json::Map::new();
     data.insert("command".to_string(), json!(command));
     if let Some(cwd) = cwd {
@@ -171,7 +231,7 @@ async fn run_command(target: &str, command: &str, skill: &str, cwd: Option<Strin
         "metadata": { "skill": skill }
     });
 
-    let response = client::call(target, "message/send", params).await?;
+    let response = client::call(target, "message/send", params, token.as_deref()).await?;
     let task_id = response
         .pointer("/result/id")
         .and_then(Value::as_str)
@@ -185,7 +245,13 @@ async fn run_command(target: &str, command: &str, skill: &str, cwd: Option<Strin
 
     let mut last = String::new();
     loop {
-        let got = client::call(target, "tasks/get", json!({ "id": task_id })).await?;
+        let got = client::call(
+            target,
+            "tasks/get",
+            json!({ "id": task_id }),
+            token.as_deref(),
+        )
+        .await?;
         let task = got.get("result").cloned().unwrap_or(Value::Null);
         let state = task
             .pointer("/status/state")

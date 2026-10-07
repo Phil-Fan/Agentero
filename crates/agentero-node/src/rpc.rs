@@ -10,6 +10,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::sync::broadcast;
 
+use crate::auth::Security;
 use crate::card::AgentCard;
 use crate::executor::{Executor, ExecutorRegistry, TaskContext};
 use crate::store::{CreatedTask, TaskStore};
@@ -19,6 +20,7 @@ pub struct ServerState {
     pub store: Arc<TaskStore>,
     pub executors: ExecutorRegistry,
     pub card: AgentCard,
+    pub security: Arc<Security>,
 }
 
 #[derive(Debug, Deserialize)]

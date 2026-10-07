@@ -52,6 +52,11 @@ pub fn registry_path() -> PathBuf {
     config_dir().join("nodes.json")
 }
 
+/// `…/agentero/node/tokens.json` — hashed bearer tokens of paired clients.
+pub fn tokens_path() -> PathBuf {
+    node_dir().join("tokens.json")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

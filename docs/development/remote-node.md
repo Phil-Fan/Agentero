@@ -1,8 +1,9 @@
 # 远端 Node（Headless Agentero Node）
 
-> 状态：**M1 + M2 已落地** —— `crates/agentero-node` 提供身份 / Agent Card / 发现登记表 / 节点服务器，
-> 以及 **A2A JSON-RPC + SSE 任务端点**（`message/send` / `message/stream` / `tasks/get` / `tasks/cancel`）。
-> 配对信任、远端 Agent 拉起、队列 / RunSet 与桌面 / CLI 集成为后续（见 §8）。
+> 状态：**M1 + M2 + 配对鉴权 已落地** —— `crates/agentero-node` 提供身份 / Agent Card /
+> 发现登记表 / 节点服务器、**A2A JSON-RPC + SSE 任务端点**（`message/send` /
+> `message/stream` / `tasks/get` / `tasks/cancel`），以及 **配对码 + Bearer token 鉴权**。
+> 远端 Agent 执行器、持久队列 / RunSet 与桌面 / CLI 集成为后续（见 §9）。
 
 ## 1. 背景
 
@@ -15,10 +16,10 @@
 |---|---|---|
 | 远端需要 | 只要 shell + 一个 CLI Agent | `agentero-node` 二进制 |
 | 通信 | ACP over SSH | A2A over 隧道 |
-| 能力 | 交互式聊天、单次任务 | 持久任务、队列、断线恢复、多客户端 |
+| 能力 | 交互式聊天、单次任务 | 持久任务、队列、断线恢复、多客户端、鉴权 |
 | 复杂度 | 零安装 | 一次安装 + 配对 |
 
-形态 B 的地基（身份 / 发现 / A2A 任务）已在 M1 + M2 完成；形态 A 保持现状，二者不冲突。
+形态 B 的地基（身份 / 发现 / A2A 任务 / 鉴权）已完成；形态 A 保持现状，二者不冲突。
 
 ## 3. 本 crate 的组成
 
@@ -29,13 +30,14 @@
 | `identity` | Ed25519 节点身份；`nodeId` = 公钥 SHA-256 指纹（hex），`shortId` = 前 12 位 |
 | `probe` | 主机能力快照：hostname / os / arch / cpu / memory / GPU（`nvidia-smi`） |
 | `card` | A2A 形状的 Agent Card（v0.3）+ `agentero` 扩展块；`fetch()` 拉取对端 Card |
-| `registry` | 本机「已发现节点」登记表（JSON，保留原始 Card 以向前兼容） |
+| `registry` | 本机「已发现节点」登记表 + 已配对 token（JSON，`0600`） |
+| `auth` | 配对码（一次性、10 分钟）+ 长期 Bearer token（节点侧**只存哈希**） |
 | `task` | A2A 任务模型：Message / Part / Task / Artifact / StreamEvent |
 | `store` | 内存任务存储 + 每任务广播 + 取消令牌；`tasks/get` 与 SSE 共享一致视图 |
 | `executor` | `Executor` trait + `echo`（协议冒烟）+ `run`（执行命令、流式输出） |
 | `rpc` | JSON-RPC 2.0 方法分发（同时接受 v0.3 `message/send` 与 v1 `SendMessage` 别名） |
-| `client` | 极小 A2A 客户端（CLI `call` / `run` 用） |
-| `server` | axum 回环服务器：Card + `/healthz` + `/a2a`（JSON-RPC 与 SSE） |
+| `client` | 极小 A2A 客户端（CLI `call` / `run` / `pair` 用，自动附带 token） |
+| `server` | axum 回环服务器：Card + `/healthz` + `/pair` + `/a2a`（JSON-RPC 与 SSE） |
 | `paths` | XDG 路径（与 `agentero-core::paths` 同布局） |
 
 **为什么自包含而不复用 `agentero-core`**：节点要能被拷到裸服务器上单独 `cargo build`，
@@ -47,28 +49,35 @@
 ```text
 agentero-node init [--name N]                 # 生成节点身份
 agentero-node card [--url URL]                # 打印本机 Agent Card
-agentero-node serve [--listen A] [--allow-run] [--workdir DIR]
-                                              # 回环提供 card + /healthz + /a2a
+agentero-node serve [--listen A] [--allow-run] [--require-auth] [--workdir DIR]
+                                              # card + /healthz + /pair + /a2a
 agentero-node probe <target>                  # 拉取对端 Agent Card
 agentero-node add <target>                    # probe 并登记到本机 registry
 agentero-node list                            # 列出已登记节点
 agentero-node remove <node-id>                # 忘记节点
+agentero-node pair <target> <code> [--name N] # 用配对码换取并保存 token
 agentero-node call <target> [--method M] [--params JSON]
-                                              # 发一条 JSON-RPC 请求
 agentero-node run <target> <command> [--skill S] [--cwd DIR]
-                                              # 在节点上跑命令并流式回报
 ```
 
-`target` 接受基址（`http://host:8766`）或完整 Card URL。
+## 5. 鉴权（可选，`--require-auth`）
 
-## 5. A2A 任务端点
+- 节点启动开启鉴权时打印一次性 **配对码**（6 位，10 分钟有效）。
+- 客户端 `agentero-node pair <target> <code>` → `POST /pair` 换取长期 **Bearer token**；
+  节点侧仅存 token 的 SHA-256 哈希（`tokens.json`，`0600`），客户端把 token 连同节点存入
+  本机 registry（`nodes.json`，`0600`）。`call` / `run` 自动附带 token。
+- `--require-auth` 关闭时（默认）不做校验，供 SSH 隧道下的本地开发使用。
+- `/healthz` 报 `requireAuth` 与 `pairedClients`；`/pair` 仅需配对码；`/a2a` 需 token。
+- 后续：token 入 OS keychain、公钥 pinning、token 吊销/轮换、按用途分级。
+
+## 6. A2A 任务端点
 
 `POST /a2a`，JSON-RPC 2.0（同时接受 v0.3 与 v1 方法名）：
 
 | 方法（别名） | 行为 |
 |---|---|
 | `message/send` / `SendMessage` | 建任务、异步执行、**立即**返回 Task 快照 |
-| `message/stream` / `SendStreamingMessage` | 同上，但以 **SSE** 推 `task` → `status-update` / `artifact-update` → 终态 |
+| `message/stream` / `SendStreamingMessage` | 同上，但以 **SSE** 推 `task` → `status-update` / `artifact-update` → 终态后关流 |
 | `tasks/get` / `GetTask` | 按 `{id}` / `{taskId}` 取 Task |
 | `tasks/cancel` / `CancelTask` | 取消任务（幂等） |
 
@@ -77,42 +86,42 @@ agentero-node run <target> <command> [--skill S] [--cwd DIR]
 - **`run` 执行**：命令取自 `data` part `{command, cwd}`，回退到 message 文本；用 `sh -c`
   执行，stdout/stderr 合流逐行作为 `working` 状态推流（上限 200 行），最终产出一个
   `output.txt` artifact（含输出与 exit code）。**默认关闭，需 `--allow-run`**。
-- **`/healthz`**：`{status, nodeId, name, version}`。
 - 任务状态为 `kebab-case`（`input-required` 等），任务事件字段为 `camelCase`（对齐 A2A）。
 
-## 6. 路径约定
+## 7. 路径约定
 
 | 路径 | 内容 |
 |---|---|
 | `$XDG_CONFIG_HOME/agentero/node/identity.json` | 本机节点身份（私钥 `0600`） |
-| `$XDG_CONFIG_HOME/agentero/nodes.json` | 已发现节点登记表 |
+| `$XDG_CONFIG_HOME/agentero/node/tokens.json` | 已配对客户端的 token 哈希（`0600`） |
+| `$XDG_CONFIG_HOME/agentero/nodes.json` | 已发现节点 + token 登记表（`0600`） |
 
-## 7. 发现 / 安装 / 通信
+## 8. 发现 / 安装 / 通信
 
 - **发现**：v1 手动 `add` + 从 `~/.ssh/config` 导入 + 配对码 TOFU；后续 mDNS、中心 registry。
 - **安装**：形态 B 只需一个二进制；预编译分发 + 安装脚本 + systemd 为后续。
 - **通信**：v1 用 **SSH 端口转发 + A2A over loopback**，复用 SSH 密钥鉴权、无需暴露端口；
   云 / NAT 场景后续走 outbound tunnel。任务队列当前在节点内存中，持久化队列为后续。
 
-## 8. 验证（实测）
+## 9. 验证（实测）
 
 | 主机 | 架构 | 结果 |
 |---|---|---|
-| 本机 macOS | aarch64 | 16 单测通过；send / stream / run / cancel 全通过 |
-| `dgx-remote` | aarch64 | 独立构建；`run nvidia-smi -L` → `NVIDIA GB10` |
-| `a1` | x86_64 | 裸机装 rustup 后构建；`run nvidia-smi -L` → 4×`A100-PCIE-40GB` |
+| 本机 macOS | aarch64 | 18 单测通过；send / stream / run / cancel / 配对鉴权全通过 |
+| `dgx-remote` | aarch64 | 配对后 `run` → `spark` / `NVIDIA GB10` |
+| `a1` | x86_64 | 配对后 `run` → `instance-mmztii7i` / 4×`A100-PCIE-40GB` |
 
-本机经 SSH 隧道同时向两个节点提交 A2A 任务并取回产物。
+本机经 SSH 隧道对两个节点完成：探测 → 配对换 token → 带 token 提交 A2A 任务 → 取回产物。
 
-## 9. 后续
+## 10. 后续
 
-1. **M3 配对**：配对码 + 长期 Bearer token + 公钥 pinning；token 入 OS keychain；A2A 鉴权头。
-2. **M3 远端 Agent**：`run` 之外的 `agent` 技能 —— 节点拉起 CLI Agent（ACP Host），
-   把任务落到 Workspace（而非直接 shell）。
-3. **M3 持久队列**：任务落盘 + 重启恢复 + worker 拉取（见 [A2A.md](A2A.md)）。
-4. **M4 编排**：RunSet / Run 队列 + 并行调度（见并行实验设计）。
-5. **集成**：桌面 / `agentero-cli` 加 `node` 子命令与「远端会话」面板。
+1. **远端 Agent 执行器**：新增 `agent` 技能 —— 节点拉起 CLI Agent（ACP Host / 一次性
+   prompt），把任务交给真正的智能体而非直接 shell。
+2. **持久队列**：任务落盘 + 重启恢复 + worker 拉取（见 [A2A.md](A2A.md)）。
+3. **编排**：RunSet / Run 队列 + 并行调度。
+4. **集成**：桌面 / `agentero-cli` 加 `node` 子命令与「远端会话」面板。
+5. **鉴权增强**：Keychain、公钥 pinning、token 分级/吊销。
 
-## 10. 代码
+## 11. 代码
 
-`crates/agentero-node/`（`src/{main,cli,identity,probe,card,registry,task,store,executor,rpc,client,server,paths,error}.rs`）
+`crates/agentero-node/`（`src/{main,cli,identity,probe,card,registry,auth,task,store,executor,rpc,client,server,paths,error}.rs`）

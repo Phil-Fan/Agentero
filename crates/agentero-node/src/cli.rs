@@ -46,6 +46,9 @@ pub enum Cmd {
         /// Working directory for `run` commands (default: current dir).
         #[arg(long, value_name = "DIR")]
         workdir: Option<PathBuf>,
+        /// Require a paired bearer token for /a2a (prints a pairing code).
+        #[arg(long)]
+        require_auth: bool,
     },
     /// Fetch and print another node's Agent Card.
     Probe {
@@ -64,6 +67,15 @@ pub enum Cmd {
     List,
     /// Forget a remembered node by id (full or short).
     Remove { node_id: String },
+    /// Exchange a pairing code for a token and remember it for this node.
+    Pair {
+        target: String,
+        /// One-time pairing code printed by the node's `serve`.
+        code: String,
+        /// Client name recorded by the node.
+        #[arg(long, value_name = "NAME")]
+        name: Option<String>,
+    },
     /// Send one A2A JSON-RPC request and print the response.
     Call {
         target: String,
