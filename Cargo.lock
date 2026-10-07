@@ -209,6 +209,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentero-node"
+version = "0.11.6"
+dependencies = [
+ "axum",
+ "chrono",
+ "clap",
+ "dirs",
+ "ed25519-dalek",
+ "env_logger",
+ "getrandom 0.2.17",
+ "hex",
+ "log",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"

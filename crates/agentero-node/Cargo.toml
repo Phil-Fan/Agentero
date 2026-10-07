@@ -1,0 +1,42 @@
+[package]
+name = "agentero-node"
+# Keep in lockstep with the `agentero` / `agentero-cli` / `agentero-core` versions.
+version = "0.11.6"
+edition = "2021"
+description = "Headless Agentero node: Ed25519 identity, A2A Agent Card, local discovery registry, and node server"
+authors = ["you"]
+license = "MIT"
+publish = false
+
+# Binary is `agentero-node` (matches the package name). The desktop app ships
+# `agentero`; the headless vault CLI ships `agentero-cli`; this one is the
+# remote/daemon artifact installed on servers.
+[[bin]]
+name = "agentero-node"
+path = "src/main.rs"
+
+# Dependencies are pinned with explicit versions (not `{ workspace = true }`) on
+# purpose: the node crate is designed to be copied to a bare server and built
+# standalone (`cargo build` in this directory), where the repo workspace root is
+# absent. Keep it free of the heavy `agentero-core` dependency tree
+# (rusqlite/liteparse/PDFium) so a remote build stays fast and portable.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+ed25519-dalek = "2"
+getrandom = "0.2"
+sha2 = "0.10"
+hex = "0.4"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+clap = { version = "4", features = ["derive"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+dirs = "6"
+log = "0.4"
+env_logger = "0.11"
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
