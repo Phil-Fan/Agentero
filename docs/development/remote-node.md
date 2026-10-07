@@ -136,13 +136,17 @@ agentero-node batch <target> --template "..." --values "a,b,c" [--skill S] [--co
 > ACP 端到端以仓库内 `tests/mock-acp.cjs`（一个最小 ACP 服务端）验证；真实
 > `codex-acp` / `claude-agent-acp` 的端到端见后续。
 
+桌面「远端会话」面板（`src/components/sessions/remote-sessions-view.tsx`，文件树虚拟节点
+`agentero:sessions`）通过 `cargo check` / `clippy -D warnings` / `tsc --noEmit` / `biome`
+校验；运行时交互需本地 `pnpm tauri dev` 确认。
+
 本机经 SSH 隧道对两个节点完成：探测 → 配对换 token → 带 token 提交 A2A 任务 → 取回产物。
 
 ## 10. 后续
 
 1. **队列增强**：优先级、资源画像（GPU/内存）、自动重跑策略。
 2. **编排**：RunSet 模型（父子分组 / 聚合 / 早停 / 晋升）——当前 `batch` 只是最小扫描原语。
-3. **集成**：桌面 / `agentero-cli` 加 `node` 子命令与「远端会话」面板。
+3. **集成**：桌面面板已落地（文件树虚拟节点「远端会话」）；后续补通知、未读角标与多节点分组增强。
 4. **鉴权增强**：Keychain、公钥 pinning、token 分级/吊销。
 5. **真实 ACP Agent 端到端**：用 `codex-acp` / `claude-agent-acp` 跑通（当前以 mock 验证）；
    会话续聊 / 历史 / 权限策略。

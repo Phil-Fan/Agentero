@@ -243,6 +243,24 @@ pub fn attach_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
             crate::features::jev::commands::jev_suggest_highlights,
             #[cfg(not(any(target_os = "ios", target_os = "android")))]
             crate::features::jev::commands::jev_probe_health,
+            #[cfg(feature = "desktop")]
+            crate::features::node::commands::node_list,
+            #[cfg(feature = "desktop")]
+            crate::features::node::commands::node_probe,
+            #[cfg(feature = "desktop")]
+            crate::features::node::commands::node_add,
+            #[cfg(feature = "desktop")]
+            crate::features::node::commands::node_remove,
+            #[cfg(feature = "desktop")]
+            crate::features::node::commands::node_pair,
+            #[cfg(feature = "desktop")]
+            crate::features::node::commands::node_tasks,
+            #[cfg(feature = "desktop")]
+            crate::features::node::commands::node_task,
+            #[cfg(feature = "desktop")]
+            crate::features::node::commands::node_submit,
+            #[cfg(feature = "desktop")]
+            crate::features::node::commands::node_cancel,
             crate::features::decision::commands::decide,
         ])
     }

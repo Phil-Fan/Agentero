@@ -68,6 +68,7 @@ import {
 	type PlazaSource,
 	plazaSourceForPath,
 } from "@/lib/plaza";
+import { SESSIONS_VIRTUAL_PATH } from "@/lib/sessions/virtual";
 import { loadSettings } from "@/lib/settings";
 import { closeCurrentWindow } from "@/lib/shell/close-window";
 import { setLayoutMode } from "@/lib/shell/ui-store";
@@ -1887,6 +1888,12 @@ export function selectLibrary(): void {
 export function selectTrash(): void {
 	setTreeSelectedPath(TRASH_VIRTUAL_PATH);
 	openTab(TRASH_VIRTUAL_PATH);
+}
+
+/** 「远端会话」virtual node: remote Agentero nodes and their tasks. */
+export function selectRemoteSessions(): void {
+	setTreeSelectedPath(SESSIONS_VIRTUAL_PATH);
+	openTab(SESSIONS_VIRTUAL_PATH);
 }
 
 /** Open one Plaza source panel (from its tree child row). */

@@ -10,6 +10,7 @@ import {
 	Loader2,
 	NotebookPen,
 	ScrollText,
+	Server,
 	Trash2,
 } from "lucide-react";
 import { useState } from "react";
@@ -46,6 +47,7 @@ import {
 	type PlazaSource,
 	plazaSourceLabel,
 } from "@/lib/plaza";
+import { SESSIONS_VIRTUAL_PATH } from "@/lib/sessions/virtual";
 import type { FileNode } from "@/lib/vault";
 import type { TexCompileActions as TexCompileHookActions } from "./hooks/use-tex-compile";
 import { DOWNLOAD_REASON_KEYS } from "./tree-helpers";
@@ -472,6 +474,21 @@ export function TrashRow() {
 			</FileTreeIcon>
 			<FileTreeName className="min-w-0 flex-1 truncate">
 				{t("recycleBin.title")}
+			</FileTreeName>
+		</FileTreeFile>
+	);
+}
+
+/** 「远端会话」virtual row — remote nodes and their tasks. */
+export function RemoteSessionsRow() {
+	const { t } = useTranslation("sidebar");
+	return (
+		<FileTreeFile path={SESSIONS_VIRTUAL_PATH} name={t("remoteSessions.title")}>
+			<FileTreeIcon>
+				<Server className="size-4 text-muted-foreground" aria-hidden />
+			</FileTreeIcon>
+			<FileTreeName className="min-w-0 flex-1 truncate">
+				{t("remoteSessions.title")}
 			</FileTreeName>
 		</FileTreeFile>
 	);

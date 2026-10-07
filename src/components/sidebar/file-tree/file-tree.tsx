@@ -36,7 +36,13 @@ import { MovePickerPopover } from "./move-picker-popover";
 import { TreeContextMenuPortal } from "./tree-context-menu";
 import { pathKey } from "./tree-helpers";
 import { TreeCreateInput } from "./tree-inputs";
-import { LoadingRows, PlazaRow, PlazaSourceRow, TrashRow } from "./tree-rows";
+import {
+	LoadingRows,
+	PlazaRow,
+	PlazaSourceRow,
+	RemoteSessionsRow,
+	TrashRow,
+} from "./tree-rows";
 import { TreeRowsViewport } from "./tree-rows-viewport";
 import type { TreeCreateDraft, TreeCreateKind, TreeRenameDraft } from "./types";
 import { buildZoteroCollectionReferences } from "./zotero-collection-references";
@@ -65,6 +71,8 @@ type FileTreeProps = {
 	onSelectLibrary?: () => void;
 	/** Virtual trash node → recycle bin view in center pane. */
 	onSelectTrash?: () => void;
+	/** Virtual「远端会话」node → remote node/task panel in center pane. */
+	onSelectSessions?: () => void;
 	/** Virtual 广场 child node → that source's page in center pane. */
 	onSelectPlazaSource?: (source: PlazaSource) => void;
 	/** Catalog papers used to add Zotero multi-collection references in-place. */
@@ -182,6 +190,7 @@ export const FileTree = memo(
 			onSelectFile,
 			onSelectLibrary,
 			onSelectTrash,
+			onSelectSessions,
 			onSelectPlazaSource,
 			zoteroCollectionPapers = [],
 			onOpenZoteroCollectionPaper,
@@ -269,6 +278,7 @@ export const FileTree = memo(
 			onSelectFile,
 			onSelectLibrary,
 			onSelectTrash,
+			onSelectSessions,
 			onSelectPlazaSource,
 			onOpenZoteroCollectionPaper,
 			onTogglePath: expansion.togglePath,
@@ -387,6 +397,7 @@ export const FileTree = memo(
 		);
 
 		const trashRow = <TrashRow />;
+		const sessionsRow = <RemoteSessionsRow />;
 		const plazaExpanded = expansion.expanded.has(PLAZA_VIRTUAL_PATH);
 		const plazaRows = plazaEnabled ? (
 			<>
@@ -446,6 +457,7 @@ export const FileTree = memo(
 								>
 									{trashRow}
 									{plazaRows}
+									{sessionsRow}
 								</AiFileTree>
 								{vaultPath && loading ? (
 									<LoadingRows />

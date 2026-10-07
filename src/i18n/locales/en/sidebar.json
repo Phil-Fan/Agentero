@@ -412,5 +412,26 @@
 			"remoteUnsupported": "Editing metadata is not supported for remote vaults yet.",
 			"saveFailed": "Failed to save metadata."
 		}
+	},
+	"remoteSessions": {
+		"title": "Remote Sessions",
+		"nodes": "Nodes",
+		"empty": "No nodes yet. Add one below.",
+		"refresh": "Refresh",
+		"add": "Add",
+		"addPlaceholder": "http://host:8766",
+		"namePlaceholder": "Name (optional)",
+		"selectNode": "Select a node",
+		"pairCode": "Pairing code",
+		"pair": "Pair",
+		"forget": "Forget",
+		"noTasks": "No tasks yet.",
+		"cancel": "Cancel task",
+		"close": "Close",
+		"skillRun": "Run",
+		"skillAgent": "Agent",
+		"cwdPlaceholder": "cwd (optional)",
+		"inputPlaceholder": "Command or prompt…",
+		"submit": "Submit"
 	}
 }

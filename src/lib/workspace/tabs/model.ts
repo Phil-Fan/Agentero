@@ -5,6 +5,11 @@ import {
 	TRASH_VIRTUAL_PATH,
 } from "@/lib/paper/api";
 import { isPlazaVirtualPath, plazaTitleForPath } from "@/lib/plaza";
+import {
+	isSessionsVirtualPath,
+	SESSIONS_VIRTUAL_PATH,
+	sessionsTitle,
+} from "@/lib/sessions/virtual";
 import { basenameOf, normalizePathKey } from "@/lib/vault/path";
 import type { DocTab, TabResources } from "@/lib/workspace/tabs/types";
 import type { CenterViewMode } from "@/lib/workspace/viewer";
@@ -16,6 +21,7 @@ export const SPLIT_PANE_ID_MARKER = "::pane-";
 export function tabIdForPath(path: string): string {
 	if (isLibraryVirtualPath(path)) return LIBRARY_VIRTUAL_PATH;
 	if (isTrashVirtualPath(path)) return TRASH_VIRTUAL_PATH;
+	if (isSessionsVirtualPath(path)) return SESSIONS_VIRTUAL_PATH;
 	if (isPlazaVirtualPath(path)) return path;
 	return normalizePathKey(path);
 }
@@ -56,6 +62,7 @@ function remapTabIdForPath(
 /** Rewrite one absolute or Vault-relative path under a moved root. */
 export function remapPathUnder(path: string, from: string, to: string): string {
 	if (isLibraryVirtualPath(path) || isTrashVirtualPath(path)) return path;
+	if (isSessionsVirtualPath(path)) return path;
 	if (isPlazaVirtualPath(path)) return path;
 	const current = path.replace(/\\/g, "/").replace(/\/+$/, "");
 	const oldRoot = from.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -123,27 +130,34 @@ export function createPlaceholderTab(
 	const isLibrary = isLibraryVirtualPath(path);
 	const isTrash = isTrashVirtualPath(path);
 	const isPlaza = isPlazaVirtualPath(path);
+	const isSessions = isSessionsVirtualPath(path);
 	return {
 		id,
 		path: isLibrary
 			? LIBRARY_VIRTUAL_PATH
 			: isTrash
 				? TRASH_VIRTUAL_PATH
-				: path,
+				: isSessions
+					? SESSIONS_VIRTUAL_PATH
+					: path,
 		kind: isLibrary
 			? "library"
 			: isTrash
 				? "trash"
-				: isPlaza
-					? "plaza"
-					: "file",
+				: isSessions
+					? "sessions"
+					: isPlaza
+						? "plaza"
+						: "file",
 		title: isLibrary
 			? "Library"
 			: isTrash
 				? "Recycle Bin"
-				: isPlaza
-					? plazaTitleForPath(path)
-					: basenameOf(path),
+				: isSessions
+					? sessionsTitle()
+					: isPlaza
+						? plazaTitleForPath(path)
+						: basenameOf(path),
 		mode: preferMode,
 		paperMeta: null,
 		pdfUrl: null,

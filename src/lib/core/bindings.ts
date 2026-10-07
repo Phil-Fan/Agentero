@@ -100,6 +100,24 @@ export const commands = {
 	desktopAppOpen: (id: DesktopAppId) => typedError<ApiResult<null>, string>(__TAURI_INVOKE("desktop_app_open", { id })),
 	/**  Request cooperative cancellation for a currently streaming ACP session. */
 	agentCancelRun: (sessionId: string) => __TAURI_INVOKE<ApiResult<boolean>>("agent_cancel_run", { sessionId }),
+	/**  List nodes in the local registry. */
+	nodeList: () => typedError<string, string>(__TAURI_INVOKE("node_list")),
+	/**  Fetch a node's Agent Card. */
+	nodeProbe: (target: string) => typedError<string, string>(__TAURI_INVOKE("node_probe", { target })),
+	/**  Probe a node and remember it. */
+	nodeAdd: (target: string, name: string | null) => typedError<string, string>(__TAURI_INVOKE("node_add", { target, name })),
+	/**  Forget a remembered node. */
+	nodeRemove: (nodeId: string) => typedError<string, string>(__TAURI_INVOKE("node_remove", { nodeId })),
+	/**  Exchange a pairing code for a token. */
+	nodePair: (target: string, code: string, name: string | null) => typedError<string, string>(__TAURI_INVOKE("node_pair", { target, code, name })),
+	/**  List task summaries (optionally filtered by context). */
+	nodeTasks: (target: string, context: string | null) => typedError<string, string>(__TAURI_INVOKE("node_tasks", { target, context })),
+	/**  Fetch one full task (with artifacts). */
+	nodeTask: (target: string, id: string) => typedError<string, string>(__TAURI_INVOKE("node_task", { target, id })),
+	/**  Submit one task (no polling). */
+	nodeSubmit: (target: string, input: string, skill: string, cwd: string | null) => typedError<string, string>(__TAURI_INVOKE("node_submit", { target, input, skill, cwd })),
+	/**  Cancel a task. */
+	nodeCancel: (target: string, id: string) => typedError<string, string>(__TAURI_INVOKE("node_cancel", { target, id })),
 	jobParseRefsEnqueue: (args: JobEnqueueArgs) => typedError<ApiResult<JobSnapshot>, string>(__TAURI_INVOKE("job_parse_refs_enqueue", { args })),
 	jobParseBodyEnqueue: (args: JobParseBodyEnqueueArgs) => typedError<ApiResult<JobSnapshot>, string>(__TAURI_INVOKE("job_parse_body_enqueue", { args })),
 	jobLayoutAnalyzeEnqueue: (args: JobEnqueueArgs) => typedError<ApiResult<JobSnapshot>, string>(__TAURI_INVOKE("job_layout_analyze_enqueue", { args })),

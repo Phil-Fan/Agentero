@@ -21,6 +21,7 @@ export type TreeRenameDraft = {
 export type FlatRow =
 	| { key: string; kind: "trash" }
 	| { key: string; kind: "plaza" }
+	| { key: string; kind: "sessions" }
 	| { key: string; kind: "plazaSource"; source: PlazaSource }
 	| {
 			key: string;

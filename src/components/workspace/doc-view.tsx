@@ -34,6 +34,11 @@ const PlazaView = lazy(() =>
 		default: m.PlazaView,
 	})),
 );
+const RemoteSessionsView = lazy(() =>
+	import("@/components/sessions/remote-sessions-view").then((m) => ({
+		default: m.RemoteSessionsView,
+	})),
+);
 const ExcalidrawViewer = lazy(() =>
 	import("@/components/viewer/excalidraw-viewer").then((m) => ({
 		default: m.ExcalidrawViewer,
@@ -212,6 +217,7 @@ function docViewPropsEqual(prev: DocViewProps, next: DocViewProps): boolean {
 		);
 	}
 	if (tab.kind === "plaza") return true;
+	if (tab.kind === "sessions") return true;
 	if (tab.mode === "markdown") return prev.editor === next.editor;
 	if (tab.mode === "excalidraw") return prev.excalidraw === next.excalidraw;
 	if (tab.mode === "text") return prev.text === next.text;
@@ -296,6 +302,14 @@ export const DocView = memo(function DocView({
 		return (
 			<Suspense fallback={<TabLoadingSkeleton />}>
 				<PlazaView path={tab.path} className="bg-background" />
+			</Suspense>
+		);
+	}
+	if (tab.kind === "sessions") {
+		if (!active) return null;
+		return (
+			<Suspense fallback={<TabLoadingSkeleton />}>
+				<RemoteSessionsView className="bg-background" />
 			</Suspense>
 		);
 	}

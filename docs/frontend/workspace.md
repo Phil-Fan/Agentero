@@ -55,7 +55,13 @@ Library 始终位于所在标签条的第一位：禁止拖动 Library 及包含
 
 ## 面板类型
 
-Library · Trash · PDF · HTML · 图片 · Markdown · 论文 NOTES · 纯文本（CodeMirror）。
+Library · Trash · 广场 · 远端会话（Remote Sessions）· PDF · HTML · 图片 · Markdown · 论文 NOTES · 纯文本（CodeMirror）。
+
+**远端会话**（`agentero:sessions`）：文件树顶部虚拟节点（与 Library / 回收站 / 广场同级）。
+中间面板列出本机登记的 Agentero 节点（`node_list`），轮询所选节点的 A2A 任务（`node_tasks`），
+可添加节点（`node_add`）、配对（`node_pair`）、提交 `run` / `agent` 任务（`node_submit`）、
+取消（`node_cancel`）与查看产物（`node_task`）。后端命令见
+[../development/remote-node.md](../development/remote-node.md)，面板 `src/components/sessions/remote-sessions-view.tsx`。
 
 ## 代码
 

@@ -237,6 +237,8 @@ export function useTreeRows({
 				}
 			}
 		}
+		// 「远端会话」sits at the same level as 广场.
+		out.push({ key: "__sessions__", kind: "sessions" });
 		const draftAt = (parent: string) =>
 			Boolean(
 				createDraft && pathKey(createDraft.parentPath) === pathKey(parent),

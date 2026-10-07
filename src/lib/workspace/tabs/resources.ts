@@ -31,6 +31,7 @@ import {
 	plazaSourceForPath,
 	plazaTitleForPath,
 } from "@/lib/plaza";
+import { isSessionsVirtualPath, sessionsTitle } from "@/lib/sessions/virtual";
 import {
 	ensureLocalFsScope,
 	type FileNode,
@@ -193,6 +194,22 @@ export async function loadTabResources(
 			paperMeta: null,
 			pdfUrl: null,
 			htmlUrl: plazaSourceForPath(path)?.url ?? null,
+			imageUrl: null,
+			notesPath: null,
+			notesSeed: "",
+			markdownSeed: "",
+			loaded: true,
+		};
+	}
+	// Remote sessions panel is virtual too: no filesystem probe.
+	if (isSessionsVirtualPath(path)) {
+		return {
+			kind: "sessions",
+			title: sessionsTitle(),
+			mode: "markdown",
+			paperMeta: null,
+			pdfUrl: null,
+			htmlUrl: null,
 			imageUrl: null,
 			notesPath: null,
 			notesSeed: "",

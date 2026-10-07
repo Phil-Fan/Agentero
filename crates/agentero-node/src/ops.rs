@@ -93,6 +93,50 @@ pub async fn call(target: &str, method: &str, params: Value) -> Result<Value> {
     client::call(target, method, params, token_for(target).as_deref()).await
 }
 
+/// Submit one task (no polling) and return the `message/send` response.
+pub async fn submit(target: &str, input: &str, skill: &str, cwd: Option<String>) -> Result<Value> {
+    let token = token_for(target);
+    let mut data = serde_json::Map::new();
+    data.insert("command".to_string(), json!(input));
+    data.insert("prompt".to_string(), json!(input));
+    if let Some(cwd) = cwd {
+        data.insert("cwd".to_string(), json!(cwd));
+    }
+    let params = json!({
+        "message": {
+            "role": "user",
+            "parts": [
+                { "kind": "text", "text": input },
+                { "kind": "data", "data": data }
+            ]
+        },
+        "metadata": { "skill": skill }
+    });
+    client::call(target, "message/send", params, token.as_deref()).await
+}
+
+/// Fetch one full task (with artifacts).
+pub async fn task(target: &str, id: &str) -> Result<Value> {
+    client::call(
+        target,
+        "tasks/get",
+        json!({ "id": id }),
+        token_for(target).as_deref(),
+    )
+    .await
+}
+
+/// Cancel a task.
+pub async fn cancel(target: &str, id: &str) -> Result<Value> {
+    client::call(
+        target,
+        "tasks/cancel",
+        json!({ "id": id }),
+        token_for(target).as_deref(),
+    )
+    .await
+}
+
 /// List task summaries (optionally filtered by context). Returns the array.
 pub async fn tasks(target: &str, context: Option<String>) -> Result<Value> {
     let params = match context {

@@ -9,6 +9,7 @@ import {
 	type PlazaSource,
 	plazaSourceForPath,
 } from "@/lib/plaza";
+import { isSessionsVirtualPath } from "@/lib/sessions/virtual";
 import type { FileNode } from "@/lib/vault";
 import { isVirtualTreePath, normalizeTreeSelection } from "../tree-helpers";
 import type { TreeCreateDraft, TreeRenameDraft } from "../types";
@@ -42,6 +43,7 @@ export function useTreeSelection({
 	onSelectFile,
 	onSelectLibrary,
 	onSelectTrash,
+	onSelectSessions,
 	onSelectPlazaSource,
 	onOpenZoteroCollectionPaper,
 	onTogglePath,
@@ -60,6 +62,7 @@ export function useTreeSelection({
 	onSelectFile: (node: FileNode) => void;
 	onSelectLibrary?: () => void;
 	onSelectTrash?: () => void;
+	onSelectSessions?: () => void;
 	onSelectPlazaSource?: (source: PlazaSource) => void;
 	/** Open the real paper behind a read-only Zotero collection reference. */
 	onOpenZoteroCollectionPaper?: (relPath: string) => void;
@@ -112,6 +115,10 @@ export function useTreeSelection({
 				onSelectTrash?.();
 				return;
 			}
+			if (isSessionsVirtualPath(path)) {
+				onSelectSessions?.();
+				return;
+			}
 			// Plaza paths are virtual: they have no FileNode to fall through to.
 			// The root node is a plain folder — it only expands/collapses.
 			if (isPlazaVirtualPath(path)) {
@@ -136,6 +143,7 @@ export function useTreeSelection({
 			onSelectFile,
 			onSelectLibrary,
 			onSelectTrash,
+			onSelectSessions,
 			onSelectPlazaSource,
 			onOpenZoteroCollectionPaper,
 			onTogglePath,

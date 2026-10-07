@@ -66,6 +66,7 @@ import {
 	openPlazaSource,
 	selectFileNode,
 	selectLibrary,
+	selectRemoteSessions,
 	selectTrash,
 } from "@/lib/workspace/actions";
 
@@ -255,6 +256,7 @@ export function VaultSidebar() {
 					onSelectFile={selectFileNode}
 					onSelectLibrary={selectLibrary}
 					onSelectTrash={selectTrash}
+					onSelectSessions={selectRemoteSessions}
 					onSelectPlazaSource={openPlazaSource}
 					zoteroCollectionPapers={papers}
 					onOpenZoteroCollectionPaper={onOpenZoteroCollectionPaper}

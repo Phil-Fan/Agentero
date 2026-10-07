@@ -411,5 +411,26 @@
 			"remoteUnsupported": "远程 Vault 暂不支持编辑元数据。",
 			"saveFailed": "元数据保存失败。"
 		}
+	},
+	"remoteSessions": {
+		"title": "远端会话",
+		"nodes": "节点",
+		"empty": "还没有节点，在下面添加。",
+		"refresh": "刷新",
+		"add": "添加",
+		"addPlaceholder": "http://host:8766",
+		"namePlaceholder": "名称（可选）",
+		"selectNode": "选择一个节点",
+		"pairCode": "配对码",
+		"pair": "配对",
+		"forget": "忘记",
+		"noTasks": "还没有任务。",
+		"cancel": "取消任务",
+		"close": "关闭",
+		"skillRun": "命令",
+		"skillAgent": "Agent",
+		"cwdPlaceholder": "工作目录（可选）",
+		"inputPlaceholder": "命令或提示词…",
+		"submit": "提交"
 	}
 }

@@ -25,6 +25,7 @@ required-features = ["desktop"]
 default = ["desktop"]
 desktop = [
   "dep:agent-client-protocol",
+  "dep:agentero-node",
   "dep:axum",
   "dep:tauri",
   "dep:tauri-plugin-deep-link",
@@ -57,6 +58,9 @@ tempfile = { workspace = true }
 # Tauri-independent foundations (errors, fs, http, paths, sqlite, usage log),
 # re-exported as `crate::core::*`. Must stay free of tauri/wry/tao.
 agentero-core = { path = "../crates/agentero-core" }
+# Headless remote-node client ops (registry / pair / A2A tasks) for the
+#「远端会话」panel. Desktop-only (uses process/signal).
+agentero-node = { path = "../crates/agentero-node", optional = true }
 tauri = { version = "2", features = [], optional = true }
 tauri-plugin-opener = { version = "2", optional = true }
 serde = { workspace = true }
