@@ -23,7 +23,10 @@ path = "src/main.rs"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "process", "io-util", "sync"] }
+tokio-util = { version = "0.7", default-features = false }
+futures-util = "0.3"
+async-trait = "0.1"
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
 ed25519-dalek = "2"
 getrandom = "0.2"

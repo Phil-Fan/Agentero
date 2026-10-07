@@ -49,6 +49,17 @@ pub struct AgentSkill {
     pub tags: Vec<String>,
 }
 
+impl AgentSkill {
+    pub fn new(id: &str, description: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            name: id.to_string(),
+            description: description.to_string(),
+            tags: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgenteroExtension {
@@ -59,7 +70,7 @@ pub struct AgenteroExtension {
 }
 
 /// Build this machine's card. `url` defaults to the loopback A2A endpoint.
-pub fn build(url: Option<&str>) -> Result<AgentCard> {
+pub fn build(url: Option<&str>, skills: Vec<AgentSkill>) -> Result<AgentCard> {
     let identity = identity::load_or_create()?;
     let host = probe::probe();
     Ok(AgentCard {
@@ -75,7 +86,7 @@ pub fn build(url: Option<&str>) -> Result<AgentCard> {
         },
         default_input_modes: vec!["text".to_string()],
         default_output_modes: vec!["text".to_string()],
-        skills: Vec::new(),
+        skills,
         agentero: AgenteroExtension {
             node_id: identity.node_id,
             short_id: identity.short_id,
@@ -130,7 +141,7 @@ mod tests {
         let _guard = crate::test_support::ENV_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("XDG_CONFIG_HOME", dir.path());
-        let card = build(None).unwrap();
+        let card = build(None, Vec::new()).unwrap();
         assert_eq!(card.url, DEFAULT_A2A_URL);
         assert_eq!(card.protocol_version, "0.3.0");
         assert_eq!(card.agentero.node_id.len(), 64);

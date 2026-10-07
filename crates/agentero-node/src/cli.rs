@@ -1,5 +1,7 @@
 //! Command-line surface for the node daemon.
 
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
@@ -8,8 +10,8 @@ use clap::{Parser, Subcommand};
     version,
     about = "Headless Agentero node — identity, Agent Card, discovery, and server",
     long_about = "Turn this machine into a discoverable peer of the Agentero fabric.\n\
-                  Mint an Ed25519 identity, advertise an A2A Agent Card, serve it on\n\
-                  loopback, and remember other nodes you discover."
+                  Mint an Ed25519 identity, advertise an A2A Agent Card, serve A2A tasks\n\
+                  on loopback, and remember other nodes you discover."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -30,7 +32,7 @@ pub enum Cmd {
         #[arg(long, value_name = "URL")]
         url: Option<String>,
     },
-    /// Serve the Agent Card and /healthz endpoints until Ctrl-C.
+    /// Serve the Agent Card, /healthz, and the A2A endpoint until Ctrl-C.
     Serve {
         /// Bind address (loopback by default; never expose without a tunnel).
         #[arg(long, value_name = "ADDR", default_value = "127.0.0.1:8766")]
@@ -38,6 +40,12 @@ pub enum Cmd {
         /// Override the A2A URL advertised in the card.
         #[arg(long, value_name = "URL")]
         url: Option<String>,
+        /// Enable the `run` skill (execute shell commands). Off by default.
+        #[arg(long)]
+        allow_run: bool,
+        /// Working directory for `run` commands (default: current dir).
+        #[arg(long, value_name = "DIR")]
+        workdir: Option<PathBuf>,
     },
     /// Fetch and print another node's Agent Card.
     Probe {
@@ -56,4 +64,25 @@ pub enum Cmd {
     List,
     /// Forget a remembered node by id (full or short).
     Remove { node_id: String },
+    /// Send one A2A JSON-RPC request and print the response.
+    Call {
+        target: String,
+        #[arg(long, value_name = "METHOD", default_value = "message/send")]
+        method: String,
+        /// JSON params object.
+        #[arg(long, value_name = "JSON")]
+        params: Option<String>,
+    },
+    /// Run a shell command on a node and stream its status to completion.
+    Run {
+        target: String,
+        /// Shell command to execute.
+        command: String,
+        /// Skill to invoke (default: run).
+        #[arg(long, value_name = "SKILL", default_value = "run")]
+        skill: String,
+        /// Working directory on the node.
+        #[arg(long, value_name = "DIR")]
+        cwd: Option<String>,
+    },
 }

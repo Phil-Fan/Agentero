@@ -1,24 +1,31 @@
 //! `agentero-node` — headless Agentero node CLI.
 //!
 //! Turns a machine into a discoverable peer: mint an identity, print its Agent
-//! Card, serve it on loopback, and remember other nodes.
+//! Card, serve A2A tasks on loopback, remember other nodes, and call them.
 //!
 //! ```text
-//! agentero-node init [--name N]     # mint this machine's Ed25519 identity
-//! agentero-node card [--url URL]    # print this node's Agent Card
-//! agentero-node serve [--listen A]  # serve card + /healthz on loopback
-//! agentero-node probe <target>      # fetch another node's Agent Card
-//! agentero-node add <target>        # probe + remember in the local registry
-//! agentero-node list                # list remembered nodes
-//! agentero-node remove <node-id>    # forget a node
+//! agentero-node init [--name N]         # mint this machine's Ed25519 identity
+//! agentero-node card [--url URL]        # print this node's Agent Card
+//! agentero-node serve [--allow-run]     # serve card + /healthz + /a2a
+//! agentero-node probe <target>          # fetch another node's Agent Card
+//! agentero-node add <target>            # probe + remember in the local registry
+//! agentero-node list                    # list remembered nodes
+//! agentero-node remove <node-id>        # forget a node
+//! agentero-node call <target> [--method M --params JSON]
+//! agentero-node run <target> <command>  # run a command and stream status
 //! ```
 
 mod cli;
 
+use std::sync::Arc;
+use std::time::Duration;
+
+use agentero_node::client;
+use agentero_node::executor::{EchoExecutor, Executor, ExecutorRegistry, RunExecutor};
 use agentero_node::{card, identity, paths, registry, server, NodeError, Result};
 use clap::Parser;
 use cli::{Cli, Cmd};
-use serde_json::json;
+use serde_json::{json, Value};
 
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
@@ -36,15 +43,26 @@ async fn run(cli: Cli) -> Result<()> {
     match cli.cmd {
         Cmd::Init { name } => init(name),
         Cmd::Card { url } => {
-            let value = card::build(url.as_deref())?;
+            let value = card::build(url.as_deref(), Vec::new())?;
             println!("{}", serde_json::to_string_pretty(&value)?);
             Ok(())
         }
-        Cmd::Serve { listen, url } => {
+        Cmd::Serve {
+            listen,
+            url,
+            allow_run,
+            workdir,
+        } => {
             let addr: std::net::SocketAddr = listen
                 .parse()
                 .map_err(|e| NodeError::msg(format!("invalid --listen '{listen}': {e}")))?;
-            server::serve(addr, url).await
+            let echo: Arc<dyn Executor> = Arc::new(EchoExecutor);
+            let run: Arc<dyn Executor> = Arc::new(RunExecutor {
+                allowed: allow_run,
+                workdir,
+            });
+            let executors = ExecutorRegistry::new(vec![echo, run], "echo");
+            server::serve(addr, url, executors).await
         }
         Cmd::Probe { target } => {
             let value = card::fetch(&target).await?;
@@ -67,6 +85,26 @@ async fn run(cli: Cli) -> Result<()> {
             );
             Ok(())
         }
+        Cmd::Call {
+            target,
+            method,
+            params,
+        } => {
+            let params = match params {
+                Some(text) => serde_json::from_str::<Value>(&text)
+                    .map_err(|e| NodeError::msg(format!("invalid --params JSON: {e}")))?,
+                None => json!({}),
+            };
+            let response = client::call(&target, &method, params).await?;
+            println!("{}", serde_json::to_string_pretty(&response)?);
+            Ok(())
+        }
+        Cmd::Run {
+            target,
+            command,
+            skill,
+            cwd,
+        } => run_command(&target, &command, &skill, cwd).await,
     }
 }
 
@@ -113,4 +151,79 @@ async fn add(target: &str, name: Option<String>) -> Result<()> {
         }))?
     );
     Ok(())
+}
+
+/// Submit a `run` task and poll `tasks/get` until it reaches a terminal state.
+async fn run_command(target: &str, command: &str, skill: &str, cwd: Option<String>) -> Result<()> {
+    let mut data = serde_json::Map::new();
+    data.insert("command".to_string(), json!(command));
+    if let Some(cwd) = cwd {
+        data.insert("cwd".to_string(), json!(cwd));
+    }
+    let params = json!({
+        "message": {
+            "role": "user",
+            "parts": [
+                { "kind": "text", "text": command },
+                { "kind": "data", "data": data }
+            ]
+        },
+        "metadata": { "skill": skill }
+    });
+
+    let response = client::call(target, "message/send", params).await?;
+    let task_id = response
+        .pointer("/result/id")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    if task_id.is_empty() {
+        println!("{}", serde_json::to_string_pretty(&response)?);
+        return Ok(());
+    }
+    println!("task {task_id}");
+
+    let mut last = String::new();
+    loop {
+        let got = client::call(target, "tasks/get", json!({ "id": task_id })).await?;
+        let task = got.get("result").cloned().unwrap_or(Value::Null);
+        let state = task
+            .pointer("/status/state")
+            .and_then(Value::as_str)
+            .unwrap_or("?")
+            .to_string();
+        let note = task
+            .pointer("/status/message/parts/0/text")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        match note {
+            Some(text) if text != last => {
+                println!("[{state}] {text}");
+                last = text;
+            }
+            None if state != last => {
+                println!("[{state}]");
+                last = state.clone();
+            }
+            _ => {}
+        }
+        if matches!(
+            state.as_str(),
+            "completed" | "failed" | "canceled" | "rejected"
+        ) {
+            if let Some(artifacts) = task.get("artifacts").and_then(Value::as_array) {
+                for artifact in artifacts {
+                    let name = artifact
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or("artifact");
+                    if let Some(text) = artifact.pointer("/parts/0/text").and_then(Value::as_str) {
+                        println!("--- {name} ---\n{text}");
+                    }
+                }
+            }
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(400)).await;
+    }
 }

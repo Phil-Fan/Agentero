@@ -212,12 +212,14 @@ dependencies = [
 name = "agentero-node"
 version = "0.11.6"
 dependencies = [
+ "async-trait",
  "axum",
  "chrono",
  "clap",
  "dirs",
  "ed25519-dalek",
  "env_logger",
+ "futures-util",
  "getrandom 0.2.17",
  "hex",
  "log",
@@ -228,6 +230,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

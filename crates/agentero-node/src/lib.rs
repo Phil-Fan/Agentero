@@ -16,12 +16,17 @@
 //! not drag in the desktop dependency tree (rusqlite / PDFium / …).
 
 pub mod card;
+pub mod client;
 pub mod error;
+pub mod executor;
 pub mod identity;
 pub mod paths;
 pub mod probe;
 pub mod registry;
+pub mod rpc;
 pub mod server;
+pub mod store;
+pub mod task;
 
 pub use error::{NodeError, Result};
 
