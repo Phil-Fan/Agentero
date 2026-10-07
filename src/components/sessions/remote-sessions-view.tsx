@@ -18,8 +18,8 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { commands } from "@/lib/core/bindings";
-import { callResult } from "@/lib/core/ipc";
+import { commands, type SshConfigHost } from "@/lib/core/bindings";
+import { callApiResult, callResult } from "@/lib/core/ipc";
 import { notifyError } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
 
@@ -85,6 +85,9 @@ export function RemoteSessionsView({ className }: { className?: string }) {
 
 	const [newTarget, setNewTarget] = useState("");
 	const [newName, setNewName] = useState("");
+	const [sshHosts, setSshHosts] = useState<SshConfigHost[]>([]);
+	const [sshHost, setSshHost] = useState("");
+	const [remotePort, setRemotePort] = useState("8766");
 	const [pairCode, setPairCode] = useState("");
 	const [input, setInput] = useState("");
 	const [cwd, setCwd] = useState("");
@@ -129,6 +132,19 @@ export function RemoteSessionsView({ className }: { className?: string }) {
 	}, [refreshNodes]);
 
 	useEffect(() => {
+		void (async () => {
+			try {
+				const hosts = await callApiResult(() =>
+					commands.remoteSshConfigHosts(),
+				);
+				setSshHosts(hosts);
+			} catch {
+				// SSH config is optional.
+			}
+		})();
+	}, []);
+
+	useEffect(() => {
 		if (!target) {
 			setTasks([]);
 			return;
@@ -144,10 +160,13 @@ export function RemoteSessionsView({ className }: { className?: string }) {
 		if (!value) return;
 		setBusy(true);
 		try {
-			await callResult(() => commands.nodeAdd(value, newName.trim() || null));
+			const raw = await callResult(() =>
+				commands.nodeAdd(value, newName.trim() || null),
+			);
 			setNewTarget("");
 			setNewName("");
 			await refreshNodes();
+			setSelected(parseJson<{ added: string }>(raw).added);
 		} catch (e) {
 			notifyError(String(e));
 		} finally {
@@ -155,10 +174,41 @@ export function RemoteSessionsView({ className }: { className?: string }) {
 		}
 	}, [newTarget, newName, refreshNodes]);
 
+	/** Open an SSH tunnel to the node's loopback and register it locally. */
+	const onSshConnect = useCallback(async () => {
+		const host = sshHost.trim();
+		if (!host) return;
+		const port = Number.parseInt(remotePort.trim(), 10);
+		setBusy(true);
+		try {
+			const raw = await callResult(() =>
+				commands.nodeTunnelOpen(host, Number.isFinite(port) ? port : null),
+			);
+			const tunnel = parseJson<{ localUrl: string; sshHost: string }>(raw);
+			const added = await callResult(() =>
+				commands.nodeAdd(tunnel.localUrl, tunnel.sshHost),
+			);
+			await refreshNodes();
+			setSelected(parseJson<{ added: string }>(added).added);
+		} catch (e) {
+			notifyError(String(e));
+		} finally {
+			setBusy(false);
+		}
+	}, [sshHost, remotePort, refreshNodes]);
+
 	const onForget = useCallback(async () => {
 		if (!node) return;
 		setBusy(true);
 		try {
+			// Best-effort: tear down a tunnel if this node was reached over SSH.
+			if (node.url) {
+				try {
+					await callResult(() => commands.nodeTunnelClose(node.url ?? ""));
+				} catch {
+					// Not a tunnel.
+				}
+			}
 			await callResult(() => commands.nodeRemove(node.nodeId));
 			setDetail(null);
 			await refreshNodes();
@@ -268,6 +318,36 @@ export function RemoteSessionsView({ className }: { className?: string }) {
 					)}
 				</div>
 				<div className="flex flex-col gap-1 border-border border-t p-2">
+					{sshHosts.length > 0 ? (
+						<div className="flex items-center gap-1">
+							<select
+								value={sshHost}
+								onChange={(e) => setSshHost(e.target.value)}
+								className="h-8 min-w-0 flex-1 rounded-md border border-border bg-transparent px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+							>
+								<option value="">{t("remoteSessions.sshPlaceholder")}</option>
+								{sshHosts.map((h) => (
+									<option key={h.alias} value={h.alias}>
+										{h.hostname ? `${h.alias} (${h.hostname})` : h.alias}
+									</option>
+								))}
+							</select>
+							<input
+								value={remotePort}
+								onChange={(e) => setRemotePort(e.target.value)}
+								aria-label={t("remoteSessions.remotePort")}
+								className="h-8 w-16 rounded-md border border-border bg-transparent px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+							/>
+							<Button
+								size="sm"
+								variant="secondary"
+								disabled={busy || !sshHost.trim()}
+								onClick={() => void onSshConnect()}
+							>
+								{t("remoteSessions.sshConnect")}
+							</Button>
+						</div>
+					) : null}
 					<input
 						value={newTarget}
 						onChange={(e) => setNewTarget(e.target.value)}

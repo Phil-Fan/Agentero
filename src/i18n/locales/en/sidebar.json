@@ -432,6 +432,9 @@
 		"skillAgent": "Agent",
 		"cwdPlaceholder": "cwd (optional)",
 		"inputPlaceholder": "Command or prompt…",
-		"submit": "Submit"
+		"submit": "Submit",
+		"sshPlaceholder": "SSH host…",
+		"sshConnect": "Connect",
+		"remotePort": "Remote port"
 	}
 }

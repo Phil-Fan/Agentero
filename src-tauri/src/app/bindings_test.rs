@@ -64,6 +64,8 @@ fn export_typescript_bindings() {
             crate::features::node::commands::node_task,
             crate::features::node::commands::node_submit,
             crate::features::node::commands::node_cancel,
+            crate::features::node::commands::node_tunnel_open,
+            crate::features::node::commands::node_tunnel_close,
             crate::features::jobs::commands::job_parse_refs_enqueue,
             crate::features::jobs::commands::job_parse_body_enqueue,
             crate::features::jobs::commands::job_layout_analyze_enqueue,

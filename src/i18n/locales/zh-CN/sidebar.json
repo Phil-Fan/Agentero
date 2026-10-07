@@ -431,6 +431,9 @@
 		"skillAgent": "Agent",
 		"cwdPlaceholder": "工作目录（可选）",
 		"inputPlaceholder": "命令或提示词…",
-		"submit": "提交"
+		"submit": "提交",
+		"sshPlaceholder": "SSH 主机…",
+		"sshConnect": "连接",
+		"remotePort": "远端端口"
 	}
 }

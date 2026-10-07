@@ -89,3 +89,21 @@ pub async fn node_submit(
 pub async fn node_cancel(target: String, id: String) -> Result<String, String> {
     json(ops::cancel(&target, &id).await.map_err(err)?)
 }
+
+/// Open a local SSH tunnel to a remote node's A2A endpoint.
+#[tauri::command]
+#[specta::specta]
+pub async fn node_tunnel_open(
+    ssh_host: String,
+    remote_port: Option<u16>,
+) -> Result<String, String> {
+    let tunnel = crate::features::node::tunnel::open(&ssh_host, remote_port.unwrap_or(8766))?;
+    serde_json::to_string(&tunnel).map_err(|e| e.to_string())
+}
+
+/// Close an SSH tunnel previously opened for `local_url`.
+#[tauri::command]
+#[specta::specta]
+pub async fn node_tunnel_close(local_url: String) -> Result<bool, String> {
+    Ok(crate::features::node::tunnel::close(&local_url))
+}

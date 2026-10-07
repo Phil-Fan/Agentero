@@ -261,6 +261,10 @@ pub fn attach_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
             crate::features::node::commands::node_submit,
             #[cfg(feature = "desktop")]
             crate::features::node::commands::node_cancel,
+            #[cfg(feature = "desktop")]
+            crate::features::node::commands::node_tunnel_open,
+            #[cfg(feature = "desktop")]
+            crate::features::node::commands::node_tunnel_close,
             crate::features::decision::commands::decide,
         ])
     }

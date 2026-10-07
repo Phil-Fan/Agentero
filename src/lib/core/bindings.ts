@@ -118,6 +118,10 @@ export const commands = {
 	nodeSubmit: (target: string, input: string, skill: string, cwd: string | null) => typedError<string, string>(__TAURI_INVOKE("node_submit", { target, input, skill, cwd })),
 	/**  Cancel a task. */
 	nodeCancel: (target: string, id: string) => typedError<string, string>(__TAURI_INVOKE("node_cancel", { target, id })),
+	/**  Open a local SSH tunnel to a remote node's A2A endpoint. */
+	nodeTunnelOpen: (sshHost: string, remotePort: number | null) => typedError<string, string>(__TAURI_INVOKE("node_tunnel_open", { sshHost, remotePort })),
+	/**  Close an SSH tunnel previously opened for `local_url`. */
+	nodeTunnelClose: (localUrl: string) => typedError<boolean, string>(__TAURI_INVOKE("node_tunnel_close", { localUrl })),
 	jobParseRefsEnqueue: (args: JobEnqueueArgs) => typedError<ApiResult<JobSnapshot>, string>(__TAURI_INVOKE("job_parse_refs_enqueue", { args })),
 	jobParseBodyEnqueue: (args: JobParseBodyEnqueueArgs) => typedError<ApiResult<JobSnapshot>, string>(__TAURI_INVOKE("job_parse_body_enqueue", { args })),
 	jobLayoutAnalyzeEnqueue: (args: JobEnqueueArgs) => typedError<ApiResult<JobSnapshot>, string>(__TAURI_INVOKE("job_layout_analyze_enqueue", { args })),

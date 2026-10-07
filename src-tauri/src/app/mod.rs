@@ -517,6 +517,8 @@ pub fn run() {
                 {
                     app.state::<Arc<McpController>>().stop_server();
                     app.state::<Arc<McpTunnelController>>().stop();
+                    // Kill any SSH tunnels opened for remote nodes.
+                    crate::features::node::tunnel::close_all();
                 }
                 // Close the mobile relay rather than letting the socket die with
                 // the process, so paired clients see a clean shutdown. `stop`

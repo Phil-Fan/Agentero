@@ -123,7 +123,9 @@ agentero-node batch <target> --template "..." --values "a,b,c" [--skill S] [--co
 - **发现**：v1 手动 `add` + 从 `~/.ssh/config` 导入 + 配对码 TOFU；后续 mDNS、中心 registry。
 - **安装**：形态 B 只需一个二进制；预编译分发 + 安装脚本 + systemd 为后续。
 - **通信**：v1 用 **SSH 端口转发 + A2A over loopback**，复用 SSH 密钥鉴权、无需暴露端口；
-  云 / NAT 场景后续走 outbound tunnel。任务在内存队列中执行并落盘，重启后重新入队。
+  云 / NAT 场景后续走 outbound tunnel。桌面「远端会话」面板已实现该转发：从 `~/.ssh/config`
+  选主机，Host 以 `ssh -N -L 127.0.0.1:<local>:127.0.0.1:8766 <host>`（系统 OpenSSH）打开隧道，
+  节点 URL 用本地端口；应用退出时统一关闭。任务在内存队列中执行并落盘，重启后重新入队。
 
 ## 9. 验证（实测）
 

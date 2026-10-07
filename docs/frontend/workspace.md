@@ -59,9 +59,12 @@ Library · Trash · 广场 · 远端会话（Remote Sessions）· PDF · HTML ·
 
 **远端会话**（`agentero:sessions`）：文件树顶部虚拟节点（与 Library / 回收站 / 广场同级）。
 中间面板列出本机登记的 Agentero 节点（`node_list`），轮询所选节点的 A2A 任务（`node_tasks`），
-可添加节点（`node_add`）、配对（`node_pair`）、提交 `run` / `agent` 任务（`node_submit`）、
-取消（`node_cancel`）与查看产物（`node_task`）。后端命令见
-[../development/remote-node.md](../development/remote-node.md)，面板 `src/components/sessions/remote-sessions-view.tsx`。
+可添加节点、配对（`node_pair`）、提交 `run` / `agent` 任务（`node_submit`）、取消（`node_cancel`）
+与查看产物（`node_task`）。添加方式有二：直接填 URL（`node_add`），或从 `~/.ssh/config`
+选主机（`remote_ssh_config_hosts`）经 `node_tunnel_open` 打开本地 SSH 隧道
+（`ssh -N -L 127.0.0.1:<local>:127.0.0.1:8766 <host>`，应用退出时 `node_tunnel_close` 清理）。
+后端命令见 [../development/remote-node.md](../development/remote-node.md)，面板
+`src/components/sessions/remote-sessions-view.tsx`。
 
 ## 代码
 

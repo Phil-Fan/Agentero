@@ -3,3 +3,4 @@
 //! Wraps `agentero_node::ops` (registry / pair / A2A tasks) as Tauri commands.
 
 pub mod commands;
+pub mod tunnel;
