@@ -1,11 +1,10 @@
 # 远端 Node（Headless Agentero Node）
 
-> 状态：**M1 + M2 + 配对鉴权 + 远端 Agent 执行器 + 任务持久化 + 队列化执行 已落地** ——
+> 状态：**M1 + M2 + 配对鉴权 + 远端 Agent 执行器 + 任务持久化 + 队列化执行 + ACP 原生宿主 已落地** ——
 > `crates/agentero-node` 提供身份 / Agent Card / 发现登记表 / 节点服务器、**A2A JSON-RPC + SSE 任务端点**
 > （`message/send` / `message/stream` / `tasks/get` / `tasks/cancel` / `tasks/list`）、
-> **配对码 + Bearer token 鉴权**、**`agent` 技能**、**任务落盘 + 重启恢复**，以及
-> **worker 池 + 队列（`--max-parallel` 并发上限）**。
-> RunSet 编排与桌面 / CLI 集成为后续（见 §10）。
+> **配对码 + Bearer token 鉴权**、**`agent` 技能**（命令模板或 **ACP 会话**）、**任务落盘 + 重启恢复**，
+> 以及 **worker 池 + 队列（`--max-parallel`）**。RunSet 编排与桌面 / CLI 集成为后续（见 §10）。
 
 ## 1. 背景
 
@@ -37,7 +36,8 @@
 | `task` | A2A 任务模型：Message / Part / Task / Artifact / StreamEvent |
 | `store` | 任务存储 + 每任务广播 + 取消令牌；可选落盘（`tasks/<id>.json`），重启恢复 |
 | `queue` | 内存作业队列 + 唤醒；`message/send` 入队即返回，worker 池拉取执行 |
-| `executor` | `Executor` trait + `echo`（协议冒烟）+ `run`（执行命令）+ `agent`（配置的 CLI Agent，`{prompt}` 模板） |
+| `executor` | `Executor` trait + `echo`（协议冒烟）+ `run`（执行命令）+ `agent`（命令模板） |
+| `acp` | ACP 原生执行器：`initialize` → `session/new` → `session/prompt`，流式回消息、权限默认拒绝 |
 | `rpc` | JSON-RPC 2.0 方法分发（同时接受 v0.3 `message/send` 与 v1 `SendMessage` 别名） |
 | `client` | 极小 A2A 客户端（CLI `call` / `run` / `pair` 用，自动附带 token） |
 | `server` | axum 回环服务器：Card + `/healthz` + `/pair` + `/a2a`（JSON-RPC 与 SSE） |
@@ -52,7 +52,7 @@
 ```text
 agentero-node init [--name N]                 # 生成节点身份
 agentero-node card [--url URL]                # 打印本机 Agent Card
-agentero-node serve [--listen A] [--allow-run] [--require-auth] [--workdir DIR] [--agent-command CMD] [--max-parallel N]
+agentero-node serve [--listen A] [--allow-run] [--require-auth] [--workdir DIR] [--agent-command CMD] [--acp-command CMD] [--acp-approve] [--max-parallel N]
                                               # card + /healthz + /pair + /a2a
 agentero-node probe <target>                  # 拉取对端 Agent Card
 agentero-node add <target>                    # probe 并登记到本机 registry
@@ -92,10 +92,13 @@ agentero-node batch <target> --template "..." --values "a,b,c" [--skill S] [--co
 - **`run` 执行**：命令取自 `data` part `{command, cwd}`，回退到 message 文本；用 `sh -c`
   执行，stdout/stderr 合流逐行作为 `working` 状态推流（上限 200 行），最终产出一个
   `output.txt` artifact（含输出与 exit code）。**默认关闭，需 `--allow-run`**。
-- **`agent` 技能**：用 `--agent-command` 提供命令模板（如 `codex exec --skip-git-repo-check
+- **`agent` 技能（命令模板）**：`--agent-command` 提供命令模板（如 `codex exec --skip-git-repo-check
   {prompt}`）；模板中的 `{prompt}` 被 shell 引号包裹后替换，缺省追加。prompt 取自 `data`
-  part 的 `prompt`，回退到 message 文本。以 `sh -c` 执行，输出流式回报，产出 `output.txt`。
-  仅在配置了 `--agent-command` 时出现在 Card 的 `skills` 中。
+  part 的 `prompt`，回退到 message 文本。
+- **`agent` 技能（ACP 原生）**：`--acp-command "codex-acp"` 时优先走 ACP：spawn 该 ACP agent，
+  `initialize` → `session/new` → `session/prompt`，把 `session/update` 的
+  `agent_message_chunk` 流式写入任务状态；权限请求**默认拒绝**（`--acp-approve` 才自动批准
+  首个 AllowOnce）；最终回复汇总为 `agent.txt` artifact。用 `agent-client-protocol` crate。
 - **队列 + worker 池**：`message/send` / `message/stream` 只**入队即返回**（任务为 `submitted`），
   由 `--max-parallel` 个 worker 拉取执行（`working`）。排队中的任务可被 `tasks/cancel` 取消且不会执行；
   `/healthz` 报 `queued` 深度。默认 `--max-parallel 4`。
@@ -126,9 +129,12 @@ agentero-node batch <target> --template "..." --values "a,b,c" [--skill S] [--co
 
 | 主机 | 架构 | 结果 |
 |---|---|---|
-| 本机 macOS | aarch64 | 20 单测通过；send / stream / run / cancel / 配对 / agent / 落盘恢复 / 队列并发 / batch 扫描全通过 |
-| `dgx-remote` | aarch64 | `batch` 4 值扫描（`--max-parallel 2`）全部完成；重启后任务仍在、token 仍有效 |
-| `a1` | x86_64 | `run` → 4×`A100`；`agent` → mock 回显；重启后任务仍在 |
+| 本机 macOS | aarch64 | 20 单测通过；send / stream / run / cancel / 配对 / agent(模板+ACP) / 落盘恢复 / 队列并发 / batch 全通过 |
+| `dgx-remote` | aarch64 | `batch` 4 值扫描（`--max-parallel 2`）与 ACP `agent` 均完成；重启后任务仍在、token 仍有效 |
+| `a1` | x86_64 | `run` → 4×`A100`；命令模板与 ACP `agent` 均回显 prompt；重启后任务仍在 |
+
+> ACP 端到端以仓库内 `tests/mock-acp.cjs`（一个最小 ACP 服务端）验证；真实
+> `codex-acp` / `claude-agent-acp` 的端到端见后续。
 
 本机经 SSH 隧道对两个节点完成：探测 → 配对换 token → 带 token 提交 A2A 任务 → 取回产物。
 
@@ -138,7 +144,8 @@ agentero-node batch <target> --template "..." --values "a,b,c" [--skill S] [--co
 2. **编排**：RunSet 模型（父子分组 / 聚合 / 早停 / 晋升）——当前 `batch` 只是最小扫描原语。
 3. **集成**：桌面 / `agentero-cli` 加 `node` 子命令与「远端会话」面板。
 4. **鉴权增强**：Keychain、公钥 pinning、token 分级/吊销。
-5. **ACP 原生宿主**：`agent` 技能从「一次性命令」升级为 ACP 会话（工具调用、权限、产物）。
+5. **真实 ACP Agent 端到端**：用 `codex-acp` / `claude-agent-acp` 跑通（当前以 mock 验证）；
+   会话续聊 / 历史 / 权限策略。
 
 ## 11. 代码
 

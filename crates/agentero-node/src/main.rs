@@ -20,6 +20,7 @@ mod cli;
 use std::sync::Arc;
 use std::time::Duration;
 
+use agentero_node::acp::AcpExecutor;
 use agentero_node::client;
 use agentero_node::executor::{
     AgentExecutor, EchoExecutor, Executor, ExecutorRegistry, RunExecutor,
@@ -57,6 +58,8 @@ async fn run(cli: Cli) -> Result<()> {
             workdir,
             require_auth,
             agent_command,
+            acp_command,
+            acp_approve,
             max_parallel,
         } => {
             let addr: std::net::SocketAddr = listen
@@ -69,7 +72,17 @@ async fn run(cli: Cli) -> Result<()> {
                     workdir: workdir.clone(),
                 }),
             ];
-            if let Some(template) = agent_command.filter(|s| !s.trim().is_empty()) {
+            if let Some(command) = acp_command.filter(|s| !s.trim().is_empty()) {
+                let mut parts = command.split_whitespace();
+                let program = parts.next().unwrap_or_default().to_string();
+                let args = parts.map(str::to_string).collect();
+                executors.push(Arc::new(AcpExecutor {
+                    program,
+                    args,
+                    workdir: workdir.clone(),
+                    auto_approve: acp_approve,
+                }));
+            } else if let Some(template) = agent_command.filter(|s| !s.trim().is_empty()) {
                 executors.push(Arc::new(AgentExecutor {
                     command_template: template,
                     workdir,

@@ -202,7 +202,7 @@ async fn run_streamed(
     }
 }
 
-fn prompt_of(ctx: &TaskContext) -> String {
+pub(crate) fn prompt_of(ctx: &TaskContext) -> String {
     if let Some(data) = ctx.message.data() {
         if let Some(prompt) = data.get("prompt").and_then(|v| v.as_str()) {
             if !prompt.is_empty() {
