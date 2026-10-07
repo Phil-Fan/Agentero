@@ -21,7 +21,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agentero_node::client;
-use agentero_node::executor::{EchoExecutor, Executor, ExecutorRegistry, RunExecutor};
+use agentero_node::executor::{
+    AgentExecutor, EchoExecutor, Executor, ExecutorRegistry, RunExecutor,
+};
 use agentero_node::server::ServeOptions;
 use agentero_node::{card, identity, paths, registry, server, NodeError, Result};
 use clap::Parser;
@@ -54,23 +56,32 @@ async fn run(cli: Cli) -> Result<()> {
             allow_run,
             workdir,
             require_auth,
+            agent_command,
         } => {
             let addr: std::net::SocketAddr = listen
                 .parse()
                 .map_err(|e| NodeError::msg(format!("invalid --listen '{listen}': {e}")))?;
-            let echo: Arc<dyn Executor> = Arc::new(EchoExecutor);
-            let run: Arc<dyn Executor> = Arc::new(RunExecutor {
-                allowed: allow_run,
-                workdir,
-            });
-            let executors = ExecutorRegistry::new(vec![echo, run], "echo");
+            let mut executors: Vec<Arc<dyn Executor>> = vec![
+                Arc::new(EchoExecutor),
+                Arc::new(RunExecutor {
+                    allowed: allow_run,
+                    workdir: workdir.clone(),
+                }),
+            ];
+            if let Some(template) = agent_command.filter(|s| !s.trim().is_empty()) {
+                executors.push(Arc::new(AgentExecutor {
+                    command_template: template,
+                    workdir,
+                }));
+            }
+            let registry = ExecutorRegistry::new(executors, "echo");
             server::serve(
                 ServeOptions {
                     listen: addr,
                     card_url: url,
                     require_auth,
                 },
-                executors,
+                registry,
             )
             .await
         }

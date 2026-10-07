@@ -49,6 +49,10 @@ pub enum Cmd {
         /// Require a paired bearer token for /a2a (prints a pairing code).
         #[arg(long)]
         require_auth: bool,
+        /// Command template for the `agent` skill, e.g. "claude -p {prompt}".
+        /// Enabling this advertises the `agent` skill.
+        #[arg(long, value_name = "CMD")]
+        agent_command: Option<String>,
     },
     /// Fetch and print another node's Agent Card.
     Probe {

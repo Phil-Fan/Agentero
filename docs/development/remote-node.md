@@ -1,9 +1,10 @@
 # 远端 Node（Headless Agentero Node）
 
-> 状态：**M1 + M2 + 配对鉴权 已落地** —— `crates/agentero-node` 提供身份 / Agent Card /
-> 发现登记表 / 节点服务器、**A2A JSON-RPC + SSE 任务端点**（`message/send` /
-> `message/stream` / `tasks/get` / `tasks/cancel`），以及 **配对码 + Bearer token 鉴权**。
-> 远端 Agent 执行器、持久队列 / RunSet 与桌面 / CLI 集成为后续（见 §9）。
+> 状态：**M1 + M2 + 配对鉴权 + 远端 Agent 执行器 已落地** —— `crates/agentero-node` 提供身份 /
+> Agent Card / 发现登记表 / 节点服务器、**A2A JSON-RPC + SSE 任务端点**（`message/send` /
+> `message/stream` / `tasks/get` / `tasks/cancel`）、**配对码 + Bearer token 鉴权**，以及
+> **`agent` 技能**（拉起配置的 CLI Agent 执行任务）。
+> 持久队列 / RunSet 与桌面 / CLI 集成为后续（见 §10）。
 
 ## 1. 背景
 
@@ -34,7 +35,7 @@
 | `auth` | 配对码（一次性、10 分钟）+ 长期 Bearer token（节点侧**只存哈希**） |
 | `task` | A2A 任务模型：Message / Part / Task / Artifact / StreamEvent |
 | `store` | 内存任务存储 + 每任务广播 + 取消令牌；`tasks/get` 与 SSE 共享一致视图 |
-| `executor` | `Executor` trait + `echo`（协议冒烟）+ `run`（执行命令、流式输出） |
+| `executor` | `Executor` trait + `echo`（协议冒烟）+ `run`（执行命令）+ `agent`（配置的 CLI Agent，`{prompt}` 模板） |
 | `rpc` | JSON-RPC 2.0 方法分发（同时接受 v0.3 `message/send` 与 v1 `SendMessage` 别名） |
 | `client` | 极小 A2A 客户端（CLI `call` / `run` / `pair` 用，自动附带 token） |
 | `server` | axum 回环服务器：Card + `/healthz` + `/pair` + `/a2a`（JSON-RPC 与 SSE） |
@@ -49,7 +50,7 @@
 ```text
 agentero-node init [--name N]                 # 生成节点身份
 agentero-node card [--url URL]                # 打印本机 Agent Card
-agentero-node serve [--listen A] [--allow-run] [--require-auth] [--workdir DIR]
+agentero-node serve [--listen A] [--allow-run] [--require-auth] [--workdir DIR] [--agent-command CMD]
                                               # card + /healthz + /pair + /a2a
 agentero-node probe <target>                  # 拉取对端 Agent Card
 agentero-node add <target>                    # probe 并登记到本机 registry
@@ -86,6 +87,10 @@ agentero-node run <target> <command> [--skill S] [--cwd DIR]
 - **`run` 执行**：命令取自 `data` part `{command, cwd}`，回退到 message 文本；用 `sh -c`
   执行，stdout/stderr 合流逐行作为 `working` 状态推流（上限 200 行），最终产出一个
   `output.txt` artifact（含输出与 exit code）。**默认关闭，需 `--allow-run`**。
+- **`agent` 技能**：用 `--agent-command` 提供命令模板（如 `codex exec --skip-git-repo-check
+  {prompt}`）；模板中的 `{prompt}` 被 shell 引号包裹后替换，缺省追加。prompt 取自 `data`
+  part 的 `prompt`，回退到 message 文本。以 `sh -c` 执行，输出流式回报，产出 `output.txt`。
+  仅在配置了 `--agent-command` 时出现在 Card 的 `skills` 中。
 - 任务状态为 `kebab-case`（`input-required` 等），任务事件字段为 `camelCase`（对齐 A2A）。
 
 ## 7. 路径约定
@@ -107,20 +112,19 @@ agentero-node run <target> <command> [--skill S] [--cwd DIR]
 
 | 主机 | 架构 | 结果 |
 |---|---|---|
-| 本机 macOS | aarch64 | 18 单测通过；send / stream / run / cancel / 配对鉴权全通过 |
-| `dgx-remote` | aarch64 | 配对后 `run` → `spark` / `NVIDIA GB10` |
-| `a1` | x86_64 | 配对后 `run` → `instance-mmztii7i` / 4×`A100-PCIE-40GB` |
+| 本机 macOS | aarch64 | 19 单测通过；send / stream / run / cancel / 配对鉴权 / agent 全通过 |
+| `dgx-remote` | aarch64 | 配对后 `run` → `spark` / `NVIDIA GB10`；`agent` → mock agent 回显 prompt |
+| `a1` | x86_64 | 配对后 `run` → `instance-mmztii7i` / 4×`A100-PCIE-40GB`；`agent` 同上 |
 
 本机经 SSH 隧道对两个节点完成：探测 → 配对换 token → 带 token 提交 A2A 任务 → 取回产物。
 
 ## 10. 后续
 
-1. **远端 Agent 执行器**：新增 `agent` 技能 —— 节点拉起 CLI Agent（ACP Host / 一次性
-   prompt），把任务交给真正的智能体而非直接 shell。
-2. **持久队列**：任务落盘 + 重启恢复 + worker 拉取（见 [A2A.md](A2A.md)）。
-3. **编排**：RunSet / Run 队列 + 并行调度。
-4. **集成**：桌面 / `agentero-cli` 加 `node` 子命令与「远端会话」面板。
-5. **鉴权增强**：Keychain、公钥 pinning、token 分级/吊销。
+1. **持久队列**：任务落盘 + 重启恢复 + worker 拉取（见 [A2A.md](A2A.md)）。
+2. **编排**：RunSet / Run 队列 + 并行调度。
+3. **集成**：桌面 / `agentero-cli` 加 `node` 子命令与「远端会话」面板。
+4. **鉴权增强**：Keychain、公钥 pinning、token 分级/吊销。
+5. **ACP 原生宿主**：`agent` 技能从「一次性命令」升级为 ACP 会话（工具调用、权限、产物）。
 
 ## 11. 代码
 

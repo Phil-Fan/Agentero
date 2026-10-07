@@ -1,8 +1,8 @@
 //! Task executors.
 //!
 //! An [`Executor`] performs the work for one task and reports progress through
-//! the [`TaskStore`]. Two are provided: `echo` (protocol smoke test) and `run`
-//! (execute a shell command in a workdir, streaming output).
+//! the [`TaskStore`]. Provided: `echo` (protocol smoke test), `run` (execute a
+//! shell command), and `agent` (drive a configured CLI agent with a prompt).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -109,56 +109,131 @@ impl Executor for RunExecutor {
         if command.trim().is_empty() {
             return Err(NodeError::msg("empty command"));
         }
-        ctx.working(format!("$ {command}"));
+        let label = format!("$ {command}");
+        run_streamed(&ctx, &command, cwd.as_deref(), &label).await
+    }
+}
 
-        let mut child = spawn(&command, cwd.as_deref())?;
-        let (_handles, mut rx) = pipe_lines(&mut child);
+/// Drives a configured CLI agent with a prompt, streaming its output.
+///
+/// The command template may contain a `{prompt}` placeholder (shell-quoted on
+/// substitution); when absent, the prompt is appended. The prompt comes from a
+/// `data` part `{ "prompt": "..." }`, falling back to the message text.
+///
+/// This is the process-level "bring your own agent" path. ACP-native hosting
+/// (session/modifications tool-calls) is a follow-up.
+pub struct AgentExecutor {
+    pub command_template: String,
+    pub workdir: Option<PathBuf>,
+}
 
-        let mut output = String::new();
-        let mut emitted = 0usize;
-        loop {
-            tokio::select! {
-                maybe = rx.recv() => {
-                    let Some(line) = maybe else { break };
-                    if output.len() < MAX_OUTPUT_BYTES {
-                        output.push_str(&line);
-                        output.push('\n');
-                    }
-                    if emitted < MAX_STREAM_LINES {
-                        emitted += 1;
-                        ctx.working(line);
-                    }
+#[async_trait]
+impl Executor for AgentExecutor {
+    fn id(&self) -> &'static str {
+        "agent"
+    }
+
+    fn description(&self) -> &'static str {
+        "Run a configured CLI agent with the task prompt and stream its output"
+    }
+
+    async fn execute(&self, ctx: TaskContext) -> Result<()> {
+        let prompt = prompt_of(&ctx);
+        if prompt.trim().is_empty() {
+            return Err(NodeError::msg("empty prompt"));
+        }
+        let command = build_agent_command(&self.command_template, &prompt);
+        let label = format!("$ {}", self.command_template.trim());
+        run_streamed(&ctx, &command, self.workdir.as_deref(), &label).await
+    }
+}
+
+/// Shared streaming body for `run` / `agent`: spawn `sh -c <command>`, forward
+/// stdout/stderr lines as `working` updates, and emit an `output.txt` artifact.
+async fn run_streamed(
+    ctx: &TaskContext,
+    command: &str,
+    cwd: Option<&Path>,
+    label: &str,
+) -> Result<()> {
+    ctx.working(label.to_string());
+    let mut child = spawn(command, cwd)?;
+    let (_handles, mut rx) = pipe_lines(&mut child);
+
+    let mut output = String::new();
+    let mut emitted = 0usize;
+    loop {
+        tokio::select! {
+            maybe = rx.recv() => {
+                let Some(line) = maybe else { break };
+                if output.len() < MAX_OUTPUT_BYTES {
+                    output.push_str(&line);
+                    output.push('\n');
                 }
-                _ = ctx.cancel.cancelled() => {
-                    let _ = child.kill().await;
-                    return Ok(());
+                if emitted < MAX_STREAM_LINES {
+                    emitted += 1;
+                    ctx.working(line);
                 }
             }
-        }
-        let truncated = output.len() >= MAX_OUTPUT_BYTES;
-
-        // Readers are done; wait for the process exit status.
-        let status = child.wait().await?;
-        if ctx.is_cancelled() {
-            return Ok(());
-        }
-        let code = status.code();
-        let summary = if truncated {
-            format!("{output}\n… (output truncated)\n[exit {code:?}]")
-        } else {
-            format!("{output}[exit {code:?}]")
-        };
-        ctx.store
-            .add_artifact(&ctx.task_id, Artifact::text("output.txt", summary));
-        if status.success() {
-            Ok(())
-        } else {
-            Err(NodeError::msg(format!(
-                "command failed (exit {code:?})",
-                code = code
-            )))
+            _ = ctx.cancel.cancelled() => {
+                let _ = child.kill().await;
+                return Ok(());
+            }
         }
     }
+    let truncated = output.len() >= MAX_OUTPUT_BYTES;
+
+    let status = child.wait().await?;
+    if ctx.is_cancelled() {
+        return Ok(());
+    }
+    let code = status.code();
+    let summary = if truncated {
+        format!("{output}\n… (output truncated)\n[exit {code:?}]")
+    } else {
+        format!("{output}[exit {code:?}]")
+    };
+    ctx.store
+        .add_artifact(&ctx.task_id, Artifact::text("output.txt", summary));
+    if status.success() {
+        Ok(())
+    } else {
+        Err(NodeError::msg(format!("command failed (exit {code:?})")))
+    }
+}
+
+fn prompt_of(ctx: &TaskContext) -> String {
+    if let Some(data) = ctx.message.data() {
+        if let Some(prompt) = data.get("prompt").and_then(|v| v.as_str()) {
+            if !prompt.is_empty() {
+                return prompt.to_string();
+            }
+        }
+    }
+    ctx.text()
+}
+
+/// Substitute the prompt into a command template (`{prompt}` or append).
+fn build_agent_command(template: &str, prompt: &str) -> String {
+    let quoted = shell_quote(prompt);
+    if template.contains("{prompt}") {
+        template.replace("{prompt}", &quoted)
+    } else {
+        format!("{template} {quoted}")
+    }
+}
+
+#[cfg(unix)]
+fn shell_quote(input: &str) -> String {
+    if input.is_empty() {
+        return "''".to_string();
+    }
+    format!("'{}'", input.replace('\'', "'\\''"))
+}
+
+#[cfg(not(unix))]
+fn shell_quote(input: &str) -> String {
+    format!("\"{}\"", input.replace('"', "\"\""))
 }
 
 fn spawn(command: &str, cwd: Option<&Path>) -> Result<Child> {
@@ -281,10 +356,30 @@ mod tests {
             allowed: false,
             workdir: None,
         });
-        let reg = ExecutorRegistry::new(vec![echo, run], "echo");
+        let agent: Arc<dyn Executor> = Arc::new(AgentExecutor {
+            command_template: "claude -p {prompt}".to_string(),
+            workdir: None,
+        });
+        let reg = ExecutorRegistry::new(vec![echo, run, agent], "echo");
         assert_eq!(reg.resolve(None).unwrap().id(), "echo");
         assert_eq!(reg.resolve(Some("run")).unwrap().id(), "run");
+        assert_eq!(reg.resolve(Some("agent")).unwrap().id(), "agent");
         assert!(reg.resolve(Some("nope")).is_err());
-        assert_eq!(reg.ids(), vec!["echo".to_string(), "run".to_string()]);
+        assert_eq!(
+            reg.ids(),
+            vec!["agent".to_string(), "echo".to_string(), "run".to_string()]
+        );
+    }
+
+    #[test]
+    fn agent_command_substitutes_and_quotes() {
+        assert_eq!(
+            build_agent_command("claude -p {prompt}", "hello world"),
+            "claude -p 'hello world'"
+        );
+        // No placeholder → appended.
+        assert_eq!(build_agent_command("codex exec", "hi"), "codex exec 'hi'");
+        // Single quotes are escaped.
+        assert_eq!(build_agent_command("x {prompt}", "a'b"), "x 'a'\\''b'");
     }
 }
